@@ -1,1 +1,15 @@
-<router-outlet></router-outlet>
+<app-v2-title-bar />
+<div class="layout-v2__body">
+  <app-v2-app-rail />
+  <app-v2-left-nav />
+  <main class="layout-v2__content">
+    <router-outlet />
+  </main>
+  @if (dockActive()) {
+    <aside class="layout-v2__dock-panel">
+      <div class="layout-v2__dock-panel-header">{{ dockActive() }}</div>
+      <p class="layout-v2__dock-panel-empty">Coming soon.</p>
+    </aside>
+  }
+  <app-v2-dock-rail [active]="dockActive()" (dockChange)="onDockChange($event)" />
+</div>

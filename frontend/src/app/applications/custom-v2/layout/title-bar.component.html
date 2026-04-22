@@ -1,0 +1,36 @@
+<div class="title-bar">
+  <div class="title-bar__brand">
+    <app-v2-logo [size]="22" />
+    <div class="title-bar__brand-text">
+      <span class="title-bar__brand-name">Sync-In</span>
+      <span class="title-bar__brand-eyebrow">Files</span>
+    </div>
+  </div>
+  <div class="title-bar__nav">
+    <app-v2-icon-btn iconName="chevLeft" [size]="26" color="rgba(255,255,255,0.75)" (click)="back()" />
+    <app-v2-icon-btn iconName="chevRight" [size]="26" color="rgba(255,255,255,0.4)" (click)="forward()" />
+  </div>
+  <div class="title-bar__breadcrumbs">
+    @for (b of breadcrumbs(); track $index; let i = $index; let last = $last) {
+      @if (i > 0) {
+        <app-v2-icon name="chevRight" [size]="11" class="title-bar__crumb-sep" />
+      }
+      <span class="title-bar__crumb" [class.title-bar__crumb--last]="last" (click)="navigateSegment(b.route)">
+        @if (b.icon) {
+          <app-v2-icon [name]="b.icon" [size]="13" class="title-bar__crumb-icon" />
+        }
+        {{ b.label }}
+      </span>
+    }
+  </div>
+  <div class="title-bar__right">
+    <ng-content select="[titleBarRight]"></ng-content>
+    <div class="title-bar__avatar" [attr.title]="user?.fullName">
+      @if (userAvatar) {
+        <img class="title-bar__avatar-img" [src]="userAvatar" alt="" />
+      } @else {
+        {{ userInitials() }}
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,20 @@
+@if (placeholder; as p) {
+  <section class="placeholder">
+    <div class="placeholder__icon">
+      <app-v2-icon [name]="p.icon" [size]="28" />
+    </div>
+    <h1 class="placeholder__title">{{ p.title }}</h1>
+    <p class="placeholder__lede">
+      @if (p.description) {
+        {{ p.description }}
+      } @else {
+        This screen hasn't been migrated to the redesigned UI yet.
+      }
+    </p>
+    @if (p.classicRoute) {
+      <app-v2-btn kind="outline" size="md" (click)="openInClassic(p.classicRoute)">
+        Open in classic UI
+      </app-v2-btn>
+    }
+  </section>
+}
