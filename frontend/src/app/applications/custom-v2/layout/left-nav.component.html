@@ -1,0 +1,73 @@
+<nav class="left-nav">
+  <div class="left-nav__section-label">Workspace</div>
+  @for (it of workspace; track it.id) {
+    <a
+      [routerLink]="it.route"
+      routerLinkActive="left-nav__item--active"
+      class="left-nav__item"
+    >
+      <span class="left-nav__indicator"></span>
+      <app-v2-icon [name]="it.icon" [size]="15" />
+      <span class="left-nav__label">{{ it.label }}</span>
+    </a>
+  }
+
+  <div class="left-nav__spacer"></div>
+  <div class="left-nav__section-label">Shared</div>
+  <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleShared()">
+    <app-v2-icon name="share" [size]="15" />
+    <span class="left-nav__label">All shares</span>
+    <app-v2-icon
+      name="chevDown"
+      [size]="11"
+      class="left-nav__caret"
+      [class.left-nav__caret--collapsed]="!sharedOpen()"
+    />
+  </button>
+  @if (sharedOpen()) {
+    @for (it of sharedEntries; track it.id) {
+      <a
+        [routerLink]="it.route"
+        routerLinkActive="left-nav__item--active"
+        class="left-nav__item left-nav__item--sub"
+      >
+        <span class="left-nav__indicator"></span>
+        <app-v2-icon [name]="it.icon" [size]="15" />
+        <span class="left-nav__label">{{ it.label }}</span>
+      </a>
+    }
+  }
+
+  <div class="left-nav__fill"></div>
+  <div class="left-nav__divider"></div>
+  <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+    <span class="left-nav__indicator"></span>
+    <app-v2-icon name="trash" [size]="15" />
+    <span class="left-nav__label">Trash</span>
+  </a>
+
+  @if (user()) {
+    <div class="left-nav__user-card">
+      <div class="left-nav__user-avatar">
+        @if (userAvatar()) {
+          <img class="left-nav__user-avatar-img" [src]="userAvatar()" alt="" />
+        } @else {
+          <span class="left-nav__user-avatar-initials">{{ (user()?.fullName ?? user()?.login ?? '')[0] }}</span>
+        }
+      </div>
+      <div class="left-nav__user-meta">
+        <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
+        <div class="left-nav__user-usage">
+          {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
+          @if ((user()?.storageQuota ?? 0) > 0) {
+            / {{ user()?.storageQuota | toBytes }}
+          }
+        </div>
+      </div>
+    </div>
+  }
+  <a class="left-nav__source" [href]="sourceUrl" target="_blank" rel="noopener noreferrer">
+    Source: github.com/zjean/server
+  </a>
+  <a class="left-nav__back" (click)="backToClassic()">← Back to classic UI</a>
+</nav>
