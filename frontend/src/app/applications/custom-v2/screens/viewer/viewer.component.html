@@ -1,0 +1,59 @@
+<section class="viewer">
+  <header class="viewer__header">
+    <app-v2-icon name="image" [size]="12" class="viewer__header-icon" />
+    <span class="viewer__header-name">{{ fileName() }}</span>
+    <div class="viewer__header-actions">
+      <app-v2-icon-btn iconName="x" [size]="26" title="Close (Esc)" (click)="close()" />
+    </div>
+  </header>
+
+  <div class="viewer__toolbar">
+    <app-v2-icon-btn iconName="chevLeft" [size]="30" title="Previous (←)" (click)="previous()" />
+    <app-v2-icon-btn iconName="chevRight" [size]="30" title="Next (→)" (click)="next()" />
+    <app-v2-icon-btn iconName="box" [size]="30" title="Fullscreen" (click)="fullscreen()" />
+    <div class="viewer__counter">
+      @if (siblings().length > 1) {
+        {{ currentIndex() + 1 }} of {{ siblings().length }}
+      } @else if (current()) {
+        1 of 1
+      }
+    </div>
+    <app-v2-icon-btn iconName="info" [size]="30" title="Info" [active]="infoOpen()" (click)="toggleInfo()" />
+  </div>
+
+  <div class="viewer__body">
+    <div class="viewer__stage">
+      @if (loadError(); as err) {
+        <div class="viewer__state">{{ err }}</div>
+      } @else if (imageUrl()) {
+        <img
+          #imageEl
+          class="viewer__image"
+          [src]="imageUrl()"
+          [alt]="fileName()"
+          (load)="onImageLoad()"
+          (error)="onImageError()"
+        />
+      }
+    </div>
+    @if (infoOpen() && current(); as f) {
+      <aside class="viewer__info">
+        <div class="viewer__info-head">Info</div>
+        <dl class="viewer__kv">
+          <dt>Name</dt>
+          <dd class="viewer__kv-val viewer__kv-val--mono">{{ f.name }}</dd>
+          <dt>Type</dt>
+          <dd class="viewer__kv-val">{{ f.mime }}</dd>
+          <dt>Size</dt>
+          <dd class="viewer__kv-val viewer__kv-val--mono">{{ f.size | toBytes: 2 : true }}</dd>
+          @if (resolution()) {
+            <dt>Dimensions</dt>
+            <dd class="viewer__kv-val viewer__kv-val--mono">{{ resolution() }}</dd>
+          }
+          <dt>Modified</dt>
+          <dd class="viewer__kv-val">{{ f.mtime | amTimeAgo }}</dd>
+        </dl>
+      </aside>
+    }
+  </div>
+</section>

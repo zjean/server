@@ -18,7 +18,7 @@
       </header>
       <div class="recents-panel__body">
         @for (f of files(); track f.id) {
-          <button type="button" class="recent-row" (click)="openFile(f.path, f.name)">
+          <button type="button" class="recent-row" (click)="openFile(f.path, f.name, f.mime)">
             <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="32" [rounded]="7" />
             <div class="recent-row__meta">
               <div class="recent-row__name">{{ f.name }}</div>
@@ -49,7 +49,7 @@
       </header>
       <div class="recents-panel__body">
         @for (c of comments(); track c.id) {
-          <button type="button" class="recent-comment" (click)="openFile(c.file.path, c.file.name)">
+          <button type="button" class="recent-comment" (click)="openFile(c.file.path, c.file.name, c.file.mime)">
             <div class="recent-comment__avatar">
               @if (c.author?.avatarUrl) {
                 <img class="recent-comment__avatar-img" [src]="c.author.avatarUrl" alt="" />

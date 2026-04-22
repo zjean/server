@@ -9,6 +9,7 @@ import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
 const RECENT_LIMIT = 20
@@ -57,7 +58,11 @@ export class RecentsComponent implements OnInit {
     this.commentsService.loadRecents(RECENT_LIMIT)
   }
 
-  protected openFile(filePath: string, fileName: string): void {
+  protected openFile(filePath: string, fileName: string, mime: string | null | undefined): void {
+    if (mime?.startsWith('image/')) {
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: filePath } }).catch(console.error)
+      return
+    }
     this.router.navigate([SPACES_PATH.SPACES, ...filePath.split('/')], { queryParams: { select: fileName } }).catch(console.error)
   }
 }
