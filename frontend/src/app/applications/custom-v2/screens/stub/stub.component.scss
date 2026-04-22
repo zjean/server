@@ -38,6 +38,14 @@
     color: var(--si-fg-muted);
   }
 
+  &__actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
   &__back {
     display: inline-block;
     padding: 10px 18px;
@@ -54,6 +62,19 @@
       background: var(--si-bg3);
       border-color: var(--si-accent-line);
       color: var(--si-fg);
+    }
+  }
+
+  &__kit {
+    font-family: var(--si-mono);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--si-fg-faint);
+    cursor: pointer;
+    transition: color 120ms ease;
+
+    &:hover {
+      color: var(--si-accent);
     }
   }
 }

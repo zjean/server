@@ -1,0 +1,95 @@
+<div class="kit">
+  <header class="kit__header">
+    <p class="kit__eyebrow">Sync-In v2</p>
+    <h1 class="kit__title">Component kit</h1>
+    <p class="kit__lede">Visual reference for icons, primitives, and tokens. This route exists for design review; it is not user-facing.</p>
+  </header>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Logo</h2>
+    <div class="kit__row kit__row--end">
+      <app-v2-logo [size]="18" />
+      <app-v2-logo [size]="22" />
+      <app-v2-logo [size]="32" />
+      <app-v2-logo [size]="48" />
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Icons <span class="kit__hint">{{ iconNames.length }}</span></h2>
+    <div class="kit__icons">
+      @for (n of iconNames; track n) {
+        <div class="kit__icon-cell" [title]="n">
+          <app-v2-icon [name]="n" [size]="20" />
+          <span class="kit__icon-label">{{ n }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Avatars</h2>
+    <div class="kit__row">
+      <app-v2-avatar [user]="soloAvatar" [size]="20" />
+      <app-v2-avatar [user]="soloAvatar" [size]="26" />
+      <app-v2-avatar [user]="soloAvatar" [size]="34" />
+      <app-v2-avatar [user]="ringedAvatar" [size]="34" ring="var(--si-bg3)" />
+      <app-v2-avatar-stack [users]="stackUsers" [size]="24" [max]="3" />
+      <app-v2-avatar-stack [users]="stackUsers" [size]="26" [max]="5" />
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">File glyphs</h2>
+    <div class="kit__row kit__row--wrap">
+      @for (t of fileTypes; track t) {
+        <div class="kit__glyph-cell">
+          <app-v2-file-glyph [type]="t" [size]="40" />
+          <span class="kit__icon-label">{{ t }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Pills</h2>
+    <div class="kit__row kit__row--wrap">
+      @for (c of pillColors; track c) {
+        <app-v2-pill [color]="c">{{ c }}</app-v2-pill>
+      }
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Buttons</h2>
+    <div class="kit__grid">
+      @for (k of buttonKinds; track k) {
+        <div class="kit__btn-group">
+          <span class="kit__group-label">{{ k }}</span>
+          <div class="kit__row">
+            @for (s of buttonSizes; track s) {
+              <app-v2-btn [kind]="k" [size]="s">{{ s }}</app-v2-btn>
+            }
+          </div>
+          <div class="kit__row">
+            <app-v2-btn [kind]="k" size="md" icon="upload">Upload</app-v2-btn>
+            <app-v2-btn [kind]="k" size="md" iconRight="chevDown">Menu</app-v2-btn>
+            <app-v2-btn [kind]="k" size="md" icon="plus" iconRight="chevRight">Next</app-v2-btn>
+            <app-v2-btn [kind]="k" size="md" [disabled]="true">Disabled</app-v2-btn>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Icon buttons</h2>
+    <div class="kit__row">
+      <app-v2-icon-btn iconName="search" />
+      <app-v2-icon-btn iconName="bell" [active]="true" />
+      <app-v2-icon-btn iconName="settings" [size]="34" />
+      <app-v2-icon-btn iconName="more" [size]="28" />
+      <app-v2-icon-btn iconName="trash" [disabled]="true" />
+    </div>
+  </section>
+</div>
