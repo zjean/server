@@ -1,0 +1,72 @@
+import { FileGlyphType } from '../components/file-glyph.component'
+
+// Map a MIME type to one of the v2 FileGlyph categories.
+// Unknown mimes fall through to 'default', which the FileGlyph renders as a
+// neutral document glyph.
+export function mimeToGlyph(mime: string | null | undefined): FileGlyphType {
+  if (!mime) return 'default'
+  const m = mime.toLowerCase()
+
+  if (m === 'inode/directory' || m === 'folder') return 'folder'
+  if (m.startsWith('image/')) return 'image'
+  if (m.startsWith('video/')) return 'video'
+  if (m.startsWith('audio/')) return 'audio'
+  if (m === 'application/pdf') return 'pdf'
+
+  if (
+    m.includes('spreadsheet') ||
+    m.includes('excel') ||
+    m.includes('opendocument.spreadsheet') ||
+    m === 'text/csv' ||
+    m === 'text/tab-separated-values'
+  ) {
+    return 'sheet'
+  }
+
+  if (m.includes('presentation') || m.includes('powerpoint') || m.includes('opendocument.presentation')) {
+    return 'deck'
+  }
+
+  if (
+    m === 'application/zip' ||
+    m === 'application/x-7z-compressed' ||
+    m === 'application/x-tar' ||
+    m === 'application/x-rar-compressed' ||
+    m === 'application/gzip' ||
+    m === 'application/x-bzip2'
+  ) {
+    return 'archive'
+  }
+
+  if (
+    m === 'application/javascript' ||
+    m === 'application/typescript' ||
+    m === 'application/json' ||
+    m === 'application/xml' ||
+    m === 'text/x-python' ||
+    m === 'text/x-java-source' ||
+    m === 'text/x-c' ||
+    m === 'text/x-c++src' ||
+    m === 'text/x-go' ||
+    m === 'text/x-rust' ||
+    m === 'text/x-ruby' ||
+    m === 'text/x-shellscript' ||
+    m === 'text/html' ||
+    m === 'text/css' ||
+    (m.startsWith('application/x-') && (m.endsWith('-script') || m.includes('source')))
+  ) {
+    return 'code'
+  }
+
+  if (
+    m.startsWith('text/') ||
+    m.includes('msword') ||
+    m.includes('officedocument.wordprocessingml') ||
+    m.includes('opendocument.text') ||
+    m === 'application/rtf'
+  ) {
+    return 'doc'
+  }
+
+  return 'default'
+}
