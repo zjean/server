@@ -1,0 +1,84 @@
+<div class="recents">
+  <header class="recents__hero">
+    <div class="recents__hero-left">
+      <p class="recents__hero-eyebrow">Recents · {{ nowLabel }}</p>
+      <h1 class="recents__hero-title">
+        <span class="recents__hero-greeting">{{ greeting() }}, </span>
+        <span class="recents__hero-name">{{ firstName() }}.</span>
+      </h1>
+    </div>
+  </header>
+
+  <div class="recents__grid">
+    <section class="recents-panel">
+      <header class="recents-panel__header">
+        <app-v2-icon name="doc" [size]="13" class="recents-panel__header-icon" />
+        <span class="recents-panel__title">Files</span>
+        <span class="recents-panel__count">{{ files().length }}</span>
+      </header>
+      <div class="recents-panel__body">
+        @for (f of files(); track f.id) {
+          <button type="button" class="recent-row" (click)="openFile(f.path, f.name)">
+            <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="32" [rounded]="7" />
+            <div class="recent-row__meta">
+              <div class="recent-row__name">{{ f.name }}</div>
+              <div class="recent-row__sub">
+                <app-v2-icon name="folder" [size]="10" class="recent-row__sub-icon" />
+                <span class="recent-row__path">{{ f.showedPath || '/' }}</span>
+              </div>
+            </div>
+            <div class="recent-row__time">{{ f.mtime | amTimeAgo }}</div>
+          </button>
+        } @empty {
+          <div class="recents-empty">
+            <div class="recents-empty__icon">
+              <app-v2-icon name="doc" [size]="20" />
+            </div>
+            <div class="recents-empty__title">No recent files</div>
+            <div class="recents-empty__lede">Files you open or change will appear here.</div>
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="recents-panel">
+      <header class="recents-panel__header">
+        <app-v2-icon name="comment" [size]="13" class="recents-panel__header-icon" />
+        <span class="recents-panel__title">Comments</span>
+        <span class="recents-panel__count">{{ comments().length }}</span>
+      </header>
+      <div class="recents-panel__body">
+        @for (c of comments(); track c.id) {
+          <button type="button" class="recent-comment" (click)="openFile(c.file.path, c.file.name)">
+            <div class="recent-comment__avatar">
+              @if (c.author?.avatarUrl) {
+                <img class="recent-comment__avatar-img" [src]="c.author.avatarUrl" alt="" />
+              } @else {
+                <span>{{ (c.author?.fullName || c.author?.login || '?')[0] }}</span>
+              }
+            </div>
+            <div class="recent-comment__body">
+              <div class="recent-comment__head">
+                <span class="recent-comment__author">{{ c.author?.fullName || c.author?.login }}</span>
+                <span class="recent-comment__when">{{ c.modifiedAt | amTimeAgo }}</span>
+              </div>
+              <p class="recent-comment__text">{{ c.content }}</p>
+              <div class="recent-comment__file">
+                <app-v2-icon name="doc" [size]="10" />
+                <span>{{ c.file.name }}</span>
+              </div>
+            </div>
+          </button>
+        } @empty {
+          <div class="recents-empty">
+            <div class="recents-empty__icon">
+              <app-v2-icon name="comment" [size]="20" />
+            </div>
+            <div class="recents-empty__title">No recent comments</div>
+            <div class="recents-empty__lede">Threads on files you're following will appear here.</div>
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+</div>

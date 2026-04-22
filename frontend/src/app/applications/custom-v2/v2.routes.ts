@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router'
 import { KitComponent } from './screens/kit/kit.component'
 import { PlaceholderComponent, PlaceholderRouteData } from './screens/placeholder/placeholder.component'
+import { RecentsComponent } from './screens/recents/recents.component'
 import { V2_ROUTES } from './v2.constants'
 
 const placeholder = (data: PlaceholderRouteData) => ({
@@ -11,15 +12,7 @@ const placeholder = (data: PlaceholderRouteData) => ({
 export const v2Routes: Routes = [
   { path: V2_ROUTES.STUB, pathMatch: 'full', redirectTo: V2_ROUTES.RECENTS },
   { path: V2_ROUTES.KIT, component: KitComponent },
-  {
-    path: V2_ROUTES.RECENTS,
-    ...placeholder({
-      title: 'Recents',
-      icon: 'clock',
-      classicRoute: '/recents',
-      description: 'The redesigned Recents screen is being built. For now the classic version is available below.'
-    })
-  },
+  { path: V2_ROUTES.RECENTS, component: RecentsComponent },
   {
     path: V2_ROUTES.PERSONAL,
     ...placeholder({
