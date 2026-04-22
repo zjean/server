@@ -57,6 +57,15 @@ GitHub remembers the user's last-used strategy; double-check the dropdown on ups
   - Every `v*.*.*` tag → `:<version>`, `:<major>.<minor>`, `:latest`
   - No DockerHub, no npm publish.
 
+## SSH host alias
+
+Both remotes use the `github-prive` SSH host alias, **not** `github.com`. The alias is defined in `~/.ssh/config` and maps to `github.com` with the maintainer's fork-specific key. Always use `git@github-prive:<org>/<repo>.git` in any remote URL you write — never `git@github.com:...`. Symptoms when you get this wrong:
+
+- `gh pr create` works fine (it's HTTPS-based), but `git push` fails with "Permission denied (publickey)".
+- Cloning a fresh copy with `git@github.com:...` authenticates with the wrong identity and may push to the wrong account.
+
+Quick self-check: `git remote -v` should show `git@github-prive:...` for both `origin` and `upstream`. If not, fix with `git remote set-url`.
+
 ## Upstream remote and license
 
 - Remote `upstream` → `git@github-prive:Sync-in/server.git` (push intentionally disabled via `DISABLE` push URL).
