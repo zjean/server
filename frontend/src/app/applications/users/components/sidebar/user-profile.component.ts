@@ -1,6 +1,6 @@
 import { Component, inject, OnDestroy } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { RouterLink } from '@angular/router'
+import { Router, RouterLink } from '@angular/router'
 import { FaIconComponent } from '@fortawesome/angular-fontawesome'
 import { faCircleHalfStroke, faCog, faPowerOff, faThumbTack, faThumbTackSlash, faUserAlt, faUserSecret } from '@fortawesome/free-solid-svg-icons'
 import { APP_URL } from '@sync-in-server/backend/src/common/shared'
@@ -9,6 +9,8 @@ import { Subscription } from 'rxjs'
 import { AuthService } from '../../../../auth/auth.service'
 import { AutoResizeDirective } from '../../../../common/directives/auto-resize.directive'
 import { CapitalizePipe } from '../../../../common/pipes/capitalize.pipe'
+import { setUiVersion } from '../../../custom-v2/ui-version'
+import { V2_PATH } from '../../../custom-v2/v2.constants'
 import { themeLight } from '../../../../layout/layout.interfaces'
 import { LayoutService } from '../../../../layout/layout.service'
 import { StoreService } from '../../../../store/store.service'
@@ -37,6 +39,7 @@ export class UserProfileComponent implements OnDestroy {
   protected readonly layout = inject(LayoutService)
   private readonly authService = inject(AuthService)
   private readonly userService = inject(UserService)
+  private readonly router = inject(Router)
   private subscriptions: Subscription[] = []
 
   constructor() {
@@ -64,6 +67,12 @@ export class UserProfileComponent implements OnDestroy {
   logOut() {
     this.authService.logout()
     this.layout.toggleRSideBar(false)
+  }
+
+  tryRedesignedUI() {
+    setUiVersion('v2')
+    this.collapseRSideBar()
+    this.router.navigate([`/${V2_PATH}`]).catch(console.error)
   }
 
   openLink(urlType: 'website' | 'news' | 'versions' | 'support') {
