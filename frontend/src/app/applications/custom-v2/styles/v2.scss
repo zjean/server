@@ -1,0 +1,35 @@
+// Sync-In v2 entry stylesheet. Loaded once by LayoutV2Component via styleUrl
+// (encapsulation: None) so the fonts and the .v2-root token scope only apply
+// when the /v2 route tree is active. Classic routes stay on their Inter stack.
+//
+// Font imports use latin-only subsets for instrument-serif so the aggregate
+// component-style stays under Angular's 8 kB anyComponentStyle budget; Geist
+// and JetBrains Mono variable packages ship single-file index.css already.
+
+@use './tokens';
+
+@import '@fontsource-variable/geist';
+@import '@fontsource/instrument-serif/latin-400.css';
+@import '@fontsource/instrument-serif/latin-400-italic.css';
+@import '@fontsource-variable/jetbrains-mono';
+
+.v2-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  color: var(--si-fg);
+  background: var(--si-bg2);
+  font-family: var(--si-sans);
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  a {
+    color: var(--si-accent);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--si-accent-hover);
+    }
+  }
+}

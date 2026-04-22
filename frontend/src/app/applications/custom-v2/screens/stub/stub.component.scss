@@ -1,0 +1,59 @@
+:host {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+.v2-stub {
+  max-width: 520px;
+  text-align: center;
+
+  &__eyebrow {
+    margin: 0 0 8px;
+    font-family: var(--si-mono);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--si-fg-faint);
+  }
+
+  &__title {
+    margin: 0 0 16px;
+    font-family: var(--si-serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 56px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--si-fg);
+  }
+
+  &__lede {
+    margin: 0 0 32px;
+    font-family: var(--si-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--si-fg-muted);
+  }
+
+  &__back {
+    display: inline-block;
+    padding: 10px 18px;
+    border: 1px solid var(--si-line-bold);
+    border-radius: var(--si-r2);
+    font-family: var(--si-sans);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--si-fg);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+
+    &:hover {
+      background: var(--si-bg3);
+      border-color: var(--si-accent-line);
+      color: var(--si-fg);
+    }
+  }
+}
