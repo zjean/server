@@ -1,0 +1,102 @@
+<div class="personal">
+  <header class="personal__toolbar">
+    <div class="personal__title">
+      <div class="personal__title-text">{{ folderLabel() }}</div>
+      <div class="personal__title-meta">
+        {{ files().length }} item{{ files().length === 1 ? '' : 's' }}
+        @if (totalSize() > 0) {
+          · {{ totalSize() | toBytes: 1 : true }}
+        }
+      </div>
+    </div>
+
+    <span class="personal__divider"></span>
+
+    <app-v2-btn kind="primary" size="sm" icon="plus" [disabled]="true" title="Coming soon">New</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="upload" [disabled]="true" title="Coming soon">Upload</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" title="Coming soon">Share</app-v2-btn>
+    <app-v2-icon-btn iconName="refresh" [size]="28" title="Refresh" (click)="refresh()" />
+    <app-v2-icon-btn iconName="more" [size]="28" title="More" [disabled]="true" />
+
+    <div class="personal__toolbar-right">
+      <div class="personal__filter">
+        <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
+        <input
+          type="text"
+          class="personal__filter-input"
+          [value]="filter()"
+          (input)="onFilterInput($event)"
+          placeholder="Filter in Personal…"
+        />
+        <span class="personal__filter-hint">⌘F</span>
+      </div>
+      <div class="personal__mode">
+        @for (opt of viewOptions; track opt.id) {
+          <button
+            type="button"
+            class="personal__mode-btn"
+            [class.personal__mode-btn--active]="mode() === opt.id"
+            [disabled]="opt.disabled"
+            [attr.title]="opt.title"
+            (click)="setMode(opt.id)"
+          >
+            <app-v2-icon [name]="opt.icon" [size]="13" />
+          </button>
+        }
+      </div>
+    </div>
+  </header>
+
+  <div class="personal__body">
+    @if (loading()) {
+      <div class="personal__state">Loading…</div>
+    } @else if (errorMessage(); as err) {
+      <div class="personal__state personal__state--error">{{ err }}</div>
+    } @else if (filteredFiles().length === 0 && filter()) {
+      <div class="personal__state">No files match "{{ filter() }}"</div>
+    } @else if (files().length === 0) {
+      <div class="personal__state">This folder is empty.</div>
+    } @else {
+      <div class="file-table">
+        <div class="file-table__head">
+          <span>Name</span>
+          <span>Info</span>
+          <span>Size</span>
+          <span>Modified</span>
+          <span></span>
+        </div>
+        @for (f of filteredFiles(); track f.id) {
+          <button type="button" class="file-row" (click)="openEntry(f)">
+            <div class="file-row__name">
+              <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
+              <span class="file-row__name-text">{{ f.name }}</span>
+            </div>
+            <div class="file-row__info">
+              @if (f.hasComments) {
+                <app-v2-pill color="green" [size]="11">
+                  <app-v2-icon name="comment" [size]="10" />
+                  <span>·</span>
+                </app-v2-pill>
+              }
+            </div>
+            <div class="file-row__size">
+              @if (!f.isDir) {
+                {{ f.size | toBytes: 1 : true }}
+              }
+            </div>
+            <div class="file-row__modified">
+              @if (f.mtime) {
+                <span class="file-row__modified-pill">{{ f.mtime | amTimeAgo }}</span>
+              } @else {
+                —
+              }
+            </div>
+            <div class="file-row__actions">
+              <app-v2-icon-btn iconName="more" [size]="26" />
+            </div>
+          </button>
+        }
+      </div>
+    }
+  </div>
+</div>

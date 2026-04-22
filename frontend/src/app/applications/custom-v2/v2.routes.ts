@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router'
 import { KitComponent } from './screens/kit/kit.component'
+import { PersonalComponent } from './screens/personal/personal.component'
 import { PlaceholderComponent, PlaceholderRouteData } from './screens/placeholder/placeholder.component'
 import { RecentsComponent } from './screens/recents/recents.component'
 import { V2_ROUTES } from './v2.constants'
@@ -15,12 +16,10 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
   {
     path: V2_ROUTES.PERSONAL,
-    ...placeholder({
-      title: 'Personal',
-      icon: 'folder',
-      classicRoute: '/files/personal',
-      description: 'The redesigned Personal browser is being built. Use the classic version in the meantime.'
-    })
+    children: [
+      { path: '', component: PersonalComponent },
+      { path: '**', component: PersonalComponent }
+    ]
   },
   {
     path: V2_ROUTES.SPACES,
