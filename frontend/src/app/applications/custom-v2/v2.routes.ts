@@ -7,6 +7,7 @@ import { RecentsComponent } from './screens/recents/recents.component'
 import { SearchComponent } from './screens/search/search.component'
 import { SettingsComponent } from './screens/settings/settings.component'
 import { SharedComponent } from './screens/shared/shared.component'
+import { SpaceFilesComponent } from './screens/space/space-files.component'
 import { SpacesComponent } from './screens/spaces/spaces.component'
 import { TrashComponent } from './screens/trash/trash.component'
 import { ViewerComponent } from './screens/viewer/viewer.component'
@@ -25,7 +26,14 @@ export const v2Routes: Routes = [
       { path: '**', component: PersonalComponent }
     ]
   },
-  { path: V2_ROUTES.SPACES, component: SpacesComponent },
+  { path: V2_ROUTES.SPACES, pathMatch: 'full', component: SpacesComponent },
+  {
+    path: `${V2_ROUTES.SPACES}/:alias`,
+    children: [
+      { path: '', component: SpaceFilesComponent },
+      { path: '**', component: SpaceFilesComponent }
+    ]
+  },
   {
     path: V2_ROUTES.SHARED,
     pathMatch: 'full',

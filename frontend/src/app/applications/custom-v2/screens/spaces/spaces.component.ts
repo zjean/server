@@ -10,6 +10,7 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { PillComponent } from '../../components/pill.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { CreateSpaceModalComponent } from './create-space-modal.component'
 
 @Component({
@@ -64,7 +65,7 @@ export class SpacesComponent implements OnInit {
   }
 
   protected openSpace(space: SpaceModel): void {
-    this.router.navigate(['/spaces/files', space.alias]).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.SPACES, space.alias]).catch(console.error)
   }
 
   protected createSpace(): void {
