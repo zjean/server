@@ -1,7 +1,7 @@
 import { API_FILES_OPERATION, API_FILES_TASK_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import type { FileLockProps, FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
-import type { FileModel } from '../../../files/models/file.model'
+import type { FileModel } from '../../files/models/file.model'
 
 // Returns a FileModel-shaped object covering the fields + methods used by
 // FilesService, FilesUploadService, and the OnlyOffice viewer:
