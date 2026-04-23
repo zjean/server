@@ -210,7 +210,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected async confirmAndDelete(file: FileProps): Promise<void> {
     const ok = await this.confirmDialog.open({
       title: 'Move to trash',
-      message: 'Move <b>{{name}}</b> to trash?',
+      message: 'v3_move_to_trash_one',
       messageParams: { name: file.name },
       confirmLabel: 'Move to trash',
       kind: 'danger'

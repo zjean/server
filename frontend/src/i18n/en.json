@@ -47,5 +47,6 @@
   "one_item_across_one_bin": "1 item across 1 bin",
   "one_item_across_nb_bins": "1 item across {{ bins }} bins",
   "nb_items_across_one_bin": "{{ items }} items across 1 bin",
-  "nb_items_across_nb_bins": "{{ items }} items across {{ bins }} bins"
+  "nb_items_across_nb_bins": "{{ items }} items across {{ bins }} bins",
+  "v3_move_to_trash_one": "Move <b>{{ name }}</b> to trash?"
 }
