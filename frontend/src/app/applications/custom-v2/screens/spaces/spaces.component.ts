@@ -9,13 +9,14 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { PillComponent } from '../../components/pill.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { CreateSpaceModalComponent } from './create-space-modal.component'
 
 @Component({
   selector: 'app-v2-spaces',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './spaces.component.html',
   styleUrl: './spaces.component.scss',
-  imports: [IconV2Component, IconButtonComponent, PillComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, PillComponent, ToBytesPipe, TimeAgoPipe, CreateSpaceModalComponent]
 })
 export class SpacesComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)
@@ -26,6 +27,7 @@ export class SpacesComponent implements OnInit {
   protected readonly spaces = signal<SpaceModel[]>([])
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
+  protected readonly createOpen = signal(false)
 
   protected readonly sortedSpaces = computed(() => [...this.spaces()].sort((a, b) => (b.modifiedAt?.valueOf() ?? 0) - (a.modifiedAt?.valueOf() ?? 0)))
 
@@ -55,7 +57,16 @@ export class SpacesComponent implements OnInit {
   }
 
   protected createSpace(): void {
-    this.router.navigate(['/spaces'], { queryParams: { new: 1 } }).catch(console.error)
+    this.createOpen.set(true)
+  }
+
+  protected onCreateClosed(): void {
+    this.createOpen.set(false)
+  }
+
+  protected onSpaceCreated(): void {
+    this.createOpen.set(false)
+    this.refresh()
   }
 
   protected memberCount(space: SpaceModel): number {

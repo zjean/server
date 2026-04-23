@@ -1,0 +1,154 @@
+@if (open) {
+  <div class="csm-backdrop" (click)="onBackdropClick()">
+    <div class="csm" role="dialog" aria-modal="true" (click)="stopPropagation($event)">
+      <header class="csm__header">
+        <div>
+          <p class="csm__eyebrow">New space</p>
+          <h2 class="csm__title">Create a new space</h2>
+        </div>
+        <app-v2-icon-btn iconName="x" [size]="30" title="Close" [disabled]="submitting()" (click)="close()" />
+      </header>
+
+      <nav class="csm__tabs" role="tablist">
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'settings'" (click)="setTab('settings')">Settings</button>
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'files'" (click)="setTab('files')">Files</button>
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'members'" (click)="setTab('members')">Members</button>
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'links'" (click)="setTab('links')">Links</button>
+      </nav>
+
+      <div class="csm__body">
+        @switch (tab()) {
+          @case ('settings') {
+            <div class="csm__panel">
+              <label class="csm__field">
+                <span class="csm__label">Space name <span class="csm__req">required</span></span>
+                <input
+                  #nameInput
+                  type="text"
+                  class="csm__input"
+                  placeholder="e.g. Engineering"
+                  [value]="name()"
+                  (input)="onNameInput($event)"
+                  [disabled]="submitting()"
+                  maxlength="120"
+                />
+              </label>
+
+              <label class="csm__field">
+                <span class="csm__label">Description</span>
+                <textarea
+                  class="csm__input csm__textarea"
+                  rows="2"
+                  placeholder="Optional one-line summary"
+                  [value]="description()"
+                  (input)="onDescriptionInput($event)"
+                  [disabled]="submitting()"
+                  maxlength="240"
+                ></textarea>
+              </label>
+
+              <label class="csm__field csm__field--inline">
+                <span class="csm__label">Storage quota</span>
+                <span class="csm__quota">
+                  <input
+                    type="number"
+                    class="csm__input csm__input--narrow"
+                    placeholder="0"
+                    min="0"
+                    [value]="quotaMb() ?? ''"
+                    (input)="onQuotaInput($event)"
+                    [disabled]="submitting()"
+                  />
+                  <span class="csm__unit">MB</span>
+                  <span class="csm__hint">Leave empty for unlimited</span>
+                </span>
+              </label>
+
+              <div class="csm__field">
+                <span class="csm__label">Managers <span class="csm__req">required</span></span>
+                @if (managers().length > 0) {
+                  <div class="csm__chips">
+                    @for (m of managers(); track m.id) {
+                      <span class="csm__chip">
+                        <app-v2-avatar [user]="avatarUser(m)" [size]="20" />
+                        <span class="csm__chip-name">{{ m.name }}</span>
+                        <button type="button" class="csm__chip-remove" (click)="removeManager(m)" [disabled]="submitting()" title="Remove">
+                          <app-v2-icon name="x" [size]="11" />
+                        </button>
+                      </span>
+                    }
+                  </div>
+                }
+                <div class="csm__search">
+                  <app-v2-icon name="search" [size]="14" />
+                  <input
+                    type="text"
+                    class="csm__input csm__input--inline"
+                    placeholder="Search users to add as manager"
+                    [value]="managerQuery()"
+                    (input)="onManagerQueryInput($event)"
+                    (focus)="onManagerQueryFocus()"
+                    (blur)="onManagerQueryBlur()"
+                    [disabled]="submitting()"
+                    autocomplete="off"
+                  />
+                  @if (managerSearching()) {
+                    <span class="csm__search-status">…</span>
+                  }
+                </div>
+                @if (managerDropdownOpen() && managerResults().length > 0) {
+                  <div class="csm__results">
+                    @for (m of managerResults(); track m.id) {
+                      <button type="button" class="csm__result" (mousedown)="addManager(m)">
+                        <app-v2-avatar [user]="avatarUser(m)" [size]="22" />
+                        <span class="csm__result-name">{{ m.name }}</span>
+                        @if (m.login) {
+                          <span class="csm__result-login">{{ m.login }}</span>
+                        }
+                      </button>
+                    }
+                  </div>
+                }
+                @if (managerDropdownOpen() && !managerSearching() && managerResults().length === 0 && managerQuery().trim().length > 0) {
+                  <div class="csm__results csm__results--empty">No matching users</div>
+                }
+              </div>
+            </div>
+          }
+          @case ('files') {
+            <div class="csm__placeholder">
+              <app-v2-icon name="folder" [size]="32" />
+              <p class="csm__placeholder-title">Add files after creating the space</p>
+              <p class="csm__placeholder-lede">Pin folders from any of your space roots once the space exists.</p>
+            </div>
+          }
+          @case ('members') {
+            <div class="csm__placeholder">
+              <app-v2-icon name="users" [size]="32" />
+              <p class="csm__placeholder-title">Invite members later</p>
+              <p class="csm__placeholder-lede">Members and groups can be added from the space settings after creation.</p>
+            </div>
+          }
+          @case ('links') {
+            <div class="csm__placeholder">
+              <app-v2-icon name="link" [size]="32" />
+              <p class="csm__placeholder-title">Generate share links later</p>
+              <p class="csm__placeholder-lede">Public and private share links live under the space's Links tab once it exists.</p>
+            </div>
+          }
+        }
+      </div>
+
+      @if (errorMessage(); as err) {
+        <div class="csm__error">{{ err }}</div>
+      }
+
+      <footer class="csm__footer">
+        <app-v2-btn kind="ghost" size="md" [disabled]="submitting()" (click)="close()">Cancel</app-v2-btn>
+        <app-v2-btn kind="primary" size="md" [disabled]="!canSubmit()" (click)="submit()">
+          {{ submitting() ? 'Creating…' : 'Create space' }}
+        </app-v2-btn>
+      </footer>
+    </div>
+  </div>
+}
