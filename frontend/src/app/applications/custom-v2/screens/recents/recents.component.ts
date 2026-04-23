@@ -57,11 +57,12 @@ export class RecentsComponent implements OnInit {
     this.commentsService.loadRecents(RECENT_LIMIT)
   }
 
-  protected openFile(filePath: string, _fileName: string, mime: string | null | undefined): void {
+  protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
+    const fullPath = `${parentPath}/${fileName}`
     if (mime?.startsWith('image/')) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: filePath } }).catch(console.error)
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
       return
     }
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: filePath } }).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 }
