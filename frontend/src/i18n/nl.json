@@ -746,6 +746,8 @@
   "Filter in Personal…": "Filter in Persoonlijk…",
   "Upload": "Uploaden",
   "Drop files to upload": "Laat bestanden los om te uploaden",
+  "Move to trash": "Verplaats naar prullenbak",
+  "Move <b>{{name}}</b> to trash?": "<b>{{name}}</b> naar de prullenbak verplaatsen?",
   "This folder is empty.": "Deze map is leeg.",
   "Folder not found": "Map niet gevonden",
   "Failed to load folder": "Map laden mislukt",
