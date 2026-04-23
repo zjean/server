@@ -21,6 +21,11 @@ import { isOfficeExtension } from '../../utils/office'
 import { API_ONLY_OFFICE_SETTINGS } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.routes'
 import type { OnlyOfficeReqDto } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.dtos'
 import { OnlyOfficeComponent } from '../../../files/components/utils/only-office.component'
+import { buildFileModelStub } from '../../utils/file-model-stub'
+import { ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.constants'
+import { FILE_MODE } from '@sync-in-server/backend/src/applications/files/constants/operations'
+import type { FileModel } from '../../../files/models/file.model'
+import { StoreService } from '../../../../store/store.service'
 import { CodeEditor } from '@acrodata/code-editor'
 import { FormsModule } from '@angular/forms'
 
@@ -57,7 +62,9 @@ export class FileDetailComponent implements OnInit {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
+  private readonly store = inject(StoreService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected fileStub: FileModel | null = null
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
@@ -173,9 +180,13 @@ export class FileDetailComponent implements OnInit {
 
   private loadOfficeConfig(): void {
     const p = this.currentPath()
-    if (!p) return
+    const f = this.file()
+    if (!p || !f) return
     this.officeLoading.set(true)
     this.officeError.set(null)
+    // Build a FileModel stub so classic lock handling in the viewer works
+    // (FilesViewerOnlyOfficeComponent pattern — createLock/removeLock).
+    this.fileStub = buildFileModelStub(f, p)
     this.http
       .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -183,6 +194,7 @@ export class FileDetailComponent implements OnInit {
         next: (cfg) => {
           this.officeConfig.set(cfg ?? null)
           if (!cfg) this.officeError.set('OnlyOffice settings are missing.')
+          else this.applyOfficeLock(cfg)
           this.officeLoading.set(false)
         },
         error: (e: HttpErrorResponse) => {
@@ -193,6 +205,30 @@ export class FileDetailComponent implements OnInit {
           this.officeLoading.set(false)
         }
       })
+  }
+
+  // Mirrors classic FilesViewerOnlyOfficeComponent.ngOnInit lock handling.
+  // If the file is not read-only and no prior lock exists, mark an OnlyOffice
+  // lock on the stub so subsequent classic calls (e.g. copyMove checks) see it.
+  private applyOfficeLock(cfg: OnlyOfficeReqDto): void {
+    const stub = this.fileStub
+    if (!stub) return
+    if (cfg.hasLock && !stub.lock) {
+      stub.createLock(cfg.hasLock)
+    }
+    const isReadonly = cfg.config?.editorConfig?.mode === FILE_MODE.VIEW
+    if (!isReadonly && !stub.lock) {
+      const u = this.store.user.getValue()
+      stub.createLock({
+        owner: { login: u?.login ?? '', fullName: u?.fullName ?? '', email: u?.email ?? '' },
+        app: ONLY_OFFICE_APP_LOCK,
+        isExclusive: false
+      })
+    }
+  }
+
+  protected onOfficeSave(): void {
+    this.fileStub?.updateHTimeAgo?.()
   }
 
   private loadTextContent(): void {

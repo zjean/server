@@ -19,6 +19,7 @@ import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
+import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ToastService } from '../../components/toast.service'
@@ -232,15 +233,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
   }
 
   private buildFileStub(file: FileProps): FileModel {
-    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
-    const encoded = encodeUrl(fullPath)
-    return {
-      path: fullPath,
-      name: file.name,
-      isBeingDeleted: false,
-      encodedPath: encoded,
-      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
-    } as unknown as FileModel
+    const fullPath = buildSpaceFilePath(SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, this.pathSegments().map((s) => s.path), file.name)
+    return buildFileModelStub(file, fullPath)
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {
@@ -302,17 +296,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   }
 
   private buildRenameStub(file: FileProps): FileModel {
-    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
-    const encoded = encodeUrl(fullPath)
-    return {
-      path: fullPath,
-      name: file.name,
-      isDir: file.isDir,
-      isBeingDeleted: false,
-      encodedPath: encoded,
-      dataUrl: `${API_FILES_OPERATION}/${encoded}`,
-      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
-    } as unknown as FileModel
+    return this.buildFileStub(file)
   }
 
   protected async newFolder(): Promise<void> {

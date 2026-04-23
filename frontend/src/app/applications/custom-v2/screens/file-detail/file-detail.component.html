@@ -55,6 +55,7 @@
               [id]="officeDocId()"
               [documentServerUrl]="cfg.documentServerUrl"
               [config]="cfg.config"
+              (wasSaved)="onOfficeSave()"
             />
           }
         } @else if (isPdf()) {
