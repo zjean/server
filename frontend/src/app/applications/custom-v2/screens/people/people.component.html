@@ -1,0 +1,90 @@
+<div class="people">
+  <aside class="people__list">
+    <header class="people__list-header">
+      <p class="people__eyebrow">People</p>
+      <h1 class="people__title">Directory</h1>
+      <div class="people__summary">
+        {{ users().length }} total · {{ onlineCount() }} online
+      </div>
+      <div class="people__filter">
+        <app-v2-icon name="search" [size]="12" class="people__filter-icon" />
+        <input
+          type="search"
+          class="people__filter-input"
+          [value]="filter()"
+          (input)="onFilterInput($event)"
+          placeholder="Filter people…"
+          autocomplete="off"
+        />
+      </div>
+    </header>
+    <div class="people__list-body">
+      @for (u of filteredUsers(); track u.id) {
+        <button
+          type="button"
+          class="people-row"
+          [class.people-row--active]="selected()?.id === u.id"
+          (click)="selectUser(u)"
+        >
+          <span
+            class="people-row__avatar"
+            [style.background]="'linear-gradient(135deg, oklch(0.55 0.14 ' + hueForUser(u) + '), oklch(0.38 0.12 ' + hueForUser(u) + '))'"
+            [style.color]="'oklch(0.96 0.03 ' + hueForUser(u) + ')'"
+          >
+            @if (u.avatarUrl) {
+              <img [src]="u.avatarUrl" alt="" />
+            } @else {
+              {{ initials(u) }}
+            }
+            <span class="people-row__status" [class]="statusClass(u)"></span>
+          </span>
+          <div class="people-row__meta">
+            <div class="people-row__name">{{ u.fullName || u.login }}</div>
+            <div class="people-row__sub">{{ u.email || '@' + u.login }}</div>
+          </div>
+        </button>
+      } @empty {
+        <div class="people__state">
+          @if (filter()) {
+            No people match "{{ filter() }}"
+          } @else {
+            No people to show.
+          }
+        </div>
+      }
+    </div>
+  </aside>
+
+  <section class="people__detail">
+    @if (selected(); as u) {
+      <div class="people__detail-card">
+        <div class="people__detail-head">
+          <span
+            class="people__detail-avatar"
+            [style.background]="'linear-gradient(135deg, oklch(0.55 0.14 ' + hueForUser(u) + '), oklch(0.38 0.12 ' + hueForUser(u) + '))'"
+            [style.color]="'oklch(0.96 0.03 ' + hueForUser(u) + ')'"
+          >
+            @if (u.avatarUrl) {
+              <img [src]="u.avatarUrl" alt="" />
+            } @else {
+              {{ initials(u) }}
+            }
+          </span>
+          <div class="people__detail-identity">
+            <div class="people__detail-name">{{ u.fullName || u.login }}</div>
+            <div class="people__detail-email">{{ u.email || '—' }}</div>
+            <div class="people__detail-status" [class]="statusClass(u)">{{ u.onlineTextStatus | titlecase }}</div>
+          </div>
+        </div>
+        <dl class="people__detail-kv">
+          <dt>Login</dt>
+          <dd>{{ u.login }}</dd>
+          <dt>ID</dt>
+          <dd class="people__detail-mono">{{ u.id }}</dd>
+        </dl>
+      </div>
+    } @else {
+      <div class="people__detail-empty">Select a person to see details.</div>
+    }
+  </section>
+</div>

@@ -20,7 +20,8 @@ export const V2_ROUTES = {
   VIEWER: 'viewer',
   FILE: 'file',
   SEARCH: 'search',
-  SETTINGS: 'settings'
+  SETTINGS: 'settings',
+  PEOPLE: 'people'
 } as const
 
 export const UI_VERSION_STORAGE_KEY = 'ui.version'
