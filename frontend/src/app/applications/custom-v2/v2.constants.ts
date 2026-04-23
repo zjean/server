@@ -18,7 +18,8 @@ export const V2_ROUTES = {
   SHARED_VIA_LINKS: 'shared/via-links',
   TRASH: 'trash',
   VIEWER: 'viewer',
-  FILE: 'file'
+  FILE: 'file',
+  SEARCH: 'search'
 } as const
 
 export const UI_VERSION_STORAGE_KEY = 'ui.version'
