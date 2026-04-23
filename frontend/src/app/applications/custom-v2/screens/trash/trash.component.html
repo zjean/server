@@ -1,0 +1,52 @@
+<div class="trash">
+  <header class="trash__toolbar">
+    <div class="trash__title-group">
+      <div class="trash__title">Trash</div>
+      <div class="trash__subtitle">
+        {{ totalItems() }} item{{ totalItems() === 1 ? '' : 's' }} across {{ bins().length }} bin{{ bins().length === 1 ? '' : 's' }}
+      </div>
+    </div>
+    <span class="trash__divider"></span>
+    <app-v2-btn kind="ghost" size="sm" icon="restore" [disabled]="true" title="Open a bin to restore items">Restore</app-v2-btn>
+    <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="true" title="Empty trash — coming next">Empty trash</app-v2-btn>
+    <div class="trash__toolbar-right">
+      <app-v2-icon-btn iconName="refresh" [size]="28" title="Refresh" (click)="refresh()" />
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="trash__state">Loading…</div>
+  } @else if (errorMessage(); as err) {
+    <div class="trash__state trash__state--error">{{ err }}</div>
+  } @else if (bins().length === 0) {
+    <div class="trash__state">Nothing in the trash.</div>
+  } @else {
+    <div class="bin-table">
+      <div class="bin-table__head">
+        <span>Space</span>
+        <span>Items</span>
+        <span>Last deletion</span>
+        <span></span>
+      </div>
+      @for (b of bins(); track b.id) {
+        <button type="button" class="bin-row" (click)="openBin(b)">
+          <div class="bin-row__name">
+            <span class="bin-row__glyph">
+              <app-v2-icon name="trash" [size]="14" />
+            </span>
+            <div class="bin-row__title">{{ b.name }}</div>
+          </div>
+          <div class="bin-row__count">{{ b.nb }}</div>
+          <div class="bin-row__mtime">
+            @if (b.mtime) {
+              {{ b.mtime | amTimeAgo }}
+            }
+          </div>
+          <div class="bin-row__actions">
+            <app-v2-icon-btn iconName="chevRight" [size]="24" />
+          </div>
+        </button>
+      }
+    </div>
+  }
+</div>
