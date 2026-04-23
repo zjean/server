@@ -118,11 +118,13 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.PERSONAL, ...segs, file.name]).catch(console.error)
       return
     }
+    const segs = this.pathSegments().map((s) => s.path)
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
     if (file.mime?.startsWith('image/')) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: file.path } }).catch(console.error)
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
       return
     }
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: file.path } }).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
   protected onFilterInput(event: Event): void {
