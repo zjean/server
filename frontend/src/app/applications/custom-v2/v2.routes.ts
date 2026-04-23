@@ -1,17 +1,12 @@
 import { Routes } from '@angular/router'
 import { KitComponent } from './screens/kit/kit.component'
 import { PersonalComponent } from './screens/personal/personal.component'
-import { PlaceholderComponent, PlaceholderRouteData } from './screens/placeholder/placeholder.component'
 import { RecentsComponent } from './screens/recents/recents.component'
 import { SharedComponent } from './screens/shared/shared.component'
 import { SpacesComponent } from './screens/spaces/spaces.component'
+import { TrashComponent } from './screens/trash/trash.component'
 import { ViewerComponent } from './screens/viewer/viewer.component'
 import { V2_ROUTES } from './v2.constants'
-
-const placeholder = (data: PlaceholderRouteData) => ({
-  component: PlaceholderComponent,
-  data: { placeholder: data }
-})
 
 export const v2Routes: Routes = [
   { path: V2_ROUTES.STUB, pathMatch: 'full', redirectTo: V2_ROUTES.RECENTS },
@@ -34,8 +29,5 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.SHARED_WITH_ME, component: SharedComponent, data: { variant: 'with-me' } },
   { path: V2_ROUTES.SHARED_WITH_OTHERS, component: SharedComponent, data: { variant: 'with-others' } },
   { path: V2_ROUTES.SHARED_VIA_LINKS, component: SharedComponent, data: { variant: 'via-links' } },
-  {
-    path: V2_ROUTES.TRASH,
-    ...placeholder({ title: 'Trash', icon: 'trash' })
-  }
+  { path: V2_ROUTES.TRASH, component: TrashComponent }
 ]
