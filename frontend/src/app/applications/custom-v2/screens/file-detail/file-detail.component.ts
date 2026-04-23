@@ -16,7 +16,7 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isImageMime, isPdfMime, isTextViewerMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { CodeEditor } from '@acrodata/code-editor'
 import { FormsModule } from '@angular/forms'
 
@@ -91,6 +91,8 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
+  protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
+  protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
   protected readonly isText = computed(() => isTextViewerMime(this.file()?.mime))
   protected readonly textContent = signal<string>('')
   protected readonly textLoading = signal(false)

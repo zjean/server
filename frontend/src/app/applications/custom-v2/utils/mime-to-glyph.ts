@@ -16,6 +16,14 @@ export function isPdfMime(mime: string | null | undefined): boolean {
   return normalizeMime(mime) === 'application/pdf'
 }
 
+export function isVideoMime(mime: string | null | undefined): boolean {
+  return normalizeMime(mime).startsWith('video/')
+}
+
+export function isAudioMime(mime: string | null | undefined): boolean {
+  return normalizeMime(mime).startsWith('audio/')
+}
+
 // Text/code files the v2 text viewer can render inline via CodeMirror.
 // Office-ish formats (msword/officedocument/opendocument) are excluded; those
 // need the OnlyOffice embed from phase 4.11.
