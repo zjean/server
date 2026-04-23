@@ -131,6 +131,16 @@
     border-radius: 4px;
   }
 
+  &__code-editor {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--si-bg1);
+    font-size: 13px;
+  }
+
   &__no-preview {
     display: flex;
     flex-direction: column;

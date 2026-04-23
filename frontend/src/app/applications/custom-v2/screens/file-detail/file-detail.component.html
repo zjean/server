@@ -41,6 +41,20 @@
           <img class="detail__image" [src]="previewUrl()" [alt]="f.name" />
         } @else if (isPdf()) {
           <iframe class="detail__iframe" [src]="previewUrl()" [title]="f.name"></iframe>
+        } @else if (isText()) {
+          @if (textLoading()) {
+            <div class="detail__state" l10nTranslate>Loading…</div>
+          } @else if (textError(); as err) {
+            <div class="detail__state detail__state--error">{{ err | translate: locale.language }}</div>
+          } @else {
+            <code-editor
+              class="detail__code-editor"
+              [ngModel]="textContent()"
+              [readonly]="true"
+              [disabled]="true"
+              [lineWrapping]="false"
+            />
+          }
         } @else {
           <div class="detail__no-preview">
             <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />

@@ -16,6 +16,26 @@ export function isPdfMime(mime: string | null | undefined): boolean {
   return normalizeMime(mime) === 'application/pdf'
 }
 
+// Text/code files the v2 text viewer can render inline via CodeMirror.
+// Office-ish formats (msword/officedocument/opendocument) are excluded; those
+// need the OnlyOffice embed from phase 4.11.
+export function isTextViewerMime(mime: string | null | undefined): boolean {
+  const m = normalizeMime(mime)
+  if (!m) return false
+  if (m.startsWith('text/')) {
+    if (m.includes('officedocument') || m.includes('opendocument')) return false
+    return true
+  }
+  return (
+    m === 'application/json' ||
+    m === 'application/xml' ||
+    m === 'application/javascript' ||
+    m === 'application/typescript' ||
+    m === 'application/x-sh' ||
+    m === 'application/x-yaml'
+  )
+}
+
 // Map a MIME type to one of the v2 FileGlyph categories.
 // Unknown mimes fall through to 'default', which the FileGlyph renders as a
 // neutral document glyph.
