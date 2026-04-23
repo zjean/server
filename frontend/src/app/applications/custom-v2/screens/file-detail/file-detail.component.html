@@ -1,0 +1,139 @@
+<div class="detail">
+  @if (loading()) {
+    <div class="detail__state">Loading…</div>
+  } @else if (errorMessage(); as err) {
+    <div class="detail__state detail__state--error">{{ err }}</div>
+  } @else if (file(); as f) {
+    <header class="detail__toolbar">
+      <div class="detail__identity">
+        <app-v2-file-glyph [type]="glyphType()" [size]="26" [rounded]="6" />
+        <div class="detail__identity-text">
+          <div class="detail__name">{{ f.name }}</div>
+          <div class="detail__meta">
+            {{ f.mime }}
+            @if (!f.isDir) {
+              · {{ f.size | toBytes: 1 : true }}
+            }
+            @if (f.mtime) {
+              · {{ f.mtime | amTimeAgo }}
+            }
+          </div>
+        </div>
+      </div>
+      <span class="detail__divider"></span>
+      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="true" title="Coming soon">Share</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="downloadClassic()">Download</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" title="Coming soon">Favorite</app-v2-btn>
+      <div class="detail__nav">
+        <app-v2-icon-btn iconName="chevLeft" title="Previous" (click)="previous()" />
+        @if (siblings().length > 0) {
+          <span class="detail__counter">{{ currentIndex() + 1 }} / {{ siblings().length }}</span>
+        }
+        <app-v2-icon-btn iconName="chevRight" title="Next" (click)="next()" />
+        <span class="detail__divider detail__divider--small"></span>
+        <app-v2-icon-btn iconName="x" title="Close" (click)="close()" />
+      </div>
+    </header>
+
+    <div class="detail__body">
+      <div class="detail__stage">
+        @if (isImage()) {
+          <img class="detail__image" [src]="previewUrl()" [alt]="f.name" />
+        } @else if (isPdf()) {
+          <iframe class="detail__iframe" [src]="previewUrl()" [title]="f.name"></iframe>
+        } @else {
+          <div class="detail__no-preview">
+            <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
+            <div class="detail__no-preview-title">Preview not available</div>
+            <div class="detail__no-preview-lede">Download the file to view its contents.</div>
+            <app-v2-btn kind="outline" size="sm" icon="download" (click)="downloadClassic()">Download</app-v2-btn>
+          </div>
+        }
+      </div>
+
+      <aside class="detail__inspector">
+        <div class="detail__inspector-head">
+          <app-v2-file-glyph [type]="glyphType()" [size]="36" [rounded]="8" />
+          <div class="detail__inspector-head-text">
+            <div class="detail__inspector-name">{{ f.name }}</div>
+            <div class="detail__inspector-meta">
+              {{ f.mime }}
+              @if (!f.isDir) {
+                · {{ f.size | toBytes: 1 : true }}
+              }
+            </div>
+          </div>
+        </div>
+        <div class="detail__tabs">
+          @for (t of tabs; track t.id) {
+            <button
+              type="button"
+              class="detail__tab"
+              [class.detail__tab--active]="tab() === t.id"
+              (click)="setTab(t.id)"
+            >
+              <app-v2-icon [name]="t.icon" [size]="12" />
+              <span>{{ t.label }}</span>
+            </button>
+          }
+        </div>
+        <div class="detail__panel">
+          @switch (tab()) {
+            @case ('info') {
+              <section class="kv-section">
+                <div class="kv-section__title">Properties</div>
+                <div class="kv-row">
+                  <span>Type</span>
+                  <span>{{ f.mime }}</span>
+                </div>
+                @if (!f.isDir) {
+                  <div class="kv-row">
+                    <span>Size</span>
+                    <span class="kv-row__mono">{{ f.size | toBytes: 2 : true }}</span>
+                  </div>
+                }
+                <div class="kv-row">
+                  <span>Location</span>
+                  <span>{{ f.path }}</span>
+                </div>
+                @if (f.mtime) {
+                  <div class="kv-row">
+                    <span>Modified</span>
+                    <span>{{ f.mtime | amTimeAgo }}</span>
+                  </div>
+                }
+                @if (f.ctime) {
+                  <div class="kv-row">
+                    <span>Created</span>
+                    <span>{{ f.ctime | amTimeAgo }}</span>
+                  </div>
+                }
+              </section>
+            }
+            @case ('comment') {
+              <div class="detail__placeholder">
+                <app-v2-icon name="comment" [size]="22" />
+                <div class="detail__placeholder-title">Comments</div>
+                <div class="detail__placeholder-lede">Inline comment threads will light up in a follow-up PR.</div>
+              </div>
+            }
+            @case ('activity') {
+              <div class="detail__placeholder">
+                <app-v2-icon name="activity" [size]="22" />
+                <div class="detail__placeholder-title">Activity</div>
+                <div class="detail__placeholder-lede">File activity feed will populate once the backend exposes it.</div>
+              </div>
+            }
+            @case ('share') {
+              <div class="detail__placeholder">
+                <app-v2-icon name="shareTree" [size]="22" />
+                <div class="detail__placeholder-title">Sharing</div>
+                <div class="detail__placeholder-lede">Sharing controls ship with the v2 shares browser.</div>
+              </div>
+            }
+          }
+        </div>
+      </aside>
+    </div>
+  }
+</div>
