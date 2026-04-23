@@ -43,7 +43,7 @@ export class AppRailComponent {
     },
     { id: 'search', icon: 'search', title: 'Search', route: `/${V2_PATH}/${V2_ROUTES.SEARCH}`, disabled: false },
     { id: 'contacts', icon: 'person', title: 'People — not migrated yet', route: null, disabled: true },
-    { id: 'settings', icon: 'settings', title: 'Settings — not migrated yet', route: null, disabled: true }
+    { id: 'settings', icon: 'settings', title: 'Settings', route: `/${V2_PATH}/${V2_ROUTES.SETTINGS}`, disabled: false }
   ]
 
   private readonly currentUrl = toSignal(
