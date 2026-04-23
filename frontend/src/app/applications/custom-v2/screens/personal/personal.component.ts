@@ -1,11 +1,13 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, OnInit, signal, OnDestroy, ViewChild } from '@angular/core'
-import { toSignal } from '@angular/core/rxjs-interop'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, OnInit, signal, OnDestroy, ViewChild } from '@angular/core'
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { Subscription } from 'rxjs'
+import { pairwise } from 'rxjs/operators'
+import { StoreService } from '../../../../store/store.service'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
@@ -68,8 +70,11 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly filesService = inject(FilesService)
   private readonly filesUpload = inject(FilesUploadService)
+  private readonly store = inject(StoreService)
+  private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private urlSubscription: Subscription | null = null
+  private pendingDropRefresh = false
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
@@ -143,6 +148,14 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.syncBreadcrumbs()
       this.loadFiles()
     })
+    this.store.filesActiveTasks
+      .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(([prev, curr]) => {
+        if (this.pendingDropRefresh && prev.length > 0 && curr.length === 0) {
+          this.pendingDropRefresh = false
+          this.refresh()
+        }
+      })
   }
 
   ngOnDestroy(): void {
@@ -215,11 +228,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   protected onDropFiles(event: DragEvent): void {
     this.filesService.currentRoute = this.currentUploadRoute()
+    this.pendingDropRefresh = true
     this.filesUpload.onDropFiles(event, [])
-    // Poll for when the active tasks related to this upload drop complete, then refresh.
-    // The classic onDropFiles is fire-and-forget (webkit recursion reads async), so instead
-    // of awaiting it we just refresh on a short interval while the transfers queue has work.
-    this.watchAndRefresh()
   }
 
   private uploadFiles(files: File[]): void {
@@ -236,14 +246,6 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private currentUploadRoute(): string {
     const segs = this.pathSegments().map((s) => s.path)
     return [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs].join('/')
-  }
-
-  private watchAndRefresh(): void {
-    // Refresh immediately to show any quickly-created placeholders (server is sync per file),
-    // then again after a short delay to catch tasks that finish after the initial tick.
-    const poll = () => this.refresh()
-    setTimeout(poll, 500)
-    setTimeout(poll, 2500)
   }
 
   private loadFiles(): void {
