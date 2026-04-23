@@ -39,8 +39,36 @@
       <div class="detail__stage">
         @if (isImage()) {
           <img class="detail__image" [src]="previewUrl()" [alt]="f.name" />
+        } @else if (showOfficeEmbed()) {
+          @if (officeLoading()) {
+            <div class="detail__state" l10nTranslate>Loading editor…</div>
+          } @else if (officeError(); as err) {
+            <div class="detail__no-preview">
+              <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
+              <div class="detail__no-preview-title">{{ err | translate: locale.language }}</div>
+              <div class="detail__no-preview-lede" l10nTranslate>Download the file to edit it in a desktop app.</div>
+              <app-v2-btn kind="outline" size="sm" icon="download" (click)="downloadClassic()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+            </div>
+          } @else if (officeConfig(); as cfg) {
+            <app-files-onlyoffice-document
+              class="detail__office"
+              [id]="officeDocId()"
+              [documentServerUrl]="cfg.documentServerUrl"
+              [config]="cfg.config"
+            />
+          }
         } @else if (isPdf()) {
           <iframe class="detail__iframe" [src]="previewUrl()" [title]="f.name"></iframe>
+          @if (canToggleToOffice()) {
+            <button
+              type="button"
+              class="detail__office-toggle"
+              (click)="toggleToOffice()"
+              [attr.title]="'Edit in OnlyOffice' | translate: locale.language"
+            >
+              <app-v2-icon name="pencil" [size]="14" />
+            </button>
+          }
         } @else if (isVideo()) {
           <video class="detail__media" [src]="previewUrl()" controls playsinline preload="metadata"></video>
         } @else if (isAudio()) {
