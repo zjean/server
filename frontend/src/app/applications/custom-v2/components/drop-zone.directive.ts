@@ -48,8 +48,8 @@ export class DropZoneDirective {
   private hasFiles(ev: DragEvent): boolean {
     const types = ev.dataTransfer?.types
     if (!types) return false
-    for (let i = 0; i < types.length; i++) {
-      if (types[i] === 'Files') return true
+    for (const type of types) {
+      if (type === 'Files') return true
     }
     return false
   }
