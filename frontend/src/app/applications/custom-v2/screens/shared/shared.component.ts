@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ShareFileModel } from '../../../shares/models/share-file.model'
@@ -50,13 +51,14 @@ const CONFIGS: Record<SharedVariant, VariantConfig> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shared.component.html',
   styleUrl: './shared.component.scss',
-  imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe]
+  imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class SharedComponent implements OnInit {
   private readonly sharesService = inject(SharesService)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
   protected readonly mimeToGlyph = mimeToGlyph
@@ -100,5 +102,9 @@ export class SharedComponent implements OnInit {
 
   protected openShare(share: ShareFileModel): void {
     this.router.navigate(['/spaces/shares', share.alias]).catch(console.error)
+  }
+
+  protected recipientCount(s: ShareFileModel): number {
+    return (s.counts?.users ?? 0) + (s.counts?.groups ?? 0)
   }
 }

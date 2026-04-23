@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal, OnDestroy } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { Subscription } from 'rxjs'
@@ -39,13 +40,24 @@ function readStoredMode(): BrowserMode {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './personal.component.html',
   styleUrl: './personal.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, ButtonComponent, IconButtonComponent, PillComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [
+    IconV2Component,
+    FileGlyphComponent,
+    ButtonComponent,
+    IconButtonComponent,
+    PillComponent,
+    ToBytesPipe,
+    TimeAgoPipe,
+    L10nTranslateDirective,
+    L10nTranslatePipe
+  ]
 })
 export class PersonalComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private urlSubscription: Subscription | null = null
 
   protected readonly mimeToGlyph = mimeToGlyph

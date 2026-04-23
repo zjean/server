@@ -1,6 +1,7 @@
 import { Location } from '@angular/common'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { UserType } from '../../users/interfaces/user.interface'
@@ -14,9 +15,10 @@ import { V2BreadcrumbService } from './breadcrumb.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss',
-  imports: [IconV2Component, IconButtonComponent, LogoComponent]
+  imports: [IconV2Component, IconButtonComponent, LogoComponent, L10nTranslatePipe]
 })
 export class TitleBarComponent {
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly location = inject(Location)
   private readonly router = inject(Router)
   private readonly store = inject(StoreService)

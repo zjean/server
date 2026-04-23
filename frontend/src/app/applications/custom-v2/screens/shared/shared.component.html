@@ -1,26 +1,26 @@
 <div class="shared">
   <header class="shared__hero">
     <div class="shared__hero-text">
-      <p class="shared__eyebrow">{{ config().eyebrow }}</p>
-      <h1 class="shared__title">{{ config().title }}</h1>
+      <p class="shared__eyebrow">{{ config().eyebrow | translate: locale.language }}</p>
+      <h1 class="shared__title">{{ config().title | translate: locale.language }}</h1>
     </div>
     <div class="shared__actions">
-      <app-v2-icon-btn iconName="refresh" [size]="30" title="Refresh" (click)="refresh()" />
+      <app-v2-icon-btn iconName="refresh" [size]="30" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
     </div>
   </header>
 
   @if (loading()) {
-    <div class="shared__state">Loading…</div>
+    <div class="shared__state" l10nTranslate>Loading…</div>
   } @else if (errorMessage(); as err) {
-    <div class="shared__state shared__state--error">{{ err }}</div>
+    <div class="shared__state shared__state--error">{{ err | translate: locale.language }}</div>
   } @else if (shares().length === 0) {
-    <div class="shared__state">{{ config().emptyState }}</div>
+    <div class="shared__state">{{ config().emptyState | translate: locale.language }}</div>
   } @else {
     <div class="share-table">
       <div class="share-table__head">
-        <span>Name</span>
-        <span>Recipients</span>
-        <span>Modified</span>
+        <span l10nTranslate>Name</span>
+        <span l10nTranslate>Recipients</span>
+        <span l10nTranslate>Modified</span>
         <span></span>
       </div>
       @for (s of shares(); track s.id) {
@@ -35,9 +35,9 @@
             </div>
           </div>
           <div class="share-row__recipients">
-            {{ (s.counts?.users ?? 0) + (s.counts?.groups ?? 0) }} user{{ (s.counts?.users ?? 0) + (s.counts?.groups ?? 0) === 1 ? '' : 's' }}
+            {{ (recipientCount(s) === 1 ? 'one_user' : 'nb_users') | translate: locale.language : { nb: recipientCount(s) } }}
             @if ((s.counts?.links ?? 0) > 0) {
-              · {{ s.counts.links }} link{{ s.counts.links === 1 ? '' : 's' }}
+              · {{ (s.counts.links === 1 ? 'one_link' : 'nb_links') | translate: locale.language : { nb: s.counts.links } }}
             }
           </div>
           <div class="share-row__modified">

@@ -1,26 +1,26 @@
 <div class="spaces">
   <header class="spaces__toolbar">
-    <app-v2-icon-btn iconName="refresh" [size]="30" title="Refresh" (click)="refresh()" />
-    <app-v2-icon-btn iconName="plus" [size]="30" title="Create space" (click)="createSpace()" />
-    <app-v2-icon-btn iconName="more" [size]="30" title="More" [disabled]="true" />
+    <app-v2-icon-btn iconName="refresh" [size]="30" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+    <app-v2-icon-btn iconName="plus" [size]="30" [title]="'Create space' | translate: locale.language" (click)="createSpace()" />
+    <app-v2-icon-btn iconName="more" [size]="30" [title]="'More' | translate: locale.language" [disabled]="true" />
     <div class="spaces__toolbar-meta">
-      {{ spaces().length }} space{{ spaces().length === 1 ? '' : 's' }}
+      {{ (spaces().length === 1 ? 'one_space' : 'nb_spaces') | translate: locale.language : { nb: spaces().length } }}
     </div>
   </header>
 
   @if (loading()) {
-    <div class="spaces__state">Loading…</div>
+    <div class="spaces__state" l10nTranslate>Loading…</div>
   } @else if (errorMessage(); as err) {
-    <div class="spaces__state spaces__state--error">{{ err }}</div>
+    <div class="spaces__state spaces__state--error">{{ err | translate: locale.language }}</div>
   } @else if (spaces().length === 0) {
-    <div class="spaces__state">You don't belong to any spaces yet.</div>
+    <div class="spaces__state" l10nTranslate>You don't belong to any spaces yet.</div>
   } @else {
     <div class="space-table">
       <div class="space-table__head">
-        <span>Name</span>
-        <span>Quota</span>
-        <span>Members</span>
-        <span>Modified</span>
+        <span l10nTranslate>Name</span>
+        <span l10nTranslate>Quota</span>
+        <span l10nTranslate>Members</span>
+        <span l10nTranslate>Modified</span>
         <span></span>
       </div>
       @for (s of sortedSpaces(); track s.id) {

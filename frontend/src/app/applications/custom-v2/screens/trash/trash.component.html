@@ -1,31 +1,43 @@
 <div class="trash">
   <header class="trash__toolbar">
     <div class="trash__title-group">
-      <div class="trash__title">Trash</div>
+      <div class="trash__title" l10nTranslate>Trash</div>
       <div class="trash__subtitle">
-        {{ totalItems() }} item{{ totalItems() === 1 ? '' : 's' }} across {{ bins().length }} bin{{ bins().length === 1 ? '' : 's' }}
+        {{ subtitleKey() | translate: locale.language : { items: totalItems(), bins: bins().length } }}
       </div>
     </div>
     <span class="trash__divider"></span>
-    <app-v2-btn kind="ghost" size="sm" icon="restore" [disabled]="true" title="Open a bin to restore items">Restore</app-v2-btn>
-    <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="true" title="Empty trash — coming next">Empty trash</app-v2-btn>
+    <app-v2-btn
+      kind="ghost"
+      size="sm"
+      icon="restore"
+      [disabled]="true"
+      [title]="'Open a bin to restore items' | translate: locale.language"
+    >{{ 'Restore' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn
+      kind="danger"
+      size="sm"
+      icon="trash"
+      [disabled]="true"
+      [title]="'Empty trash — coming next' | translate: locale.language"
+    >{{ 'Empty trash' | translate: locale.language }}</app-v2-btn>
     <div class="trash__toolbar-right">
-      <app-v2-icon-btn iconName="refresh" [size]="28" title="Refresh" (click)="refresh()" />
+      <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
     </div>
   </header>
 
   @if (loading()) {
-    <div class="trash__state">Loading…</div>
+    <div class="trash__state" l10nTranslate>Loading…</div>
   } @else if (errorMessage(); as err) {
-    <div class="trash__state trash__state--error">{{ err }}</div>
+    <div class="trash__state trash__state--error">{{ err | translate: locale.language }}</div>
   } @else if (bins().length === 0) {
-    <div class="trash__state">Nothing in the trash.</div>
+    <div class="trash__state" l10nTranslate>Nothing in the trash.</div>
   } @else {
     <div class="bin-table">
       <div class="bin-table__head">
-        <span>Space</span>
-        <span>Items</span>
-        <span>Last deletion</span>
+        <span l10nTranslate>Space</span>
+        <span l10nTranslate>Items</span>
+        <span l10nTranslate>Last deletion</span>
         <span></span>
       </div>
       @for (b of bins(); track b.id) {

@@ -21,6 +21,7 @@ import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
 import { UserService } from '../../../users/user.service'
 import { MemberModel } from '../../../users/models/member.model'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { ButtonComponent } from '../../components/button.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { AvatarComponent, AvatarUser } from '../../components/avatar.component'
@@ -33,9 +34,10 @@ type Tab = 'settings' | 'files' | 'members' | 'links'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './create-space-modal.component.html',
   styleUrl: './create-space-modal.component.scss',
-  imports: [IconV2Component, IconButtonComponent, ButtonComponent, AvatarComponent]
+  imports: [IconV2Component, IconButtonComponent, ButtonComponent, AvatarComponent, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   @Input({ required: true }) open = false
   @Output() closed = new EventEmitter<void>()
   @Output() created = new EventEmitter<SpaceModel>()

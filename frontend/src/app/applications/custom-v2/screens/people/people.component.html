@@ -1,10 +1,10 @@
 <div class="people">
   <aside class="people__list">
     <header class="people__list-header">
-      <p class="people__eyebrow">People</p>
-      <h1 class="people__title">Directory</h1>
+      <p class="people__eyebrow" l10nTranslate>People</p>
+      <h1 class="people__title" l10nTranslate>Directory</h1>
       <div class="people__summary">
-        {{ users().length }} total · {{ onlineCount() }} online
+        {{ 'nb_total_nb_online' | translate: locale.language : { total: users().length, online: onlineCount() } }}
       </div>
       <div class="people__filter">
         <app-v2-icon name="search" [size]="12" class="people__filter-icon" />
@@ -13,7 +13,7 @@
           class="people__filter-input"
           [value]="filter()"
           (input)="onFilterInput($event)"
-          placeholder="Filter people…"
+          [placeholder]="'Filter people…' | translate: locale.language"
           autocomplete="off"
         />
       </div>
@@ -46,9 +46,9 @@
       } @empty {
         <div class="people__state">
           @if (filter()) {
-            No people match "{{ filter() }}"
+            {{ 'no_people_match_query' | translate: locale.language : { query: filter() } }}
           } @else {
-            No people to show.
+            <span l10nTranslate>No people to show.</span>
           }
         </div>
       }
@@ -73,18 +73,18 @@
           <div class="people__detail-identity">
             <div class="people__detail-name">{{ u.fullName || u.login }}</div>
             <div class="people__detail-email">{{ u.email || '—' }}</div>
-            <div class="people__detail-status" [class]="statusClass(u)">{{ u.onlineTextStatus | titlecase }}</div>
+            <div class="people__detail-status" [class]="statusClass(u)">{{ statusKey(u) | translate: locale.language }}</div>
           </div>
         </div>
         <dl class="people__detail-kv">
-          <dt>Login</dt>
+          <dt l10nTranslate>Login</dt>
           <dd>{{ u.login }}</dd>
-          <dt>ID</dt>
+          <dt l10nTranslate>ID</dt>
           <dd class="people__detail-mono">{{ u.id }}</dd>
         </dl>
       </div>
     } @else {
-      <div class="people__detail-empty">Select a person to see details.</div>
+      <div class="people__detail-empty" l10nTranslate>Select a person to see details.</div>
     }
   </section>
 </div>

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { APP_VERSION } from '../../../../app.constants'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../../store/store.service'
@@ -21,12 +22,13 @@ interface SettingLink {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
-  imports: [IconV2Component, ToBytesPipe]
+  imports: [IconV2Component, ToBytesPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class SettingsComponent implements OnInit {
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly user = toSignal(this.store.user)
   protected readonly userAvatar = toSignal(this.store.userAvatarUrl)

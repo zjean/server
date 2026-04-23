@@ -2,6 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
@@ -30,7 +31,16 @@ interface TabDef {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './file-detail.component.html',
   styleUrl: './file-detail.component.scss',
-  imports: [IconV2Component, IconButtonComponent, FileGlyphComponent, ButtonComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [
+    IconV2Component,
+    IconButtonComponent,
+    FileGlyphComponent,
+    ButtonComponent,
+    ToBytesPipe,
+    TimeAgoPipe,
+    L10nTranslateDirective,
+    L10nTranslatePipe
+  ]
 })
 export class FileDetailComponent implements OnInit {
   private readonly http = inject(HttpClient)
@@ -38,6 +48,7 @@ export class FileDetailComponent implements OnInit {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
@@ -142,7 +153,7 @@ export class FileDetailComponent implements OnInit {
         next: (result) => {
           const match = result.files.find((f) => f.name === name)
           if (!match) {
-            this.errorMessage.set(`File "${name}" not found in parent folder.`)
+            this.errorMessage.set('File not found in parent folder.')
             this.file.set(null)
             this.loading.set(false)
             return

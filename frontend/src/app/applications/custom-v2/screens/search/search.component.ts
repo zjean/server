@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FileContentModel } from '../../../files/models/file-content.model'
 import { FilesService } from '../../../files/services/files.service'
 import { ButtonComponent } from '../../components/button.component'
@@ -18,13 +19,14 @@ const LIMIT = 100
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.component.html',
   styleUrl: './search.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, ButtonComponent]
+  imports: [IconV2Component, FileGlyphComponent, ButtonComponent, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class SearchComponent implements OnInit {
   private readonly filesService = inject(FilesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly input = viewChild<ElementRef<HTMLInputElement>>('queryInput')
   private activeSub?: { cancel?: () => void } | null = null
 

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FileTask, FileTaskStatus } from '@sync-in-server/backend/src/applications/files/models/file-task'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
@@ -14,11 +15,12 @@ import { IconV2Component } from '../icons/icon-v2.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './transfers-popover.component.html',
   styleUrl: './transfers-popover.component.scss',
-  imports: [IconV2Component, IconButtonComponent, ButtonComponent, PillComponent, ToBytesPipe]
+  imports: [IconV2Component, IconButtonComponent, ButtonComponent, PillComponent, ToBytesPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class TransfersPopoverComponent {
   private readonly store = inject(StoreService)
   private readonly host = inject(ElementRef<HTMLElement>)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly open = signal(false)
   protected readonly activeTasks = toSignal(this.store.filesActiveTasks, { initialValue: [] as FileTask[] })
@@ -29,11 +31,9 @@ export class TransfersPopoverComponent {
   protected readonly totalDone = computed(() => this.endedTasks().filter((t) => t.status === FileTaskStatus.SUCCESS).length)
   protected readonly totalError = computed(() => this.endedTasks().filter((t) => t.status === FileTaskStatus.ERROR).length)
 
-  protected readonly pillLabel = computed(() => {
-    const active = this.totalActive()
-    const done = this.totalDone()
-    if (active > 0) return `${active} active`
-    if (done > 0) return `${done} done`
+  protected readonly pillKind = computed<'active' | 'done' | null>(() => {
+    if (this.totalActive() > 0) return 'active'
+    if (this.totalDone() > 0) return 'done'
     return null
   })
 
@@ -57,7 +57,7 @@ export class TransfersPopoverComponent {
   }
 
   protected toggle(): void {
-    if (this.pillLabel() === null) return
+    if (this.pillKind() === null) return
     this.open.update((v) => !v)
   }
 
