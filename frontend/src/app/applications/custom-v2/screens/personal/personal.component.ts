@@ -18,8 +18,10 @@ import { FileUpload } from '../../../files/interfaces/file-upload.interface'
 import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
+import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { ToastService } from '../../components/toast.service'
+import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
 import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
@@ -74,6 +76,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly filesService = inject(FilesService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
+  private readonly treePicker = inject(TreePickerService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly destroyRef = inject(DestroyRef)
@@ -81,6 +84,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private urlSubscription: Subscription | null = null
   private pendingDropRefresh = false
   private pendingDeleteRefresh = false
+  private pendingCopyMoveRefresh = false
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
@@ -129,6 +133,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
         disabledReason: f.isDir ? 'Coming soon' : undefined,
         action: () => this.downloadFile(f)
       },
+      { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
+      { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       {
         id: 'share',
         label: 'Share',
@@ -154,9 +160,10 @@ export class PersonalComponent implements OnInit, OnDestroy {
     })
     this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
       if (prev.length > 0 && curr.length === 0) {
-        if (this.pendingDropRefresh || this.pendingDeleteRefresh) {
+        if (this.pendingDropRefresh || this.pendingDeleteRefresh || this.pendingCopyMoveRefresh) {
           this.pendingDropRefresh = false
           this.pendingDeleteRefresh = false
+          this.pendingCopyMoveRefresh = false
           this.refresh()
         }
       }
@@ -207,6 +214,32 @@ export class PersonalComponent implements OnInit, OnDestroy {
     this.menu.set(null)
   }
 
+  protected async copyOrMove(file: FileProps, op: FILE_OPERATION.COPY | FILE_OPERATION.MOVE): Promise<void> {
+    const isMove = op === FILE_OPERATION.MOVE
+    const dst = await this.treePicker.open({
+      title: isMove ? 'Move file' : 'Copy file',
+      submitLabel: isMove ? 'Move here' : 'Copy here',
+      disabledPath: this.currentUploadRoute()
+    })
+    if (!dst) return
+    const stub = this.buildFileStub(file)
+    this.pendingCopyMoveRefresh = true
+    this.filesService.copyMove([stub], dst.path, op).catch(console.error)
+    this.toast.success(isMove ? `Moving "${file.name}"…` : `Copying "${file.name}"…`)
+  }
+
+  private buildFileStub(file: FileProps): FileModel {
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
+    const encoded = encodeUrl(fullPath)
+    return {
+      path: fullPath,
+      name: file.name,
+      isBeingDeleted: false,
+      encodedPath: encoded,
+      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
+    } as unknown as FileModel
+  }
+
   protected async confirmAndDelete(file: FileProps): Promise<void> {
     const ok = await this.confirmDialog.open({
       title: 'Move to trash',
@@ -216,17 +249,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
-    const encoded = encodeUrl(fullPath)
-    const stub = {
-      path: fullPath,
-      name: file.name,
-      isBeingDeleted: false,
-      encodedPath: encoded,
-      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
-    } as unknown as FileModel
     this.pendingDeleteRefresh = true
-    this.filesService.delete([stub])
+    this.filesService.delete([this.buildFileStub(file)])
     this.toast.success(`Moving "${file.name}" to trash…`)
   }
 
