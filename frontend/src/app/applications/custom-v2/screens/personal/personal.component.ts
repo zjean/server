@@ -17,7 +17,7 @@ import { PillComponent } from '../../components/pill.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -120,7 +120,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     }
     const segs = this.pathSegments().map((s) => s.path)
     const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
-    if (file.mime?.startsWith('image/')) {
+    if (isImageMime(file.mime)) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
       return
     }

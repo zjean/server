@@ -192,6 +192,7 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
     const dto: CreateOrUpdateSpaceDto = {
       name: this.name().trim(),
       description: this.description().trim() || undefined,
+      enabled: true,
       storageQuota: this.quotaMb() != null ? (this.quotaMb() as number) * 1024 * 1024 : undefined,
       managers: this.managers().map(
         (m) =>
@@ -201,7 +202,8 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
           }) as SpaceMemberDto
       ),
       members: [],
-      links: []
+      links: [],
+      roots: []
     }
     this.spacesService.createSpace(dto).subscribe({
       next: (space) => {

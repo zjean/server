@@ -9,7 +9,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 const MIN_QUERY = 2
 const LIMIT = 100
@@ -80,7 +80,7 @@ export class SearchComponent implements OnInit {
   }
 
   protected openResult(r: FileContentModel): void {
-    if (r.mime?.startsWith('image/')) {
+    if (isImageMime(r.mime)) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: r.path } }).catch(console.error)
       return
     }

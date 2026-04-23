@@ -16,7 +16,7 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -52,6 +52,8 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
+  protected readonly currentPath = signal<string>('')
+  protected readonly parentPath = signal<string>('')
   protected readonly siblings = signal<FileProps[]>([])
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
@@ -71,19 +73,20 @@ export class FileDetailComponent implements OnInit {
   })
 
   protected readonly previewUrl = computed(() => {
-    const f = this.file()
-    return f ? `${API_FILES_OPERATION}/${encodeUrl(f.path)}` : ''
+    const p = this.currentPath()
+    return p ? `${API_FILES_OPERATION}/${encodeUrl(p)}` : ''
   })
 
   protected readonly currentIndex = computed(() => {
-    const f = this.file()
+    const p = this.currentPath()
+    const prefix = this.parentPath()
     const sibs = this.siblings()
-    if (!f) return -1
-    return sibs.findIndex((s) => s.path === f.path)
+    if (!p || !prefix) return -1
+    return sibs.findIndex((s) => `${prefix}/${s.name}` === p)
   })
 
-  protected readonly isImage = computed(() => !!this.file()?.mime?.startsWith('image/'))
-  protected readonly isPdf = computed(() => this.file()?.mime === 'application/pdf')
+  protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
+  protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
 
   ngOnInit(): void {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -105,14 +108,14 @@ export class FileDetailComponent implements OnInit {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() + 1 + sibs.length) % sibs.length
-    this.goTo(sibs[idx].path)
+    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
   }
 
   protected previous(): void {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() - 1 + sibs.length) % sibs.length
-    this.goTo(sibs[idx].path)
+    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
   }
 
   protected close(): void {
@@ -124,9 +127,9 @@ export class FileDetailComponent implements OnInit {
   }
 
   protected downloadClassic(): void {
-    const f = this.file()
-    if (!f) return
-    window.open(`${API_FILES_OPERATION}/${encodeUrl(f.path)}`, '_blank')
+    const p = this.currentPath()
+    if (!p) return
+    window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_blank')
   }
 
   private goTo(path: string): void {
@@ -136,6 +139,7 @@ export class FileDetailComponent implements OnInit {
   private loadFile(path: string): void {
     this.loading.set(true)
     this.errorMessage.set(null)
+    this.currentPath.set(path)
 
     const parts = path.split('/').filter(Boolean)
     if (parts.length < 2) {
@@ -145,6 +149,7 @@ export class FileDetailComponent implements OnInit {
     }
     const parentPath = parts.slice(0, -1).join('/')
     const name = parts[parts.length - 1]
+    this.parentPath.set(parentPath)
 
     this.http
       .get<SpaceFiles>(`${API_SPACES_BROWSE}/${parentPath}`)

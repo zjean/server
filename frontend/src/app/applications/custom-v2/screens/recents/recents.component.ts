@@ -9,7 +9,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 const RECENT_LIMIT = 20
 
@@ -59,7 +59,7 @@ export class RecentsComponent implements OnInit {
 
   protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
     const fullPath = `${parentPath}/${fileName}`
-    if (mime?.startsWith('image/')) {
+    if (isImageMime(mime)) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
       return
     }
