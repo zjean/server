@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common'
 import { AdminModule } from './admin/admin.module'
 import { CommentsModule } from './comments/comments.module'
+import { CustomMobileCompatModule } from './custom-mobile-compat/custom-mobile-compat.module'
 import { FilesModule } from './files/files.module'
 import { NotificationsModule } from './notifications/notifications.module'
 import { SharesModule } from './shares/shares.module'
@@ -11,7 +12,18 @@ import { WebDAVModule } from './webdav/webdav.module'
 
 @Global()
 @Module({
-  imports: [UsersModule, SpacesModule, SharesModule, FilesModule, WebDAVModule, AdminModule, CommentsModule, NotificationsModule, SyncModule],
+  imports: [
+    UsersModule,
+    SpacesModule,
+    SharesModule,
+    FilesModule,
+    WebDAVModule,
+    AdminModule,
+    CommentsModule,
+    NotificationsModule,
+    SyncModule,
+    CustomMobileCompatModule
+  ],
   exports: [UsersModule, SpacesModule, SharesModule, FilesModule, WebDAVModule, CommentsModule, NotificationsModule]
 })
 export class ApplicationsModule {}

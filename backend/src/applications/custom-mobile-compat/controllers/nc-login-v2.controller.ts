@@ -1,0 +1,248 @@
+import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req, Res } from '@nestjs/common'
+import { FastifyReply, FastifyRequest } from 'fastify'
+import { AUTH_SCOPE } from '../../../authentication/constants/scope'
+import { UsersManager } from '../../users/services/users-manager.service'
+import { NC_ROUTE } from '../constants/routes'
+import { NcLoginFlowService } from '../services/nc-login-flow.service'
+import { NcResponseService } from '../services/nc-response.service'
+
+// NC Login Flow v2 — the 3-step authentication dance used by Nextcloud's
+// mobile apps.
+//
+//   1. POST /index.php/login/v2        (the app calls this)
+//      → { poll: {token, endpoint}, login: <browser URL> }
+//   2. User opens <browser URL> → our login page → posts back → we mint an
+//      AUTH_SCOPE.MOBILE_NC app password and stash it on the flow.
+//   3. POST /index.php/login/v2/poll   (the app polls until ready)
+//      → 404 while pending, once 200 with { server, loginName, appPassword }
+//
+// See https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html
+
+@Controller()
+export class NcLoginV2Controller {
+  constructor(
+    private readonly flows: NcLoginFlowService,
+    private readonly usersManager: UsersManager,
+    private readonly response: NcResponseService
+  ) {}
+
+  // Step 1 — app initiates
+  @Post(NC_ROUTE.LOGIN_V2.slice(1))
+  initiate(@Req() req: FastifyRequest): { poll: { token: string; endpoint: string }; login: string } {
+    const base = this.response.baseUrl(req)
+    const flow = this.flows.initiate()
+    return {
+      poll: {
+        token: flow.pollToken,
+        endpoint: `${base}${NC_ROUTE.LOGIN_V2_POLL}`
+      },
+      login: `${base}/login/v2/flow/${flow.loginToken}`
+    }
+  }
+
+  // Step 3 — app polls (404 while pending, 200 once ready — returned only once)
+  //
+  // Mounted at both /index.php/login/v2/poll (what docs advertise) and
+  // /login/v2/poll (what some iOS/Android versions hit instead).
+  @Post(NC_ROUTE.LOGIN_V2_POLL.slice(1))
+  async pollCanonical(@Body() body: PollBody, @Res({ passthrough: true }) res: FastifyReply): Promise<PollResult> {
+    return this.doPoll(body, res)
+  }
+
+  @Post(NC_ROUTE.LOGIN_V2_POLL_ALT.slice(1))
+  async pollAlt(@Body() body: PollBody, @Res({ passthrough: true }) res: FastifyReply): Promise<PollResult> {
+    return this.doPoll(body, res)
+  }
+
+  // Step 2a — browser GETs the login page
+  @Get(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
+  renderLoginPage(@Param('token') loginToken: string, @Res({ passthrough: true }) res: FastifyReply): string {
+    const flow = this.flows.findByLoginToken(loginToken)
+    if (!flow) {
+      res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Login expired',
+        body: '<h1>Login session expired</h1><p>Please return to the app and start again.</p>'
+      })
+    }
+    if (flow.status !== 'pending') {
+      res.header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Already authorized',
+        body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
+      })
+    }
+    res.header('Content-Type', 'text/html; charset=utf-8')
+    return renderHtml({
+      title: 'Sign in to Sync-in',
+      body: renderLoginForm(loginToken)
+    })
+  }
+
+  // Step 2b — browser POSTs credentials
+  @Post(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
+  async submitLoginPage(
+    @Param('token') loginToken: string,
+    @Body() body: LoginFormBody,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<string> {
+    const flow = this.flows.findByLoginToken(loginToken)
+    if (!flow || flow.status !== 'pending') {
+      res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Login expired',
+        body: '<h1>Login session expired</h1><p>Please return to the app and start again.</p>'
+      })
+    }
+
+    const login = (body?.login ?? '').trim()
+    const password = body?.password ?? ''
+    if (!login || !password) {
+      res.status(HttpStatus.BAD_REQUEST).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign in to Sync-in',
+        body: renderLoginForm(loginToken, 'Login and password are required.')
+      })
+    }
+
+    const user = await this.usersManager.findUser(login, false)
+    if (!user) {
+      res.status(HttpStatus.UNAUTHORIZED).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign in to Sync-in',
+        body: renderLoginForm(loginToken, 'Invalid credentials.')
+      })
+    }
+
+    const ip = clientIp(req)
+    const authed = await this.usersManager.logUser(user, password, ip)
+    if (!authed) {
+      res.status(HttpStatus.UNAUTHORIZED).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign in to Sync-in',
+        body: renderLoginForm(loginToken, 'Invalid credentials.')
+      })
+    }
+
+    // Mint a fresh AUTH_SCOPE.MOBILE_NC app password. Use a unique slug based
+    // on the flow's loginToken so repeated sign-ins don't collide.
+    const tokenShort = loginToken.slice(0, 8)
+    const appPwd = await this.usersManager.generateAppPassword(authed, {
+      name: `mobile ${tokenShort}`,
+      app: AUTH_SCOPE.MOBILE_NC,
+      expiration: null
+    } as never)
+
+    this.flows.completeWithCredentials(loginToken, {
+      server: this.response.baseUrl(req),
+      loginName: authed.login,
+      appPassword: appPwd.password
+    })
+
+    res.header('Content-Type', 'text/html; charset=utf-8')
+    return renderHtml({
+      title: 'Signed in',
+      body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
+    })
+  }
+
+  private async doPoll(body: PollBody, res: FastifyReply): Promise<PollResult> {
+    const token = readPollToken(body)
+    if (!token) {
+      throw new HttpException('missing token', HttpStatus.BAD_REQUEST)
+    }
+    const creds = this.flows.consumeByPollToken(token)
+    if (!creds) {
+      // NC protocol: 404 while pending + after consumption.
+      res.status(HttpStatus.NOT_FOUND)
+      throw new HttpException('', HttpStatus.NOT_FOUND)
+    }
+    res.status(HttpStatus.OK)
+    return creds
+  }
+}
+
+type PollResult = { server: string; loginName: string; appPassword: string }
+
+interface PollBody {
+  token?: string
+}
+
+interface LoginFormBody {
+  login?: string
+  password?: string
+}
+
+// NC clients send the poll token as form-urlencoded (token=...) but some send
+// JSON. Accept both.
+function readPollToken(body: unknown): string | null {
+  if (typeof body === 'string') {
+    const m = /(?:^|&)token=([^&]+)/.exec(body)
+    return m ? decodeURIComponent(m[1]) : null
+  }
+  if (body && typeof body === 'object' && 'token' in body) {
+    const v = (body as Record<string, unknown>).token
+    return typeof v === 'string' ? v : null
+  }
+  return null
+}
+
+function clientIp(req: FastifyRequest): string {
+  const fwd = req.headers['x-forwarded-for'] as string | undefined
+  if (fwd) return fwd.split(',')[0].trim()
+  return (req.ip as string | undefined) ?? 'unknown'
+}
+
+// Minimal HTML rendering. Deliberately no external assets — safe behind any
+// reverse proxy, theme-agnostic, and keeps this module dependency-free on the
+// frontend side.
+function renderHtml({ title, body }: { title: string; body: string }): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(title)}</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --fg:#f1f5f9; --muted:#94a3b8; --accent:#0082c9; --border:#334155; --err:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  .card { width:100%; max-width:360px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
+  h1 { margin:0 0 8px; font-size:18px; }
+  p { margin:0 0 16px; color:var(--muted); font-size:14px; line-height:1.5; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input { width:100%; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; outline:none; }
+  input:focus { border-color:var(--accent); }
+  button { width:100%; margin-top:18px; padding:11px; font-size:14px; font-weight:500; border:none; border-radius:8px; background:var(--accent); color:white; cursor:pointer; }
+  .err { color:var(--err); font-size:13px; margin-top:12px; }
+  .brand { font-size:12px; color:var(--muted); text-align:center; margin-top:18px; }
+</style>
+</head>
+<body>
+<div class="card">
+${body}
+</div>
+</body>
+</html>`
+}
+
+function renderLoginForm(loginToken: string, errorMsg?: string): string {
+  const safeToken = escapeHtml(loginToken)
+  const err = errorMsg ? `<div class="err">${escapeHtml(errorMsg)}</div>` : ''
+  return `<h1>Sign in to Sync-in</h1>
+<p>Authorize the mobile app to access your account.</p>
+<form method="post" action="/login/v2/flow/${safeToken}" autocomplete="on">
+  <label for="login">Username or email</label>
+  <input id="login" name="login" type="text" required autofocus autocomplete="username" />
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required autocomplete="current-password" />
+  ${err}
+  <button type="submit">Grant access</button>
+</form>
+<div class="brand">Sync-in · Nextcloud-compatible login</div>`
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+}

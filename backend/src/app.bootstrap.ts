@@ -43,6 +43,25 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
   /* PARSER */
   // '*' body parser allow binary data as a stream (unlimited body size)
   fastifyInstance.addContentTypeParser('*', { bodyLimit: 0 }, (_req: FastifyRequest, _payload: FastifyRequest['raw'], done) => done(null))
+  // application/x-www-form-urlencoded — consumed by the custom-mobile-compat
+  // login-v2 poll endpoint and the browser-side flow form. Kept minimal: tiny
+  // body limit, no nested keys, no array syntax.
+  fastifyInstance.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+    try {
+      const parsed: Record<string, string> = {}
+      const raw = typeof body === 'string' ? body : body?.toString('utf8') || ''
+      for (const pair of raw.split('&')) {
+        if (!pair) continue
+        const eq = pair.indexOf('=')
+        const key = decodeURIComponent((eq >= 0 ? pair.slice(0, eq) : pair).replace(/\+/g, ' '))
+        const value = eq >= 0 ? decodeURIComponent(pair.slice(eq + 1).replace(/\+/g, ' ')) : ''
+        parsed[key] = value
+      }
+      done(null, parsed)
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  })
 
   /* INTERCEPTORS */
   app.useGlobalInterceptors(
