@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router'
 import { FileDetailComponent } from './screens/file-detail/file-detail.component'
 import { KitComponent } from './screens/kit/kit.component'
+import { PeopleComponent } from './screens/people/people.component'
 import { PersonalComponent } from './screens/personal/personal.component'
 import { RecentsComponent } from './screens/recents/recents.component'
 import { SearchComponent } from './screens/search/search.component'
@@ -35,5 +36,6 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.SHARED_VIA_LINKS, component: SharedComponent, data: { variant: 'via-links' } },
   { path: V2_ROUTES.TRASH, component: TrashComponent },
   { path: V2_ROUTES.SEARCH, component: SearchComponent },
-  { path: V2_ROUTES.SETTINGS, component: SettingsComponent }
+  { path: V2_ROUTES.SETTINGS, component: SettingsComponent },
+  { path: V2_ROUTES.PEOPLE, component: PeopleComponent }
 ]
