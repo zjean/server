@@ -1,5 +1,6 @@
 import { Component, HostBinding, OnInit, signal, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
+import { ToastHostComponent } from '../components/toast-host.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
@@ -12,7 +13,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   templateUrl: './layout-v2.component.html',
   styleUrls: ['../styles/v2.scss', './layout-v2.component.scss'],
   encapsulation: ViewEncapsulation.None,
-  imports: [RouterOutlet, TitleBarComponent, AppRailComponent, LeftNavComponent, DockRailComponent, TransfersPopoverComponent]
+  imports: [RouterOutlet, TitleBarComponent, AppRailComponent, LeftNavComponent, DockRailComponent, TransfersPopoverComponent, ToastHostComponent]
 })
 export class LayoutV2Component implements OnInit {
   @HostBinding('class.v2-root') readonly v2Root = true
