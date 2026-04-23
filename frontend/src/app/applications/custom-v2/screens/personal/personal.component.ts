@@ -24,7 +24,14 @@ interface BrowserViewOption {
   id: BrowserMode
   icon: IconV2Name
   title: string
-  disabled: boolean
+}
+
+const VIEW_MODE_STORAGE_KEY = 'ui.personal.viewMode'
+
+function readStoredMode(): BrowserMode {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return 'list'
+  const raw = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+  return raw === 'grid' || raw === 'gallery' || raw === 'list' ? raw : 'list'
 }
 
 @Component({
@@ -46,14 +53,14 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
-  protected readonly mode = signal<BrowserMode>('list')
+  protected readonly mode = signal<BrowserMode>(readStoredMode())
 
   protected readonly pathSegments = toSignal(this.route.url, { initialValue: [] })
 
   protected readonly viewOptions: BrowserViewOption[] = [
-    { id: 'list', icon: 'list', title: 'List', disabled: false },
-    { id: 'grid', icon: 'grid', title: 'Grid — coming next', disabled: true },
-    { id: 'gallery', icon: 'gallery', title: 'Gallery — coming next', disabled: true }
+    { id: 'list', icon: 'list', title: 'List' },
+    { id: 'grid', icon: 'grid', title: 'Grid' },
+    { id: 'gallery', icon: 'gallery', title: 'Gallery' }
   ]
 
   protected readonly folderLabel = computed(() => {
@@ -83,8 +90,10 @@ export class PersonalComponent implements OnInit, OnDestroy {
   }
 
   protected setMode(mode: BrowserMode): void {
-    if (this.viewOptions.find((o) => o.id === mode)?.disabled) return
     this.mode.set(mode)
+    if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
+      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+    }
   }
 
   protected refresh(): void {

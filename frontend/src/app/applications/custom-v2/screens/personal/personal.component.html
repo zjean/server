@@ -36,7 +36,6 @@
             type="button"
             class="personal__mode-btn"
             [class.personal__mode-btn--active]="mode() === opt.id"
-            [disabled]="opt.disabled"
             [attr.title]="opt.title"
             (click)="setMode(opt.id)"
           >
@@ -57,46 +56,117 @@
     } @else if (files().length === 0) {
       <div class="personal__state">This folder is empty.</div>
     } @else {
-      <div class="file-table">
-        <div class="file-table__head">
-          <span>Name</span>
-          <span>Info</span>
-          <span>Size</span>
-          <span>Modified</span>
-          <span></span>
-        </div>
-        @for (f of filteredFiles(); track f.id) {
-          <button type="button" class="file-row" (click)="openEntry(f)">
-            <div class="file-row__name">
-              <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
-              <span class="file-row__name-text">{{ f.name }}</span>
+      @switch (mode()) {
+        @case ('list') {
+          <div class="file-table">
+            <div class="file-table__head">
+              <span>Name</span>
+              <span>Info</span>
+              <span>Size</span>
+              <span>Modified</span>
+              <span></span>
             </div>
-            <div class="file-row__info">
-              @if (f.hasComments) {
-                <app-v2-pill color="green" [size]="11">
-                  <app-v2-icon name="comment" [size]="10" />
-                  <span>·</span>
-                </app-v2-pill>
-              }
-            </div>
-            <div class="file-row__size">
-              @if (!f.isDir) {
-                {{ f.size | toBytes: 1 : true }}
-              }
-            </div>
-            <div class="file-row__modified">
-              @if (f.mtime) {
-                <span class="file-row__modified-pill">{{ f.mtime | amTimeAgo }}</span>
-              } @else {
-                —
-              }
-            </div>
-            <div class="file-row__actions">
-              <app-v2-icon-btn iconName="more" [size]="26" />
-            </div>
-          </button>
+            @for (f of filteredFiles(); track f.id) {
+              <button type="button" class="file-row" (click)="openEntry(f)">
+                <div class="file-row__name">
+                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
+                  <span class="file-row__name-text">{{ f.name }}</span>
+                </div>
+                <div class="file-row__info">
+                  @if (f.hasComments) {
+                    <app-v2-pill color="green" [size]="11">
+                      <app-v2-icon name="comment" [size]="10" />
+                      <span>·</span>
+                    </app-v2-pill>
+                  }
+                </div>
+                <div class="file-row__size">
+                  @if (!f.isDir) {
+                    {{ f.size | toBytes: 1 : true }}
+                  }
+                </div>
+                <div class="file-row__modified">
+                  @if (f.mtime) {
+                    <span class="file-row__modified-pill">{{ f.mtime | amTimeAgo }}</span>
+                  } @else {
+                    —
+                  }
+                </div>
+                <div class="file-row__actions">
+                  <app-v2-icon-btn iconName="more" [size]="26" />
+                </div>
+              </button>
+            }
+          </div>
         }
-      </div>
+        @case ('grid') {
+          <div class="file-grid">
+            @for (f of filteredFiles(); track f.id) {
+              <button type="button" class="file-card" (click)="openEntry(f)">
+                <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
+                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="38" [rounded]="8" />
+                  @if (f.hasComments) {
+                    <span class="file-card__pill">
+                      <app-v2-pill color="green" [size]="10">
+                        <app-v2-icon name="comment" [size]="9" />
+                      </app-v2-pill>
+                    </span>
+                  }
+                </div>
+                <div class="file-card__body">
+                  <div class="file-card__name">{{ f.name }}</div>
+                  <div class="file-card__meta">
+                    @if (!f.isDir) {
+                      <span class="file-card__size">{{ f.size | toBytes: 1 : true }}</span>
+                    }
+                    @if (f.mtime) {
+                      <span class="file-card__sep">·</span>
+                      <span>{{ f.mtime | amTimeAgo }}</span>
+                    }
+                  </div>
+                </div>
+              </button>
+            }
+          </div>
+        }
+        @case ('gallery') {
+          <div class="file-gallery">
+            @for (f of filteredFiles(); track f.id) {
+              <button type="button" class="gallery-card" (click)="openEntry(f)">
+                <div
+                  class="gallery-card__stage"
+                  [style.--fc-bg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-bg)'"
+                  [style.--fc-fg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-fg)'"
+                >
+                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="48" [rounded]="10" />
+                  <div class="gallery-card__tags">
+                    <app-v2-pill color="gray" [size]="10">
+                      {{ f.isDir ? 'FOLDER' : mimeToGlyph(f.mime).toUpperCase() }}
+                    </app-v2-pill>
+                    @if (f.hasComments) {
+                      <app-v2-pill color="green" [size]="10">
+                        <app-v2-icon name="comment" [size]="9" />
+                      </app-v2-pill>
+                    }
+                  </div>
+                </div>
+                <div class="gallery-card__footer">
+                  <div class="gallery-card__name">{{ f.name }}</div>
+                  <div class="gallery-card__meta">
+                    @if (!f.isDir) {
+                      <span>{{ f.size | toBytes: 1 : true }}</span>
+                    }
+                    @if (f.mtime) {
+                      <span class="gallery-card__sep">·</span>
+                      <span>{{ f.mtime | amTimeAgo }}</span>
+                    }
+                  </div>
+                </div>
+              </button>
+            }
+          </div>
+        }
+      }
     }
   </div>
 </div>
