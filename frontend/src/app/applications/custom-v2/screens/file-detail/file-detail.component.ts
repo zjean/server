@@ -53,6 +53,7 @@ export class FileDetailComponent implements OnInit {
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
   protected readonly currentPath = signal<string>('')
+  protected readonly parentPath = signal<string>('')
   protected readonly siblings = signal<FileProps[]>([])
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
@@ -78,9 +79,10 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly currentIndex = computed(() => {
     const p = this.currentPath()
+    const prefix = this.parentPath()
     const sibs = this.siblings()
-    if (!p) return -1
-    return sibs.findIndex((s) => `${s.path}/${s.name}` === p)
+    if (!p || !prefix) return -1
+    return sibs.findIndex((s) => `${prefix}/${s.name}` === p)
   })
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
@@ -106,14 +108,14 @@ export class FileDetailComponent implements OnInit {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() + 1 + sibs.length) % sibs.length
-    this.goTo(`${sibs[idx].path}/${sibs[idx].name}`)
+    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
   }
 
   protected previous(): void {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() - 1 + sibs.length) % sibs.length
-    this.goTo(`${sibs[idx].path}/${sibs[idx].name}`)
+    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
   }
 
   protected close(): void {
@@ -147,6 +149,7 @@ export class FileDetailComponent implements OnInit {
     }
     const parentPath = parts.slice(0, -1).join('/')
     const name = parts[parts.length - 1]
+    this.parentPath.set(parentPath)
 
     this.http
       .get<SpaceFiles>(`${API_SPACES_BROWSE}/${parentPath}`)

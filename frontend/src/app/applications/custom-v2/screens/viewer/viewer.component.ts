@@ -30,14 +30,17 @@ export class ViewerComponent implements OnInit {
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
 
   protected readonly path = signal<string>('')
+  protected readonly parentPath = signal<string>('')
   protected readonly siblings = signal<FileProps[]>([])
   protected readonly current = computed<FileProps | null>(() => {
     const p = this.path()
-    return this.siblings().find((f) => `${f.path}/${f.name}` === p) ?? null
+    const prefix = this.parentPath()
+    return this.siblings().find((f) => `${prefix}/${f.name}` === p) ?? null
   })
   protected readonly currentIndex = computed(() => {
     const p = this.path()
-    return this.siblings().findIndex((f) => `${f.path}/${f.name}` === p)
+    const prefix = this.parentPath()
+    return this.siblings().findIndex((f) => `${prefix}/${f.name}` === p)
   })
   protected readonly infoOpen = signal(false)
   protected readonly resolution = signal<string>('')
@@ -86,7 +89,7 @@ export class ViewerComponent implements OnInit {
     const imgs = this.siblings()
     if (!imgs.length) return
     const idx = (this.currentIndex() + 1 + imgs.length) % imgs.length
-    this.path.set(`${imgs[idx].path}/${imgs[idx].name}`)
+    this.path.set(`${this.parentPath()}/${imgs[idx].name}`)
     this.resolution.set('')
   }
 
@@ -94,7 +97,7 @@ export class ViewerComponent implements OnInit {
     const imgs = this.siblings()
     if (!imgs.length) return
     const idx = (this.currentIndex() - 1 + imgs.length) % imgs.length
-    this.path.set(`${imgs[idx].path}/${imgs[idx].name}`)
+    this.path.set(`${this.parentPath()}/${imgs[idx].name}`)
     this.resolution.set('')
   }
 
@@ -128,9 +131,11 @@ export class ViewerComponent implements OnInit {
     const parts = path.split('/').filter(Boolean)
     if (parts.length < 2) {
       this.siblings.set([])
+      this.parentPath.set('')
       return
     }
     const parentPath = parts.slice(0, -1).join('/')
+    this.parentPath.set(parentPath)
     const url = `${API_SPACES_BROWSE}/${parentPath}`
     this.http
       .get<SpaceFiles>(url)
