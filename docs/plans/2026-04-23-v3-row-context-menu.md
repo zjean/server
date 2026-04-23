@@ -1,8 +1,11 @@
 # v3 row context menu
 
+> **Superseded by [milestone 4](./2026-04-23-v3-ui-redesign-milestone4.md), where this is phase 4.1.**
+> The milestone-4 plan folds this into the broader file-ops theme alongside upload / rename / copy-move / delete so the context-menu items can be built against real handlers instead of stubs. The tasks below still capture the initial primitive spec and stay a useful reference — keep them in mind when executing 4.1 — but the up-to-date roadmap lives in the milestone-4 doc.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.
 
-**Status**: not started
+**Status**: superseded by milestone 4, phase 4.1
 **Date filed**: 2026-04-23
 **Related**: [milestone-3 plan](./2026-04-23-v3-ui-redesign-milestone3.md) — this gap was not in §1 of the plan
 
