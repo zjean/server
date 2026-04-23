@@ -830,5 +830,22 @@
   "one_item_across_one_bin": "1 item in 1 prullenbak",
   "one_item_across_nb_bins": "1 item in {{ bins }} prullenbakken",
   "nb_items_across_one_bin": "{{ items }} items in 1 prullenbak",
-  "nb_items_across_nb_bins": "{{ items }} items in {{ bins }} prullenbakken"
+  "nb_items_across_nb_bins": "{{ items }} items in {{ bins }} prullenbakken",
+  "Get link": "Link ophalen",
+  "v3_link_create_title": "Openbare link aanmaken",
+  "v3_link_edit_title": "Openbare link bewerken",
+  "v3_link_create": "Aanmaken",
+  "v3_link_save": "Wijzigingen opslaan",
+  "v3_link_copy": "Kopiëren",
+  "v3_link_close": "Sluiten",
+  "v3_link_revoke": "Intrekken",
+  "v3_link_generate": "Genereer",
+  "v3_link_require_password": "Wachtwoord vereisen",
+  "v3_link_set_expiry": "Vervaldatum instellen",
+  "v3_link_password_too_short": "Wachtwoord is te kort",
+  "v3_link_created": "Link aangemaakt",
+  "v3_link_updated": "Link bijgewerkt",
+  "v3_link_revoked": "Link ingetrokken",
+  "v3_link_copied": "Gekopieerd naar klembord",
+  "v3_link_copy_failed": "Kopiëren mislukt — kopieer handmatig"
 }
