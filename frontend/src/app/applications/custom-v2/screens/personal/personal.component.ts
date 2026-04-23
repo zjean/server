@@ -97,6 +97,10 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.PERSONAL, ...segs, file.name]).catch(console.error)
       return
     }
+    if (file.mime?.startsWith('image/')) {
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: file.path } }).catch(console.error)
+      return
+    }
     this.router.navigate(['/spaces/files/personal/', ...file.path.split('/')], { queryParams: { select: file.name } }).catch(console.error)
   }
 

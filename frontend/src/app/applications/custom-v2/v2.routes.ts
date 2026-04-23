@@ -3,6 +3,7 @@ import { KitComponent } from './screens/kit/kit.component'
 import { PersonalComponent } from './screens/personal/personal.component'
 import { PlaceholderComponent, PlaceholderRouteData } from './screens/placeholder/placeholder.component'
 import { RecentsComponent } from './screens/recents/recents.component'
+import { ViewerComponent } from './screens/viewer/viewer.component'
 import { V2_ROUTES } from './v2.constants'
 
 const placeholder = (data: PlaceholderRouteData) => ({
@@ -14,6 +15,7 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.STUB, pathMatch: 'full', redirectTo: V2_ROUTES.RECENTS },
   { path: V2_ROUTES.KIT, component: KitComponent },
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
+  { path: V2_ROUTES.VIEWER, component: ViewerComponent },
   {
     path: V2_ROUTES.PERSONAL,
     children: [
