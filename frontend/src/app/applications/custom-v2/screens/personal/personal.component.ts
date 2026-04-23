@@ -135,6 +135,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
         disabledReason: f.isDir ? 'Coming soon' : undefined,
         action: () => this.downloadFile(f)
       },
+      { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       {
@@ -264,6 +265,54 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       window.open(url, '_self')
     }
+  }
+
+  protected async renameEntry(file: FileProps): Promise<void> {
+    const newName = await this.promptDialog.open({
+      title: file.isDir ? 'Rename folder' : 'Rename file',
+      placeholder: 'New name',
+      submitLabel: 'Rename',
+      initialValue: file.name,
+      selectionRange: file.isDir ? 'all' : 'stem',
+      validate: (v) => this.validateRenameName(v, file)
+    })
+    if (!newName || newName.trim() === file.name) return
+    const trimmed = newName.trim()
+    const stub = this.buildRenameStub(file)
+    this.filesService.rename(stub, trimmed, false).subscribe({
+      next: () => {
+        this.toast.success(`Renamed to "${trimmed}"`)
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Rename failed')
+      }
+    })
+  }
+
+  private validateRenameName(v: string, file: FileProps): string | null {
+    const trimmed = v.trim()
+    if (!trimmed) return 'Name is required'
+    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot contain slashes'
+    if (trimmed === '.' || trimmed === '..') return 'Invalid name'
+    if (trimmed === file.name) return null
+    const existing = this.files().some((f) => f.id !== file.id && f.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return 'A file or folder with this name already exists'
+    return null
+  }
+
+  private buildRenameStub(file: FileProps): FileModel {
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
+    const encoded = encodeUrl(fullPath)
+    return {
+      path: fullPath,
+      name: file.name,
+      isDir: file.isDir,
+      isBeingDeleted: false,
+      encodedPath: encoded,
+      dataUrl: `${API_FILES_OPERATION}/${encoded}`,
+      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
+    } as unknown as FileModel
   }
 
   protected async newFolder(): Promise<void> {
