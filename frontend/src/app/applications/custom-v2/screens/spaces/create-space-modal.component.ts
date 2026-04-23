@@ -199,7 +199,9 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
             id: m.id,
             type: MEMBER_TYPE.USER
           }) as SpaceMemberDto
-      )
+      ),
+      members: [],
+      links: []
     }
     this.spacesService.createSpace(dto).subscribe({
       next: (space) => {
