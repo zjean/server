@@ -3,6 +3,7 @@ import { KitComponent } from './screens/kit/kit.component'
 import { PersonalComponent } from './screens/personal/personal.component'
 import { PlaceholderComponent, PlaceholderRouteData } from './screens/placeholder/placeholder.component'
 import { RecentsComponent } from './screens/recents/recents.component'
+import { SpacesComponent } from './screens/spaces/spaces.component'
 import { ViewerComponent } from './screens/viewer/viewer.component'
 import { V2_ROUTES } from './v2.constants'
 
@@ -23,15 +24,7 @@ export const v2Routes: Routes = [
       { path: '**', component: PersonalComponent }
     ]
   },
-  {
-    path: V2_ROUTES.SPACES,
-    ...placeholder({
-      title: 'Spaces',
-      icon: 'box',
-      classicRoute: '/spaces',
-      description: 'Spaces will ship in a later milestone.'
-    })
-  },
+  { path: V2_ROUTES.SPACES, component: SpacesComponent },
   {
     path: V2_ROUTES.SHARED,
     pathMatch: 'full',
