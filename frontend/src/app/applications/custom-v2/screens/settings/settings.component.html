@@ -26,6 +26,15 @@
           }
         </div>
       </div>
+      <div class="settings__avatar-actions">
+        <input #avatarInput type="file" accept="image/*" hidden (change)="onAvatarPicked($event)" />
+        <app-v2-btn kind="outline" size="sm" icon="upload" (click)="triggerAvatarPicker()">
+          {{ 'Upload avatar' | translate: locale.language }}
+        </app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="refresh" (click)="regenerateAvatar()">
+          {{ 'Regenerate' | translate: locale.language }}
+        </app-v2-btn>
+      </div>
     </section>
 
     <section class="settings__section">
@@ -46,20 +55,56 @@
   }
 
   <section class="settings__section">
-    <div class="settings__section-title" l10nTranslate>Preferences</div>
-    <div class="settings__grid">
-      @for (link of settingsLinks; track link.id) {
-        <button type="button" class="settings-card" (click)="openClassic(link.classicPath)">
-          <span class="settings-card__icon">
-            <app-v2-icon [name]="link.icon" [size]="18" />
-          </span>
-          <div class="settings-card__body">
-            <div class="settings-card__title">{{ link.title | translate: locale.language }}</div>
-            <div class="settings-card__description">{{ link.description | translate: locale.language }}</div>
-          </div>
-          <app-v2-icon name="chevRight" [size]="14" class="settings-card__chev" />
-        </button>
+    <div class="settings__section-title" l10nTranslate>Language</div>
+    <div class="settings__form-row">
+      <select class="settings__input" [(ngModel)]="$any(this).languageValue" [value]="language()" (change)="language.set($any($event.target).value)">
+        @for (l of languages; track l) {
+          <option [value]="l">{{ languageLabels[l] || l }}</option>
+        }
+      </select>
+      <app-v2-btn kind="primary" size="sm" [disabled]="savingLanguage()" (click)="saveLanguage()">
+        {{ 'Save' | translate: locale.language }}
+      </app-v2-btn>
+    </div>
+  </section>
+
+  <section class="settings__section">
+    <div class="settings__section-title" l10nTranslate>Online status</div>
+    <div class="settings__form-row">
+      <select class="settings__input" [value]="onlineStatus()" (change)="onlineStatus.set(+$any($event.target).value)">
+        @for (s of onlineStatuses; track s; let i = $index) {
+          <option [value]="i">{{ statusLabel(i) | translate: locale.language }}</option>
+        }
+      </select>
+      <app-v2-btn kind="primary" size="sm" (click)="saveOnlineStatus()">
+        {{ 'Save' | translate: locale.language }}
+      </app-v2-btn>
+    </div>
+  </section>
+
+  <section class="settings__section">
+    <div class="settings__section-title" l10nTranslate>Change password</div>
+    <div class="settings__form">
+      <label class="settings__field">
+        <span l10nTranslate>Current password</span>
+        <input type="password" class="settings__input" [value]="oldPassword()" (input)="oldPassword.set($any($event.target).value)" autocomplete="current-password" />
+      </label>
+      <label class="settings__field">
+        <span>{{ 'New password' | translate: locale.language }} ({{ passwordMinLength }}+)</span>
+        <input type="password" class="settings__input" [value]="newPassword()" (input)="newPassword.set($any($event.target).value)" autocomplete="new-password" />
+      </label>
+      <label class="settings__field">
+        <span l10nTranslate>Confirm new password</span>
+        <input type="password" class="settings__input" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)" autocomplete="new-password" />
+      </label>
+      @if (newPassword() && confirmPassword() && newPassword() !== confirmPassword()) {
+        <div class="settings__field-error" l10nTranslate>Passwords do not match</div>
       }
+      <div class="settings__form-actions">
+        <app-v2-btn kind="primary" size="sm" [disabled]="!canSavePassword() || savingPassword()" (click)="savePassword()">
+          {{ 'Change password' | translate: locale.language }}
+        </app-v2-btn>
+      </div>
     </div>
   </section>
 
