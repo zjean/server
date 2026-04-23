@@ -5,6 +5,8 @@ export interface ShareDialogInput {
   // Create flow: file to share + path.
   file?: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
   relativePath?: string
+  // Create flow: owner id (current user id for personal files; null when the file lives in a space the user doesn't own).
+  ownerId?: number | null
   // Edit flow: existing share id (we'll fetch the full share inside the dialog).
   existingShareId?: number
 }

@@ -286,7 +286,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         mime: file.mime,
         space: { alias, name, root: { alias, name } } as never
       },
-      relativePath
+      relativePath,
+      ownerId: null
     })
   }
 
@@ -303,7 +304,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         mime: file.mime,
         space: { alias, name, root: { alias, name } } as never
       },
-      relativePath
+      relativePath,
+      ownerId: null
     })
   }
 

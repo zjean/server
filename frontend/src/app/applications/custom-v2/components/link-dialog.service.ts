@@ -7,6 +7,8 @@ export interface LinkDialogInput {
   file?: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
   // Create flow: relative path (after stripping `files/<space-alias>/`) — what CreateOrUpdateShareDto expects in file.path.
   relativePath?: string
+  // Create flow: owner id (current user id for personal files; null when the file lives in a space the user doesn't own).
+  ownerId?: number | null
   // Edit flow: supply the existing share-link row.
   existing?: ShareLinkModel
 }

@@ -399,7 +399,7 @@ export class LinkDialogComponent {
     createLinkShare(this.http, {
       file: { id: p.file.id, name: p.file.name, isDir: p.file.isDir, mime: p.file.mime, space: p.file.space },
       relativePath: p.relativePath ?? p.file.name,
-      ownerId: null,
+      ownerId: p.ownerId ?? null,
       settings
     }).subscribe({
       next: (share: ShareProps) => {

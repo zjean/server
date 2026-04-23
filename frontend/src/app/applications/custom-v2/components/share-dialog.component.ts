@@ -274,6 +274,7 @@ export class ShareDialogComponent {
   private readonly createCtx = signal<{
     file: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
     relativePath: string
+    ownerId: number | null
   } | null>(null)
   private readonly editShare = signal<ShareProps | null>(null)
 
@@ -300,7 +301,7 @@ export class ShareDialogComponent {
           this.loadExisting(p.existingShareId)
         } else if (p.file) {
           this.subjectName.set(p.file.name)
-          this.createCtx.set({ file: p.file, relativePath: p.relativePath ?? p.file.name })
+          this.createCtx.set({ file: p.file, relativePath: p.relativePath ?? p.file.name, ownerId: p.ownerId ?? null })
           this.members.set([])
         }
       })
@@ -411,7 +412,7 @@ export class ShareDialogComponent {
     createShare(this.http, {
       file: ctx.file,
       relativePath: ctx.relativePath,
-      ownerId: null,
+      ownerId: ctx.ownerId,
       members
     }).subscribe({
       next: (share) => {

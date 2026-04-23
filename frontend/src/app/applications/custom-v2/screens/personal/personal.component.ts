@@ -269,7 +269,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const relativePath = [...segs, file.name].join('/')
     await this.linkDialog.open({
       file: { id: file.id, name: file.name, isDir: file.isDir, mime: file.mime, space: null as never },
-      relativePath
+      relativePath,
+      ownerId: this.store.user.getValue()?.id ?? null
     })
   }
 
@@ -278,7 +279,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const relativePath = [...segs, file.name].join('/')
     await this.shareDialog.open({
       file: { id: file.id, name: file.name, isDir: file.isDir, mime: file.mime, space: null as never },
-      relativePath
+      relativePath,
+      ownerId: this.store.user.getValue()?.id ?? null
     })
   }
 
