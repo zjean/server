@@ -17,7 +17,8 @@ export const V2_ROUTES = {
   SHARED_WITH_OTHERS: 'shared/with-others',
   SHARED_VIA_LINKS: 'shared/via-links',
   TRASH: 'trash',
-  VIEWER: 'viewer'
+  VIEWER: 'viewer',
+  FILE: 'file'
 } as const
 
 export const UI_VERSION_STORAGE_KEY = 'ui.version'

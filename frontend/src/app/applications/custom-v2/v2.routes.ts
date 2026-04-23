@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router'
+import { FileDetailComponent } from './screens/file-detail/file-detail.component'
 import { KitComponent } from './screens/kit/kit.component'
 import { PersonalComponent } from './screens/personal/personal.component'
 import { RecentsComponent } from './screens/recents/recents.component'
@@ -13,6 +14,7 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.KIT, component: KitComponent },
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
   { path: V2_ROUTES.VIEWER, component: ViewerComponent },
+  { path: V2_ROUTES.FILE, component: FileDetailComponent },
   {
     path: V2_ROUTES.PERSONAL,
     children: [

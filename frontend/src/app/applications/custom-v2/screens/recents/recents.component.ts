@@ -3,7 +3,6 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import { CommentsService } from '../../../comments/services/comments.service'
 import { FilesService } from '../../../files/services/files.service'
-import { SPACES_PATH } from '../../../spaces/spaces.constants'
 import { StoreService } from '../../../../store/store.service'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
@@ -58,11 +57,11 @@ export class RecentsComponent implements OnInit {
     this.commentsService.loadRecents(RECENT_LIMIT)
   }
 
-  protected openFile(filePath: string, fileName: string, mime: string | null | undefined): void {
+  protected openFile(filePath: string, _fileName: string, mime: string | null | undefined): void {
     if (mime?.startsWith('image/')) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: filePath } }).catch(console.error)
       return
     }
-    this.router.navigate([SPACES_PATH.SPACES, ...filePath.split('/')], { queryParams: { select: fileName } }).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: filePath } }).catch(console.error)
   }
 }
