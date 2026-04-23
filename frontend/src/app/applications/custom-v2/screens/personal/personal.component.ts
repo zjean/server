@@ -9,8 +9,11 @@ import { Subscription } from 'rxjs'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
+import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ButtonComponent } from '../../components/button.component'
+import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
@@ -46,6 +49,7 @@ function readStoredMode(): BrowserMode {
     ButtonComponent,
     IconButtonComponent,
     PillComponent,
+    ContextMenuComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -66,6 +70,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
   protected readonly mode = signal<BrowserMode>(readStoredMode())
+  protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
 
   protected readonly pathSegments = toSignal(this.route.url, { initialValue: [] })
 
@@ -89,6 +94,40 @@ export class PersonalComponent implements OnInit, OnDestroy {
   })
 
   protected readonly totalSize = computed(() => this.files().reduce((s, f) => s + (f.isDir ? 0 : f.size), 0))
+
+  protected readonly menuItems = computed<ContextMenuItem[]>(() => {
+    const entry = this.menu()
+    if (!entry) return []
+    const f = entry.file
+    return [
+      { id: 'open', label: 'Open', icon: 'eye', action: () => this.openEntry(f) },
+      {
+        id: 'download',
+        label: 'Download',
+        icon: 'download',
+        disabled: f.isDir,
+        disabledReason: f.isDir ? 'Coming soon' : undefined,
+        action: () => this.downloadFile(f)
+      },
+      {
+        id: 'share',
+        label: 'Share',
+        icon: 'share',
+        disabled: true,
+        disabledReason: 'Coming soon',
+        action: () => undefined
+      },
+      {
+        id: 'delete',
+        label: 'Delete',
+        icon: 'trash',
+        kind: 'danger',
+        disabled: true,
+        disabledReason: 'Coming soon',
+        action: () => undefined
+      }
+    ]
+  })
 
   ngOnInit(): void {
     this.urlSubscription = this.route.url.subscribe(() => {
@@ -129,6 +168,26 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   protected onFilterInput(event: Event): void {
     this.filter.set((event.target as HTMLInputElement).value)
+  }
+
+  protected openRowMenu(event: MouseEvent, file: FileProps): void {
+    event.stopPropagation()
+    event.preventDefault()
+    this.menu.set({ file, x: event.clientX, y: event.clientY })
+  }
+
+  protected closeMenu(): void {
+    this.menu.set(null)
+  }
+
+  protected downloadFile(file: FileProps): void {
+    if (file.isDir) return
+    const segs = this.pathSegments().map((s) => s.path)
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
+    const url = `${API_FILES_OPERATION}/${encodeUrl(fullPath)}`
+    if (typeof window !== 'undefined') {
+      window.open(url, '_self')
+    }
   }
 
   private loadFiles(): void {

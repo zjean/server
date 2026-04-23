@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  computed,
   ElementRef,
   EventEmitter,
   HostListener,
@@ -41,8 +40,8 @@ const VIEWPORT_GUTTER = 8
       <div
         class="ctx-menu"
         role="menu"
-        [style.left.px]="position().x"
-        [style.top.px]="position().y"
+        [style.left.px]="position.x"
+        [style.top.px]="position.y"
         (click)="$event.stopPropagation()"
         (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
       >
@@ -54,7 +53,7 @@ const VIEWPORT_GUTTER = 8
             [class.ctx-menu__item--danger]="item.kind === 'danger'"
             [disabled]="item.disabled"
             [attr.title]="item.disabled && item.disabledReason ? (item.disabledReason | translate: locale.language) : null"
-            (click)="onItemClick(item)"
+            (click)="onItemClick($event, item)"
           >
             @if (item.icon) {
               <app-v2-icon [name]="item.icon" [size]="14" />
@@ -141,7 +140,7 @@ export class ContextMenuComponent {
 
   @Output() readonly closed = new EventEmitter<void>()
 
-  protected readonly position = computed(() => {
+  protected get position(): { x: number; y: number } {
     const a = this.anchor
     if (!a) return { x: 0, y: 0 }
     if (typeof window === 'undefined') return { x: a.x, y: a.y }
@@ -153,7 +152,7 @@ export class ContextMenuComponent {
     if (x + MENU_WIDTH + VIEWPORT_GUTTER > vw) x = Math.max(VIEWPORT_GUTTER, vw - MENU_WIDTH - VIEWPORT_GUTTER)
     if (y + menuHeight + VIEWPORT_GUTTER > vh) y = Math.max(VIEWPORT_GUTTER, vh - menuHeight - VIEWPORT_GUTTER)
     return { x, y }
-  })
+  }
 
   @HostListener('document:click', ['$event'])
   onDocumentClick(ev: MouseEvent): void {
@@ -190,7 +189,8 @@ export class ContextMenuComponent {
     this.closed.emit()
   }
 
-  protected onItemClick(item: ContextMenuItem): void {
+  protected onItemClick(event: MouseEvent, item: ContextMenuItem): void {
+    event.stopPropagation()
     if (item.disabled) return
     item.action()
     this.closed.emit()

@@ -73,7 +73,12 @@
               <span></span>
             </div>
             @for (f of filteredFiles(); track f.id) {
-              <button type="button" class="file-row" (click)="openEntry(f)">
+              <button
+                type="button"
+                class="file-row"
+                (click)="openEntry(f)"
+                (contextmenu)="openRowMenu($event, f)"
+              >
                 <div class="file-row__name">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
                   <span class="file-row__name-text">{{ f.name }}</span>
@@ -98,8 +103,8 @@
                     —
                   }
                 </div>
-                <div class="file-row__actions">
-                  <app-v2-icon-btn iconName="more" [size]="26" />
+                <div class="file-row__actions" (click)="openRowMenu($event, f)">
+                  <app-v2-icon-btn iconName="more" [size]="26" [title]="'More' | translate: locale.language" />
                 </div>
               </button>
             }
@@ -108,7 +113,12 @@
         @case ('grid') {
           <div class="file-grid">
             @for (f of filteredFiles(); track f.id) {
-              <button type="button" class="file-card" (click)="openEntry(f)">
+              <button
+                type="button"
+                class="file-card"
+                (click)="openEntry(f)"
+                (contextmenu)="openRowMenu($event, f)"
+              >
                 <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="38" [rounded]="8" />
                   @if (f.hasComments) {
@@ -138,7 +148,12 @@
         @case ('gallery') {
           <div class="file-gallery">
             @for (f of filteredFiles(); track f.id) {
-              <button type="button" class="gallery-card" (click)="openEntry(f)">
+              <button
+                type="button"
+                class="gallery-card"
+                (click)="openEntry(f)"
+                (contextmenu)="openRowMenu($event, f)"
+              >
                 <div
                   class="gallery-card__stage"
                   [style.--fc-bg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-bg)'"
@@ -175,4 +190,11 @@
       }
     }
   </div>
+
+  <app-v2-context-menu
+    [items]="menuItems()"
+    [open]="menu() !== null"
+    [anchor]="menu()"
+    (closed)="closeMenu()"
+  />
 </div>
