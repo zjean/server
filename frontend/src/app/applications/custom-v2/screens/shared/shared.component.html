@@ -1,0 +1,55 @@
+<div class="shared">
+  <header class="shared__hero">
+    <div class="shared__hero-text">
+      <p class="shared__eyebrow">{{ config().eyebrow }}</p>
+      <h1 class="shared__title">{{ config().title }}</h1>
+    </div>
+    <div class="shared__actions">
+      <app-v2-icon-btn iconName="refresh" [size]="30" title="Refresh" (click)="refresh()" />
+    </div>
+  </header>
+
+  @if (loading()) {
+    <div class="shared__state">Loading…</div>
+  } @else if (errorMessage(); as err) {
+    <div class="shared__state shared__state--error">{{ err }}</div>
+  } @else if (shares().length === 0) {
+    <div class="shared__state">{{ config().emptyState }}</div>
+  } @else {
+    <div class="share-table">
+      <div class="share-table__head">
+        <span>Name</span>
+        <span>Recipients</span>
+        <span>Modified</span>
+        <span></span>
+      </div>
+      @for (s of shares(); track s.id) {
+        <button type="button" class="share-row" (click)="openShare(s)">
+          <div class="share-row__name">
+            <app-v2-file-glyph [type]="s.file?.mime ? mimeToGlyph(s.file.mime) : 'folder'" [size]="28" [rounded]="6" />
+            <div class="share-row__meta">
+              <div class="share-row__title">{{ s.name }}</div>
+              @if (s.description) {
+                <div class="share-row__description">{{ s.description }}</div>
+              }
+            </div>
+          </div>
+          <div class="share-row__recipients">
+            {{ (s.counts?.users ?? 0) + (s.counts?.groups ?? 0) }} user{{ (s.counts?.users ?? 0) + (s.counts?.groups ?? 0) === 1 ? '' : 's' }}
+            @if ((s.counts?.links ?? 0) > 0) {
+              · {{ s.counts.links }} link{{ s.counts.links === 1 ? '' : 's' }}
+            }
+          </div>
+          <div class="share-row__modified">
+            @if (s.modifiedAt) {
+              {{ s.modifiedAt | amTimeAgo }}
+            }
+          </div>
+          <div class="share-row__actions">
+            <app-v2-icon-btn iconName="more" [size]="26" />
+          </div>
+        </button>
+      }
+    </div>
+  }
+</div>
