@@ -1,19 +1,25 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal, OnDestroy } from '@angular/core'
-import { toSignal } from '@angular/core/rxjs-interop'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, OnInit, signal, OnDestroy, ViewChild } from '@angular/core'
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { Subscription } from 'rxjs'
+import { pairwise } from 'rxjs/operators'
+import { StoreService } from '../../../../store/store.service'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
+import { FileUpload } from '../../../files/interfaces/file-upload.interface'
+import { FilesService } from '../../../files/services/files.service'
+import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { ButtonComponent } from '../../components/button.component'
 import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
+import { DropZoneDirective } from '../../components/drop-zone.directive'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
@@ -50,6 +56,7 @@ function readStoredMode(): BrowserMode {
     IconButtonComponent,
     PillComponent,
     ContextMenuComponent,
+    DropZoneDirective,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -61,8 +68,15 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly filesService = inject(FilesService)
+  private readonly filesUpload = inject(FilesUploadService)
+  private readonly store = inject(StoreService)
+  private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private urlSubscription: Subscription | null = null
+  private pendingDropRefresh = false
+
+  @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly files = signal<FileProps[]>([])
@@ -134,6 +148,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.syncBreadcrumbs()
       this.loadFiles()
     })
+    this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
+      if (this.pendingDropRefresh && prev.length > 0 && curr.length === 0) {
+        this.pendingDropRefresh = false
+        this.refresh()
+      }
+    })
   }
 
   ngOnDestroy(): void {
@@ -188,6 +208,42 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       window.open(url, '_self')
     }
+  }
+
+  protected triggerFilePicker(): void {
+    const input = this.fileInput?.nativeElement
+    if (!input) return
+    input.value = ''
+    input.click()
+  }
+
+  protected onFilePicked(event: Event): void {
+    const input = event.target as HTMLInputElement
+    const files = input.files
+    if (!files || files.length === 0) return
+    this.uploadFiles(Array.from(files))
+  }
+
+  protected onDropFiles(event: DragEvent): void {
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.pendingDropRefresh = true
+    this.filesUpload.onDropFiles(event, [])
+  }
+
+  private uploadFiles(files: File[]): void {
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.filesUpload
+      .addFiles(files as FileUpload[], false)
+      .then(() => this.refresh())
+      .catch((err) => {
+        console.error(err)
+        this.refresh()
+      })
+  }
+
+  private currentUploadRoute(): string {
+    const segs = this.pathSegments().map((s) => s.path)
+    return [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs].join('/')
   }
 
   private loadFiles(): void {

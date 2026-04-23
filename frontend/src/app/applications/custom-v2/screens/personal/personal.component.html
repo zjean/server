@@ -19,7 +19,8 @@
     <span class="personal__divider"></span>
 
     <app-v2-btn kind="primary" size="sm" icon="plus" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'New' | translate: locale.language }}</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="upload" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+    <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
     <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>
     <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
     <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
@@ -52,7 +53,14 @@
     </div>
   </header>
 
-  <div class="personal__body">
+  <div class="personal__body" appV2DropZone (dropped)="onDropFiles($event)">
+    <div class="personal__drop-overlay">
+      <div class="personal__drop-overlay-inner">
+        <app-v2-icon name="upload" [size]="28" />
+        <span l10nTranslate>Drop files to upload</span>
+      </div>
+    </div>
+
     @if (loading()) {
       <div class="personal__state" l10nTranslate>Loading…</div>
     } @else if (errorMessage(); as err) {

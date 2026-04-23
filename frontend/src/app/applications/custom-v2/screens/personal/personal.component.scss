@@ -153,6 +153,39 @@
     min-height: 0;
     overflow: auto;
     background: var(--si-bg2);
+    position: relative;
+
+    &.drop-zone--active {
+      .personal__drop-overlay {
+        opacity: 1;
+        pointer-events: none;
+      }
+    }
+  }
+
+  &__drop-overlay {
+    position: absolute;
+    inset: 8px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px dashed var(--si-accent, #3b82f6);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--si-accent, #3b82f6) 8%, var(--si-bg2));
+    opacity: 0;
+    transition: opacity 100ms ease;
+    pointer-events: none;
+  }
+
+  &__drop-overlay-inner {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--si-fg);
   }
 
   &__state {
