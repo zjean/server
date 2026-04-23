@@ -1,16 +1,26 @@
 <nav class="app-rail">
   @for (it of items; track it.id) {
-    <button
-      type="button"
-      class="app-rail__item"
-      [class.app-rail__item--active]="it.id === activeId"
-      [disabled]="it.disabled"
-      [attr.title]="it.title"
-    >
-      @if (it.id === activeId) {
-        <span class="app-rail__indicator"></span>
-      }
-      <app-v2-icon [name]="it.icon" [size]="17" />
-    </button>
+    @if (it.route && !it.disabled) {
+      <a
+        [routerLink]="it.route"
+        class="app-rail__item"
+        [class.app-rail__item--active]="it.id === activeId()"
+        [attr.title]="it.title"
+      >
+        @if (it.id === activeId()) {
+          <span class="app-rail__indicator"></span>
+        }
+        <app-v2-icon [name]="it.icon" [size]="17" />
+      </a>
+    } @else {
+      <button
+        type="button"
+        class="app-rail__item"
+        [disabled]="it.disabled"
+        [attr.title]="it.title"
+      >
+        <app-v2-icon [name]="it.icon" [size]="17" />
+      </button>
+    }
   }
 </nav>
