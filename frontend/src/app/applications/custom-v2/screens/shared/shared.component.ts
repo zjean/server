@@ -12,6 +12,7 @@ import { SharesService } from '../../../shares/services/shares.service'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { LinkDialogService } from '../../components/link-dialog.service'
+import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -65,6 +66,7 @@ export class SharedComponent implements OnInit {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly linkDialog = inject(LinkDialogService)
+  private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
@@ -113,7 +115,16 @@ export class SharedComponent implements OnInit {
       this.openLinkEditor(share)
       return
     }
+    if (this.variant() === 'with-others') {
+      this.openShareEditor(share)
+      return
+    }
     this.router.navigate(['/spaces/shares', share.alias]).catch(console.error)
+  }
+
+  private async openShareEditor(share: ShareFileModel): Promise<void> {
+    const result = await this.shareDialog.open({ existingShareId: share.id })
+    if (result?.revoked) this.refresh()
   }
 
   private openLinkEditor(share: ShareFileModel): void {

@@ -847,5 +847,22 @@
   "v3_link_updated": "Link bijgewerkt",
   "v3_link_revoked": "Link ingetrokken",
   "v3_link_copied": "Gekopieerd naar klembord",
-  "v3_link_copy_failed": "Kopiëren mislukt — kopieer handmatig"
+  "v3_link_copy_failed": "Kopiëren mislukt — kopieer handmatig",
+  "Share": "Delen",
+  "v3_share_create_title": "Delen met personen",
+  "v3_share_edit_title": "Deling beheren",
+  "v3_share_create": "Delen",
+  "v3_share_save": "Wijzigingen opslaan",
+  "v3_share_revoke": "Deling intrekken",
+  "v3_share_no_recipients": "Voeg ten minste één persoon of groep toe.",
+  "v3_share_preset_viewer": "Lezer",
+  "v3_share_preset_editor": "Bewerker",
+  "v3_share_preset_manager": "Beheerder",
+  "v3_share_created": "Gedeeld",
+  "v3_share_updated": "Deling bijgewerkt",
+  "v3_share_revoked": "Deling verwijderd",
+  "Search people or groups": "Zoek personen of groepen",
+  "Searching…": "Zoeken…",
+  "No matches": "Geen resultaten",
+  "Remove": "Verwijderen"
 }

@@ -64,5 +64,20 @@
   "v3_link_updated": "Link updated",
   "v3_link_revoked": "Link revoked",
   "v3_link_copied": "Copied to clipboard",
-  "v3_link_copy_failed": "Copy failed — please copy manually"
+  "v3_link_copy_failed": "Copy failed — please copy manually",
+  "v3_share_create_title": "Share with people",
+  "v3_share_edit_title": "Manage share",
+  "v3_share_create": "Share",
+  "v3_share_save": "Save changes",
+  "v3_share_revoke": "Revoke share",
+  "v3_share_no_recipients": "Add at least one person or group.",
+  "v3_share_preset_viewer": "Viewer",
+  "v3_share_preset_editor": "Editor",
+  "v3_share_preset_manager": "Manager",
+  "v3_share_created": "Shared",
+  "v3_share_updated": "Share updated",
+  "v3_share_revoked": "Share removed",
+  "Search people or groups": "Search people or groups",
+  "Searching…": "Searching…",
+  "No matches": "No matches"
 }
