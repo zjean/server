@@ -1,0 +1,110 @@
+import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core'
+import { IconV2Component } from '../icons/icon-v2.component'
+import { ToastService } from './toast.service'
+
+@Component({
+  selector: 'app-v2-toast-host',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [IconV2Component],
+  template: `
+    <div class="toast-host" aria-live="polite">
+      @for (t of toasts(); track t.id) {
+        <div class="toast toast--{{ t.kind }}" role="status">
+          <app-v2-icon [name]="t.kind === 'error' ? 'x' : 'check'" [size]="14" />
+          <span class="toast__msg">{{ t.message }}</span>
+          <button type="button" class="toast__close" (click)="dismiss(t.id)" aria-label="Dismiss">
+            <app-v2-icon name="x" [size]="12" />
+          </button>
+        </div>
+      }
+    </div>
+  `,
+  styles: [
+    `
+      :host {
+        position: fixed;
+        top: 60px;
+        right: 16px;
+        z-index: 60;
+        pointer-events: none;
+      }
+      .toast-host {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .toast {
+        pointer-events: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 220px;
+        max-width: 360px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--si-bg1);
+        border: 1px solid var(--si-border);
+        box-shadow:
+          0 4px 10px rgba(0, 0, 0, 0.08),
+          0 10px 24px rgba(0, 0, 0, 0.1);
+        color: var(--si-fg);
+        font-size: 13px;
+        animation: toast-in 140ms ease-out;
+      }
+      .toast--success {
+        border-color: color-mix(in srgb, var(--si-green, #22c55e) 35%, var(--si-border));
+      }
+      .toast--success app-v2-icon {
+        color: var(--si-green, #22c55e);
+      }
+      .toast--error {
+        border-color: color-mix(in srgb, var(--si-rose, #c0392b) 35%, var(--si-border));
+      }
+      .toast--error app-v2-icon {
+        color: var(--si-rose, #c0392b);
+      }
+      .toast__msg {
+        flex: 1 1 auto;
+        min-width: 0;
+        word-break: break-word;
+      }
+      .toast__close {
+        background: transparent;
+        border: none;
+        color: var(--si-fg-muted);
+        cursor: pointer;
+        padding: 2px;
+        border-radius: 4px;
+        display: inline-flex;
+      }
+      .toast__close:hover {
+        background: var(--si-bg3);
+        color: var(--si-fg);
+      }
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    `
+  ]
+})
+export class ToastHostComponent {
+  private readonly service = inject(ToastService)
+
+  protected readonly toasts = this.service.toasts.asReadonly()
+
+  protected dismiss(id: number): void {
+    this.service.dismiss(id)
+  }
+
+  @HostListener('window:keydown.escape')
+  onEscape(): void {
+    this.service.dismissAll()
+  }
+}

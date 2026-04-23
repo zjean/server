@@ -11,12 +11,15 @@ import { StoreService } from '../../../../store/store.service'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
-import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import { API_FILES_OPERATION, API_FILES_TASK_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { FileUpload } from '../../../files/interfaces/file-upload.interface'
+import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
+import { ConfirmDialogService } from '../../components/confirm-dialog.service'
+import { ToastService } from '../../components/toast.service'
 import { ButtonComponent } from '../../components/button.component'
 import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
@@ -70,11 +73,14 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly filesService = inject(FilesService)
   private readonly filesUpload = inject(FilesUploadService)
+  private readonly confirmDialog = inject(ConfirmDialogService)
+  private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private urlSubscription: Subscription | null = null
   private pendingDropRefresh = false
+  private pendingDeleteRefresh = false
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
@@ -136,9 +142,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
         label: 'Delete',
         icon: 'trash',
         kind: 'danger',
-        disabled: true,
-        disabledReason: 'Coming soon',
-        action: () => undefined
+        action: () => this.confirmAndDelete(f)
       }
     ]
   })
@@ -149,9 +153,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.loadFiles()
     })
     this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
-      if (this.pendingDropRefresh && prev.length > 0 && curr.length === 0) {
-        this.pendingDropRefresh = false
-        this.refresh()
+      if (prev.length > 0 && curr.length === 0) {
+        if (this.pendingDropRefresh || this.pendingDeleteRefresh) {
+          this.pendingDropRefresh = false
+          this.pendingDeleteRefresh = false
+          this.refresh()
+        }
       }
     })
   }
@@ -198,6 +205,29 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   protected closeMenu(): void {
     this.menu.set(null)
+  }
+
+  protected async confirmAndDelete(file: FileProps): Promise<void> {
+    const ok = await this.confirmDialog.open({
+      title: 'Move to trash',
+      message: 'v3_move_to_trash_one',
+      messageParams: { name: file.name },
+      confirmLabel: 'Move to trash',
+      kind: 'danger'
+    })
+    if (!ok) return
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
+    const encoded = encodeUrl(fullPath)
+    const stub = {
+      path: fullPath,
+      name: file.name,
+      isBeingDeleted: false,
+      encodedPath: encoded,
+      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
+    } as unknown as FileModel
+    this.pendingDeleteRefresh = true
+    this.filesService.delete([stub])
+    this.toast.success(`Moving "${file.name}" to trash…`)
   }
 
   protected downloadFile(file: FileProps): void {
