@@ -4,6 +4,7 @@ import { UsersModule } from '../users/users.module'
 import { WebDAVModule } from '../webdav/webdav.module'
 import { NcDavController } from './controllers/nc-dav.controller'
 import { NcDiscoveryController } from './controllers/nc-discovery.controller'
+import { NcExtrasController } from './controllers/nc-extras.controller'
 import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
@@ -18,7 +19,7 @@ import { NcResponseService } from './services/nc-response.service'
 // full design + decisions log.
 @Module({
   imports: [UsersModule, FilesModule, WebDAVModule],
-  controllers: [NcDiscoveryController, NcLoginV2Controller, NcOcsController, NcDavController],
+  controllers: [NcDiscoveryController, NcLoginV2Controller, NcOcsController, NcDavController, NcExtrasController],
   providers: [NcBasicAuthGuard, NcLoginFlowService, NcPathResolverService, NcResponseService, NcChunkedUploadsService]
 })
 export class CustomMobileCompatModule {}
