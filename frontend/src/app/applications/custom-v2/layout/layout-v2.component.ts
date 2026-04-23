@@ -5,13 +5,14 @@ import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
 import { LeftNavComponent } from './left-nav.component'
 import { TitleBarComponent } from './title-bar.component'
+import { TransfersPopoverComponent } from './transfers-popover.component'
 
 @Component({
   selector: 'app-layout-v2',
   templateUrl: './layout-v2.component.html',
   styleUrls: ['../styles/v2.scss', './layout-v2.component.scss'],
   encapsulation: ViewEncapsulation.None,
-  imports: [RouterOutlet, TitleBarComponent, AppRailComponent, LeftNavComponent, DockRailComponent]
+  imports: [RouterOutlet, TitleBarComponent, AppRailComponent, LeftNavComponent, DockRailComponent, TransfersPopoverComponent]
 })
 export class LayoutV2Component implements OnInit {
   @HostBinding('class.v2-root') readonly v2Root = true
