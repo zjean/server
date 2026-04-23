@@ -1,0 +1,85 @@
+<div class="settings">
+  <header class="settings__hero">
+    <p class="settings__eyebrow">Settings</p>
+    <h1 class="settings__title">Your account</h1>
+  </header>
+
+  @if (user(); as u) {
+    <section class="settings__identity">
+      <div class="settings__avatar">
+        @if (userAvatar()) {
+          <img [src]="userAvatar()" alt="" class="settings__avatar-img" />
+        } @else {
+          <span>{{ initials() }}</span>
+        }
+      </div>
+      <div class="settings__identity-meta">
+        <div class="settings__name">{{ u.fullName || u.login }}</div>
+        <div class="settings__email">{{ u.email }}</div>
+        <div class="settings__role">
+          @if (u.isAdmin) {
+            Administrator
+          } @else if (u.isGuest) {
+            Guest
+          } @else {
+            User
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="settings__section">
+      <div class="settings__section-title">Storage</div>
+      <div class="settings__storage">
+        <div class="settings__storage-bar">
+          <div class="settings__storage-fill" [style.width.%]="storagePercent()"></div>
+        </div>
+        <div class="settings__storage-meta">
+          @if (u.storageQuota && u.storageQuota > 0) {
+            {{ u.storageUsage | toBytes: 1 : true }} of {{ u.storageQuota | toBytes }} used — {{ storagePercent() }}%
+          } @else {
+            {{ u.storageUsage | toBytes: 1 : true }} used · unlimited
+          }
+        </div>
+      </div>
+    </section>
+  }
+
+  <section class="settings__section">
+    <div class="settings__section-title">Preferences</div>
+    <div class="settings__grid">
+      @for (link of settingsLinks; track link.id) {
+        <button type="button" class="settings-card" (click)="openClassic(link.classicPath)">
+          <span class="settings-card__icon">
+            <app-v2-icon [name]="link.icon" [size]="18" />
+          </span>
+          <div class="settings-card__body">
+            <div class="settings-card__title">{{ link.title }}</div>
+            <div class="settings-card__description">{{ link.description }}</div>
+          </div>
+          <app-v2-icon name="chevRight" [size]="14" class="settings-card__chev" />
+        </button>
+      }
+    </div>
+  </section>
+
+  <section class="settings__section">
+    <div class="settings__section-title">About</div>
+    <div class="settings__about">
+      <div class="settings__about-row">
+        <span>Version</span>
+        <span class="settings__about-value">{{ version }}</span>
+      </div>
+      <div class="settings__about-row">
+        <span>Source</span>
+        <a href="https://github.com/zjean/server" target="_blank" rel="noopener noreferrer" class="settings__about-value settings__about-link">
+          github.com/zjean/server
+        </a>
+      </div>
+      <div class="settings__about-row">
+        <span>License</span>
+        <span class="settings__about-value">AGPL-3.0-or-later</span>
+      </div>
+    </div>
+  </section>
+</div>
