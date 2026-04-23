@@ -1,9 +1,15 @@
 <div class="personal">
   <header class="personal__toolbar">
     <div class="personal__title">
-      <div class="personal__title-text">{{ folderLabel() }}</div>
+      <div class="personal__title-text">
+        @if (pathSegments().length === 0) {
+          <span l10nTranslate>Personal</span>
+        } @else {
+          {{ folderLabel() }}
+        }
+      </div>
       <div class="personal__title-meta">
-        {{ files().length }} item{{ files().length === 1 ? '' : 's' }}
+        {{ (files().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: files().length } }}
         @if (totalSize() > 0) {
           · {{ totalSize() | toBytes: 1 : true }}
         }
@@ -12,11 +18,11 @@
 
     <span class="personal__divider"></span>
 
-    <app-v2-btn kind="primary" size="sm" icon="plus" [disabled]="true" title="Coming soon">New</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="upload" [disabled]="true" title="Coming soon">Upload</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" title="Coming soon">Share</app-v2-btn>
-    <app-v2-icon-btn iconName="refresh" [size]="28" title="Refresh" (click)="refresh()" />
-    <app-v2-icon-btn iconName="more" [size]="28" title="More" [disabled]="true" />
+    <app-v2-btn kind="primary" size="sm" icon="plus" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'New' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="upload" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+    <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+    <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
 
     <div class="personal__toolbar-right">
       <div class="personal__filter">
@@ -26,7 +32,7 @@
           class="personal__filter-input"
           [value]="filter()"
           (input)="onFilterInput($event)"
-          placeholder="Filter in Personal…"
+          [placeholder]="'Filter in Personal…' | translate: locale.language"
         />
         <span class="personal__filter-hint">⌘F</span>
       </div>
@@ -36,7 +42,7 @@
             type="button"
             class="personal__mode-btn"
             [class.personal__mode-btn--active]="mode() === opt.id"
-            [attr.title]="opt.title"
+            [attr.title]="opt.title | translate: locale.language"
             (click)="setMode(opt.id)"
           >
             <app-v2-icon [name]="opt.icon" [size]="13" />
@@ -48,22 +54,22 @@
 
   <div class="personal__body">
     @if (loading()) {
-      <div class="personal__state">Loading…</div>
+      <div class="personal__state" l10nTranslate>Loading…</div>
     } @else if (errorMessage(); as err) {
-      <div class="personal__state personal__state--error">{{ err }}</div>
+      <div class="personal__state personal__state--error">{{ err | translate: locale.language }}</div>
     } @else if (filteredFiles().length === 0 && filter()) {
-      <div class="personal__state">No files match "{{ filter() }}"</div>
+      <div class="personal__state">{{ 'no_files_match_query' | translate: locale.language : { query: filter() } }}</div>
     } @else if (files().length === 0) {
-      <div class="personal__state">This folder is empty.</div>
+      <div class="personal__state" l10nTranslate>This folder is empty.</div>
     } @else {
       @switch (mode()) {
         @case ('list') {
           <div class="file-table">
             <div class="file-table__head">
-              <span>Name</span>
-              <span>Info</span>
-              <span>Size</span>
-              <span>Modified</span>
+              <span l10nTranslate>Name</span>
+              <span l10nTranslate>Info</span>
+              <span l10nTranslate>Size</span>
+              <span l10nTranslate>Modified</span>
               <span></span>
             </div>
             @for (f of filteredFiles(); track f.id) {

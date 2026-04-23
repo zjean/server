@@ -1,8 +1,8 @@
 <div class="detail">
   @if (loading()) {
-    <div class="detail__state">Loading…</div>
+    <div class="detail__state" l10nTranslate>Loading…</div>
   } @else if (errorMessage(); as err) {
-    <div class="detail__state detail__state--error">{{ err }}</div>
+    <div class="detail__state detail__state--error">{{ err | translate: locale.language }}</div>
   } @else if (file(); as f) {
     <header class="detail__toolbar">
       <div class="detail__identity">
@@ -21,17 +21,17 @@
         </div>
       </div>
       <span class="detail__divider"></span>
-      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="true" title="Coming soon">Share</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="downloadClassic()">Download</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" title="Coming soon">Favorite</app-v2-btn>
+      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="downloadClassic()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Favorite' | translate: locale.language }}</app-v2-btn>
       <div class="detail__nav">
-        <app-v2-icon-btn iconName="chevLeft" title="Previous" (click)="previous()" />
+        <app-v2-icon-btn iconName="chevLeft" [title]="'Previous' | translate: locale.language" (click)="previous()" />
         @if (siblings().length > 0) {
           <span class="detail__counter">{{ currentIndex() + 1 }} / {{ siblings().length }}</span>
         }
-        <app-v2-icon-btn iconName="chevRight" title="Next" (click)="next()" />
+        <app-v2-icon-btn iconName="chevRight" [title]="'Next' | translate: locale.language" (click)="next()" />
         <span class="detail__divider detail__divider--small"></span>
-        <app-v2-icon-btn iconName="x" title="Close" (click)="close()" />
+        <app-v2-icon-btn iconName="x" [title]="'Close' | translate: locale.language" (click)="close()" />
       </div>
     </header>
 
@@ -44,9 +44,9 @@
         } @else {
           <div class="detail__no-preview">
             <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
-            <div class="detail__no-preview-title">Preview not available</div>
-            <div class="detail__no-preview-lede">Download the file to view its contents.</div>
-            <app-v2-btn kind="outline" size="sm" icon="download" (click)="downloadClassic()">Download</app-v2-btn>
+            <div class="detail__no-preview-title" l10nTranslate>Preview not available</div>
+            <div class="detail__no-preview-lede" l10nTranslate>Download the file to view its contents.</div>
+            <app-v2-btn kind="outline" size="sm" icon="download" (click)="downloadClassic()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
           </div>
         }
       </div>
@@ -73,7 +73,7 @@
               (click)="setTab(t.id)"
             >
               <app-v2-icon [name]="t.icon" [size]="12" />
-              <span>{{ t.label }}</span>
+              <span>{{ t.label | translate: locale.language }}</span>
             </button>
           }
         </div>
@@ -81,30 +81,30 @@
           @switch (tab()) {
             @case ('info') {
               <section class="kv-section">
-                <div class="kv-section__title">Properties</div>
+                <div class="kv-section__title" l10nTranslate>Properties</div>
                 <div class="kv-row">
-                  <span>Type</span>
+                  <span l10nTranslate>Type</span>
                   <span>{{ f.mime }}</span>
                 </div>
                 @if (!f.isDir) {
                   <div class="kv-row">
-                    <span>Size</span>
+                    <span l10nTranslate>Size</span>
                     <span class="kv-row__mono">{{ f.size | toBytes: 2 : true }}</span>
                   </div>
                 }
                 <div class="kv-row">
-                  <span>Location</span>
+                  <span l10nTranslate>Location</span>
                   <span>{{ f.path }}</span>
                 </div>
                 @if (f.mtime) {
                   <div class="kv-row">
-                    <span>Modified</span>
+                    <span l10nTranslate>Modified</span>
                     <span>{{ f.mtime | amTimeAgo }}</span>
                   </div>
                 }
                 @if (f.ctime) {
                   <div class="kv-row">
-                    <span>Created</span>
+                    <span l10nTranslate>Created</span>
                     <span>{{ f.ctime | amTimeAgo }}</span>
                   </div>
                 }
@@ -113,22 +113,22 @@
             @case ('comment') {
               <div class="detail__placeholder">
                 <app-v2-icon name="comment" [size]="22" />
-                <div class="detail__placeholder-title">Comments</div>
-                <div class="detail__placeholder-lede">Inline comment threads will light up in a follow-up PR.</div>
+                <div class="detail__placeholder-title" l10nTranslate>Comments</div>
+                <div class="detail__placeholder-lede" l10nTranslate>Inline comment threads will light up in a follow-up PR.</div>
               </div>
             }
             @case ('activity') {
               <div class="detail__placeholder">
                 <app-v2-icon name="activity" [size]="22" />
-                <div class="detail__placeholder-title">Activity</div>
-                <div class="detail__placeholder-lede">File activity feed will populate once the backend exposes it.</div>
+                <div class="detail__placeholder-title" l10nTranslate>Activity</div>
+                <div class="detail__placeholder-lede" l10nTranslate>File activity feed will populate once the backend exposes it.</div>
               </div>
             }
             @case ('share') {
               <div class="detail__placeholder">
                 <app-v2-icon name="shareTree" [size]="22" />
-                <div class="detail__placeholder-title">Sharing</div>
-                <div class="detail__placeholder-lede">Sharing controls ship with the v2 shares browser.</div>
+                <div class="detail__placeholder-title" l10nTranslate>Sharing</div>
+                <div class="detail__placeholder-lede" l10nTranslate>Sharing controls ship with the v2 shares browser.</div>
               </div>
             }
           }

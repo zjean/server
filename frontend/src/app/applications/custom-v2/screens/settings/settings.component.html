@@ -1,7 +1,7 @@
 <div class="settings">
   <header class="settings__hero">
-    <p class="settings__eyebrow">Settings</p>
-    <h1 class="settings__title">Your account</h1>
+    <p class="settings__eyebrow" l10nTranslate>Settings</p>
+    <h1 class="settings__title" l10nTranslate>Your account</h1>
   </header>
 
   @if (user(); as u) {
@@ -18,27 +18,27 @@
         <div class="settings__email">{{ u.email }}</div>
         <div class="settings__role">
           @if (u.isAdmin) {
-            Administrator
+            <span l10nTranslate>Administrator</span>
           } @else if (u.isGuest) {
-            Guest
+            <span l10nTranslate>Guest</span>
           } @else {
-            User
+            <span l10nTranslate>User</span>
           }
         </div>
       </div>
     </section>
 
     <section class="settings__section">
-      <div class="settings__section-title">Storage</div>
+      <div class="settings__section-title" l10nTranslate>Storage</div>
       <div class="settings__storage">
         <div class="settings__storage-bar">
           <div class="settings__storage-fill" [style.width.%]="storagePercent()"></div>
         </div>
         <div class="settings__storage-meta">
           @if (u.storageQuota && u.storageQuota > 0) {
-            {{ u.storageUsage | toBytes: 1 : true }} of {{ u.storageQuota | toBytes }} used — {{ storagePercent() }}%
+            {{ 'storage_used_of_total' | translate: locale.language : { used: (u.storageUsage | toBytes: 1 : true), total: (u.storageQuota | toBytes), pct: storagePercent() } }}
           } @else {
-            {{ u.storageUsage | toBytes: 1 : true }} used · unlimited
+            {{ 'storage_used_unlimited' | translate: locale.language : { used: (u.storageUsage | toBytes: 1 : true) } }}
           }
         </div>
       </div>
@@ -46,7 +46,7 @@
   }
 
   <section class="settings__section">
-    <div class="settings__section-title">Preferences</div>
+    <div class="settings__section-title" l10nTranslate>Preferences</div>
     <div class="settings__grid">
       @for (link of settingsLinks; track link.id) {
         <button type="button" class="settings-card" (click)="openClassic(link.classicPath)">
@@ -54,8 +54,8 @@
             <app-v2-icon [name]="link.icon" [size]="18" />
           </span>
           <div class="settings-card__body">
-            <div class="settings-card__title">{{ link.title }}</div>
-            <div class="settings-card__description">{{ link.description }}</div>
+            <div class="settings-card__title">{{ link.title | translate: locale.language }}</div>
+            <div class="settings-card__description">{{ link.description | translate: locale.language }}</div>
           </div>
           <app-v2-icon name="chevRight" [size]="14" class="settings-card__chev" />
         </button>
@@ -64,20 +64,20 @@
   </section>
 
   <section class="settings__section">
-    <div class="settings__section-title">About</div>
+    <div class="settings__section-title" l10nTranslate>About</div>
     <div class="settings__about">
       <div class="settings__about-row">
-        <span>Version</span>
+        <span l10nTranslate>Version</span>
         <span class="settings__about-value">{{ version }}</span>
       </div>
       <div class="settings__about-row">
-        <span>Source</span>
+        <span l10nTranslate>Source</span>
         <a href="https://github.com/zjean/server" target="_blank" rel="noopener noreferrer" class="settings__about-value settings__about-link">
           github.com/zjean/server
         </a>
       </div>
       <div class="settings__about-row">
-        <span>License</span>
+        <span l10nTranslate>License</span>
         <span class="settings__about-value">AGPL-3.0-or-later</span>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
@@ -16,12 +17,22 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './spaces.component.html',
   styleUrl: './spaces.component.scss',
-  imports: [IconV2Component, IconButtonComponent, PillComponent, ToBytesPipe, TimeAgoPipe, CreateSpaceModalComponent]
+  imports: [
+    IconV2Component,
+    IconButtonComponent,
+    PillComponent,
+    ToBytesPipe,
+    TimeAgoPipe,
+    CreateSpaceModalComponent,
+    L10nTranslateDirective,
+    L10nTranslatePipe
+  ]
 })
 export class SpacesComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
   protected readonly spaces = signal<SpaceModel[]>([])

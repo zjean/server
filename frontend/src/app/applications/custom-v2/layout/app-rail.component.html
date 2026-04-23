@@ -5,7 +5,7 @@
         [routerLink]="it.route"
         class="app-rail__item"
         [class.app-rail__item--active]="it.id === activeId()"
-        [attr.title]="it.title"
+        [attr.title]="it.title | translate: locale.language"
       >
         @if (it.id === activeId()) {
           <span class="app-rail__indicator"></span>
@@ -17,7 +17,7 @@
         type="button"
         class="app-rail__item"
         [disabled]="it.disabled"
-        [attr.title]="it.title"
+        [attr.title]="it.title | translate: locale.language"
       >
         <app-v2-icon [name]="it.icon" [size]="17" />
       </button>

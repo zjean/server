@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { TrashModel } from '../../../spaces/models/trash.model'
@@ -14,12 +15,13 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './trash.component.html',
   styleUrl: './trash.component.scss',
-  imports: [IconV2Component, IconButtonComponent, ButtonComponent, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, ButtonComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class TrashComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
   protected readonly bins = signal<TrashModel[]>([])
@@ -27,6 +29,15 @@ export class TrashComponent implements OnInit {
   protected readonly errorMessage = signal<string | null>(null)
 
   protected readonly totalItems = computed(() => this.bins().reduce((n, b) => n + b.nb, 0))
+
+  protected readonly subtitleKey = computed(() => {
+    const itemsOne = this.totalItems() === 1
+    const binsOne = this.bins().length === 1
+    if (itemsOne && binsOne) return 'one_item_across_one_bin'
+    if (itemsOne) return 'one_item_across_nb_bins'
+    if (binsOne) return 'nb_items_across_one_bin'
+    return 'nb_items_across_nb_bins'
+  })
 
   ngOnInit(): void {
     this.breadcrumbs.setBreadcrumbs([{ label: 'Trash', icon: 'trash' }])

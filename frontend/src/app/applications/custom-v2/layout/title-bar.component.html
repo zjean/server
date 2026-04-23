@@ -19,7 +19,7 @@
         @if (b.icon) {
           <app-v2-icon [name]="b.icon" [size]="13" class="title-bar__crumb-icon" />
         }
-        {{ b.label }}
+        {{ b.label | translate: locale.language }}
       </span>
     }
   </div>

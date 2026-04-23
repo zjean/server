@@ -1,5 +1,5 @@
-import { TitleCasePipe } from '@angular/common'
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { USER_ONLINE_STATUS } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { UserOnlineModel } from '../../../users/models/user-online.model'
 import { StoreService } from '../../../../store/store.service'
@@ -11,11 +11,12 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './people.component.html',
   styleUrl: './people.component.scss',
-  imports: [IconV2Component, TitleCasePipe]
+  imports: [IconV2Component, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class PeopleComponent implements OnInit {
   private readonly store = inject(StoreService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly users = this.store.onlineUsers
   protected readonly filter = signal('')
@@ -60,6 +61,19 @@ export class PeopleComponent implements OnInit {
         return 'people-row__status--busy'
       default:
         return 'people-row__status--offline'
+    }
+  }
+
+  protected statusKey(u: UserOnlineModel): string {
+    switch (u.onlineStatus) {
+      case USER_ONLINE_STATUS.AVAILABLE:
+        return 'Available'
+      case USER_ONLINE_STATUS.ABSENT:
+        return 'Absent'
+      case USER_ONLINE_STATUS.BUSY:
+        return 'Busy'
+      default:
+        return 'Offline'
     }
   }
 

@@ -1,6 +1,6 @@
 <div class="search">
   <header class="search__hero">
-    <p class="search__eyebrow">Search</p>
+    <p class="search__eyebrow" l10nTranslate>Search</p>
     <form class="search__form" (submit)="onSubmit($event)">
       <app-v2-icon name="search" [size]="16" class="search__icon" />
       <input
@@ -9,25 +9,27 @@
         class="search__input"
         [value]="query()"
         (input)="onQueryInput($event)"
-        placeholder="Find a file by name or content…"
+        [placeholder]="'Find a file by name or content…' | translate: locale.language"
         autocomplete="off"
       />
-      <button type="button" class="search__toggle" [class.search__toggle--active]="fullText()" (click)="toggleFullText()">
+      <button type="button" class="search__toggle" [class.search__toggle--active]="fullText()" (click)="toggleFullText()" l10nTranslate>
         Full-text
       </button>
-      <app-v2-btn kind="primary" size="sm" icon="search">Search</app-v2-btn>
+      <app-v2-btn kind="primary" size="sm" icon="search">{{ 'Search' | translate: locale.language }}</app-v2-btn>
     </form>
   </header>
 
   @if (loading()) {
-    <div class="search__state">Searching…</div>
+    <div class="search__state" l10nTranslate>Searching…</div>
   } @else if (errorMessage(); as err) {
-    <div class="search__state search__state--error">{{ err }}</div>
+    <div class="search__state search__state--error">{{ err | translate: locale.language }}</div>
   } @else if (searched() && results().length === 0) {
-    <div class="search__state">No results for "{{ query() }}"</div>
+    <div class="search__state">{{ 'no_results_for_query' | translate: locale.language : { query: query() } }}</div>
   } @else if (results().length > 0) {
     <div class="search__results">
-      <div class="search__count">{{ results().length }} result{{ results().length === 1 ? '' : 's' }}</div>
+      <div class="search__count">
+        {{ (results().length === 1 ? 'one_result' : 'nb_results') | translate: locale.language : { nb: results().length } }}
+      </div>
       @for (r of results(); track r.id) {
         <button type="button" class="search-row" (click)="openResult(r)">
           <app-v2-file-glyph [type]="mimeToGlyph(r.mime)" [size]="28" [rounded]="6" />
@@ -46,6 +48,6 @@
       }
     </div>
   } @else {
-    <div class="search__state">Type at least two characters to search.</div>
+    <div class="search__state" l10nTranslate>Type at least two characters to search.</div>
   }
 </div>
