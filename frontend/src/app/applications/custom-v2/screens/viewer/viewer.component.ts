@@ -12,6 +12,7 @@ import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { isImageMime } from '../../utils/mime-to-glyph'
 
 @Component({
   selector: 'app-v2-viewer',
@@ -32,9 +33,12 @@ export class ViewerComponent implements OnInit {
   protected readonly siblings = signal<FileProps[]>([])
   protected readonly current = computed<FileProps | null>(() => {
     const p = this.path()
-    return this.siblings().find((f) => f.path === p) ?? null
+    return this.siblings().find((f) => `${f.path}/${f.name}` === p) ?? null
   })
-  protected readonly currentIndex = computed(() => this.siblings().findIndex((f) => f.path === this.path()))
+  protected readonly currentIndex = computed(() => {
+    const p = this.path()
+    return this.siblings().findIndex((f) => `${f.path}/${f.name}` === p)
+  })
   protected readonly infoOpen = signal(false)
   protected readonly resolution = signal<string>('')
   protected readonly loadError = signal<string | null>(null)
@@ -82,7 +86,7 @@ export class ViewerComponent implements OnInit {
     const imgs = this.siblings()
     if (!imgs.length) return
     const idx = (this.currentIndex() + 1 + imgs.length) % imgs.length
-    this.path.set(imgs[idx].path)
+    this.path.set(`${imgs[idx].path}/${imgs[idx].name}`)
     this.resolution.set('')
   }
 
@@ -90,7 +94,7 @@ export class ViewerComponent implements OnInit {
     const imgs = this.siblings()
     if (!imgs.length) return
     const idx = (this.currentIndex() - 1 + imgs.length) % imgs.length
-    this.path.set(imgs[idx].path)
+    this.path.set(`${imgs[idx].path}/${imgs[idx].name}`)
     this.resolution.set('')
   }
 
@@ -133,7 +137,7 @@ export class ViewerComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
-          const images = result.files.filter((f) => !f.isDir && f.mime?.startsWith('image/'))
+          const images = result.files.filter((f) => !f.isDir && isImageMime(f.mime))
           this.siblings.set(images)
         },
         error: (e: HttpErrorResponse) => {

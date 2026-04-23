@@ -1,11 +1,27 @@
 import { FileGlyphType } from '../components/file-glyph.component'
 
+// The spaces browse API returns mimes with '/' replaced by '-' — e.g. 'image-jpeg'
+// instead of 'image/jpeg' (backend/src/applications/files/utils/files.ts:95).
+// Normalize back to the canonical form before any type/subtype checks.
+export function normalizeMime(mime: string | null | undefined): string {
+  if (!mime) return ''
+  return mime.replace('-', '/').toLowerCase()
+}
+
+export function isImageMime(mime: string | null | undefined): boolean {
+  return normalizeMime(mime).startsWith('image/')
+}
+
+export function isPdfMime(mime: string | null | undefined): boolean {
+  return normalizeMime(mime) === 'application/pdf'
+}
+
 // Map a MIME type to one of the v2 FileGlyph categories.
 // Unknown mimes fall through to 'default', which the FileGlyph renders as a
 // neutral document glyph.
 export function mimeToGlyph(mime: string | null | undefined): FileGlyphType {
   if (!mime) return 'default'
-  const m = mime.toLowerCase()
+  const m = normalizeMime(mime)
 
   if (m === 'inode/directory' || m === 'folder') return 'folder'
   if (m.startsWith('image/')) return 'image'
