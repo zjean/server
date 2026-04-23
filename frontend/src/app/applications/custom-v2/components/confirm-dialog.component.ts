@@ -10,26 +10,14 @@ import { ConfirmDialogService } from './confirm-dialog.service'
   template: `
     @if (pending(); as p) {
       <div class="confirm-dialog__backdrop" (click)="cancel()" (contextmenu)="$event.preventDefault()"></div>
-      <div
-        class="confirm-dialog"
-        role="dialog"
-        aria-modal="true"
-        (click)="$event.stopPropagation()"
-      >
+      <div class="confirm-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
         <div class="confirm-dialog__title">{{ p.title | translate: locale.language }}</div>
-        <div
-          class="confirm-dialog__message"
-          [innerHTML]="p.message | translate: locale.language : p.messageParams"
-        ></div>
+        <div class="confirm-dialog__message" [innerHTML]="p.message | translate: locale.language : p.messageParams"></div>
         <div class="confirm-dialog__actions">
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
-            {{ (p.cancelLabel ?? 'Cancel') | translate: locale.language }}
+            {{ p.cancelLabel ?? 'Cancel' | translate: locale.language }}
           </app-v2-btn>
-          <app-v2-btn
-            [kind]="p.kind === 'danger' ? 'danger' : 'primary'"
-            size="sm"
-            (click)="confirm()"
-          >
+          <app-v2-btn [kind]="p.kind === 'danger' ? 'danger' : 'primary'" size="sm" (click)="confirm()">
             {{ p.confirmLabel | translate: locale.language }}
           </app-v2-btn>
         </div>
