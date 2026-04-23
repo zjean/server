@@ -148,14 +148,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.syncBreadcrumbs()
       this.loadFiles()
     })
-    this.store.filesActiveTasks
-      .pipe(pairwise(), takeUntilDestroyed(this.destroyRef))
-      .subscribe(([prev, curr]) => {
-        if (this.pendingDropRefresh && prev.length > 0 && curr.length === 0) {
-          this.pendingDropRefresh = false
-          this.refresh()
-        }
-      })
+    this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
+      if (this.pendingDropRefresh && prev.length > 0 && curr.length === 0) {
+        this.pendingDropRefresh = false
+        this.refresh()
+      }
+    })
   }
 
   ngOnDestroy(): void {
