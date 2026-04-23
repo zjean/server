@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
 import { API_SPACES_TREE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_ALIAS, SPACE_OPERATION, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { FileTree } from '@sync-in-server/backend/src/applications/files/interfaces/file-tree.interface'
@@ -302,13 +302,15 @@ export class TreePickerComponent {
   constructor() {
     effect(() => {
       const p = this.pending()
-      if (p) {
-        this.seedRoots(p)
-      } else {
-        this.rootNodes.set([])
-        this.selected.set(null)
-        this.errorMsg.set(null)
-      }
+      untracked(() => {
+        if (p) {
+          this.seedRoots(p)
+        } else {
+          this.rootNodes.set([])
+          this.selected.set(null)
+          this.errorMsg.set(null)
+        }
+      })
     })
   }
 
