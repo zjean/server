@@ -43,6 +43,33 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
   /* PARSER */
   // '*' body parser allow binary data as a stream (unlimited body size)
   fastifyInstance.addContentTypeParser('*', { bodyLimit: 0 }, (_req: FastifyRequest, _payload: FastifyRequest['raw'], done) => done(null))
+  // application/x-www-form-urlencoded — consumed by the custom-mobile-compat
+  // login-v2 poll endpoint and the browser-side flow form. Kept minimal: tiny
+  // body limit, no nested keys, no array syntax. Only parses for the routes
+  // that need it; other routes (notably the chunked DAV uploads at
+  // /remote.php/dav/uploads/*) get the default passthrough so req.raw stays
+  // readable as a stream.
+  fastifyInstance.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    const urlPath = (req.url ?? '').split('?')[0]
+    const isLoginFlow = urlPath.startsWith('/index.php/login/v2') || urlPath.startsWith('/login/v2/') || urlPath === '/login/v2/poll'
+    if (!isLoginFlow) {
+      return done(null)
+    }
+    try {
+      const parsed: Record<string, string> = {}
+      const raw = typeof body === 'string' ? body : body?.toString('utf8') || ''
+      for (const pair of raw.split('&')) {
+        if (!pair) continue
+        const eq = pair.indexOf('=')
+        const key = decodeURIComponent((eq >= 0 ? pair.slice(0, eq) : pair).replace(/\+/g, ' '))
+        const value = eq >= 0 ? decodeURIComponent(pair.slice(eq + 1).replace(/\+/g, ' ')) : ''
+        parsed[key] = value
+      }
+      done(null, parsed)
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  })
 
   /* INTERCEPTORS */
   app.useGlobalInterceptors(
