@@ -11,6 +11,7 @@ import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ButtonComponent } from '../../components/button.component'
+import { CommentsPanelComponent } from '../../components/comments-panel.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
@@ -47,6 +48,7 @@ interface TabDef {
     IconButtonComponent,
     FileGlyphComponent,
     ButtonComponent,
+    CommentsPanelComponent,
     CodeEditor,
     FormsModule,
     OnlyOfficeComponent,
@@ -135,12 +137,23 @@ export class FileDetailComponent implements OnInit {
         this.loading.set(false)
         return
       }
+      const tab = params.get('tab') as InspectorTab | null
+      if (tab && this.tabs.some((t) => t.id === tab)) {
+        this.tab.set(tab)
+      }
       this.loadFile(path)
     })
   }
 
   protected setTab(t: InspectorTab): void {
     this.tab.set(t)
+  }
+
+  protected onHasCommentsChange(has: boolean): void {
+    const f = this.file()
+    if (!f) return
+    if (!!f.hasComments === has) return
+    this.file.set({ ...f, hasComments: has })
   }
 
   protected next(): void {

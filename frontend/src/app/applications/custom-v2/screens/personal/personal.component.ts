@@ -188,6 +188,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
       { id: 'share', label: 'Share', icon: 'share', action: () => this.shareEntry(f) },
+      { id: 'comments', label: 'Comments', icon: 'comment', disabled: f.isDir, action: () => this.openComments(f) },
       {
         id: 'delete',
         label: 'Delete',
@@ -527,6 +528,13 @@ export class PersonalComponent implements OnInit, OnDestroy {
       relativePath,
       ownerId: this.store.user.getValue()?.id ?? null
     })
+  }
+
+  protected openComments(file: FileProps): void {
+    if (file.isDir) return
+    const segs = this.pathSegments().map((s) => s.path)
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath, tab: 'comment' } }).catch(console.error)
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {

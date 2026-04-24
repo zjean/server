@@ -192,6 +192,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
       { id: 'share', label: 'Share', icon: 'share', action: () => this.shareEntry(f) },
+      { id: 'comments', label: 'Comments', icon: 'comment', disabled: f.isDir, action: () => this.openComments(f) },
       {
         id: 'delete',
         label: 'Delete',
@@ -552,6 +553,15 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       relativePath,
       ownerId: null
     })
+  }
+
+  protected openComments(file: FileProps): void {
+    if (file.isDir) return
+    const alias = this.currentAlias()
+    if (!alias) return
+    const segs = this.pathSegments().map((s) => s.path)
+    const fullPath = [SPACE_REPOSITORY.FILES, alias, ...segs, file.name].join('/')
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath, tab: 'comment' } }).catch(console.error)
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {

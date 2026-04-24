@@ -80,6 +80,7 @@
   "v3_share_updated": "Share updated",
   "v3_share_revoked": "Share removed",
   "v3_share_n_items_subject": "{{ nb }} items",
+  "v3_delete_comment": "Delete this comment? This cannot be undone.",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
   "No matches": "No matches"
