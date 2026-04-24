@@ -13,6 +13,7 @@ import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
+import { AdminGroupMembersComponent, GroupRef } from './admin-group-members.component'
 
 interface GroupRow {
   id: number
@@ -36,7 +37,7 @@ function emptyDraft(): GroupDraft {
 @Component({
   selector: 'app-v2-admin-groups',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ButtonComponent, FormsModule, IconV2Component, L10nTranslateDirective, L10nTranslatePipe],
+  imports: [AdminGroupMembersComponent, ButtonComponent, FormsModule, IconV2Component, L10nTranslateDirective, L10nTranslatePipe],
   template: `
     <div class="ag">
       <header class="ag__head">
@@ -85,6 +86,9 @@ function emptyDraft(): GroupDraft {
                 }
               </span>
               <span class="ag-row__actions">
+                <button type="button" class="ag-row__action" (click)="openMembers(g)" [attr.title]="'Members' | translate: locale.language">
+                  <app-v2-icon name="people" [size]="12" />
+                </button>
                 <button type="button" class="ag-row__action" (click)="openEdit(g)" [attr.title]="'Edit' | translate: locale.language">
                   <app-v2-icon name="pencil" [size]="12" />
                 </button>
@@ -137,6 +141,8 @@ function emptyDraft(): GroupDraft {
           </div>
         </div>
       }
+
+      <app-v2-admin-group-members [group]="activeMembersGroup()" (membersChanged)="onMembersChanged($event)" (dismissed)="closeMembers()" />
     </div>
   `,
   styles: [
@@ -382,6 +388,7 @@ export class AdminGroupsComponent implements OnInit {
   protected readonly dialog = signal<GroupDraft | null>(null)
   protected readonly dialogError = signal<string | null>(null)
   protected readonly busy = signal(false)
+  protected readonly activeMembersGroup = signal<GroupRef | null>(null)
 
   protected readonly filtered = computed(() => {
     const q = this.search().toLowerCase().trim()
@@ -525,6 +532,20 @@ export class AdminGroupsComponent implements OnInit {
   private onError(e: HttpErrorResponse): void {
     this.busy.set(false)
     this.dialogError.set(e.error?.message ?? 'Unable to save group')
+  }
+
+  protected openMembers(row: GroupRow): void {
+    this.activeMembersGroup.set({ id: row.id, name: row.name })
+  }
+
+  protected closeMembers(): void {
+    this.activeMembersGroup.set(null)
+  }
+
+  protected onMembersChanged(count: number): void {
+    const g = this.activeMembersGroup()
+    if (!g) return
+    this.groups.update((list) => list.map((x) => (x.id === g.id ? { ...x, memberCount: count } : x)))
   }
 
   protected async confirmDelete(row: GroupRow): Promise<void> {
