@@ -60,6 +60,8 @@ export type IconV2Name =
   | 'people'
   | 'box'
   | 'restore'
+  | 'copy'
+  | 'moveTo'
 
 @Component({
   selector: 'app-v2-icon',

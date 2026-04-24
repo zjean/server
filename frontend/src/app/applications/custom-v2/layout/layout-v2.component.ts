@@ -2,6 +2,7 @@ import { Component, HostBinding, OnInit, signal, ViewEncapsulation } from '@angu
 import { RouterOutlet } from '@angular/router'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
+import { TreePickerComponent } from '../components/tree-picker.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
@@ -22,7 +23,8 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     DockRailComponent,
     TransfersPopoverComponent,
     ToastHostComponent,
-    ConfirmDialogComponent
+    ConfirmDialogComponent,
+    TreePickerComponent
   ]
 })
 export class LayoutV2Component implements OnInit {
