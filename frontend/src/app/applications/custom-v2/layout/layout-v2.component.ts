@@ -6,6 +6,7 @@ import { PromptDialogComponent } from '../components/prompt-dialog.component'
 import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
+import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
@@ -30,7 +31,8 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     TreePickerComponent,
     PromptDialogComponent,
     LinkDialogComponent,
-    ShareDialogComponent
+    ShareDialogComponent,
+    TwoFaDialogComponent
   ]
 })
 export class LayoutV2Component implements OnInit {
