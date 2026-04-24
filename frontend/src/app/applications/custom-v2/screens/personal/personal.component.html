@@ -122,10 +122,17 @@
                 </div>
                 <div class="file-row__info">
                   @if (f.hasComments) {
-                    <app-v2-pill color="green" [size]="11">
-                      <app-v2-icon name="comment" [size]="10" />
-                      <span>·</span>
-                    </app-v2-pill>
+                    <button
+                      type="button"
+                      class="file-row__comments-btn"
+                      (click)="$event.stopPropagation(); openComments(f)"
+                      [attr.title]="'Show comments' | translate: locale.language"
+                    >
+                      <app-v2-pill color="green" [size]="11">
+                        <app-v2-icon name="comment" [size]="10" />
+                        <span>·</span>
+                      </app-v2-pill>
+                    </button>
                   }
                 </div>
                 <div class="file-row__size">
