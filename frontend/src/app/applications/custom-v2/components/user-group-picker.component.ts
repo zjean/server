@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, ElementRef, EventEmitter, inject, Input, Output, signal, ViewChild } from '@angular/core'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
-import { USERS_ROUTE } from '@sync-in-server/backend/src/applications/users/constants/routes'
+import { API_ADMIN_MEMBERS, USERS_ROUTE } from '@sync-in-server/backend/src/applications/users/constants/routes'
 import type { Member } from '@sync-in-server/backend/src/applications/users/interfaces/member.interface'
 import type { SearchMembersDto } from '@sync-in-server/backend/src/applications/users/dto/search-members.dto'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
@@ -160,6 +160,10 @@ export class UserGroupPickerComponent {
   @Input() placeholder = 'Search people or groups'
   @Input() ignoreUserIds: number[] = []
   @Input() ignoreGroupIds: number[] = []
+  // When true, searches /api/admin/members (all users the admin can administrate)
+  // instead of the default /api/users (members visible to the current user).
+  @Input() adminScope = false
+  @Input() onlyUsers = false
   @Output() pick = new EventEmitter<PickedMember>()
 
   @ViewChild('input') protected input?: ElementRef<HTMLInputElement>
@@ -187,9 +191,11 @@ export class UserGroupPickerComponent {
           const body: SearchMembersDto = {
             search: trimmed,
             ignoreUserIds: this.ignoreUserIds,
-            ignoreGroupIds: this.ignoreGroupIds
+            ignoreGroupIds: this.ignoreGroupIds,
+            onlyUsers: this.onlyUsers || undefined
           }
-          return this.http.request<Member[]>('search', USERS_ROUTE.BASE, { body })
+          const url = this.adminScope ? API_ADMIN_MEMBERS : USERS_ROUTE.BASE
+          return this.http.request<Member[]>('search', url, { body })
         }),
         takeUntil(this.destroy$)
       )
