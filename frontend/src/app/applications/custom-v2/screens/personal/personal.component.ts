@@ -20,6 +20,7 @@ import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
+import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
@@ -77,6 +78,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly treePicker = inject(TreePickerService)
+  private readonly promptDialog = inject(PromptDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly destroyRef = inject(DestroyRef)
@@ -133,6 +135,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
         disabledReason: f.isDir ? 'Coming soon' : undefined,
         action: () => this.downloadFile(f)
       },
+      { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       {
@@ -262,6 +265,84 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       window.open(url, '_self')
     }
+  }
+
+  protected async renameEntry(file: FileProps): Promise<void> {
+    const newName = await this.promptDialog.open({
+      title: file.isDir ? 'Rename folder' : 'Rename file',
+      placeholder: 'New name',
+      submitLabel: 'Rename',
+      initialValue: file.name,
+      selectionRange: file.isDir ? 'all' : 'stem',
+      validate: (v) => this.validateRenameName(v, file)
+    })
+    if (!newName || newName.trim() === file.name) return
+    const trimmed = newName.trim()
+    const stub = this.buildRenameStub(file)
+    this.filesService.rename(stub, trimmed, false).subscribe({
+      next: () => {
+        this.toast.success(`Renamed to "${trimmed}"`)
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Rename failed')
+      }
+    })
+  }
+
+  private validateRenameName(v: string, file: FileProps): string | null {
+    const trimmed = v.trim()
+    if (!trimmed) return 'Name is required'
+    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot contain slashes'
+    if (trimmed === '.' || trimmed === '..') return 'Invalid name'
+    if (trimmed === file.name) return null
+    const existing = this.files().some((f) => f.id !== file.id && f.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return 'A file or folder with this name already exists'
+    return null
+  }
+
+  private buildRenameStub(file: FileProps): FileModel {
+    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...this.pathSegments().map((s) => s.path), file.name].join('/')
+    const encoded = encodeUrl(fullPath)
+    return {
+      path: fullPath,
+      name: file.name,
+      isDir: file.isDir,
+      isBeingDeleted: false,
+      encodedPath: encoded,
+      dataUrl: `${API_FILES_OPERATION}/${encoded}`,
+      taskUrl: `${API_FILES_TASK_OPERATION}/${encoded}`
+    } as unknown as FileModel
+  }
+
+  protected async newFolder(): Promise<void> {
+    const name = await this.promptDialog.open({
+      title: 'New folder',
+      placeholder: 'Folder name',
+      submitLabel: 'Create',
+      validate: (v) => this.validateFolderName(v)
+    })
+    if (!name) return
+    const dirPath = this.currentUploadRoute()
+    this.filesService.make('directory', name.trim(), dirPath, true).subscribe({
+      next: () => {
+        this.toast.success(`Folder "${name.trim()}" created`)
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Folder creation failed')
+      }
+    })
+  }
+
+  private validateFolderName(v: string): string | null {
+    const trimmed = v.trim()
+    if (!trimmed) return 'Name is required'
+    if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot contain slashes'
+    if (trimmed === '.' || trimmed === '..') return 'Invalid name'
+    const existing = this.files().some((f) => f.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return 'A file or folder with this name already exists'
+    return null
   }
 
   protected triggerFilePicker(): void {
