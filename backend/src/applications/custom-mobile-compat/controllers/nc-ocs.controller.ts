@@ -117,11 +117,7 @@ export class NcOcsController {
     return after[0]?.name ?? null
   }
 
-  private doUserProvisioning(
-    userid: string,
-    req: FastifyRequest & { user: UserModel },
-    res: FastifyReply
-  ): OcsEnvelope<NcUserPayload> {
+  private doUserProvisioning(userid: string, req: FastifyRequest & { user: UserModel }, res: FastifyReply): OcsEnvelope<NcUserPayload> {
     this.response.requireJson(req)
     if (userid !== req.user.login) {
       throw new HttpException('forbidden', HttpStatus.FORBIDDEN)

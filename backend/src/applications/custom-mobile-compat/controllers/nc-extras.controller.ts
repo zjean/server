@@ -32,11 +32,7 @@ export class NcExtrasController {
   @Get('index.php/avatar/:user/:size')
   @UseGuards(NcBasicAuthGuard)
   @Header('cache-control', 'private,max-age=86400')
-  async avatar(
-    @Param('user') user: string,
-    @Param('size') _size: string,
-    @Req() req: FastifyRequest & { user: UserModel }
-  ): Promise<StreamableFile> {
+  async avatar(@Param('user') user: string, @Param('size') _size: string, @Req() req: FastifyRequest & { user: UserModel }): Promise<StreamableFile> {
     if (user !== req.user.login) {
       throw new HttpException('forbidden', HttpStatus.FORBIDDEN)
     }

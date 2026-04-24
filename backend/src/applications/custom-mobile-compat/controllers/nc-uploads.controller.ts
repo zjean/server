@@ -150,11 +150,7 @@ export class NcUploadsController {
     }
   }
 
-  private async assembleAndMove(
-    req: FastifyRequest & { user: UserModel },
-    res: FastifyReply,
-    uploadId: string
-  ): Promise<void> {
+  private async assembleAndMove(req: FastifyRequest & { user: UserModel }, res: FastifyReply, uploadId: string): Promise<void> {
     const destHeader = req.headers['destination']
     const destination = Array.isArray(destHeader) ? destHeader[0] : destHeader
     if (!destination) throw new HttpException('Destination header required for MOVE', HttpStatus.BAD_REQUEST)

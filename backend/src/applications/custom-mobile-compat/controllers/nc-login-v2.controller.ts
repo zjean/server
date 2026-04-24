@@ -165,7 +165,11 @@ export class NcLoginV2Controller {
   }
 }
 
-type PollResult = { server: string; loginName: string; appPassword: string }
+interface PollResult {
+  server: string
+  loginName: string
+  appPassword: string
+}
 
 interface PollBody {
   token?: string

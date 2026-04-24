@@ -51,10 +51,7 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
   // readable as a stream.
   fastifyInstance.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
     const urlPath = (req.url ?? '').split('?')[0]
-    const isLoginFlow =
-      urlPath.startsWith('/index.php/login/v2') ||
-      urlPath.startsWith('/login/v2/') ||
-      urlPath === '/login/v2/poll'
+    const isLoginFlow = urlPath.startsWith('/index.php/login/v2') || urlPath.startsWith('/login/v2/') || urlPath === '/login/v2/poll'
     if (!isLoginFlow) {
       return done(null)
     }
