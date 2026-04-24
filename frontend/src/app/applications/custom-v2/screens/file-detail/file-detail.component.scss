@@ -113,6 +113,7 @@
     padding: 32px;
     min-height: 0;
     min-width: 0;
+    position: relative;
   }
 
   &__image {
@@ -129,6 +130,76 @@
     border: none;
     background: #fff;
     border-radius: 4px;
+  }
+
+  &__code-editor {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--si-bg1);
+    font-size: 13px;
+  }
+
+  &__media {
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+    border-radius: 4px;
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+
+  &__audio-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 28px;
+    border-radius: 12px;
+    background: var(--si-bg2);
+  }
+
+  &__audio-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--si-fg);
+    word-break: break-all;
+    text-align: center;
+    max-width: 480px;
+  }
+
+  &__audio {
+    width: 420px;
+    max-width: 100%;
+  }
+
+  &__office {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  &__office-toggle {
+    position: absolute;
+    top: 8px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--si-bg1);
+    color: var(--si-fg);
+    border: 1px solid var(--si-border);
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  &__office-toggle:hover {
+    background: var(--si-bg3);
   }
 
   &__no-preview {
