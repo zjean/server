@@ -80,10 +80,13 @@ export class SearchComponent implements OnInit {
   }
 
   protected openResult(r: FileContentModel): void {
+    // Backend FileContent.path is the parent directory; the filename lives in `name`.
+    // Compose the full path the viewer/file-detail screens expect.
+    const fullPath = `${r.path}/${r.name}`
     if (isImageMime(r.mime)) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: r.path } }).catch(console.error)
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
       return
     }
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: r.path } }).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 }
