@@ -95,7 +95,16 @@ export class NcUploadsController {
         if (!this.staging.exists(req.user.id, uploadId)) {
           await this.staging.ensureDir(req.user.id, uploadId)
         }
-        await this.staging.writeChunk(req.user.id, uploadId, chunkName, req.raw)
+        const written = await this.staging.writeChunk(req.user.id, uploadId, chunkName, req.raw)
+        // If the client advertised a Content-Length, verify the bytes we
+        // persisted match. Mismatch → drop the chunk + 400 so the client
+        // retries instead of silently uploading a short tail.
+        const cl = req.headers['content-length']
+        const declared = Number.parseInt(String(Array.isArray(cl) ? cl[0] : (cl ?? '')), 10)
+        if (Number.isFinite(declared) && declared >= 0 && declared !== written) {
+          await fs.unlink(this.staging.chunkPath(req.user.id, uploadId, chunkName)).catch(() => undefined)
+          throw new HttpException(`chunk ${chunkName}: wrote ${written}B but Content-Length=${declared}B`, HttpStatus.BAD_REQUEST)
+        }
         res.status(HttpStatus.CREATED)
         return
       }
@@ -169,16 +178,25 @@ export class NcUploadsController {
       throw new HttpException('Not allowed to write at destination', HttpStatus.FORBIDDEN)
     }
 
+    // OC-Total-Length is part of the NC chunked-upload protocol; mobile
+    // clients always send it on the assembly MOVE. We require it so the
+    // assembled-vs-expected check below actually guards every transfer. A
+    // missing header now yields 400 instead of silently trusting the payload.
+    const expectedHeader = req.headers['oc-total-length']
+    const expectedRaw = Array.isArray(expectedHeader) ? expectedHeader[0] : expectedHeader
+    const expectedTotal = Number.parseInt(String(expectedRaw ?? ''), 10)
+    if (!Number.isFinite(expectedTotal) || expectedTotal <= 0) {
+      throw new HttpException('OC-Total-Length header is required for chunked upload assembly', HttpStatus.BAD_REQUEST)
+    }
+
     // Assemble to a sibling tmp file then atomic-move to avoid partial writes.
     const tmpPath = `${space.realPath}.uploading.${uploadId}`
     await makeDir(path.dirname(space.realPath), true)
     try {
       const total = await this.staging.concatenate(req.user.id, uploadId, tmpPath)
-      // Check OC-Total-Length if client provided it — soft sanity check.
-      const expected = Number.parseInt(String(req.headers['oc-total-length'] ?? ''), 10)
-      if (Number.isFinite(expected) && expected > 0 && expected !== total) {
+      if (expectedTotal !== total) {
         await fs.unlink(tmpPath).catch(() => undefined)
-        throw new HttpException(`assembled size ${total} != OC-Total-Length ${expected}`, HttpStatus.BAD_REQUEST)
+        throw new HttpException(`assembled size ${total} != OC-Total-Length ${expectedTotal}`, HttpStatus.BAD_REQUEST)
       }
       await moveFiles(tmpPath, space.realPath, true)
     } finally {

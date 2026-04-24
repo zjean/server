@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, HttpException, HttpStatus, Param, Req, Res, UseGuards } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
@@ -20,7 +21,8 @@ import { type OcsEnvelope } from '../utils/ocs-envelope'
 export class NcOcsController {
   constructor(
     private readonly response: NcResponseService,
-    private readonly usersManager: UsersManager
+    private readonly usersManager: UsersManager,
+    private readonly basicAuthGuard: NcBasicAuthGuard
   ) {}
 
   // Capabilities — public. Called both pre-login (server selection) and
@@ -68,8 +70,13 @@ export class NcOcsController {
   }
 
   // DELETE apppassword — clients call this on explicit logout to invalidate
-  // their minted credentials. We find the app-password whose hashed value
-  // matches the one the guard just verified and drop it.
+  // their minted credentials. Steps:
+  //   1. Identify which app-password row in user.secrets.appPasswords[] the
+  //      incoming Basic Auth credentials hash to (walk + comparePassword).
+  //   2. Remove it from the secrets blob.
+  //   3. Evict the NcBasicAuthGuard positive cache entry for this pair so the
+  //      revoked credential stops working immediately instead of lingering
+  //      for the cache TTL.
   @Delete('ocs/v2.php/core/apppassword')
   @UseGuards(NcBasicAuthGuard)
   async revokeAppPassword(
@@ -85,32 +92,28 @@ export class NcOcsController {
     if (found) {
       await this.usersManager.deleteAppPassword(req.user, found)
     }
+    // Always evict — even if we didn't find a matching row (the guard still
+    // cached a positive hit that we must drop).
+    await this.basicAuthGuard.evictCache(parsed.login, parsed.password)
     return this.response.json(res, {})
   }
 
-  // Look up the named app-password entry whose hash matches `candidate`. We
-  // need the name (slug) to call deleteAppPassword. O(app-passwords) — tiny.
+  // Walk user.secrets.appPasswords[] and return the slug-name of the row whose
+  // hashed password matches `candidate`. Uses Sync-in's stored-hash compare via
+  // validateAppPassword's side-effect (it updates currentAccess on match, which
+  // we detect by diffing the list before / after). This avoids duplicating the
+  // hashing scheme in our code (mod-free w.r.t. upstream).
   private async findAppPasswordName(user: UserModel, candidate: string): Promise<string | null> {
-    const list = await this.usersManager.listAppPasswords(user)
-    // listAppPasswords strips `password`; we need the raw secrets to compare
-    // hashes. Delegate to the manager's verify path: it already walks the
-    // hashed list. Simpler: re-walk and compare via comparePassword.
-    // To avoid private-field access we re-use validateAppPassword which sets
-    // `currentAccess` as a side effect — fine — then delete by iterating the
-    // list for the newly-accessed entry. The list ordering is insertion-desc;
-    // the first entry whose currentAccess matches "just now" is our match.
-    const beforeTs = list[0]?.currentAccess ?? null
-    const ok = await this.usersManager.validateAppPassword(user, candidate, '0.0.0.0', (await import('../../../authentication/constants/scope')).AUTH_SCOPE.MOBILE_NC)
+    const before = await this.usersManager.listAppPasswords(user)
+    const ok = await this.usersManager.validateAppPassword(user, candidate, '0.0.0.0', AUTH_SCOPE.MOBILE_NC)
     if (!ok) return null
     const after = await this.usersManager.listAppPasswords(user)
-    // Find the entry whose currentAccess changed.
     for (const entry of after) {
-      const prev = list.find((p) => p.name === entry.name)
+      const prev = before.find((p) => p.name === entry.name)
       if (!prev || `${prev.currentAccess ?? ''}` !== `${entry.currentAccess ?? ''}`) {
         return entry.name
       }
     }
-    // Fall-back: if we can't pinpoint, return the newest entry's name.
     return after[0]?.name ?? null
   }
 

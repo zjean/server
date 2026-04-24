@@ -43,7 +43,10 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         directEditing: { url: '', etag: '' },
         comments: false,
         undelete: true,
-        versioning: false
+        versioning: false,
+        // Preview available for image mimes via /index.php/core/preview?file=<path>.
+        // Non-images return 404 and the client falls back to a download.
+        preview: true
       },
       dav: {
         chunking: '1.0',
