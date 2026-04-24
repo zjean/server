@@ -2,6 +2,7 @@ import { Routes } from '@angular/router'
 import { AdminComponent } from './screens/admin/admin.component'
 import { AdminGroupsComponent } from './screens/admin/admin-groups.component'
 import { AdminSpacesComponent } from './screens/admin/admin-spaces.component'
+import { AdminToolsComponent } from './screens/admin/admin-tools.component'
 import { AdminUsersComponent } from './screens/admin/admin-users.component'
 import { FileDetailComponent } from './screens/file-detail/file-detail.component'
 import { KitComponent } from './screens/kit/kit.component'
@@ -61,5 +62,6 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.ADMIN, pathMatch: 'full', component: AdminComponent },
   { path: V2_ROUTES.ADMIN_USERS, component: AdminUsersComponent },
   { path: V2_ROUTES.ADMIN_GROUPS, component: AdminGroupsComponent },
-  { path: V2_ROUTES.ADMIN_SPACES, component: AdminSpacesComponent }
+  { path: V2_ROUTES.ADMIN_SPACES, component: AdminSpacesComponent },
+  { path: V2_ROUTES.ADMIN_TOOLS, component: AdminToolsComponent }
 ]

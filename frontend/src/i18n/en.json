@@ -85,6 +85,7 @@
   "v3_delete_group": "Delete group <b>{{ name }}</b>? This cannot be undone.",
   "v3_delete_space": "Delete space <b>{{ name }}</b>? This cannot be undone.",
   "v3_space_managers_required": "Add at least one manager.",
+  "v3_drop_indexes": "Drop every search index on this server? Content search will not work until indexing runs again.",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
   "No matches": "No matches"
