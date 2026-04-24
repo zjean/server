@@ -13,6 +13,7 @@ import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcPathResolverService } from './services/nc-path-resolver.service'
+import { NcPropfindService } from './services/nc-propfind.service'
 import { NcResponseService } from './services/nc-response.service'
 
 // Custom add-on module: exposes a Nextcloud-compatible subset of URLs so that
@@ -22,6 +23,6 @@ import { NcResponseService } from './services/nc-response.service'
 @Module({
   imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule],
   controllers: [NcDiscoveryController, NcLoginV2Controller, NcOcsController, NcDavController, NcExtrasController, NcUploadsController],
-  providers: [NcBasicAuthGuard, NcLoginFlowService, NcPathResolverService, NcResponseService, NcChunkedUploadsService]
+  providers: [NcBasicAuthGuard, NcLoginFlowService, NcPathResolverService, NcResponseService, NcChunkedUploadsService, NcPropfindService]
 })
 export class CustomMobileCompatModule {}

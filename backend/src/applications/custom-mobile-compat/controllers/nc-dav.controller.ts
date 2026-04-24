@@ -10,6 +10,7 @@ import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVMethods } from '../../webdav/services/webdav-methods.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { NcPropfindService } from '../services/nc-propfind.service'
 import type { FastifyRequest } from 'fastify'
 
 // NcDavController — WebDAV, trashbin, legacy redirect.
@@ -27,7 +28,8 @@ export class NcDavController {
   constructor(
     private readonly resolver: NcPathResolverService,
     private readonly spacesManager: SpacesManager,
-    private readonly webdav: WebDAVMethods
+    private readonly webdav: WebDAVMethods,
+    private readonly propfind: NcPropfindService
   ) {}
 
   // /remote.php/webdav/* — legacy clients. 301 to the modern dav-files route.
@@ -89,13 +91,13 @@ export class NcDavController {
   private async dispatchFiles(urlUser: string, subpath: string, req: FastifyDAVRequest, res: FastifyReply) {
     this.verifyUrlUser(urlUser, req.user as UserModel)
     await this.attachSpace(req, { mode: 'files', subpath })
-    return this.invokeWebDAV(req, res)
+    return this.invokeWebDAV(req, res, 'files')
   }
 
   private async dispatchTrashbin(urlUser: string, subpath: string, req: FastifyDAVRequest, res: FastifyReply) {
     this.verifyUrlUser(urlUser, req.user as UserModel)
     await this.attachSpace(req, { mode: 'trashbin', subpath })
-    return this.invokeWebDAV(req, res)
+    return this.invokeWebDAV(req, res, 'trashbin')
   }
 
   private verifyUrlUser(urlUser: string, user: UserModel): void {
@@ -214,13 +216,17 @@ export class NcDavController {
     return [...head, ...tail].join('/')
   }
 
-  private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply): Promise<string | StreamableFile | FastifyReply> {
+  private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply, mode: 'files' | 'trashbin'): Promise<string | StreamableFile | FastifyReply> {
     const method = req.method
     const repository = req.space.repository
 
     switch (method) {
       case HTTP_METHOD.PROPFIND:
-        return this.webdav.propfind(req, res, repository)
+        // Delegate to the NC-flavored builder so the response carries the
+        // oc:/nc: namespace properties stock Nextcloud iOS & Android clients
+        // require. The upstream WebDAVMethods.propfind only emits DAV: props
+        // and iOS silently drops entries missing <oc:id> / <oc:fileid>.
+        return this.propfind.respond(req, res, mode)
       case HTTP_METHOD.HEAD:
       case HTTP_METHOD.GET:
         return this.webdav.headOrGet(req, res, repository)
