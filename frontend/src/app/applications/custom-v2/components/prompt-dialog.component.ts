@@ -10,13 +10,7 @@ import { PromptDialogService } from './prompt-dialog.service'
   template: `
     @if (pending(); as p) {
       <div class="prompt-dialog__backdrop" (click)="cancel()"></div>
-      <form
-        class="prompt-dialog"
-        role="dialog"
-        aria-modal="true"
-        (click)="$event.stopPropagation()"
-        (submit)="onSubmit($event)"
-      >
+      <form class="prompt-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
         <div class="prompt-dialog__title">{{ p.title | translate: locale.language }}</div>
         @if (p.message) {
           <div class="prompt-dialog__message">{{ p.message | translate: locale.language }}</div>
@@ -27,7 +21,7 @@ import { PromptDialogService } from './prompt-dialog.service'
           class="prompt-dialog__input"
           [value]="value()"
           (input)="onInput($event)"
-          [placeholder]="(p.placeholder ?? '') | translate: locale.language"
+          [placeholder]="p.placeholder ?? '' | translate: locale.language"
         />
         @if (errorMsg(); as err) {
           <div class="prompt-dialog__error">{{ err | translate: locale.language }}</div>
