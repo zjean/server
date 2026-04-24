@@ -1,5 +1,5 @@
 import { HttpHeaders } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, signal, untracked, ViewChild } from '@angular/core'
+import { ChangeDetectionStrategy, Component, effect, ElementRef, HostListener, inject, untracked, ViewChild } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { TWO_FA_CODE_LENGTH, TWO_FA_HEADER_CODE, TWO_FA_HEADER_PASSWORD } from '@sync-in-server/backend/src/authentication/constants/auth'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
