@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, HttpException, HttpStatus, Param, Req, Res, UseGuards } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { ncCapabilities, type NcCapabilitiesPayload } from '../constants/capabilities'
@@ -10,7 +11,12 @@ import { type OcsEnvelope } from '../utils/ocs-envelope'
 // OCS endpoints hit by the NC mobile clients. Responses are JSON-only; see
 // NcResponseService.requireJson. Not covered here (deferred): shares, sharees,
 // notifications, search — see design doc §non-goals.
+//
+// @AuthTokenSkip bypasses the global JWT guard — NC endpoints don't carry
+// Sync-in JWTs. Authentication is done via NcBasicAuthGuard on the protected
+// routes instead; the capabilities endpoints are intentionally unauthenticated.
 @Controller()
+@AuthTokenSkip()
 export class NcOcsController {
   constructor(
     private readonly response: NcResponseService,

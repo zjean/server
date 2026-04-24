@@ -1,10 +1,12 @@
 import { All, Controller, Get, HttpCode, HttpStatus, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { NC_AUTH_REALM } from '../constants/routes'
 
 // Public unauthenticated probes issued by NC mobile clients before / during
 // server selection. Keep these lightweight and stable.
 @Controller()
+@AuthTokenSkip()
 export class NcDiscoveryController {
   // status.php — server identity. iOS/Android gate connection on this
   // returning a sensible productname + version.

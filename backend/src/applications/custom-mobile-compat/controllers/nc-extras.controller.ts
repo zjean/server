@@ -1,6 +1,7 @@
 import { Controller, Get, Header, HttpException, HttpStatus, Param, Query, Req, StreamableFile, UseGuards } from '@nestjs/common'
 import { createReadStream } from 'node:fs'
 import { FastifyRequest } from 'fastify'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
@@ -9,6 +10,7 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 // hit outside of OCS/WebDAV: avatar display + file-preview thumbnails. Kept
 // out of NcOcsController because these aren't OCS-enveloped responses.
 @Controller()
+@AuthTokenSkip()
 export class NcExtrasController {
   constructor(private readonly usersManager: UsersManager) {}
 

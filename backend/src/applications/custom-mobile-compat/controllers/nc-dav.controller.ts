@@ -1,10 +1,11 @@
 import { All, Controller, HttpException, HttpStatus, Param, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { HTTP_METHOD } from '../../applications.constants'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
-import { WebDAVProtocolGuard } from '../../webdav/guards/webdav-protocol.guard'
+import { DEPTH } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVMethods } from '../../webdav/services/webdav-methods.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
@@ -20,7 +21,8 @@ import type { FastifyRequest } from 'fastify'
 // doesn't model chunked-in-flight state.
 
 @Controller()
-@UseGuards(NcBasicAuthGuard, WebDAVProtocolGuard)
+@AuthTokenSkip()
+@UseGuards(NcBasicAuthGuard)
 export class NcDavController {
   constructor(
     private readonly resolver: NcPathResolverService,
@@ -127,6 +129,89 @@ export class NcDavController {
     // WebDAV body handlers read req.params['*'] for Destination-relative logic
     // inside COPY/MOVE. We repopulate it so they see the Sync-in-style path.
     ;(req as FastifyRequest & { params: Record<string, string> }).params['*'] = urlSegments.join('/')
+
+    // Build the minimal req.dav WebDAVMethods consumes. We intentionally do NOT
+    // use WebDAVProtocolGuard — it reads req.originalUrl which Fastify doesn't
+    // populate for our route tree, and it also requires USER_PERMISSION.WEBDAV
+    // which we validate in the NC-minted-app-password path instead (see
+    // NcBasicAuthGuard).
+    req.dav = {
+      url: (req.url ?? '').split('?')[0],
+      depth: normalizeDepth(req.headers['depth'])
+    }
+    // PROPFIND / PROPPATCH / LOCK want body parsed into JSON-from-XML. We
+    // accept empty bodies (NC clients sometimes send PROPFIND with no body
+    // and expect default "allprop" semantics). A real XML parse isn't
+    // necessary for the handlers we invoke — they only use body fields
+    // opportunistically, falling back to sensible defaults.
+    req.dav.body = null
+
+    // COPY / MOVE: populate req.dav.copyMove from the Destination + Overwrite
+    // headers so WebDAVMethods.copyMove() can resolve + dispatch.
+    if (req.method === HTTP_METHOD.COPY || req.method === HTTP_METHOD.MOVE) {
+      const destHeader = req.headers['destination']
+      const destRaw = Array.isArray(destHeader) ? destHeader[0] : destHeader
+      if (!destRaw) {
+        throw new HttpException('Destination header is required for COPY/MOVE', HttpStatus.BAD_REQUEST)
+      }
+      // Destination may be absolute (https://host/remote.php/dav/files/{user}/X)
+      // or path-relative. Normalize to the path only, then map NC → Sync-in.
+      let destPath = destRaw
+      try {
+        destPath = new URL(destRaw).pathname
+      } catch {
+        // path-relative — use as-is
+      }
+      const destInternal = this.mapNcPathToInternal(user, destPath)
+      if (destInternal === null) {
+        throw new HttpException(`Destination must point at /remote.php/dav/{files,trashbin}/{user}/...: ${destRaw}`, HttpStatus.BAD_REQUEST)
+      }
+      const overwrite = (req.headers['overwrite'] as string | undefined)?.toUpperCase() !== 'F'
+      req.dav.copyMove = {
+        destination: destInternal,
+        overwrite,
+        isMove: req.method === HTTP_METHOD.MOVE
+      }
+    }
+  }
+
+  // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
+  // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
+  // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/trash).
+  // Returns null if the URL path isn't rooted at /remote.php/dav/{files,trashbin}/{user}/.
+  private mapNcPathToInternal(user: UserModel, urlPath: string): string | null {
+    const stripped = urlPath.split('?')[0]
+    const filesPrefix = `/remote.php/dav/files/${user.login}/`
+    const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
+    const trashPrefix = `/remote.php/dav/trashbin/${user.login}/`
+    const trashPrefixNoSlash = `/remote.php/dav/trashbin/${user.login}`
+    let mode: 'files' | 'trashbin'
+    let subpath: string
+    if (stripped === filesPrefixNoSlash || stripped.startsWith(filesPrefix)) {
+      mode = 'files'
+      subpath = stripped === filesPrefixNoSlash ? '' : stripped.slice(filesPrefix.length)
+    } else if (stripped === trashPrefixNoSlash || stripped.startsWith(trashPrefix)) {
+      mode = 'trashbin'
+      subpath = stripped === trashPrefixNoSlash ? '' : stripped.slice(trashPrefix.length)
+    } else {
+      return null
+    }
+    const resolved = this.resolver.resolve(user, { mode, subpath })
+    // Build the WebDAV-style head that WEBDAV_PATH_TO_SPACE_SEGMENTS understands:
+    //   personal       → 'personal'
+    //   files/<alias>  → 'spaces/<alias>'
+    //   trash/<alias>  → 'trash/<alias>'
+    const head: string[] = []
+    if (resolved.repository === 'trash') {
+      head.push('trash', resolved.spaceAlias)
+    } else if (resolved.spaceAlias === 'personal') {
+      head.push('personal')
+    } else {
+      head.push('spaces', resolved.spaceAlias)
+    }
+    if (resolved.rootAlias) head.push(resolved.rootAlias)
+    const tail = resolved.relativePath ? resolved.relativePath.split('/').filter(Boolean) : []
+    return [...head, ...tail].join('/')
   }
 
   private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply): Promise<string | StreamableFile | FastifyReply> {
@@ -176,4 +261,16 @@ function extractStar(req: FastifyDAVRequest, prefix: string): string {
   // Fallback to the '*' param Nest assembled.
   const starParam = (req as FastifyRequest & { params: Record<string, string> }).params?.['*']
   return starParam ?? ''
+}
+
+// Normalize the WebDAV Depth header (case-insensitive; accepts 0 / 1 / infinity).
+// Falls back to RESOURCE (0) when missing or invalid so handlers behave
+// conservatively on malformed clients.
+function normalizeDepth(raw: string | string[] | undefined): DEPTH {
+  const v = Array.isArray(raw) ? raw[0] : raw
+  if (!v) return DEPTH.RESOURCE
+  const lower = v.toLowerCase().trim()
+  if (lower === DEPTH.MEMBERS || lower === '1') return DEPTH.MEMBERS
+  if (lower === DEPTH.INFINITY) return DEPTH.INFINITY
+  return DEPTH.RESOURCE
 }

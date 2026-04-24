@@ -124,7 +124,8 @@ describe(NcBasicAuthGuard.name, () => {
     cache.get.mockResolvedValue(cachedUser)
     const { ctx, req } = makeContext(basic('cached', 'any'))
     await expect(guard.canActivate(ctx)).resolves.toBe(true)
-    expect(req.user).toBe(cachedUser)
+    // Cached entry is rehydrated into a UserModel instance (new reference, same fields).
+    expect(req.user).toMatchObject({ id: 99, login: 'cached' })
     expect(usersQueries.from).not.toHaveBeenCalled()
     expect(usersManager.validateAppPassword).not.toHaveBeenCalled()
   })

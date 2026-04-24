@@ -3,6 +3,7 @@ import * as fsSync from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { HTTP_METHOD } from '../../applications.constants'
 import { isPathExists, makeDir, moveFiles } from '../../files/utils/files'
 import { SPACE_OPERATION } from '../../spaces/constants/spaces'
@@ -29,6 +30,7 @@ import { NcPathResolverService } from '../services/nc-path-resolver.service'
 // string. We preserve client ordering via numeric sort in the staging service.
 
 @Controller()
+@AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)
 export class NcUploadsController {
   constructor(

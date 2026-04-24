@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
+import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
@@ -19,6 +20,7 @@ import { NcResponseService } from '../services/nc-response.service'
 // See https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html
 
 @Controller()
+@AuthTokenSkip()
 export class NcLoginV2Controller {
   constructor(
     private readonly flows: NcLoginFlowService,
