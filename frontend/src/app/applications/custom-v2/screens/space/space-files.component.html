@@ -39,35 +39,38 @@
       <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
     }
     <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
-    <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
-    <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
 
-    <div class="personal__toolbar-right">
-      <div class="personal__filter">
-        <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
-        <input
-          type="text"
-          class="personal__filter-input"
-          [value]="filter()"
-          (input)="onFilterInput($event)"
-          [placeholder]="'Filter in this space…' | translate: locale.language"
-        />
-        <span class="personal__filter-hint">⌘F</span>
+    @if (!hasSelection()) {
+      <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+      <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
+
+      <div class="personal__toolbar-right">
+        <div class="personal__filter">
+          <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
+          <input
+            type="text"
+            class="personal__filter-input"
+            [value]="filter()"
+            (input)="onFilterInput($event)"
+            [placeholder]="'Filter in this space…' | translate: locale.language"
+          />
+          <span class="personal__filter-hint">⌘F</span>
+        </div>
+        <div class="personal__mode">
+          @for (opt of viewOptions; track opt.id) {
+            <button
+              type="button"
+              class="personal__mode-btn"
+              [class.personal__mode-btn--active]="mode() === opt.id"
+              [attr.title]="opt.title | translate: locale.language"
+              (click)="setMode(opt.id)"
+            >
+              <app-v2-icon [name]="opt.icon" [size]="13" />
+            </button>
+          }
+        </div>
       </div>
-      <div class="personal__mode">
-        @for (opt of viewOptions; track opt.id) {
-          <button
-            type="button"
-            class="personal__mode-btn"
-            [class.personal__mode-btn--active]="mode() === opt.id"
-            [attr.title]="opt.title | translate: locale.language"
-            (click)="setMode(opt.id)"
-          >
-            <app-v2-icon [name]="opt.icon" [size]="13" />
-          </button>
-        }
-      </div>
-    </div>
+    }
   </header>
 
   <div class="personal__body" appV2DropZone (dropped)="onDropFiles($event)">

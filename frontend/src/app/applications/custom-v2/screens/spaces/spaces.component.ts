@@ -6,6 +6,7 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
+import { ButtonComponent } from '../../components/button.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { PillComponent } from '../../components/pill.component'
@@ -20,6 +21,7 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
   styleUrl: './spaces.component.scss',
   imports: [
     IconV2Component,
+    ButtonComponent,
     IconButtonComponent,
     PillComponent,
     ToBytesPipe,

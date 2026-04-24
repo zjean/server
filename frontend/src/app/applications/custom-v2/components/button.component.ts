@@ -70,12 +70,13 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
       }
 
       .btn--primary {
-        background: linear-gradient(180deg, var(--si-accent-hover), var(--si-accent));
+        background: var(--si-accent);
         color: var(--si-accent-fg);
-        border-color: oklch(0.7 0.15 55 / 0.6);
-        box-shadow:
-          0 1px 0 rgba(255, 255, 255, 0.15) inset,
-          0 1px 3px rgba(0, 0, 0, 0.3);
+        border-color: var(--si-accent-line);
+        box-shadow: var(--si-shadow1);
+      }
+      .btn--primary:hover {
+        background: var(--si-accent-hover);
       }
       .btn--secondary {
         background: var(--si-bg4);

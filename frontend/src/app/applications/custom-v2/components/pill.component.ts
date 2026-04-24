@@ -61,7 +61,7 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
       }
       .pill--warm {
         background: var(--si-accent-soft);
-        color: oklch(0.88 0.13 55);
+        color: oklch(0.9 0.13 38);
         border-color: var(--si-accent-line);
       }
     `

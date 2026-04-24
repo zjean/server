@@ -43,6 +43,7 @@
     } @else {
       <div class="file-table">
         <div class="file-table__head">
+          <span class="file-row__select"></span>
           <span l10nTranslate>Name</span>
           <span l10nTranslate>Info</span>
           <span l10nTranslate>Size</span>
@@ -56,6 +57,7 @@
             (click)="openEntry(f)"
             (contextmenu)="openRowMenu($event, f)"
           >
+            <span class="file-row__select"></span>
             <div class="file-row__name">
               <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
               <span class="file-row__name-text">{{ f.name }}</span>

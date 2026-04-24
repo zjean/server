@@ -83,8 +83,8 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent);
-    border-bottom: 1px solid var(--si-line);
+    background: var(--si-bg3);
+    border-bottom: 1px solid var(--si-line-strong);
   }
 
   &__header-icon {
@@ -203,8 +203,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, oklch(0.55 0.14 55), oklch(0.38 0.12 55));
-    color: oklch(0.96 0.03 55);
+    background: var(--si-bg5);
+    color: var(--si-fg-muted);
     font-family: var(--si-sans);
     font-weight: 600;
     font-size: 11px;

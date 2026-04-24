@@ -14,13 +14,11 @@
   overflow: auto;
 
   &__toolbar {
-    height: 52px;
-    padding: 0 16px;
+    padding: 20px 22px 14px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 6px;
-    border-bottom: 1px solid var(--si-line);
     background: var(--si-bg2);
     position: sticky;
     top: 0;
