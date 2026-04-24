@@ -53,17 +53,20 @@ export class SettingsComponent implements OnInit {
   protected readonly savingPassword = signal(false)
 
   protected readonly canSavePassword = computed(
-    () =>
-      this.oldPassword().length > 0 &&
-      this.newPassword().length >= this.passwordMinLength &&
-      this.newPassword() === this.confirmPassword()
+    () => this.oldPassword().length > 0 && this.newPassword().length >= this.passwordMinLength && this.newPassword() === this.confirmPassword()
   )
 
   protected readonly initials = computed(() => {
     const u = this.user()
     if (!u) return '?'
     const parts = (u.fullName || u.login || '').trim().split(/\s+/).filter(Boolean)
-    return parts.slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?'
+    return (
+      parts
+        .slice(0, 2)
+        .map((p) => p[0])
+        .join('')
+        .toUpperCase() || '?'
+    )
   })
 
   protected readonly storagePercent = computed(() => {
@@ -122,21 +125,19 @@ export class SettingsComponent implements OnInit {
     if (!this.canSavePassword()) return
     this.savingPassword.set(true)
     const headers = new HttpHeaders()
-    this.userService
-      .changePassword({ oldPassword: this.oldPassword(), newPassword: this.newPassword() }, headers)
-      .subscribe({
-        next: () => {
-          this.savingPassword.set(false)
-          this.oldPassword.set('')
-          this.newPassword.set('')
-          this.confirmPassword.set('')
-          this.toast.success('Password updated')
-        },
-        error: (e: HttpErrorResponse) => {
-          this.savingPassword.set(false)
-          this.toast.error(e.error?.message ?? 'Unable to update password')
-        }
-      })
+    this.userService.changePassword({ oldPassword: this.oldPassword(), newPassword: this.newPassword() }, headers).subscribe({
+      next: () => {
+        this.savingPassword.set(false)
+        this.oldPassword.set('')
+        this.newPassword.set('')
+        this.confirmPassword.set('')
+        this.toast.success('Password updated')
+      },
+      error: (e: HttpErrorResponse) => {
+        this.savingPassword.set(false)
+        this.toast.error(e.error?.message ?? 'Unable to update password')
+      }
+    })
   }
 
   protected saveOnlineStatus(): void {

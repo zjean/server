@@ -11,7 +11,7 @@ import { StoreService } from '../../../../store/store.service'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
-import { API_FILES_OPERATION, API_FILES_TASK_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { FileUpload } from '../../../files/interfaces/file-upload.interface'
@@ -233,7 +233,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
   }
 
   private buildFileStub(file: FileProps): FileModel {
-    const fullPath = buildSpaceFilePath(SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, this.pathSegments().map((s) => s.path), file.name)
+    const fullPath = buildSpaceFilePath(
+      SPACE_REPOSITORY.FILES,
+      SPACE_ALIAS.PERSONAL,
+      this.pathSegments().map((s) => s.path),
+      file.name
+    )
     return buildFileModelStub(file, fullPath)
   }
 
