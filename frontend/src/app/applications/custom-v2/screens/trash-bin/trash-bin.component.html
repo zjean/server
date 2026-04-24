@@ -1,0 +1,98 @@
+<div class="personal">
+  <header class="personal__toolbar">
+    <div class="personal__title">
+      <div class="personal__title-text">{{ folderLabel() }}</div>
+      <div class="personal__title-meta">
+        {{ (files().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: files().length } }}
+        @if (totalSize() > 0) {
+          · {{ totalSize() | toBytes: 1 : true }}
+        }
+      </div>
+    </div>
+
+    <span class="personal__divider"></span>
+
+    @if (atBinRoot() && files().length > 0) {
+      <app-v2-btn kind="danger" size="sm" icon="trash" (click)="confirmAndEmptyTrash()">{{ 'Empty trash' | translate: locale.language }}</app-v2-btn>
+    }
+    <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+
+    <div class="personal__toolbar-right">
+      <div class="personal__filter">
+        <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
+        <input
+          type="text"
+          class="personal__filter-input"
+          [value]="filter()"
+          (input)="onFilterInput($event)"
+          [placeholder]="'Filter in this bin…' | translate: locale.language"
+        />
+      </div>
+    </div>
+  </header>
+
+  <div class="personal__body">
+    @if (loading()) {
+      <div class="personal__state" l10nTranslate>Loading…</div>
+    } @else if (errorMessage(); as err) {
+      <div class="personal__state personal__state--error">{{ err | translate: locale.language }}</div>
+    } @else if (filteredFiles().length === 0 && filter()) {
+      <div class="personal__state">{{ 'no_files_match_query' | translate: locale.language : { query: filter() } }}</div>
+    } @else if (files().length === 0) {
+      <div class="personal__state" l10nTranslate>This bin is empty.</div>
+    } @else {
+      <div class="file-table">
+        <div class="file-table__head">
+          <span l10nTranslate>Name</span>
+          <span l10nTranslate>Info</span>
+          <span l10nTranslate>Size</span>
+          <span l10nTranslate>Deleted</span>
+          <span></span>
+        </div>
+        @for (f of filteredFiles(); track f.id) {
+          <button
+            type="button"
+            class="file-row"
+            (click)="openEntry(f)"
+            (contextmenu)="openRowMenu($event, f)"
+          >
+            <div class="file-row__name">
+              <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
+              <span class="file-row__name-text">{{ f.name }}</span>
+            </div>
+            <div class="file-row__info">
+              @if (f.hasComments) {
+                <app-v2-pill color="green" [size]="11">
+                  <app-v2-icon name="comment" [size]="10" />
+                  <span>·</span>
+                </app-v2-pill>
+              }
+            </div>
+            <div class="file-row__size">
+              @if (!f.isDir) {
+                {{ f.size | toBytes: 1 : true }}
+              }
+            </div>
+            <div class="file-row__modified">
+              @if (f.mtime) {
+                <span class="file-row__modified-pill">{{ f.mtime | amTimeAgo }}</span>
+              } @else {
+                —
+              }
+            </div>
+            <div class="file-row__actions" (click)="openRowMenu($event, f)">
+              <app-v2-icon-btn iconName="more" [size]="26" [title]="'More' | translate: locale.language" />
+            </div>
+          </button>
+        }
+      </div>
+    }
+  </div>
+
+  <app-v2-context-menu
+    [items]="menuItems()"
+    [open]="menu() !== null"
+    [anchor]="menu()"
+    (closed)="closeMenu()"
+  />
+</div>

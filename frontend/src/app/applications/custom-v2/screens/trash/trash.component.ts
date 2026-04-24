@@ -9,6 +9,7 @@ import { ButtonComponent } from '../../components/button.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 
 @Component({
   selector: 'app-v2-trash',
@@ -61,6 +62,6 @@ export class TrashComponent implements OnInit {
   }
 
   protected openBin(bin: TrashModel): void {
-    this.router.navigate(['/spaces/trash', bin.alias]).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.TRASH, bin.alias]).catch(console.error)
   }
 }
