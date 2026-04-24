@@ -10,6 +10,7 @@ import { SharedComponent } from './screens/shared/shared.component'
 import { SpaceFilesComponent } from './screens/space/space-files.component'
 import { SpacesComponent } from './screens/spaces/spaces.component'
 import { TrashComponent } from './screens/trash/trash.component'
+import { TrashBinComponent } from './screens/trash-bin/trash-bin.component'
 import { ViewerComponent } from './screens/viewer/viewer.component'
 import { V2_ROUTES } from './v2.constants'
 
@@ -42,7 +43,14 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.SHARED_WITH_ME, component: SharedComponent, data: { variant: 'with-me' } },
   { path: V2_ROUTES.SHARED_WITH_OTHERS, component: SharedComponent, data: { variant: 'with-others' } },
   { path: V2_ROUTES.SHARED_VIA_LINKS, component: SharedComponent, data: { variant: 'via-links' } },
-  { path: V2_ROUTES.TRASH, component: TrashComponent },
+  { path: V2_ROUTES.TRASH, pathMatch: 'full', component: TrashComponent },
+  {
+    path: `${V2_ROUTES.TRASH}/:alias`,
+    children: [
+      { path: '', component: TrashBinComponent },
+      { path: '**', component: TrashBinComponent }
+    ]
+  },
   { path: V2_ROUTES.SEARCH, component: SearchComponent },
   { path: V2_ROUTES.SETTINGS, component: SettingsComponent },
   { path: V2_ROUTES.PEOPLE, component: PeopleComponent }

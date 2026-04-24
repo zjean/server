@@ -6,21 +6,6 @@
         {{ subtitleKey() | translate: locale.language : { items: totalItems(), bins: bins().length } }}
       </div>
     </div>
-    <span class="trash__divider"></span>
-    <app-v2-btn
-      kind="ghost"
-      size="sm"
-      icon="restore"
-      [disabled]="true"
-      [title]="'Open a bin to restore items' | translate: locale.language"
-    >{{ 'Restore' | translate: locale.language }}</app-v2-btn>
-    <app-v2-btn
-      kind="danger"
-      size="sm"
-      icon="trash"
-      [disabled]="true"
-      [title]="'Empty trash — coming next' | translate: locale.language"
-    >{{ 'Empty trash' | translate: locale.language }}</app-v2-btn>
     <div class="trash__toolbar-right">
       <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
     </div>
