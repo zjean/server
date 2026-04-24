@@ -181,9 +181,7 @@ export class AdminComponent implements OnInit {
       title: 'Tools',
       description: 'Re-index, stats, server diagnostics.',
       icon: 'more',
-      route: `/${V2_PATH}/${V2_ROUTES.ADMIN}`,
-      disabled: true,
-      disabledReason: 'Coming soon'
+      route: `/${V2_PATH}/${V2_ROUTES.ADMIN_TOOLS}`
     }
   ]
 
