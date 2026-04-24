@@ -162,11 +162,11 @@
               </section>
             }
             @case ('comment') {
-              <div class="detail__placeholder">
-                <app-v2-icon name="comment" [size]="22" />
-                <div class="detail__placeholder-title" l10nTranslate>Comments</div>
-                <div class="detail__placeholder-lede" l10nTranslate>Inline comment threads will light up in a follow-up PR.</div>
-              </div>
+              <app-v2-comments-panel
+                [filePath]="currentPath()"
+                [fileId]="f.id"
+                (hasCommentsChange)="onHasCommentsChange($event)"
+              />
             }
             @case ('activity') {
               <div class="detail__placeholder">

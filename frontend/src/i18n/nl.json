@@ -878,6 +878,12 @@
   "v3_share_updated": "Deling bijgewerkt",
   "v3_share_revoked": "Deling verwijderd",
   "v3_share_n_items_subject": "{{ nb }} items",
+  "v3_delete_comment": "Deze opmerking verwijderen? Dit kan niet ongedaan worden gemaakt.",
+  "Write a comment…": "Schrijf een opmerking…",
+  "Post": "Plaatsen",
+  "No comments yet.": "Nog geen opmerkingen.",
+  "edited": "bewerkt",
+  "Delete comment": "Opmerking verwijderen",
   "Search people or groups": "Zoek personen of groepen",
   "No matches": "Geen resultaten"
 }
