@@ -18,12 +18,29 @@
 
     <span class="personal__divider"></span>
 
-    <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
-    <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+    @if (hasSelection()) {
+      <div class="personal__selection">
+        <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Deselect all' | translate: locale.language" />
+        <span class="personal__selection-count">
+          {{ 'v3_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
+          @if (selectionSize() > 0) {
+            · {{ selectionSize() | toBytes: 1 : true }}
+          }
+        </span>
+        <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove('copy')">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove('move')">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
+      </div>
+    } @else {
+      <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+    }
     <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
-    <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>
     <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
     <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
 
@@ -74,8 +91,11 @@
     } @else {
       @switch (mode()) {
         @case ('list') {
-          <div class="file-table">
+          <div class="file-table" [class.file-table--selecting]="hasSelection()">
             <div class="file-table__head">
+              <span class="file-row__select">
+                <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Select all' | translate: locale.language" />
+              </span>
               <span l10nTranslate>Name</span>
               <span l10nTranslate>Info</span>
               <span l10nTranslate>Size</span>
@@ -86,9 +106,13 @@
               <button
                 type="button"
                 class="file-row"
-                (click)="openEntry(f)"
+                [class.file-row--selected]="isSelected(f)"
+                (click)="onRowClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
+                <span class="file-row__select" (click)="$event.stopPropagation(); toggleSelection(f)">
+                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                </span>
                 <div class="file-row__name">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
                   <span class="file-row__name-text">{{ f.name }}</span>
@@ -121,14 +145,18 @@
           </div>
         }
         @case ('grid') {
-          <div class="file-grid">
+          <div class="file-grid" [class.file-grid--selecting]="hasSelection()">
             @for (f of filteredFiles(); track f.id) {
               <button
                 type="button"
                 class="file-card"
-                (click)="openEntry(f)"
+                [class.file-card--selected]="isSelected(f)"
+                (click)="onRowClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
+                <span class="file-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
+                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                </span>
                 <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="38" [rounded]="8" />
                   @if (f.hasComments) {
@@ -156,14 +184,18 @@
           </div>
         }
         @case ('gallery') {
-          <div class="file-gallery">
+          <div class="file-gallery" [class.file-gallery--selecting]="hasSelection()">
             @for (f of filteredFiles(); track f.id) {
               <button
                 type="button"
                 class="gallery-card"
-                (click)="openEntry(f)"
+                [class.gallery-card--selected]="isSelected(f)"
+                (click)="onRowClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
+                <span class="gallery-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
+                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                </span>
                 <div
                   class="gallery-card__stage"
                   [style.--fc-bg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-bg)'"
