@@ -54,12 +54,7 @@ export function createLinkShare(http: HttpClient, p: CreateLinkParams): Observab
   return http.post<ShareProps>(SHARES_ROUTE.BASE, dto)
 }
 
-export function updateLinkOnShare(
-  http: HttpClient,
-  shareId: number,
-  linkId: number,
-  settings: LinkSettingsInput
-): Observable<LinkGuest> {
+export function updateLinkOnShare(http: HttpClient, shareId: number, linkId: number, settings: LinkSettingsInput): Observable<LinkGuest> {
   // /app/shares/links/:linkId/share/:shareId
   return http.put<LinkGuest>(`${API_SHARES_LINKS}/${linkId}/${LINK_TYPE.SHARE}/${shareId}`, toLinkDto(settings))
 }

@@ -78,13 +78,7 @@ interface FormState {
             <span>{{ 'v3_link_set_expiry' | translate: locale.language }}</span>
           </label>
           @if (form().hasExpiry) {
-            <input
-              type="date"
-              class="ld__input ld__input--date"
-              [value]="form().expiresAt"
-              [min]="minExpiryDate"
-              (input)="onExpiryInput($event)"
-            />
+            <input type="date" class="ld__input ld__input--date" [value]="form().expiresAt" [min]="minExpiryDate" (input)="onExpiryInput($event)" />
           }
         </div>
 
