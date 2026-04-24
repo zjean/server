@@ -1,11 +1,17 @@
 <div class="spaces">
   <header class="spaces__toolbar">
-    <app-v2-icon-btn iconName="refresh" [size]="30" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
-    <app-v2-icon-btn iconName="plus" [size]="30" [title]="'Create space' | translate: locale.language" (click)="createSpace()" />
-    <app-v2-icon-btn iconName="more" [size]="30" [title]="'More' | translate: locale.language" [disabled]="true" />
-    <div class="spaces__toolbar-meta">
-      {{ (spaces().length === 1 ? 'one_space' : 'nb_spaces') | translate: locale.language : { nb: spaces().length } }}
+    <div class="spaces__title">
+      <div class="spaces__title-text" l10nTranslate>Spaces</div>
+      <div class="spaces__title-meta">
+        {{ (spaces().length === 1 ? 'one_space' : 'nb_spaces') | translate: locale.language : { nb: spaces().length } }}
+      </div>
     </div>
+
+    <span class="spaces__divider"></span>
+
+    <app-v2-btn kind="primary" size="sm" icon="plus" (click)="createSpace()">{{ 'Create space' | translate: locale.language }}</app-v2-btn>
+    <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+    <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
   </header>
 
   @if (loading()) {
@@ -46,7 +52,7 @@
           <div class="space-row__members">{{ memberCount(s) }}</div>
           <div class="space-row__modified">
             @if (s.modifiedAt) {
-              <app-v2-pill color="violet" [size]="11">{{ s.modifiedAt | amTimeAgo }}</app-v2-pill>
+              {{ s.modifiedAt | amTimeAgo }}
             }
           </div>
           <div class="space-row__actions">

@@ -31,7 +31,7 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
       }
       .pill--indigo {
         background: var(--si-nav-soft);
-        color: oklch(0.86 0.12 265);
+        color: oklch(0.86 0.12 275);
         border-color: var(--si-nav-line);
       }
       .pill--green {
@@ -61,7 +61,7 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
       }
       .pill--warm {
         background: var(--si-accent-soft);
-        color: oklch(0.88 0.13 55);
+        color: oklch(0.9 0.13 200);
         border-color: var(--si-accent-line);
       }
     `

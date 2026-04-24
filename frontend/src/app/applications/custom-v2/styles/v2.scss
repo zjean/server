@@ -2,15 +2,14 @@
 // (encapsulation: None) so the fonts and the .v2-root token scope only apply
 // when the /v2 route tree is active. Classic routes stay on their Inter stack.
 //
-// Font imports use latin-only subsets for instrument-serif so the aggregate
-// component-style stays under Angular's 8 kB anyComponentStyle budget; Geist
-// and JetBrains Mono variable packages ship single-file index.css already.
+// tokens-v4 unified the type stack on Inter Tight (sans/display/serif all
+// resolve to it — the ornamental Instrument Serif italic is gone). Geist kept
+// as a fallback in case Inter Tight fails to load.
 
 @use './tokens';
 
+@import '@fontsource-variable/inter-tight';
 @import '@fontsource-variable/geist';
-@import '@fontsource/instrument-serif/latin-400.css';
-@import '@fontsource/instrument-serif/latin-400-italic.css';
 @import '@fontsource-variable/jetbrains-mono';
 
 .v2-root {

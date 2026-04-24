@@ -1,12 +1,17 @@
 <div class="shared">
-  <header class="shared__hero">
-    <div class="shared__hero-text">
-      <p class="shared__eyebrow">{{ config().eyebrow | translate: locale.language }}</p>
-      <h1 class="shared__title">{{ config().title | translate: locale.language }}</h1>
+  <header class="shared__toolbar">
+    <div class="shared__title">
+      <h1 class="shared__title-text">{{ config().title | translate: locale.language }}</h1>
+      <div class="shared__title-meta">
+        @if (!loading() && !errorMessage()) {
+          {{ (shares().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: shares().length } }}
+        }
+      </div>
     </div>
-    <div class="shared__actions">
-      <app-v2-icon-btn iconName="refresh" [size]="30" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
-    </div>
+
+    <span class="shared__divider"></span>
+
+    <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
   </header>
 
   @if (loading()) {
