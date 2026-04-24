@@ -9,6 +9,7 @@ import type { AdminUserModel } from '../../../admin/models/admin-user.model'
 import { ButtonComponent } from '../../components/button.component'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { ToastService } from '../../components/toast.service'
+import { TwoFaDialogService } from '../../components/two-fa-dialog.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
@@ -442,6 +443,7 @@ export class AdminUsersComponent implements OnInit {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly toast = inject(ToastService)
   private readonly confirm = inject(ConfirmDialogService)
+  private readonly twoFa = inject(TwoFaDialogService)
 
   protected readonly users = signal<AdminUserModel[]>([])
   protected readonly loading = signal(true)
@@ -530,12 +532,17 @@ export class AdminUsersComponent implements OnInit {
     return true
   }
 
-  protected save(): void {
+  protected async save(): Promise<void> {
     const d = this.dialog()
     if (!d || !this.canSave()) return
     this.busy.set(true)
     this.dialogError.set(null)
-    const headers = new HttpHeaders()
+    const twoFa = await this.twoFa.verify(false)
+    if (twoFa === false) {
+      this.busy.set(false)
+      return
+    }
+    const headers = twoFa ?? new HttpHeaders()
     if (d.id) {
       const dto: UpdateUserDto = {
         login: d.login.trim(),
@@ -593,7 +600,9 @@ export class AdminUsersComponent implements OnInit {
       kind: 'danger'
     })
     if (!ok) return
-    const headers = new HttpHeaders()
+    const twoFa = await this.twoFa.verify(true)
+    if (twoFa === false) return
+    const headers = twoFa ?? new HttpHeaders()
     this.admin.deleteUser(u.id, { isGuest: false, deleteSpace: false }, headers).subscribe({
       next: () => {
         this.users.update((list) => list.filter((x) => x.id !== u.id))
