@@ -83,6 +83,8 @@
   "v3_delete_comment": "Delete this comment? This cannot be undone.",
   "v3_delete_user": "Delete user <b>{{ login }}</b>? This cannot be undone.",
   "v3_delete_group": "Delete group <b>{{ name }}</b>? This cannot be undone.",
+  "v3_delete_space": "Delete space <b>{{ name }}</b>? This cannot be undone.",
+  "v3_space_managers_required": "Add at least one manager.",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
   "No matches": "No matches"

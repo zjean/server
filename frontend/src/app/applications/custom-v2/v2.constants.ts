@@ -24,7 +24,8 @@ export const V2_ROUTES = {
   PEOPLE: 'people',
   ADMIN: 'admin',
   ADMIN_USERS: 'admin/users',
-  ADMIN_GROUPS: 'admin/groups'
+  ADMIN_GROUPS: 'admin/groups',
+  ADMIN_SPACES: 'admin/spaces'
 } as const
 
 export const UI_VERSION_STORAGE_KEY = 'ui.version'

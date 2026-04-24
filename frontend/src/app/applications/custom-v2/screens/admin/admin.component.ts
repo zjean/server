@@ -174,9 +174,7 @@ export class AdminComponent implements OnInit {
       title: 'Spaces',
       description: 'Review all spaces on the server.',
       icon: 'folder',
-      route: `/${V2_PATH}/${V2_ROUTES.ADMIN}`,
-      disabled: true,
-      disabledReason: 'Coming soon'
+      route: `/${V2_PATH}/${V2_ROUTES.ADMIN_SPACES}`
     },
     {
       id: 'tools',
