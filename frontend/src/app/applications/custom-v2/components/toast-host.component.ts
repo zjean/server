@@ -1,17 +1,18 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { ToastService } from './toast.service'
 
 @Component({
   selector: 'app-v2-toast-host',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconV2Component],
+  imports: [IconV2Component, L10nTranslatePipe],
   template: `
     <div class="toast-host" aria-live="polite">
       @for (t of toasts(); track t.id) {
         <div class="toast toast--{{ t.kind }}" role="status">
           <app-v2-icon [name]="t.kind === 'error' ? 'x' : 'check'" [size]="14" />
-          <span class="toast__msg">{{ t.message }}</span>
+          <span class="toast__msg">{{ t.message | translate: locale.language }}</span>
           <button type="button" class="toast__close" (click)="dismiss(t.id)" aria-label="Dismiss">
             <app-v2-icon name="x" [size]="12" />
           </button>
@@ -96,6 +97,7 @@ import { ToastService } from './toast.service'
 })
 export class ToastHostComponent {
   private readonly service = inject(ToastService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly toasts = this.service.toasts.asReadonly()
 

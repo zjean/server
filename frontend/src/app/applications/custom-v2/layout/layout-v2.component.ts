@@ -1,7 +1,9 @@
 import { Component, HostBinding, OnInit, signal, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
+import { LinkDialogComponent } from '../components/link-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
+import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
 import { setUiVersion } from '../ui-version'
@@ -26,7 +28,9 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     ToastHostComponent,
     ConfirmDialogComponent,
     TreePickerComponent,
-    PromptDialogComponent
+    PromptDialogComponent,
+    LinkDialogComponent,
+    ShareDialogComponent
   ]
 })
 export class LayoutV2Component implements OnInit {

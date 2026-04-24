@@ -22,7 +22,9 @@ import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/c
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
+import { LinkDialogService } from '../../components/link-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
+import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
@@ -82,6 +84,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly treePicker = inject(TreePickerService)
   private readonly promptDialog = inject(PromptDialogService)
+  private readonly linkDialog = inject(LinkDialogService)
+  private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly destroyRef = inject(DestroyRef)
@@ -144,14 +148,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
-      {
-        id: 'share',
-        label: 'Share',
-        icon: 'share',
-        disabled: true,
-        disabledReason: 'Coming soon',
-        action: () => undefined
-      },
+      { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
+      { id: 'share', label: 'Share', icon: 'share', action: () => this.shareEntry(f) },
       {
         id: 'delete',
         label: 'Delete',
@@ -273,6 +271,42 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     if (typeof window !== 'undefined') {
       window.open(url, '_self')
     }
+  }
+
+  protected async getLink(file: FileProps): Promise<void> {
+    const alias = this.currentAlias()
+    const name = this.spaceName() || alias
+    const segs = this.pathSegments().map((s) => s.path)
+    const relativePath = [...segs, file.name].join('/')
+    await this.linkDialog.open({
+      file: {
+        id: file.id,
+        name: file.name,
+        isDir: file.isDir,
+        mime: file.mime,
+        space: { alias, name, root: { alias, name } } as never
+      },
+      relativePath,
+      ownerId: null
+    })
+  }
+
+  protected async shareEntry(file: FileProps): Promise<void> {
+    const alias = this.currentAlias()
+    const name = this.spaceName() || alias
+    const segs = this.pathSegments().map((s) => s.path)
+    const relativePath = [...segs, file.name].join('/')
+    await this.shareDialog.open({
+      file: {
+        id: file.id,
+        name: file.name,
+        isDir: file.isDir,
+        mime: file.mime,
+        space: { alias, name, root: { alias, name } } as never
+      },
+      relativePath,
+      ownerId: null
+    })
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {

@@ -1,13 +1,19 @@
+import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { API_SHARES_LINKS } from '@sync-in-server/backend/src/applications/shares/constants/routes'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
+import { ShareLinkModel } from '../../../links/models/share-link.model'
 import { ShareFileModel } from '../../../shares/models/share-file.model'
 import { SharesService } from '../../../shares/services/shares.service'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
+import { LinkDialogService } from '../../components/link-dialog.service'
+import { ShareDialogService } from '../../components/share-dialog.service'
+import { ToastService } from '../../components/toast.service'
 import { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
@@ -55,9 +61,13 @@ const CONFIGS: Record<SharedVariant, VariantConfig> = {
 })
 export class SharedComponent implements OnInit {
   private readonly sharesService = inject(SharesService)
+  private readonly http = inject(HttpClient)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly linkDialog = inject(LinkDialogService)
+  private readonly shareDialog = inject(ShareDialogService)
+  private readonly toast = inject(ToastService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
@@ -101,7 +111,34 @@ export class SharedComponent implements OnInit {
   }
 
   protected openShare(share: ShareFileModel): void {
+    if (this.variant() === 'via-links') {
+      this.openLinkEditor(share)
+      return
+    }
+    if (this.variant() === 'with-others') {
+      this.openShareEditor(share)
+      return
+    }
     this.router.navigate(['/spaces/shares', share.alias]).catch(console.error)
+  }
+
+  private async openShareEditor(share: ShareFileModel): Promise<void> {
+    const result = await this.shareDialog.open({ existingShareId: share.id })
+    if (result?.revoked) this.refresh()
+  }
+
+  private openLinkEditor(share: ShareFileModel): void {
+    // Fetch the full ShareLink (carries the single link guest) and open the link-dialog in edit mode.
+    this.http.get<ShareLinkModel>(`${API_SHARES_LINKS}/${share.id}`).subscribe({
+      next: async (raw) => {
+        const shareLink = new ShareLinkModel(raw)
+        const result = await this.linkDialog.open({ existing: shareLink })
+        if (result?.revoked) this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Failed to open link')
+      }
+    })
   }
 
   protected recipientCount(s: ShareFileModel): number {
