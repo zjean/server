@@ -1,12 +1,22 @@
 import { Injectable, signal } from '@angular/core'
 import type { FileSpace } from '@sync-in-server/backend/src/applications/files/interfaces/file-space.interface'
 
+export interface ShareDialogFileCtx {
+  file: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
+  relativePath: string
+  // Current user id for files the user owns; null otherwise (e.g. space files).
+  ownerId: number | null
+}
+
 export interface ShareDialogInput {
-  // Create flow: file to share + path.
+  // Create flow, single file (shorthand for files: [{...}]).
   file?: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
   relativePath?: string
-  // Create flow: owner id (current user id for personal files; null when the file lives in a space the user doesn't own).
   ownerId?: number | null
+  // Create flow, multi: share the same member set across N files. One
+  // createShare call per entry on submit; per-file failures are collected
+  // and surfaced as a summary toast.
+  files?: ShareDialogFileCtx[]
   // Edit flow: existing share id (we'll fetch the full share inside the dialog).
   existingShareId?: number
 }
@@ -15,6 +25,10 @@ export interface ShareDialogResult {
   shareId: number
   // True when the user revoked the share during this dialog session.
   revoked?: boolean
+  // Present only for multi-file create flows. shareId above is the first
+  // successfully created share id (arbitrary); these two counters describe
+  // the whole batch.
+  multi?: { created: number; failed: number }
 }
 
 interface PendingDialog extends ShareDialogInput {
