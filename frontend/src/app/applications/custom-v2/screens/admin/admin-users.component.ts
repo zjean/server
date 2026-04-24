@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms'
 import { USER_ROLE } from '@sync-in-server/backend/src/applications/users/constants/user'
 import type { CreateUserDto, UpdateUserDto } from '@sync-in-server/backend/src/applications/users/dto/create-or-update-user.dto'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { StoreService } from '../../../../store/store.service'
 import { AdminService } from '../../../admin/admin.service'
 import type { AdminUserModel } from '../../../admin/models/admin-user.model'
 import { ButtonComponent } from '../../components/button.component'
@@ -98,6 +99,15 @@ function emptyDraft(): UserDraft {
                 }
               </span>
               <span class="au-row__actions">
+                <button
+                  type="button"
+                  class="au-row__action"
+                  (click)="impersonate(u)"
+                  [disabled]="!canImpersonate(u)"
+                  [attr.title]="'Sign in as…' | translate: locale.language"
+                >
+                  <app-v2-icon name="person" [size]="12" />
+                </button>
                 <button type="button" class="au-row__action" (click)="openEdit(u)" [attr.title]="'Edit' | translate: locale.language">
                   <app-v2-icon name="pencil" [size]="12" />
                 </button>
@@ -444,6 +454,7 @@ export class AdminUsersComponent implements OnInit {
   private readonly toast = inject(ToastService)
   private readonly confirm = inject(ConfirmDialogService)
   private readonly twoFa = inject(TwoFaDialogService)
+  private readonly store = inject(StoreService)
 
   protected readonly users = signal<AdminUserModel[]>([])
   protected readonly loading = signal(true)
@@ -589,6 +600,27 @@ export class AdminUsersComponent implements OnInit {
   private onError(e: HttpErrorResponse): void {
     this.busy.set(false)
     this.dialogError.set(e.error?.message ?? 'Unable to save user')
+  }
+
+  protected canImpersonate(u: AdminUserModel): boolean {
+    if (!u.isActive) return false
+    const self = this.store.user.getValue()
+    return !self || self.id !== u.id
+  }
+
+  protected async impersonate(u: AdminUserModel): Promise<void> {
+    if (!this.canImpersonate(u)) return
+    const twoFa = await this.twoFa.verify(true)
+    if (twoFa === false) return
+    const headers = twoFa ?? new HttpHeaders()
+    this.admin.impersonateUser(u.id, headers).subscribe({
+      next: (r) => {
+        this.admin.initImpersonateUser(r)
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Failed to impersonate user')
+      }
+    })
   }
 
   protected async confirmDelete(u: AdminUserModel): Promise<void> {
