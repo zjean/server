@@ -93,6 +93,27 @@ Quick self-check: `git remote -v` should show `git@github-prive:...` for both `o
 
 The only PRs that ever belong on `Sync-in/server` are branches with the `upstream-contrib/` prefix, and those are handled as a separate, deliberate workflow (root the branch at `upstream/main`, no `custom-*` paths, no fork-flavored language).
 
+## Verifying existing functionality: always use the classic UI as ground truth
+
+The `/v2` (and `/v3`) app is a reimplementation of features that already ship in the **classic UI** (the Angular screens under `frontend/src/app/applications/<feature>/` — shares, links, files, users, spaces, etc.). The classic code is the authoritative reference for how backend APIs want to be called.
+
+**Before writing any v2/v3 code that talks to the backend, read the classic implementation first.** Specifically:
+
+- Which endpoint does classic hit? (URL + method)
+- What DTO shape does it send?
+- What sentinel values mean "new" vs "existing" (e.g. `id: -1` for new link, not `0`)? How does classic distinguish?
+- What side effects or sequences does classic perform (optimistic UI, refresh, toast, etc.)?
+
+These details aren't guessable from the DTO types — the backend has runtime contracts baked into value conventions (e.g. `shares-manager.service.ts:581` treats `link.id < 0` as "new link" and anything else as update-by-id, which 404s for unknown ids). Every time v2/v3 has diverged from classic on one of these details, it's been a user-facing bug.
+
+**When debugging a v2/v3 feature that doesn't work:**
+
+1. Find the classic screen that does the same thing (grep under `frontend/src/app/applications/` ignoring `custom-v2/`).
+2. Compare the classic service call to the v2/v3 one — URL, DTO, sentinel ids, field presence.
+3. Diff the classic's network request against the failing v2/v3 one if you have DevTools open.
+
+**When implementing a new v2/v3 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2/v3 version. Do not trust the DTO types alone.
+
 ## Tooling note: `rtk` wrapper
 
 The user runs git/gh via the `rtk` proxy (token savings). A few commands don't pass through cleanly and need `rtk proxy` to bypass:
