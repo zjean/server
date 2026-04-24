@@ -28,6 +28,7 @@ export class LeftNavComponent {
   protected readonly user = toSignal(this.store.user)
   protected readonly userAvatar = toSignal(this.store.userAvatarUrl)
   protected readonly sharedOpen = signal(true)
+  protected readonly adminOpen = signal(true)
 
   protected readonly workspace: NavEntry[] = [
     { id: 'recents', label: 'Recents', icon: 'clock', route: `/${V2_PATH}/${V2_ROUTES.RECENTS}` },
@@ -41,6 +42,11 @@ export class LeftNavComponent {
     { id: 'shared-via-links', label: 'Via links', icon: 'link', route: `/${V2_PATH}/${V2_ROUTES.SHARED_VIA_LINKS}` }
   ]
 
+  protected readonly adminEntries: NavEntry[] = [
+    { id: 'admin-users', label: 'Users', icon: 'person', route: `/${V2_PATH}/${V2_ROUTES.ADMIN_USERS}` },
+    { id: 'admin-groups', label: 'Groups', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.ADMIN_GROUPS}` }
+  ]
+
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
 
   // AGPL §13 source link — required when the server is deployed for anyone
@@ -50,6 +56,10 @@ export class LeftNavComponent {
 
   protected toggleShared(): void {
     this.sharedOpen.update((v) => !v)
+  }
+
+  protected toggleAdmin(): void {
+    this.adminOpen.update((v) => !v)
   }
 
   protected backToClassic(): void {

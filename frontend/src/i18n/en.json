@@ -81,6 +81,8 @@
   "v3_share_revoked": "Share removed",
   "v3_share_n_items_subject": "{{ nb }} items",
   "v3_delete_comment": "Delete this comment? This cannot be undone.",
+  "v3_delete_user": "Delete user <b>{{ login }}</b>? This cannot be undone.",
+  "v3_delete_group": "Delete group <b>{{ name }}</b>? This cannot be undone.",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
   "No matches": "No matches"
