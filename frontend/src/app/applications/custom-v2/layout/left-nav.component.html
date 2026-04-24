@@ -38,6 +38,34 @@
     }
   }
 
+  @if (user()?.isAdmin) {
+    <div class="left-nav__spacer"></div>
+    <div class="left-nav__section-label">Admin</div>
+    <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleAdmin()">
+      <app-v2-icon name="person" [size]="15" />
+      <span class="left-nav__label">Administration</span>
+      <app-v2-icon
+        name="chevDown"
+        [size]="11"
+        class="left-nav__caret"
+        [class.left-nav__caret--collapsed]="!adminOpen()"
+      />
+    </button>
+    @if (adminOpen()) {
+      @for (it of adminEntries; track it.id) {
+        <a
+          [routerLink]="it.route"
+          routerLinkActive="left-nav__item--active"
+          class="left-nav__item left-nav__item--sub"
+        >
+          <span class="left-nav__indicator"></span>
+          <app-v2-icon [name]="it.icon" [size]="15" />
+          <span class="left-nav__label">{{ it.label }}</span>
+        </a>
+      }
+    }
+  }
+
   <div class="left-nav__fill"></div>
   <div class="left-nav__divider"></div>
   <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">

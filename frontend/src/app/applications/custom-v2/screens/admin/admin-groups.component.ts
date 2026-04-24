@@ -1,0 +1,549 @@
+import { HttpErrorResponse } from '@angular/common/http'
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
+import { FormsModule } from '@angular/forms'
+import { GROUP_VISIBILITY } from '@sync-in-server/backend/src/applications/users/constants/group'
+import type { CreateOrUpdateGroupDto } from '@sync-in-server/backend/src/applications/users/dto/create-or-update-group.dto'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { AdminService } from '../../../admin/admin.service'
+import type { AdminGroupModel } from '../../../admin/models/admin-group.model'
+import type { GroupBrowseModel } from '../../../users/models/group-browse.model'
+import { ButtonComponent } from '../../components/button.component'
+import { ConfirmDialogService } from '../../components/confirm-dialog.service'
+import { ToastService } from '../../components/toast.service'
+import { IconV2Component } from '../../icons/icon-v2.component'
+import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { V2_PATH, V2_ROUTES } from '../../v2.constants'
+
+interface GroupRow {
+  id: number
+  name: string
+  description?: string | null
+  visibility: GROUP_VISIBILITY
+  memberCount?: number
+}
+
+interface GroupDraft {
+  id?: number
+  name: string
+  description: string
+  visibility: GROUP_VISIBILITY
+}
+
+function emptyDraft(): GroupDraft {
+  return { name: '', description: '', visibility: GROUP_VISIBILITY.VISIBLE }
+}
+
+@Component({
+  selector: 'app-v2-admin-groups',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ButtonComponent, FormsModule, IconV2Component, L10nTranslateDirective, L10nTranslatePipe],
+  template: `
+    <div class="ag">
+      <header class="ag__head">
+        <div class="ag__title-wrap">
+          <h1 class="ag__title" l10nTranslate>Groups</h1>
+          <span class="ag__count">{{ filtered().length }} / {{ groups().length }}</span>
+        </div>
+        <div class="ag__actions">
+          <input
+            type="text"
+            class="ag__search"
+            [value]="search()"
+            (input)="onSearch($event)"
+            [placeholder]="'Filter groups…' | translate: locale.language"
+          />
+          <app-v2-btn kind="ghost" size="sm" icon="refresh" (click)="refresh()">{{ 'Refresh' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="primary" size="sm" icon="plus" (click)="openCreate()">{{ 'New group' | translate: locale.language }}</app-v2-btn>
+        </div>
+      </header>
+
+      @if (loading()) {
+        <div class="ag__state" l10nTranslate>Loading…</div>
+      } @else if (errorMessage(); as err) {
+        <div class="ag__state ag__state--error">{{ err | translate: locale.language }}</div>
+      } @else if (groups().length === 0) {
+        <div class="ag__state" l10nTranslate>No groups yet.</div>
+      } @else {
+        <div class="ag-table">
+          <div class="ag-row ag-row--head">
+            <span l10nTranslate>Name</span>
+            <span l10nTranslate>Description</span>
+            <span l10nTranslate>Visibility</span>
+            <span l10nTranslate>Members</span>
+            <span></span>
+          </div>
+          @for (g of filtered(); track g.id) {
+            <div class="ag-row">
+              <span class="ag-row__name">{{ g.name }}</span>
+              <span class="ag-row__desc">{{ g.description || '—' }}</span>
+              <span>{{ visibilityLabel(g.visibility) }}</span>
+              <span class="ag-row__count">
+                @if (g.memberCount !== undefined) {
+                  {{ g.memberCount }}
+                } @else {
+                  <button type="button" class="ag-row__count-btn" (click)="loadMemberCount(g)">{{ 'Load' | translate: locale.language }}</button>
+                }
+              </span>
+              <span class="ag-row__actions">
+                <button type="button" class="ag-row__action" (click)="openEdit(g)" [attr.title]="'Edit' | translate: locale.language">
+                  <app-v2-icon name="pencil" [size]="12" />
+                </button>
+                <button
+                  type="button"
+                  class="ag-row__action ag-row__action--danger"
+                  (click)="confirmDelete(g)"
+                  [attr.title]="'Delete' | translate: locale.language"
+                >
+                  <app-v2-icon name="trash" [size]="12" />
+                </button>
+              </span>
+            </div>
+          }
+        </div>
+      }
+
+      @if (dialog(); as d) {
+        <div class="ag-dialog__backdrop" (click)="closeDialog()"></div>
+        <div class="ag-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+          <div class="ag-dialog__title">
+            {{ (d.id ? 'Edit group' : 'New group') | translate: locale.language }}
+          </div>
+          <div class="ag-dialog__body">
+            <label class="ag-field">
+              <span l10nTranslate>Name</span>
+              <input type="text" [(ngModel)]="d.name" autocomplete="off" />
+            </label>
+            <label class="ag-field">
+              <span l10nTranslate>Description</span>
+              <input type="text" [(ngModel)]="d.description" autocomplete="off" />
+            </label>
+            <label class="ag-field">
+              <span l10nTranslate>Visibility</span>
+              <select [(ngModel)]="d.visibility">
+                <option [ngValue]="GROUP_VISIBILITY.VISIBLE">{{ 'Visible' | translate: locale.language }}</option>
+                <option [ngValue]="GROUP_VISIBILITY.PRIVATE">{{ 'Private' | translate: locale.language }}</option>
+                <option [ngValue]="GROUP_VISIBILITY.ISOLATED">{{ 'Isolated' | translate: locale.language }}</option>
+              </select>
+            </label>
+            @if (dialogError(); as err) {
+              <div class="ag-dialog__error">{{ err }}</div>
+            }
+          </div>
+          <div class="ag-dialog__actions">
+            <app-v2-btn kind="ghost" size="sm" (click)="closeDialog()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
+            <app-v2-btn kind="primary" size="sm" [disabled]="busy() || !canSave()" (click)="save()">
+              {{ (d.id ? 'Save' : 'Create') | translate: locale.language }}
+            </app-v2-btn>
+          </div>
+        </div>
+      }
+    </div>
+  `,
+  styles: [
+    `
+      :host {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        background: var(--si-bg2);
+      }
+      .ag {
+        padding: 22px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        min-height: 0;
+        flex: 1 1 auto;
+      }
+      .ag__head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ag__title-wrap {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .ag__title {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--si-fg);
+        letter-spacing: -0.3px;
+        font-family: var(--si-display);
+      }
+      .ag__count {
+        font-size: 11px;
+        color: var(--si-fg-faint);
+        font-family: var(--si-mono);
+      }
+      .ag__actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .ag__search {
+        width: 220px;
+        height: 30px;
+        padding: 0 10px;
+        background: var(--si-bg3);
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r2);
+        color: var(--si-fg);
+        font-size: 12.5px;
+        outline: none;
+        &:focus {
+          border-color: var(--si-nav);
+        }
+      }
+      .ag__state {
+        padding: 60px 20px;
+        text-align: center;
+        font-size: 13px;
+        color: var(--si-fg-muted);
+        &--error {
+          color: var(--si-rose);
+        }
+      }
+      .ag-table {
+        display: flex;
+        flex-direction: column;
+        background: var(--si-bg2);
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r3);
+        overflow: hidden;
+      }
+      .ag-row {
+        display: grid;
+        grid-template-columns: 1.5fr 2.2fr 1fr 0.8fr 80px;
+        gap: 14px;
+        padding: 10px 16px;
+        align-items: center;
+        font-size: 12.5px;
+        color: var(--si-fg);
+        border-bottom: 1px solid var(--si-line);
+
+        &:last-child {
+          border-bottom: none;
+        }
+        &--head {
+          background: var(--si-bg3);
+          font-size: 10.5px;
+          text-transform: uppercase;
+          letter-spacing: 1.1px;
+          color: var(--si-fg-faint);
+          font-weight: 600;
+          font-family: var(--si-display);
+        }
+      }
+      .ag-row__name {
+        font-weight: 500;
+      }
+      .ag-row__desc {
+        color: var(--si-fg-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ag-row__count {
+        font-family: var(--si-mono);
+        font-size: 11.5px;
+      }
+      .ag-row__count-btn {
+        background: transparent;
+        border: none;
+        color: var(--si-nav);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        cursor: pointer;
+        padding: 0;
+        font-weight: 600;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+      .ag-row__actions {
+        display: inline-flex;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+      .ag-row__action {
+        width: 22px;
+        height: 22px;
+        border-radius: 5px;
+        background: transparent;
+        border: none;
+        color: var(--si-fg-faint);
+        cursor: pointer;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &:hover {
+          background: var(--si-bg4);
+          color: var(--si-fg);
+        }
+        &--danger:hover {
+          color: var(--si-rose);
+        }
+      }
+
+      .ag-dialog__backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+        z-index: 90;
+      }
+      .ag-dialog {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 440px;
+        max-height: 80vh;
+        overflow: auto;
+        z-index: 91;
+        background: var(--si-bg2);
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r3);
+        box-shadow: var(--si-shadow2, 0 16px 32px rgba(0, 0, 0, 0.35));
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .ag-dialog__title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--si-fg);
+      }
+      .ag-dialog__body {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ag-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ag-field > span {
+        font-size: 10.5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--si-fg-faint);
+        font-weight: 600;
+      }
+      .ag-field input[type='text'],
+      .ag-field select {
+        background: var(--si-bg3);
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r2);
+        padding: 7px 9px;
+        color: var(--si-fg);
+        font: inherit;
+        font-size: 12.5px;
+
+        &:focus {
+          outline: none;
+          border-color: var(--si-nav);
+        }
+      }
+      .ag-dialog__error {
+        color: var(--si-rose);
+        font-size: 12px;
+      }
+      .ag-dialog__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+    `
+  ]
+})
+export class AdminGroupsComponent implements OnInit {
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected readonly GROUP_VISIBILITY = GROUP_VISIBILITY
+  private readonly admin = inject(AdminService)
+  private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly toast = inject(ToastService)
+  private readonly confirm = inject(ConfirmDialogService)
+
+  protected readonly groups = signal<GroupRow[]>([])
+  protected readonly loading = signal(true)
+  protected readonly errorMessage = signal<string | null>(null)
+  protected readonly search = signal('')
+  protected readonly dialog = signal<GroupDraft | null>(null)
+  protected readonly dialogError = signal<string | null>(null)
+  protected readonly busy = signal(false)
+
+  protected readonly filtered = computed(() => {
+    const q = this.search().toLowerCase().trim()
+    const list = this.groups()
+    if (!q) return list
+    return list.filter((g) => g.name.toLowerCase().includes(q) || (g.description ?? '').toLowerCase().includes(q))
+  })
+
+  ngOnInit(): void {
+    this.breadcrumbs.setBreadcrumbs([{ label: 'Administration', icon: 'person', route: ['/', V2_PATH, V2_ROUTES.ADMIN] }, { label: 'Groups' }])
+    this.refresh()
+  }
+
+  protected refresh(): void {
+    this.loading.set(true)
+    this.errorMessage.set(null)
+    // Browse the root (no name) — returns top-level groups as members.
+    this.admin.browseGroup(undefined, false).subscribe({
+      next: (browse: GroupBrowseModel) => {
+        const rows: GroupRow[] = (browse.members ?? []).map((m) => ({
+          id: m.id,
+          name: m.name ?? '',
+          description: m.description ?? null,
+          // Visibility is not returned by the browse endpoint; default Visible and
+          // let the detail fetch in openEdit() pull the real value.
+          visibility: GROUP_VISIBILITY.VISIBLE
+        }))
+        this.groups.set(rows)
+        this.loading.set(false)
+      },
+      error: (e: HttpErrorResponse) => {
+        this.errorMessage.set(e.error?.message ?? 'Failed to load groups')
+        this.loading.set(false)
+      }
+    })
+  }
+
+  protected onSearch(ev: Event): void {
+    this.search.set((ev.target as HTMLInputElement).value)
+  }
+
+  protected visibilityLabel(v: GROUP_VISIBILITY): string {
+    switch (v) {
+      case GROUP_VISIBILITY.PRIVATE:
+        return 'Private'
+      case GROUP_VISIBILITY.ISOLATED:
+        return 'Isolated'
+      case GROUP_VISIBILITY.VISIBLE:
+      default:
+        return 'Visible'
+    }
+  }
+
+  protected loadMemberCount(row: GroupRow): void {
+    this.admin.browseGroup(row.name, false).subscribe({
+      next: (browse: GroupBrowseModel) => {
+        const count = (browse.members ?? []).length
+        this.groups.update((list) => list.map((g) => (g.id === row.id ? { ...g, memberCount: count } : g)))
+      },
+      error: () => {
+        /* silent — count is optional */
+      }
+    })
+  }
+
+  protected openCreate(): void {
+    this.dialogError.set(null)
+    this.dialog.set(emptyDraft())
+  }
+
+  protected openEdit(row: GroupRow): void {
+    this.dialogError.set(null)
+    // Fetch fresh detail so visibility, etc., reflect the server.
+    this.admin.getGroup(row.id).subscribe({
+      next: (g: AdminGroupModel) => {
+        this.dialog.set({
+          id: g.id,
+          name: g.name ?? '',
+          description: g.description ?? '',
+          visibility: g.visibility ?? GROUP_VISIBILITY.VISIBLE
+        })
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Failed to load group')
+      }
+    })
+  }
+
+  protected closeDialog(): void {
+    if (this.busy()) return
+    this.dialog.set(null)
+    this.dialogError.set(null)
+  }
+
+  protected canSave(): boolean {
+    const d = this.dialog()
+    return !!d && d.name.trim().length > 0
+  }
+
+  protected save(): void {
+    const d = this.dialog()
+    if (!d || !this.canSave()) return
+    this.busy.set(true)
+    this.dialogError.set(null)
+    const dto: CreateOrUpdateGroupDto = {
+      name: d.name.trim(),
+      description: d.description.trim(),
+      visibility: d.visibility
+    }
+    if (d.id) {
+      this.admin.updateGroup(d.id, dto).subscribe({
+        next: (updated) => this.onSaved(updated, d.id!),
+        error: (e: HttpErrorResponse) => this.onError(e)
+      })
+    } else {
+      this.admin.createGroup(dto).subscribe({
+        next: (created) => this.onSaved(created),
+        error: (e: HttpErrorResponse) => this.onError(e)
+      })
+    }
+  }
+
+  private onSaved(g: AdminGroupModel, editedId?: number): void {
+    this.busy.set(false)
+    this.dialog.set(null)
+    const row: GroupRow = {
+      id: g.id,
+      name: g.name ?? '',
+      description: g.description ?? null,
+      visibility: g.visibility
+    }
+    if (editedId !== undefined) {
+      this.groups.update((list) => list.map((x) => (x.id === editedId ? { ...row, memberCount: x.memberCount } : x)))
+      this.toast.success('Group updated')
+    } else {
+      this.groups.update((list) => [row, ...list])
+      this.toast.success('Group created')
+    }
+  }
+
+  private onError(e: HttpErrorResponse): void {
+    this.busy.set(false)
+    this.dialogError.set(e.error?.message ?? 'Unable to save group')
+  }
+
+  protected async confirmDelete(row: GroupRow): Promise<void> {
+    const ok = await this.confirm.open({
+      title: 'Delete group',
+      message: 'v3_delete_group',
+      messageParams: { name: row.name },
+      confirmLabel: 'Delete',
+      kind: 'danger'
+    })
+    if (!ok) return
+    this.admin.deleteGroup(row.id).subscribe({
+      next: () => {
+        this.groups.update((list) => list.filter((g) => g.id !== row.id))
+        this.toast.success('Group deleted')
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Delete failed')
+      }
+    })
+  }
+}
