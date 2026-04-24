@@ -1,0 +1,26 @@
+{
+  "skill_name": "sync-in-fork-maintenance",
+  "evals": [
+    {
+      "id": 1,
+      "name": "happy-path-sync",
+      "prompt": "Can you run the upstream sync and see if anything new came in? If there's a PR, tell me what's in it and whether it's ready to merge.",
+      "expected_output": "Triggers the Upstream Sync workflow, watches it to completion, checks for an auto-opened PR, reports PR number/URL/diff-stat if one exists, or 'no new upstream' if not. Correctly uses `--repo zjean/server` flag, does NOT push to upstream-main directly, does NOT target Sync-in/server for the PR.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "conflict-resolution",
+      "prompt": "The upstream-sync workflow just opened PR #99 on zjean/server and it's CONFLICTING. Get it merged.",
+      "expected_output": "Recognizes that upstream-main is workflow-writable only, closes PR #99 with a superseded comment, branches off main, merges origin/upstream-main into it with --no-ff, resolves conflicts (correctly prefers upstream for overlapping i18n keys, preserves our custom keys), runs builds to verify, pushes the new branch, opens a replacement PR targeting zjean/server with merge-commit strategy noted in the body.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "investigate-custom-ui-impact",
+      "prompt": "An upstream sync just merged into main. It touched some backend/src/applications/files/ code. Do we need to update anything in our custom v2/v3 UI, and if so what exactly?",
+      "expected_output": "Identifies the upstream commits via `git log origin/main..origin/upstream-main` or equivalent, diffs each interesting commit, classifies changes as wire-contract / internal-refactor / behaviour-change, greps custom-v2/ and shared classic services for callers, produces a scannable report with concrete before/after patches where wire contracts changed, and a 'No impact' section or explicit recommendations. Does NOT silently apply edits — the investigation is the deliverable.",
+      "files": []
+    }
+  ]
+}
