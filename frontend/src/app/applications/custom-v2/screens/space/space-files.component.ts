@@ -115,6 +115,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
   protected readonly mimeToGlyph = mimeToGlyph
+  protected readonly FILE_OPERATION = FILE_OPERATION
   protected readonly files = signal<FileProps[]>([])
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)

@@ -29,8 +29,8 @@
         </span>
         <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
         <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove('copy')">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove('move')">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
         <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
         <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
       </div>
