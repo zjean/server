@@ -1,5 +1,18 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, OnInit, signal, OnDestroy, ViewChild } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  OnInit,
+  signal,
+  OnDestroy,
+  ViewChild
+} from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -27,11 +40,13 @@ import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
+import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
+import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
@@ -63,6 +78,7 @@ function readStoredMode(): BrowserMode {
     IconV2Component,
     FileGlyphComponent,
     ButtonComponent,
+    CheckboxComponent,
     IconButtonComponent,
     PillComponent,
     ContextMenuComponent,
@@ -104,6 +120,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly mode = signal<BrowserMode>(readStoredMode())
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
 
+  protected readonly selection = signal<Set<number>>(new Set())
+  private selectionAnchorId: number | null = null
+
   protected readonly pathSegments = toSignal(this.route.url, { initialValue: [] })
 
   protected readonly viewOptions: BrowserViewOption[] = [
@@ -126,6 +145,28 @@ export class PersonalComponent implements OnInit, OnDestroy {
   })
 
   protected readonly totalSize = computed(() => this.files().reduce((s, f) => s + (f.isDir ? 0 : f.size), 0))
+
+  protected readonly selectedFiles = computed(() => {
+    const ids = this.selection()
+    if (ids.size === 0) return []
+    return this.filteredFiles().filter((f) => ids.has(f.id))
+  })
+  protected readonly hasSelection = computed(() => this.selection().size > 0)
+  protected readonly selectionCount = computed(() => this.selection().size)
+  protected readonly selectionSize = computed(() => this.selectedFiles().reduce((s, f) => s + (f.isDir ? 0 : f.size), 0))
+  protected readonly selectionHasShares = computed(() =>
+    this.selectedFiles().some((f) => {
+      const shares = (f as FileProps & { shares?: { id: number }[] }).shares
+      return Array.isArray(shares) && shares.length > 0
+    })
+  )
+  protected readonly selectAllState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
+    const total = this.filteredFiles().length
+    const selected = this.selectedFiles().length
+    if (selected === 0) return 'unchecked'
+    if (selected === total) return 'checked'
+    return 'indeterminate'
+  })
 
   protected readonly menuItems = computed<ContextMenuItem[]>(() => {
     const entry = this.menu()
@@ -156,9 +197,30 @@ export class PersonalComponent implements OnInit, OnDestroy {
     ]
   })
 
+  constructor() {
+    effect(() => {
+      // Drop selection entries for files that no longer exist in the current
+      // folder (refresh after delete/move, folder nav, filter change).
+      const ids = new Set(this.filteredFiles().map((f) => f.id))
+      const current = this.selection()
+      if (current.size === 0) return
+      let changed = false
+      const next = new Set<number>()
+      current.forEach((id) => {
+        if (ids.has(id)) {
+          next.add(id)
+        } else {
+          changed = true
+        }
+      })
+      if (changed) this.selection.set(next)
+    })
+  }
+
   ngOnInit(): void {
     this.urlSubscription = this.route.url.subscribe(() => {
       this.syncBreadcrumbs()
+      this.clearSelection()
       this.loadFiles()
     })
     this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
@@ -186,6 +248,177 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   protected refresh(): void {
     this.loadFiles()
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  protected onWindowKeydown(event: KeyboardEvent): void {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+    if (event.key === 'Escape' && this.hasSelection()) {
+      this.clearSelection()
+      event.preventDefault()
+      return
+    }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
+      this.selectAllFiltered()
+      event.preventDefault()
+      return
+    }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && this.hasSelection()) {
+      this.bulkDelete()
+      event.preventDefault()
+    }
+  }
+
+  protected isSelected(file: FileProps): boolean {
+    return this.selection().has(file.id)
+  }
+
+  protected onRowClick(event: MouseEvent, file: FileProps): void {
+    if (event.shiftKey && this.selectionAnchorId !== null) {
+      this.selectRange(file)
+      return
+    }
+    if (event.metaKey || event.ctrlKey) {
+      this.toggleSelection(file)
+      return
+    }
+    const sel = this.selection()
+    // Re-clicking the single selected file opens it — otherwise a selection
+    // would trap the user from opening a file without first hitting Escape.
+    if (sel.size > 1 || (sel.size === 1 && !sel.has(file.id))) {
+      this.selection.set(new Set([file.id]))
+      this.selectionAnchorId = file.id
+      return
+    }
+    this.openEntry(file)
+  }
+
+  protected toggleSelection(file: FileProps): void {
+    this.selection.update((current) => {
+      const next = new Set(current)
+      if (next.has(file.id)) next.delete(file.id)
+      else next.add(file.id)
+      return next
+    })
+    this.selectionAnchorId = file.id
+  }
+
+  protected toggleSelectAll(): void {
+    if (this.selectAllState() === 'checked') this.clearSelection()
+    else this.selectAllFiltered()
+  }
+
+  protected clearSelection(): void {
+    if (!this.hasSelection()) return
+    this.selection.set(new Set())
+    this.selectionAnchorId = null
+  }
+
+  private selectAllFiltered(): void {
+    const ids = this.filteredFiles().map((f) => f.id)
+    this.selection.set(new Set(ids))
+    this.selectionAnchorId = ids[ids.length - 1] ?? null
+  }
+
+  private selectRange(target: FileProps): void {
+    const items = this.filteredFiles()
+    const anchorIdx = items.findIndex((f) => f.id === this.selectionAnchorId)
+    const targetIdx = items.findIndex((f) => f.id === target.id)
+    if (anchorIdx === -1 || targetIdx === -1) {
+      this.selection.set(new Set([target.id]))
+      this.selectionAnchorId = target.id
+      return
+    }
+    const [from, to] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+    const ids = new Set(this.selection())
+    for (let i = from; i <= to; i++) ids.add(items[i].id)
+    this.selection.set(ids)
+  }
+
+  protected async bulkDelete(): Promise<void> {
+    const files = this.selectedFiles()
+    if (files.length === 0) return
+    const ok = await this.confirmDialog.open({
+      title: 'Move to trash',
+      message: 'v3_move_to_trash_n',
+      messageParams: { nb: files.length },
+      confirmLabel: 'Move to trash',
+      kind: 'danger'
+    })
+    if (!ok) return
+    this.pendingDeleteRefresh = true
+    const stubs = files.map((f) => this.buildFileStub(f))
+    this.filesService.delete(stubs)
+    this.toast.success(files.length === 1 ? `Moving "${files[0].name}" to trash…` : `Moving ${files.length} items to trash…`)
+    this.clearSelection()
+  }
+
+  protected bulkDownload(): void {
+    const files = this.selectedFiles()
+    if (files.length === 0) return
+    if (files.length === 1 && !files[0].isDir) {
+      this.downloadFile(files[0])
+      return
+    }
+    this.startArchiveDownload(files)
+  }
+
+  private async startArchiveDownload(files: FileProps[]): Promise<void> {
+    const parentSegs = this.pathSegments().map((s) => s.path)
+    const defaultName = parentSegs.length ? parentSegs[parentSegs.length - 1] : 'personal'
+    const name = await this.promptDialog.open({
+      title: 'Download archive',
+      placeholder: 'Archive name',
+      submitLabel: 'Download',
+      initialValue: defaultName,
+      selectionRange: 'all',
+      validate: (v) => (v.trim() ? null : 'Name is required')
+    })
+    if (!name) return
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.filesService.compress({
+      name: name.trim(),
+      compressInDirectory: false,
+      extension: TAR_GZ_EXTENSION,
+      files: files.map((f) => {
+        const stub = this.buildFileStub(f)
+        return { name: stub.name, rootAlias: SPACE_ALIAS.PERSONAL, path: stub.path }
+      })
+    })
+    this.toast.success(`Archiving ${files.length} items…`)
+    this.clearSelection()
+  }
+
+  protected async bulkCopyOrMove(op: FILE_OPERATION.COPY | FILE_OPERATION.MOVE): Promise<void> {
+    const files = this.selectedFiles()
+    if (files.length === 0) return
+    const isMove = op === FILE_OPERATION.MOVE
+    const dst = await this.treePicker.open({
+      title: isMove ? 'Move items' : 'Copy items',
+      submitLabel: isMove ? 'Move here' : 'Copy here',
+      disabledPath: this.currentUploadRoute()
+    })
+    if (!dst) return
+    const stubs = files.map((f) => this.buildFileStub(f))
+    this.pendingCopyMoveRefresh = true
+    this.filesService.copyMove(stubs, dst.path, op).catch(console.error)
+    const verb = isMove ? 'Moving' : 'Copying'
+    this.toast.success(files.length === 1 ? `${verb} "${files[0].name}"…` : `${verb} ${files.length} items…`)
+    this.clearSelection()
+  }
+
+  protected async bulkShare(): Promise<void> {
+    const files = this.selectedFiles()
+    if (files.length === 0) return
+    if (this.selectionHasShares()) {
+      this.toast.error('Some selected files are already shared — share them individually.')
+      return
+    }
+    if (files.length === 1) {
+      await this.shareEntry(files[0])
+      return
+    }
+    this.toast.error('Bulk sharing is not available yet — share items one at a time.')
   }
 
   protected openEntry(file: FileProps): void {

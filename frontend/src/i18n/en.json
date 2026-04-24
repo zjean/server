@@ -49,6 +49,8 @@
   "nb_items_across_one_bin": "{{ items }} items across 1 bin",
   "nb_items_across_nb_bins": "{{ items }} items across {{ bins }} bins",
   "v3_move_to_trash_one": "Move <b>{{ name }}</b> to trash?",
+  "v3_move_to_trash_n": "Move <b>{{ nb }}</b> items to trash?",
+  "v3_n_items_selected": "{{ nb }} selected",
   "v3_link_create_title": "Create public link",
   "v3_link_edit_title": "Edit public link",
   "v3_link_create": "Create",
