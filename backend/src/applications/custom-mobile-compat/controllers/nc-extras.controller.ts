@@ -3,6 +3,8 @@ import { createReadStream } from 'node:fs'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesManager } from '../../files/services/files-manager.service'
+import { FilesQueries } from '../../files/services/files-queries.service'
+import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
@@ -19,7 +21,8 @@ export class NcExtrasController {
     private readonly usersManager: UsersManager,
     private readonly filesManager: FilesManager,
     private readonly spacesManager: SpacesManager,
-    private readonly resolver: NcPathResolverService
+    private readonly resolver: NcPathResolverService,
+    private readonly filesQueries: FilesQueries
   ) {}
 
   // Avatar binary. NC clients call this for every user they render (chat,
@@ -55,14 +58,16 @@ export class NcExtrasController {
   // mime types only; everything else returns 404, which NC clients gracefully
   // interpret as "no preview — show the file icon".
   //
-  // NC clients typically send fileId, but they also accept a ?file=<path>
-  // fallback. Since Sync-in's file.id is sync-scoped (not a stable identifier
-  // you can assume was previously exposed to the client), we only support the
-  // path-based variant. fileId alone → 404 gracefully.
+  // NC iOS/Android clients prefer ?fileId=<oc:fileid> because they already
+  // keep it from PROPFIND. We honor that by looking up the file in the DB
+  // (scoped to files owned by the authenticated user, which matches the
+  // mobile-compat personal-space default). A ?file=<path> fallback is kept
+  // for clients or manual tools that compute a path instead.
   //
-  // Query params supported: `file` (NC-style path starting with /files/{user}/),
-  // `x` + `y` (pixel dimensions — we use the max of the two for the thumbnail
-  // square; NC clients request square thumbs and letterbox client-side).
+  // Query params: `fileId` OR `file` (NC-style path with or without the
+  // /remote.php/dav/files/{user}/ prefix), `x` + `y` (pixel dimensions —
+  // we use the max of the two for the thumbnail square; NC clients request
+  // square thumbs and letterbox client-side).
   @Get('index.php/core/preview')
   @UseGuards(NcBasicAuthGuard)
   @Header('cache-control', 'private,max-age=3600')
@@ -77,15 +82,14 @@ export class NcExtrasController {
     if (!filePath && !fileId) {
       throw new HttpException('file or fileId is required', HttpStatus.BAD_REQUEST)
     }
-    if (!filePath) {
-      // fileId-only: graceful 404. NC clients fall back to downloading the
-      // full file for inline display, which is what we want for a server
-      // that can't resolve the numeric id to a path.
-      throw new HttpException('previews by fileId not supported; pass ?file=<path>', HttpStatus.NOT_FOUND)
-    }
 
     const size = clampSize(x, y)
-    const space = await this.resolveFilePath(req.user, filePath)
+    let space: SpaceEnv | null = null
+    if (filePath) {
+      space = await this.resolveFilePath(req.user, filePath)
+    } else if (fileId) {
+      space = await this.resolveFileId(req.user, fileId)
+    }
     if (!space) throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
 
     try {
@@ -103,6 +107,39 @@ export class NcExtrasController {
         throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
       }
       throw new HttpException(err.message ?? 'preview failed', HttpStatus.INTERNAL_SERVER_ERROR)
+    }
+  }
+
+  // Resolve an `?fileId=<oc:fileid>` query param into a personal-space SpaceEnv
+  // for the authenticated user. Sync-in's `files` rows are scoped by ownerId,
+  // so the lookup is intrinsically safe — a user cannot request a preview for
+  // a file they don't own. Non-owned or non-existent ids return null and the
+  // caller turns that into a 404 (which NC clients treat as "skip preview").
+  //
+  // Files living inside a non-personal space — shared spaces, shares, etc. —
+  // are not currently supported via fileId because the mobile-compat mapping
+  // targets personal-space-only (see NcPathResolverService). That's in line
+  // with the module's design scope; a follow-up can extend this when mobile
+  // users flip user.settings.mobileHome to a different space.
+  private async resolveFileId(user: UserModel, fileId: string): Promise<SpaceEnv | null> {
+    const id = Number.parseInt(fileId, 10)
+    if (!Number.isFinite(id) || id <= 0) return null
+    let row: { id: number; path: string } | null = null
+    try {
+      row = await this.filesQueries.getUserFile(user.id, id)
+    } catch {
+      return null
+    }
+    if (!row?.path) return null
+    // filesQueries.getUserFile returns path as "<dir>/<name>" already joined.
+    // Build the URL segments that SpacesManager.spaceEnv expects for personal
+    // space: ['files', 'personal', ...pathSegments].
+    const pathSegments = row.path.split('/').filter(Boolean)
+    const urlSegments = ['files', 'personal', ...pathSegments]
+    try {
+      return await this.spacesManager.spaceEnv(user, urlSegments)
+    } catch {
+      return null
     }
   }
 
