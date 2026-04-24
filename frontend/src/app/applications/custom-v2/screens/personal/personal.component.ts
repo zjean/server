@@ -418,7 +418,17 @@ export class PersonalComponent implements OnInit, OnDestroy {
       await this.shareEntry(files[0])
       return
     }
-    this.toast.error('Bulk sharing is not available yet — share items one at a time.')
+    const segs = this.pathSegments().map((s) => s.path)
+    const ownerId = this.store.user.getValue()?.id ?? null
+    await this.shareDialog.open({
+      files: files.map((f) => ({
+        file: { id: f.id, name: f.name, isDir: f.isDir, mime: f.mime, space: null as never },
+        relativePath: [...segs, f.name].join('/'),
+        ownerId
+      }))
+    })
+    this.clearSelection()
+    this.refresh()
   }
 
   protected openEntry(file: FileProps): void {

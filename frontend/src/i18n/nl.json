@@ -880,6 +880,7 @@
   "v3_share_created": "Gedeeld",
   "v3_share_updated": "Deling bijgewerkt",
   "v3_share_revoked": "Deling verwijderd",
+  "v3_share_n_items_subject": "{{ nb }} items",
   "Search people or groups": "Zoek personen of groepen",
   "No matches": "Geen resultaten",
   "Remove": "Verwijderen"

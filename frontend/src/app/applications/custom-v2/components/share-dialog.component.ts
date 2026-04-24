@@ -1,6 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
-import type { FileSpace } from '@sync-in-server/backend/src/applications/files/interfaces/file-space.interface'
 import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
@@ -16,7 +15,7 @@ import {
   updateShare
 } from '../utils/share-crud'
 import { ButtonComponent } from './button.component'
-import { ShareDialogService } from './share-dialog.service'
+import { ShareDialogFileCtx, ShareDialogService } from './share-dialog.service'
 import { ToastService } from './toast.service'
 import { UserGroupPickerComponent, type PickedMember } from './user-group-picker.component'
 
@@ -38,7 +37,11 @@ interface RowMember extends ShareMemberInput {
         <div class="sd__title">
           {{ (isEdit() ? 'v3_share_edit_title' : 'v3_share_create_title') | translate: locale.language }}
         </div>
-        <div class="sd__subject" [attr.title]="subjectName()">{{ subjectName() }}</div>
+        @if (isMulti()) {
+          <div class="sd__subject">{{ 'v3_share_n_items_subject' | translate: locale.language : { nb: multiCount() } }}</div>
+        } @else {
+          <div class="sd__subject" [attr.title]="subjectName()">{{ subjectName() }}</div>
+        }
 
         @if (loadingExisting()) {
           <div class="sd__state">{{ 'Loading…' | translate: locale.language }}</div>
@@ -264,19 +267,26 @@ export class ShareDialogComponent {
 
   protected readonly isEdit = computed(() => !!this.pending()?.existingShareId)
 
-  protected readonly subjectName = signal('')
   protected readonly members = signal<RowMember[]>([])
   protected readonly loadingExisting = signal(false)
   protected readonly busy = signal(false)
   protected readonly errorMessage = signal<string | null>(null)
 
-  // Track file context for create, or the loaded share for edit.
-  private readonly createCtx = signal<{
-    file: Pick<FileSpace, 'id' | 'name' | 'isDir' | 'mime' | 'space'>
-    relativePath: string
-    ownerId: number | null
-  } | null>(null)
+  // Create flow: N file contexts (single entry for single-file shares).
+  // Edit flow: the loaded share.
+  private readonly createCtxs = signal<ShareDialogFileCtx[]>([])
   private readonly editShare = signal<ShareProps | null>(null)
+
+  protected readonly subjectName = computed(() => {
+    const share = this.editShare()
+    if (share) return share.name
+    const ctxs = this.createCtxs()
+    if (ctxs.length === 0) return ''
+    if (ctxs.length === 1) return ctxs[0].file.name
+    return ''
+  })
+  protected readonly isMulti = computed(() => !this.isEdit() && this.createCtxs().length > 1)
+  protected readonly multiCount = computed(() => this.createCtxs().length)
 
   protected readonly ignoredUserIds = computed(() =>
     this.members()
@@ -299,11 +309,16 @@ export class ShareDialogComponent {
         }
         if (p.existingShareId) {
           this.loadExisting(p.existingShareId)
-        } else if (p.file) {
-          this.subjectName.set(p.file.name)
-          this.createCtx.set({ file: p.file, relativePath: p.relativePath ?? p.file.name, ownerId: p.ownerId ?? null })
-          this.members.set([])
+          return
         }
+        // Create flow: accept either `files[]` (multi) or the legacy single `file`.
+        const ctxs: ShareDialogFileCtx[] = p.files?.length
+          ? p.files
+          : p.file
+            ? [{ file: p.file, relativePath: p.relativePath ?? p.file.name, ownerId: p.ownerId ?? null }]
+            : []
+        this.createCtxs.set(ctxs)
+        this.members.set([])
       })
     })
   }
@@ -314,7 +329,6 @@ export class ShareDialogComponent {
     getShare(this.http, shareId).subscribe({
       next: (share) => {
         this.editShare.set(share)
-        this.subjectName.set(share.name)
         const rows: RowMember[] = (share.members ?? [])
           // Skip link "members" — link UX lives in link-dialog.
           .filter((m) => !m.linkId)
@@ -407,25 +421,73 @@ export class ShareDialogComponent {
       return
     }
 
-    const ctx = this.createCtx()
-    if (!ctx || !ctx.file) return
-    createShare(this.http, {
-      file: ctx.file,
-      relativePath: ctx.relativePath,
-      ownerId: ctx.ownerId,
-      members
-    }).subscribe({
-      next: (share) => {
-        this.busy.set(false)
-        this.toast.success('v3_share_created')
-        this.service.latch({ shareId: share.id })
-        this.service.close()
-      },
-      error: (e: HttpErrorResponse) => {
-        this.errorMessage.set(e.error?.message ?? 'Failed to create share')
-        this.busy.set(false)
-      }
-    })
+    const ctxs = this.createCtxs()
+    if (ctxs.length === 0) return
+    if (ctxs.length === 1) {
+      const ctx = ctxs[0]
+      createShare(this.http, {
+        file: ctx.file,
+        relativePath: ctx.relativePath,
+        ownerId: ctx.ownerId,
+        members
+      }).subscribe({
+        next: (share) => {
+          this.busy.set(false)
+          this.toast.success('v3_share_created')
+          this.service.latch({ shareId: share.id })
+          this.service.close()
+        },
+        error: (e: HttpErrorResponse) => {
+          this.errorMessage.set(e.error?.message ?? 'Failed to create share')
+          this.busy.set(false)
+        }
+      })
+      return
+    }
+
+    // Multi-file: fire one createShare per file in parallel. Collect
+    // successes + failures for a summary toast; latch the first success so
+    // callers that care about "a share was created" still get a shareId.
+    let firstShareId: number | null = null
+    let created = 0
+    let failed = 0
+    let completed = 0
+    const total = ctxs.length
+    for (const ctx of ctxs) {
+      createShare(this.http, {
+        file: ctx.file,
+        relativePath: ctx.relativePath,
+        ownerId: ctx.ownerId,
+        members
+      }).subscribe({
+        next: (share) => {
+          if (firstShareId === null) firstShareId = share.id
+          created += 1
+          completed += 1
+          if (completed === total) this.finishMulti(firstShareId, created, failed)
+        },
+        error: () => {
+          failed += 1
+          completed += 1
+          if (completed === total) this.finishMulti(firstShareId, created, failed)
+        }
+      })
+    }
+  }
+
+  private finishMulti(firstShareId: number | null, created: number, failed: number): void {
+    this.busy.set(false)
+    if (created === 0) {
+      this.errorMessage.set('Failed to create any share')
+      return
+    }
+    if (failed > 0) {
+      this.toast.error(`Shared ${created} · ${failed} failed`)
+    } else {
+      this.toast.success(created === 1 ? 'v3_share_created' : `${created} items shared`)
+    }
+    this.service.latch({ shareId: firstShareId ?? 0, multi: { created, failed } })
+    this.service.close()
   }
 
   protected revoke(): void {
@@ -458,16 +520,19 @@ export class ShareDialogComponent {
   }
 
   private pendingFileIsDir(): boolean {
-    const p = this.pending()
-    if (p?.file) return !!p.file.isDir
+    const ctxs = this.createCtxs()
+    // Presets hinge on isDir (editor/manager permission strings differ for files vs
+    // folders). For a heterogeneous multi-select, we pick the first; classic's
+    // share-dialog makes the same choice. Callers can exclude folders if they
+    // want file-only permissions.
+    if (ctxs.length > 0) return !!ctxs[0].file.isDir
     const existing = this.editShare()
     return !!existing?.file?.isDir
   }
 
   private resetState(): void {
-    this.subjectName.set('')
     this.members.set([])
-    this.createCtx.set(null)
+    this.createCtxs.set([])
     this.editShare.set(null)
     this.loadingExisting.set(false)
     this.busy.set(false)

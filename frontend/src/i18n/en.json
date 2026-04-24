@@ -79,6 +79,7 @@
   "v3_share_created": "Shared",
   "v3_share_updated": "Share updated",
   "v3_share_revoked": "Share removed",
+  "v3_share_n_items_subject": "{{ nb }} items",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
   "No matches": "No matches"

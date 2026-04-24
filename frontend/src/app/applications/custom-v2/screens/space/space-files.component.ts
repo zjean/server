@@ -158,6 +158,12 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected readonly hasSelection = computed(() => this.selection().size > 0)
   protected readonly selectionCount = computed(() => this.selection().size)
   protected readonly selectionSize = computed(() => this.selectedFiles().reduce((s, f) => s + (f.isDir ? 0 : f.size), 0))
+  protected readonly selectionHasShares = computed(() =>
+    this.selectedFiles().some((f) => {
+      const shares = (f as FileProps & { shares?: { id: number }[] }).shares
+      return Array.isArray(shares) && shares.length > 0
+    })
+  )
   protected readonly selectAllState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
     const total = this.filteredFiles().length
     const selected = this.selectedFiles().length
@@ -403,11 +409,32 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected async bulkShare(): Promise<void> {
     const files = this.selectedFiles()
     if (files.length === 0) return
+    if (this.selectionHasShares()) {
+      this.toast.error('Some selected files are already shared — share them individually.')
+      return
+    }
     if (files.length === 1) {
       await this.shareEntry(files[0])
       return
     }
-    this.toast.error('Bulk sharing is not available yet — share items one at a time.')
+    const alias = this.currentAlias()
+    const spaceName = this.spaceName() || alias
+    const segs = this.pathSegments().map((s) => s.path)
+    await this.shareDialog.open({
+      files: files.map((f) => ({
+        file: {
+          id: f.id,
+          name: f.name,
+          isDir: f.isDir,
+          mime: f.mime,
+          space: { alias, name: spaceName, root: { alias, name: spaceName } } as never
+        },
+        relativePath: [...segs, f.name].join('/'),
+        ownerId: null
+      }))
+    })
+    this.clearSelection()
+    this.refresh()
   }
 
   protected openEntry(file: FileProps): void {
