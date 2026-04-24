@@ -8,6 +8,7 @@ import { UserType } from '../../users/interfaces/user.interface'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { LogoComponent } from '../components/logo.component'
+import { NotificationsBellComponent } from './notifications-bell.component'
 import { V2BreadcrumbService } from './breadcrumb.service'
 
 @Component({
@@ -15,7 +16,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss',
-  imports: [IconV2Component, IconButtonComponent, LogoComponent, L10nTranslatePipe]
+  imports: [IconV2Component, IconButtonComponent, LogoComponent, NotificationsBellComponent, L10nTranslatePipe]
 })
 export class TitleBarComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
