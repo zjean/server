@@ -35,7 +35,11 @@ export type NcPermissionsMode = 'files' | 'trashbin'
 // to the NC letter+bitmask pair. `mode === 'trashbin'` always returns empty
 // (trashed items are read-only on NC, you can only restore or delete — which
 // the NC client models as "no permissions except its own trashbin actions").
-export function toNcPermissions(syncinPermissions: string | undefined | null, isDir: boolean, mode: NcPermissionsMode = 'files'): NcPermissionsResult {
+export function toNcPermissions(
+  syncinPermissions: string | undefined | null,
+  isDir: boolean,
+  mode: NcPermissionsMode = 'files'
+): NcPermissionsResult {
   if (mode === 'trashbin') {
     return { letters: '', shareMask: '0' }
   }
