@@ -42,7 +42,9 @@ function formatDate(ts: number | null | undefined): string {
               </div>
             </div>
           </div>
-          <span class="at-badge" [class]="'at-badge--' + badgeKind(status().state)">{{ stateLabel(status().state) | translate: locale.language }}</span>
+          <span class="at-badge" [class]="'at-badge--' + badgeKind(status().state)">{{
+            stateLabel(status().state) | translate: locale.language
+          }}</span>
         </div>
 
         <dl class="at-stats">
@@ -56,7 +58,9 @@ function formatDate(ts: number | null | undefined): string {
           </div>
           <div class="at-stat">
             <dt l10nTranslate>Last partial run</dt>
-            <dd class="at-stat__mono">{{ status().lastPartialRunAt ? formatDate(status().lastPartialRunAt) : ('Never' | translate: locale.language) }}</dd>
+            <dd class="at-stat__mono">
+              {{ status().lastPartialRunAt ? formatDate(status().lastPartialRunAt) : ('Never' | translate: locale.language) }}
+            </dd>
           </div>
         </dl>
 
@@ -269,10 +273,7 @@ export class AdminToolsComponent implements OnInit {
   protected readonly formatDate = formatDate
 
   ngOnInit(): void {
-    this.breadcrumbs.setBreadcrumbs([
-      { label: 'Administration', icon: 'person', route: ['/', V2_PATH, V2_ROUTES.ADMIN] },
-      { label: 'Tools' }
-    ])
+    this.breadcrumbs.setBreadcrumbs([{ label: 'Administration', icon: 'person', route: ['/', V2_PATH, V2_ROUTES.ADMIN] }, { label: 'Tools' }])
     // Poll every 6s while the screen is mounted. Matches classic's cadence.
     timer(0, 6_000)
       .pipe(
