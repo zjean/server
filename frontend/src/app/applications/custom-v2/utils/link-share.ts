@@ -43,8 +43,9 @@ export function createLinkShare(http: HttpClient, p: CreateLinkParams): Observab
     members: [],
     links: [
       {
-        id: 0,
-        // Backend's MEMBER_TYPE_REVERSE maps 'link' → 'user'; the links array placement is what flags it as a link.
+        // Backend's shares-manager treats link.id < 0 as "new"; id ≥ 0 goes through an update
+        // path that 404s for unknown ids. Classic uses -1, so we match.
+        id: -1,
         type: 'link' as never,
         permissions: '',
         linkSettings: toLinkDto(p.settings)
