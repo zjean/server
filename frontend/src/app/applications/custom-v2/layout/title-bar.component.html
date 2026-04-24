@@ -25,6 +25,7 @@
   </div>
   <div class="title-bar__right">
     <ng-content select="[titleBarRight]"></ng-content>
+    <app-v2-notifications-bell />
     <div class="title-bar__avatar" [attr.title]="user?.fullName">
       @if (userAvatar) {
         <img class="title-bar__avatar-img" [src]="userAvatar" alt="" />
