@@ -231,7 +231,14 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
             <div class="au-field-row">
               <label class="au-field">
                 <span l10nTranslate>Quota (GB)</span>
-                <input type="number" min="0" step="0.1" [ngModel]="d.storageQuotaGB" (ngModelChange)="setQuotaGb(d, $event)" [placeholder]="'unlimited' | translate: locale.language" />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  [ngModel]="d.storageQuotaGB"
+                  (ngModelChange)="setQuotaGb(d, $event)"
+                  [placeholder]="'unlimited' | translate: locale.language"
+                />
               </label>
               <label class="au-field au-field--check">
                 <input type="checkbox" [(ngModel)]="d.enabled" />
@@ -727,10 +734,7 @@ export class AdminSpacesComponent implements OnInit {
   protected readonly formatAgo = formatAgo
 
   ngOnInit(): void {
-    this.breadcrumbs.setBreadcrumbs([
-      { label: 'Administration', icon: 'person', route: ['/', V2_PATH, V2_ROUTES.ADMIN] },
-      { label: 'Spaces' }
-    ])
+    this.breadcrumbs.setBreadcrumbs([{ label: 'Administration', icon: 'person', route: ['/', V2_PATH, V2_ROUTES.ADMIN] }, { label: 'Spaces' }])
     this.refresh()
   }
 
@@ -945,7 +949,7 @@ export class AdminSpacesComponent implements OnInit {
         case 'storage':
           return ((a.storageUsage ?? 0) - (b.storageUsage ?? 0)) * mult
         case 'members':
-          return (((a.counts?.users ?? 0) + (a.counts?.groups ?? 0)) - ((b.counts?.users ?? 0) + (b.counts?.groups ?? 0))) * mult
+          return ((a.counts?.users ?? 0) + (a.counts?.groups ?? 0) - ((b.counts?.users ?? 0) + (b.counts?.groups ?? 0))) * mult
         case 'modified': {
           const at = a.modifiedAt ? new Date(a.modifiedAt).getTime() : 0
           const bt = b.modifiedAt ? new Date(b.modifiedAt).getTime() : 0
