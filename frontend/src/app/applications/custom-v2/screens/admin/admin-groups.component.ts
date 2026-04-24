@@ -42,8 +42,30 @@ function emptyDraft(): GroupDraft {
     <div class="ag">
       <header class="ag__head">
         <div class="ag__title-wrap">
-          <h1 class="ag__title" l10nTranslate>Groups</h1>
+          <h1 class="ag__title">{{ (isPersonal() ? 'Personal groups' : 'Groups') | translate: locale.language }}</h1>
           <span class="ag__count">{{ filtered().length }} / {{ groups().length }}</span>
+        </div>
+        <div class="ag__segmented" role="tablist" aria-label="{{ 'Group scope' | translate: locale.language }}">
+          <button
+            type="button"
+            role="tab"
+            class="ag__seg"
+            [class.ag__seg--active]="!isPersonal()"
+            [attr.aria-selected]="!isPersonal()"
+            (click)="setIsPersonal(false)"
+          >
+            {{ 'Groups' | translate: locale.language }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="ag__seg"
+            [class.ag__seg--active]="isPersonal()"
+            [attr.aria-selected]="isPersonal()"
+            (click)="setIsPersonal(true)"
+          >
+            {{ 'Personal' | translate: locale.language }}
+          </button>
         </div>
         <div class="ag__actions">
           <input
@@ -54,7 +76,9 @@ function emptyDraft(): GroupDraft {
             [placeholder]="'Filter groups…' | translate: locale.language"
           />
           <app-v2-btn kind="ghost" size="sm" icon="refresh" (click)="refresh()">{{ 'Refresh' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="primary" size="sm" icon="plus" (click)="openCreate()">{{ 'New group' | translate: locale.language }}</app-v2-btn>
+          @if (!isPersonal()) {
+            <app-v2-btn kind="primary" size="sm" icon="plus" (click)="openCreate()">{{ 'New group' | translate: locale.language }}</app-v2-btn>
+          }
         </div>
       </header>
 
@@ -63,7 +87,7 @@ function emptyDraft(): GroupDraft {
       } @else if (errorMessage(); as err) {
         <div class="ag__state ag__state--error">{{ err | translate: locale.language }}</div>
       } @else if (groups().length === 0) {
-        <div class="ag__state" l10nTranslate>No groups yet.</div>
+        <div class="ag__state">{{ (isPersonal() ? 'No personal groups.' : 'No groups yet.') | translate: locale.language }}</div>
       } @else {
         <div class="ag-table">
           <div class="ag-row ag-row--head">
@@ -86,20 +110,22 @@ function emptyDraft(): GroupDraft {
                 }
               </span>
               <span class="ag-row__actions">
-                <button type="button" class="ag-row__action" (click)="openMembers(g)" [attr.title]="'Members' | translate: locale.language">
-                  <app-v2-icon name="people" [size]="12" />
-                </button>
-                <button type="button" class="ag-row__action" (click)="openEdit(g)" [attr.title]="'Edit' | translate: locale.language">
-                  <app-v2-icon name="pencil" [size]="12" />
-                </button>
-                <button
-                  type="button"
-                  class="ag-row__action ag-row__action--danger"
-                  (click)="confirmDelete(g)"
-                  [attr.title]="'Delete' | translate: locale.language"
-                >
-                  <app-v2-icon name="trash" [size]="12" />
-                </button>
+                @if (!isPersonal()) {
+                  <button type="button" class="ag-row__action" (click)="openMembers(g)" [attr.title]="'Members' | translate: locale.language">
+                    <app-v2-icon name="people" [size]="12" />
+                  </button>
+                  <button type="button" class="ag-row__action" (click)="openEdit(g)" [attr.title]="'Edit' | translate: locale.language">
+                    <app-v2-icon name="pencil" [size]="12" />
+                  </button>
+                  <button
+                    type="button"
+                    class="ag-row__action ag-row__action--danger"
+                    (click)="confirmDelete(g)"
+                    [attr.title]="'Delete' | translate: locale.language"
+                  >
+                    <app-v2-icon name="trash" [size]="12" />
+                  </button>
+                }
               </span>
             </div>
           }
@@ -190,6 +216,33 @@ function emptyDraft(): GroupDraft {
         display: flex;
         align-items: center;
         gap: 8px;
+      }
+      .ag__segmented {
+        display: inline-flex;
+        padding: 2px;
+        background: var(--si-bg3);
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r2);
+        gap: 2px;
+      }
+      .ag__seg {
+        background: transparent;
+        border: none;
+        padding: 4px 12px;
+        font: inherit;
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--si-fg-faint);
+        border-radius: var(--si-r1);
+        cursor: pointer;
+
+        &--active {
+          background: var(--si-bg1);
+          color: var(--si-fg);
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+        }
       }
       .ag__search {
         width: 220px;
@@ -382,6 +435,7 @@ export class AdminGroupsComponent implements OnInit {
   private readonly confirm = inject(ConfirmDialogService)
 
   protected readonly groups = signal<GroupRow[]>([])
+  protected readonly isPersonal = signal(false)
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly search = signal('')
@@ -406,7 +460,7 @@ export class AdminGroupsComponent implements OnInit {
     this.loading.set(true)
     this.errorMessage.set(null)
     // Browse the root (no name) — returns top-level groups as members.
-    this.admin.browseGroup(undefined, false).subscribe({
+    this.admin.browseGroup(undefined, this.isPersonal()).subscribe({
       next: (browse: GroupBrowseModel) => {
         const rows: GroupRow[] = (browse.members ?? []).map((m) => ({
           id: m.id,
@@ -426,6 +480,14 @@ export class AdminGroupsComponent implements OnInit {
     })
   }
 
+  protected setIsPersonal(value: boolean): void {
+    if (this.isPersonal() === value) return
+    this.isPersonal.set(value)
+    this.groups.set([])
+    this.search.set('')
+    this.refresh()
+  }
+
   protected onSearch(ev: Event): void {
     this.search.set((ev.target as HTMLInputElement).value)
   }
@@ -443,7 +505,7 @@ export class AdminGroupsComponent implements OnInit {
   }
 
   protected loadMemberCount(row: GroupRow): void {
-    this.admin.browseGroup(row.name, false).subscribe({
+    this.admin.browseGroup(row.name, this.isPersonal()).subscribe({
       next: (browse: GroupBrowseModel) => {
         const count = (browse.members ?? []).length
         this.groups.update((list) => list.map((g) => (g.id === row.id ? { ...g, memberCount: count } : g)))
