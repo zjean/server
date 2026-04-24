@@ -5,11 +5,11 @@
 
 const PREVIEWABLE_PREFIXES = ['image/']
 const PREVIEWABLE_EXACT = new Set<string>([
-  'application/pdf',
-  // Leaving video and audio off for now — Sync-in's preview endpoint only
-  // handles images today. Advertising a preview here and returning 404 for it
-  // pushes the client to fall back to a full download per request, which is
-  // worse than just showing a type icon.
+  // Sync-in's FilesManager.generateThumbnail only handles image/* today (it
+  // delegates to common/image, which rejects anything else with a 400). We
+  // keep the predicate in lockstep so <nc:has-preview> is never true for a
+  // mime the server would then 404 on — that roundtrip is worse UX (NC iOS
+  // falls back to a full download per thumbnail) than showing a type icon.
 ])
 
 export function ncHasPreview(mime: string | undefined | null): boolean {

@@ -4,6 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 import * as fs from 'node:fs'
 import { Readable } from 'node:stream'
 import { FilesManager } from '../../files/services/files-manager.service'
+import { FilesQueries } from '../../files/services/files-queries.service'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
@@ -17,17 +18,20 @@ describe(NcExtrasController.name, () => {
   let getAvatar: jest.Mock
   let generateThumbnail: jest.Mock
   let spaceEnv: jest.Mock
+  let getUserFile: jest.Mock
 
   beforeAll(async () => {
     getAvatar = jest.fn()
     generateThumbnail = jest.fn()
     spaceEnv = jest.fn()
+    getUserFile = jest.fn()
     moduleRef = await Test.createTestingModule({
       controllers: [NcExtrasController],
       providers: [
         { provide: UsersManager, useValue: { getAvatar } },
         { provide: FilesManager, useValue: { generateThumbnail } },
         { provide: SpacesManager, useValue: { spaceEnv } },
+        { provide: FilesQueries, useValue: { getUserFile } },
         NcPathResolverService
       ]
     })
@@ -47,6 +51,7 @@ describe(NcExtrasController.name, () => {
     getAvatar.mockReset()
     generateThumbnail.mockReset()
     spaceEnv.mockReset()
+    getUserFile.mockReset()
   })
 
   function fakeRes(): FastifyReply {
@@ -111,14 +116,42 @@ describe(NcExtrasController.name, () => {
       })
     })
 
-    it('fileId-only falls back to a graceful 404', async () => {
+    it('resolves ?fileId via FilesQueries and streams a thumbnail', async () => {
+      getUserFile.mockResolvedValueOnce({ id: 42, path: 'photos/a.png' })
+      const fakeSpace = { realPath: '/tmp/img.png' }
+      spaceEnv.mockResolvedValueOnce(fakeSpace)
+      generateThumbnail.mockResolvedValueOnce(Readable.from([Buffer.from('jpegdata')]))
+
       const req = fakePreviewReq()
       const res = fakeRes()
-      await expect(controller.preview(req, res, undefined, '42')).rejects.toMatchObject({
+      const result = await controller.preview(req, res, undefined, '42', '128', '128')
+
+      expect(getUserFile).toHaveBeenCalledWith(7, 42)
+      expect(spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal', 'photos', 'a.png'])
+      expect(generateThumbnail).toHaveBeenCalledWith(fakeSpace, 128)
+      expect(result).toBeInstanceOf(StreamableFile)
+    })
+
+    it('returns 404 when ?fileId is not owned by the user', async () => {
+      getUserFile.mockResolvedValueOnce(null)
+      const req = fakePreviewReq()
+      const res = fakeRes()
+      await expect(controller.preview(req, res, undefined, '999')).rejects.toMatchObject({
         status: HttpStatus.NOT_FOUND
       })
-      expect(spaceEnv).not.toHaveBeenCalled()
       expect(generateThumbnail).not.toHaveBeenCalled()
+    })
+
+    it('returns 404 when ?fileId is not a positive integer', async () => {
+      const req = fakePreviewReq()
+      const res = fakeRes()
+      await expect(controller.preview(req, res, undefined, 'abc')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND
+      })
+      await expect(controller.preview(req, res, undefined, '-5')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND
+      })
+      expect(getUserFile).not.toHaveBeenCalled()
     })
 
     it('streams a thumbnail for a resolvable image path', async () => {

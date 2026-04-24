@@ -7,19 +7,18 @@ describe('ncHasPreview', () => {
     expect(ncHasPreview('image/heic')).toBe(true)
   })
 
-  it('returns true for pdf', () => {
-    expect(ncHasPreview('application/pdf')).toBe(true)
-  })
-
   it('normalizes Sync-in dash-format mime', () => {
     expect(ncHasPreview('image-jpeg')).toBe(true)
   })
 
-  it('returns false for non-previewable mimes', () => {
+  it('returns false for non-previewable mimes (server cannot thumbnail them)', () => {
     expect(ncHasPreview('text/plain')).toBe(false)
     expect(ncHasPreview('video/mp4')).toBe(false)
     expect(ncHasPreview('audio/mpeg')).toBe(false)
     expect(ncHasPreview('application/zip')).toBe(false)
+    // PDF intentionally excluded — Sync-in's thumbnail pipeline is image-only,
+    // so advertising a PDF preview would 404 at request time.
+    expect(ncHasPreview('application/pdf')).toBe(false)
   })
 
   it('returns false for empty/missing mime', () => {
