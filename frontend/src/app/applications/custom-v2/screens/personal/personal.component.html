@@ -19,6 +19,8 @@
     <span class="personal__divider"></span>
 
     <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
+    <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
     <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
     <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
     <app-v2-btn kind="ghost" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>

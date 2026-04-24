@@ -36,6 +36,7 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -327,7 +328,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       title: 'New folder',
       placeholder: 'Folder name',
       submitLabel: 'Create',
-      validate: (v) => this.validateFolderName(v)
+      validate: (v) => this.validateEntryName(v)
     })
     if (!name) return
     const dirPath = this.currentUploadRoute()
@@ -342,7 +343,52 @@ export class PersonalComponent implements OnInit, OnDestroy {
     })
   }
 
-  private validateFolderName(v: string): string | null {
+  protected async newTextFile(): Promise<void> {
+    const name = await this.promptDialog.open({
+      title: 'New text file',
+      placeholder: 'File name',
+      submitLabel: 'Create',
+      initialValue: 'Untitled.txt',
+      selectionRange: 'stem',
+      validate: (v) => this.validateEntryName(v)
+    })
+    if (!name) return
+    const dirPath = this.currentUploadRoute()
+    this.filesService.make('file', name.trim(), dirPath, true).subscribe({
+      next: () => {
+        this.toast.success(`File "${name.trim()}" created`)
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'File creation failed')
+      }
+    })
+  }
+
+  protected async downloadFromUrl(): Promise<void> {
+    const url = await this.promptDialog.open({
+      title: 'Download from URL',
+      placeholder: 'https://…',
+      submitLabel: 'Next',
+      validate: (v) => (validHttpSchemaRegexp.test(v.trim()) ? null : 'Malformed URL')
+    })
+    if (!url) return
+    const derivedName = url.trim().split('/').filter(Boolean).pop() ?? ''
+    const name = await this.promptDialog.open({
+      title: 'Save as',
+      placeholder: 'File name',
+      submitLabel: 'Download',
+      initialValue: derivedName,
+      selectionRange: 'stem',
+      validate: (v) => this.validateEntryName(v)
+    })
+    if (!name) return
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.filesService.downloadFromUrl(url.trim(), name.trim())
+    this.toast.success(`Downloading "${name.trim()}"…`)
+  }
+
+  private validateEntryName(v: string): string | null {
     const trimmed = v.trim()
     if (!trimmed) return 'Name is required'
     if (trimmed.includes('/') || trimmed.includes('\\')) return 'Name cannot contain slashes'
