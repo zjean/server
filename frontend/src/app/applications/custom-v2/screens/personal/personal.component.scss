@@ -284,12 +284,6 @@
   &--selected &__select {
     opacity: 1;
   }
-}
-
-.file-table--selecting .file-row__select,
-.file-table__head .file-row__select {
-  opacity: 1;
-}
 
   &__name {
     display: flex;
@@ -342,6 +336,11 @@
     display: flex;
     justify-content: flex-end;
   }
+}
+
+.file-table--selecting .file-row__select,
+.file-table__head .file-row__select {
+  opacity: 1;
 }
 
 .file-grid {

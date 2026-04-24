@@ -779,13 +779,10 @@
   "v3_move_to_trash_one": "<b>{{ name }}</b> naar de prullenbak verplaatsen?",
   "v3_move_to_trash_n": "<b>{{ nb }}</b> items naar de prullenbak verplaatsen?",
   "v3_n_items_selected": "{{ nb }} geselecteerd",
-  "Copy to…": "Kopiëren naar…",
-  "Move to…": "Verplaatsen naar…",
   "Deselect all": "Deselecteer alles",
   "Select all": "Selecteer alles",
   "Select": "Selecteer",
   "Download archive": "Archief downloaden",
-  "Archive name": "Naam van archief",
   "Copy items": "Items kopiëren",
   "Move items": "Items verplaatsen",
   "Delete permanently": "Definitief verwijderen",
@@ -882,6 +879,5 @@
   "v3_share_revoked": "Deling verwijderd",
   "v3_share_n_items_subject": "{{ nb }} items",
   "Search people or groups": "Zoek personen of groepen",
-  "No matches": "Geen resultaten",
-  "Remove": "Verwijderen"
+  "No matches": "Geen resultaten"
 }
