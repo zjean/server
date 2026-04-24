@@ -73,7 +73,7 @@
 
     &--active {
       background: var(--si-nav-soft);
-      color: oklch(0.92 0.08 265);
+      color: oklch(0.92 0.08 275);
       font-weight: 500;
 
       .left-nav__indicator {
@@ -131,8 +131,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, oklch(0.55 0.14 265), oklch(0.38 0.12 265));
-    color: oklch(0.96 0.03 265);
+    background: linear-gradient(135deg, oklch(0.55 0.14 275), oklch(0.38 0.12 275));
+    color: oklch(0.96 0.03 275);
     font-family: var(--si-sans);
     font-weight: 600;
     font-size: 11px;

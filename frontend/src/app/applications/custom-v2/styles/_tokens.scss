@@ -1,123 +1,126 @@
-// Sync-In v2 design tokens — ported from sync-in/project/src/tokens-v4.jsx
-// Mood: modern dark, confident. Richer contrast, more life in the neutrals;
-// slight violet-indigo undertone (hue 270), punchier coral-peach accent.
+// Sync-In v2 design tokens — ported from sync-in/project/src/tokens-v5.jsx
+// Mood: "slick navy" — deep, truly blue base (hue 245, real chroma), electric
+// cyan-teal accent. Stripe-dashboard meets Arc: confidently blue, never gray.
 // Scoped under .v2-root so nothing leaks into the classic layout.
-// hex/rgb fallbacks are declared before oklch() so Safari <15.4 picks up the fallback.
+// hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the fallback.
 
 .v2-root {
-  // ─── Backgrounds — deep, layered, slight violet-indigo cast (hue 270) ─
-  --si-bg0: #15141b;                     // outermost — deep
-  --si-bg0: oklch(0.15 0.014 270);
-  --si-bg1: #1b1a22;                     // sidebar / rails
-  --si-bg1: oklch(0.18 0.016 270);
-  --si-bg2: #222029;                     // content canvas
-  --si-bg2: oklch(0.22 0.016 270);
-  --si-bg3: #2b2934;                     // cards / panels
-  --si-bg3: oklch(0.28 0.018 270);
-  --si-bg4: #35333f;                     // hover surface
-  --si-bg4: oklch(0.34 0.020 270);
-  --si-bg5: #413e4c;                     // active surface
-  --si-bg5: oklch(0.41 0.022 270);
-  --si-bg6: #504d5c;                     // lifted element
-  --si-bg6: oklch(0.50 0.024 270);
+  // ─── Backgrounds — deep navy, real chroma (not gray with a hint) ─────
+  // hue 245 = true blue-violet; chroma 0.035–0.05 reads unmistakably BLUE
+  // even at low lightness.
+  --si-bg0: #161a26;                     // outermost — deep navy
+  --si-bg0: oklch(0.17 0.040 245);
+  --si-bg1: #1c2132;                     // sidebar / rails
+  --si-bg1: oklch(0.21 0.042 245);
+  --si-bg2: #232a40;                     // content canvas
+  --si-bg2: oklch(0.25 0.044 245);
+  --si-bg3: #2d354e;                     // cards / panels
+  --si-bg3: oklch(0.30 0.046 245);
+  --si-bg4: #38415e;                     // hover surface
+  --si-bg4: oklch(0.36 0.048 245);
+  --si-bg5: #454f70;                     // active surface
+  --si-bg5: oklch(0.43 0.050 245);
+  --si-bg6: #566187;                     // lifted element
+  --si-bg6: oklch(0.52 0.050 245);
 
-  // ─── Lines ────────────────────────────────────────────
-  --si-line:        rgba(255, 255, 255, 0.08);
-  --si-line:        oklch(1 0 0 / 0.08);
-  --si-line-strong: rgba(255, 255, 255, 0.15);
-  --si-line-strong: oklch(1 0 0 / 0.15);
-  --si-line-bold:   rgba(255, 255, 255, 0.24);
-  --si-line-bold:   oklch(1 0 0 / 0.24);
+  // ─── Lines — tinted with the base hue so they don't go gray ──────────
+  --si-line:        rgba(172, 184, 216, 0.12);
+  --si-line:        oklch(0.80 0.04 245 / 0.12);
+  --si-line-strong: rgba(183, 196, 228, 0.20);
+  --si-line-strong: oklch(0.85 0.05 245 / 0.20);
+  --si-line-bold:   rgba(196, 209, 239, 0.30);
+  --si-line-bold:   oklch(0.90 0.06 245 / 0.30);
 
   // Alias — referenced by form controls, dialogs, context menus, inspector.
   // Maps to the mid-strength line so borders read as quiet structure.
   --si-border: var(--si-line-strong);
 
-  // ─── Text — cool-white with a whisper of the base hue ─
-  --si-fg:       #f7f5fb;
-  --si-fg:       oklch(0.98 0.005 270);
-  --si-fg-muted: #bbb6c6;
-  --si-fg-muted: oklch(0.78 0.016 270);
-  --si-fg-faint: #8b8698;
-  --si-fg-faint: oklch(0.60 0.018 270);
-  --si-fg-ghost: #5a5767;
-  --si-fg-ghost: oklch(0.42 0.016 270);
+  // ─── Text — cool-white with a breath of navy ─────────────────────────
+  --si-fg:       #f6f7fb;
+  --si-fg:       oklch(0.98 0.010 240);
+  --si-fg-muted: #b8bccb;
+  --si-fg-muted: oklch(0.78 0.028 240);
+  --si-fg-faint: #878ca0;
+  --si-fg-faint: oklch(0.60 0.035 240);
+  --si-fg-ghost: #575d74;
+  --si-fg-ghost: oklch(0.42 0.040 245);
 
-  // ─── Accent (coral-peach — primary actions, focus) ────
-  --si-accent:       #f0925f;
-  --si-accent:       oklch(0.76 0.17 38);
-  --si-accent-soft:  rgba(240, 146, 95, 0.15);
-  --si-accent-soft:  oklch(0.76 0.17 38 / 0.15);
-  --si-accent-line:  rgba(240, 146, 95, 0.42);
-  --si-accent-line:  oklch(0.76 0.17 38 / 0.42);
-  --si-accent-deep:  #7a3e1e;
-  --si-accent-deep:  oklch(0.44 0.13 38);
-  --si-accent-fg:    #1a0f08;
-  --si-accent-fg:    oklch(0.16 0.04 38);
-  --si-accent-hover: #ffa572;
-  --si-accent-hover: oklch(0.82 0.18 42);
+  // ─── Accent — electric cyan-teal, slick dashboard energy ─────────────
+  // hue 200 sits beautifully against navy.
+  --si-accent:       #5fc9d7;
+  --si-accent:       oklch(0.78 0.14 200);
+  --si-accent-soft:  rgba(95, 201, 215, 0.16);
+  --si-accent-soft:  oklch(0.78 0.14 200 / 0.16);
+  --si-accent-line:  rgba(95, 201, 215, 0.45);
+  --si-accent-line:  oklch(0.78 0.14 200 / 0.45);
+  --si-accent-deep:  #1e6b75;
+  --si-accent-deep:  oklch(0.44 0.12 200);
+  --si-accent-fg:    #081018;
+  --si-accent-fg:    oklch(0.16 0.04 220);
+  --si-accent-hover: #7fdbe6;
+  --si-accent-hover: oklch(0.85 0.15 200);
 
-  // ─── Nav accent (vivid indigo — selected items) ───────
-  --si-nav:      #9a96f5;
-  --si-nav:      oklch(0.76 0.17 262);
-  --si-nav-soft: rgba(154, 150, 245, 0.20);
-  --si-nav-soft: oklch(0.76 0.17 262 / 0.20);
-  --si-nav-line: rgba(154, 150, 245, 0.45);
-  --si-nav-line: oklch(0.76 0.17 262 / 0.45);
+  // ─── Nav — soft periwinkle, contrasts navy without fighting cyan ─────
+  --si-nav:      #a49cf2;
+  --si-nav:      oklch(0.78 0.15 275);
+  --si-nav-soft: rgba(164, 156, 242, 0.20);
+  --si-nav-soft: oklch(0.78 0.15 275 / 0.20);
+  --si-nav-line: rgba(164, 156, 242, 0.45);
+  --si-nav-line: oklch(0.78 0.15 275 / 0.45);
 
-  // ─── Title bar — flat, slightly lifted indigo-violet ──
-  --si-chrome-bg:      #3d3662;
-  --si-chrome-bg:      oklch(0.32 0.085 268);
-  --si-chrome-bg-dark: #3d3662;
-  --si-chrome-bg-dark: oklch(0.32 0.085 268);
+  // ─── Title bar — one step deeper than bg0, stronger chroma ───────────
+  --si-chrome-bg:      #1f2844;
+  --si-chrome-bg:      oklch(0.22 0.065 245);
+  --si-chrome-bg-dark: #1f2844;
+  --si-chrome-bg-dark: oklch(0.22 0.065 245);
 
-  // ─── Semantic palette ─────────────────────────────────
+  // ─── Semantic palette ────────────────────────────────────────────────
   --si-green:      #6bd199;
   --si-green:      oklch(0.80 0.16 155);
-  --si-green-soft: rgba(107, 209, 153, 0.15);
-  --si-green-soft: oklch(0.80 0.16 155 / 0.15);
+  --si-green-soft: rgba(107, 209, 153, 0.16);
+  --si-green-soft: oklch(0.80 0.16 155 / 0.16);
 
   --si-amber:      #f2c566;
   --si-amber:      oklch(0.85 0.14 80);
-  --si-amber-soft: rgba(242, 197, 102, 0.15);
-  --si-amber-soft: oklch(0.85 0.14 80 / 0.15);
+  --si-amber-soft: rgba(242, 197, 102, 0.16);
+  --si-amber-soft: oklch(0.85 0.14 80 / 0.16);
 
   --si-rose:       #ef7c70;
   --si-rose:       oklch(0.74 0.19 18);
-  --si-rose-soft:  rgba(239, 124, 112, 0.15);
-  --si-rose-soft:  oklch(0.74 0.19 18 / 0.15);
+  --si-rose-soft:  rgba(239, 124, 112, 0.16);
+  --si-rose-soft:  oklch(0.74 0.19 18 / 0.16);
 
   --si-violet:      #c68ae6;
   --si-violet:      oklch(0.78 0.17 305);
-  --si-violet-soft: rgba(198, 138, 230, 0.15);
-  --si-violet-soft: oklch(0.78 0.17 305 / 0.15);
+  --si-violet-soft: rgba(198, 138, 230, 0.16);
+  --si-violet-soft: oklch(0.78 0.17 305 / 0.16);
 
-  --si-cyan:       #7fc9d5;
-  --si-cyan:       oklch(0.82 0.13 210);
-  --si-cyan-soft:  rgba(127, 201, 213, 0.15);
-  --si-cyan-soft:  oklch(0.82 0.13 210 / 0.15);
+  --si-cyan:       #86d4e2;
+  --si-cyan:       oklch(0.84 0.13 210);
+  --si-cyan-soft:  rgba(134, 212, 226, 0.16);
+  --si-cyan-soft:  oklch(0.84 0.13 210 / 0.16);
 
-  // ─── Type system — unified modern grotesk ─────────────
+  // ─── Type system — unified modern grotesk ────────────────────────────
   --si-sans:    'Inter Tight Variable', 'Geist Variable', system-ui, -apple-system, sans-serif;
   --si-display: 'Inter Tight Variable', 'Geist Variable', system-ui, sans-serif;
   --si-serif:   'Inter Tight Variable', 'Geist Variable', system-ui, sans-serif;
   --si-mono:    'JetBrains Mono Variable', ui-monospace, monospace;
 
-  // ─── Radii ────────────────────────────────────────────
+  // ─── Radii ───────────────────────────────────────────────────────────
   --si-r1: 5px;
   --si-r2: 8px;
   --si-r3: 12px;
   --si-r4: 18px;
 
-  // ─── Shadows — cool-tinted to match the base hue ──────
-  --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --si-shadow1: 0 1px 2px oklch(0.08 0.02 270 / 0.40);
-  --si-shadow2: 0 6px 20px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --si-shadow2: 0 6px 20px oklch(0.08 0.02 270 / 0.45), 0 1px 3px oklch(0.08 0.02 270 / 0.30);
-  --si-shadow3: 0 20px 56px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
-  --si-shadow3: 0 20px 56px oklch(0.08 0.02 270 / 0.55), 0 6px 18px oklch(0.08 0.02 270 / 0.35);
+  // ─── Shadows — deep navy, not neutral black, stays in-palette ────────
+  --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --si-shadow1: 0 1px 2px oklch(0.10 0.05 245 / 0.45);
+  --si-shadow2: 0 6px 22px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.32);
+  --si-shadow2: 0 6px 22px oklch(0.10 0.05 245 / 0.50), 0 1px 3px oklch(0.10 0.05 245 / 0.32);
+  --si-shadow3: 0 20px 60px rgba(0, 0, 0, 0.6), 0 6px 18px rgba(0, 0, 0, 0.38);
+  --si-shadow3: 0 20px 60px oklch(0.10 0.05 245 / 0.60), 0 6px 18px oklch(0.10 0.05 245 / 0.38);
 
-  // ─── File-type color coding (FILE_COLORS in tokens-v4.jsx) ─────
+  // ─── File-type color coding (FILE_COLORS in tokens-v5.jsx) ───────────
   --fc-image-bg:   rgba(198, 138, 230, 0.20);
   --fc-image-bg:   oklch(0.78 0.17 305 / 0.20);
   --fc-image-fg:   #d6a8ef;
@@ -128,9 +131,9 @@
   --fc-video-fg:   #f39585;
   --fc-video-fg:   oklch(0.84 0.16 18);
 
-  --fc-doc-bg:     rgba(127, 201, 213, 0.20);
-  --fc-doc-bg:     oklch(0.82 0.13 210 / 0.20);
-  --fc-doc-fg:     #b0dfe7;
+  --fc-doc-bg:     rgba(134, 212, 226, 0.20);
+  --fc-doc-bg:     oklch(0.84 0.13 210 / 0.20);
+  --fc-doc-fg:     #b8e1ea;
   --fc-doc-fg:     oklch(0.90 0.10 210);
 
   --fc-sheet-bg:   rgba(107, 209, 153, 0.20);
@@ -148,10 +151,10 @@
   --fc-deck-fg:    #f6d68a;
   --fc-deck-fg:    oklch(0.92 0.11 80);
 
-  --fc-folder-bg:  rgba(154, 150, 245, 0.20);
-  --fc-folder-bg:  oklch(0.76 0.17 262 / 0.20);
-  --fc-folder-fg:  #b8b3f7;
-  --fc-folder-fg:  oklch(0.86 0.14 262);
+  --fc-folder-bg:  rgba(164, 156, 242, 0.20);
+  --fc-folder-bg:  oklch(0.78 0.15 275 / 0.20);
+  --fc-folder-fg:  #bcb6f6;
+  --fc-folder-fg:  oklch(0.86 0.13 275);
 
   --fc-code-bg:    rgba(122, 199, 193, 0.20);
   --fc-code-bg:    oklch(0.78 0.12 185 / 0.20);
@@ -170,6 +173,6 @@
 
   --fc-default-bg: rgba(255, 255, 255, 0.07);
   --fc-default-bg: oklch(1 0 0 / 0.07);
-  --fc-default-fg: #bbb6c6;
-  --fc-default-fg: oklch(0.78 0.016 270);
+  --fc-default-fg: #b8bccb;
+  --fc-default-fg: oklch(0.78 0.028 240);
 }
