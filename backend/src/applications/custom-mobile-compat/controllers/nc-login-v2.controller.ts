@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req, Res } from '@nestjs/common'
+import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
@@ -49,14 +49,29 @@ export class NcLoginV2Controller {
   //
   // Mounted at both /index.php/login/v2/poll (what docs advertise) and
   // /login/v2/poll (what some iOS/Android versions hit instead).
+  //
+  // The token can arrive in any of three forms — Nextcloud's own clients
+  // disagree across platforms and versions:
+  //   - form-urlencoded body  (`token=…`)              — Android, NC desktop
+  //   - JSON body              (`{"token":"…"}`)        — some iOS builds
+  //   - query string           (`?token=…`)             — NC iOS ≥ 33.x
+  // We accept whichever the client sends.
   @Post(NC_ROUTE.LOGIN_V2_POLL.slice(1))
-  async pollCanonical(@Body() body: PollBody, @Res({ passthrough: true }) res: FastifyReply): Promise<PollResult> {
-    return this.doPoll(body, res)
+  async pollCanonical(
+    @Body() body: PollBody,
+    @Query('token') queryToken: string | undefined,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<PollResult> {
+    return this.doPoll(body, queryToken, res)
   }
 
   @Post(NC_ROUTE.LOGIN_V2_POLL_ALT.slice(1))
-  async pollAlt(@Body() body: PollBody, @Res({ passthrough: true }) res: FastifyReply): Promise<PollResult> {
-    return this.doPoll(body, res)
+  async pollAlt(
+    @Body() body: PollBody,
+    @Query('token') queryToken: string | undefined,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<PollResult> {
+    return this.doPoll(body, queryToken, res)
   }
 
   // Step 2a — browser GETs the login page.
@@ -175,8 +190,8 @@ export class NcLoginV2Controller {
     })
   }
 
-  private async doPoll(body: PollBody, res: FastifyReply): Promise<PollResult> {
-    const token = readPollToken(body)
+  private async doPoll(body: PollBody, queryToken: string | undefined, res: FastifyReply): Promise<PollResult> {
+    const token = readPollToken(body) ?? (queryToken && queryToken.length > 0 ? queryToken : null)
     if (!token) {
       throw new HttpException('missing token', HttpStatus.BAD_REQUEST)
     }
