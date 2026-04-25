@@ -7,7 +7,7 @@ import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
-import { buildOcId } from '../utils/nc-oc-id'
+import { buildOcId, ncFileId } from '../utils/nc-oc-id'
 import { toNcPermissions, type NcPermissionsMode } from '../utils/nc-permissions'
 import { ncHasPreview } from '../utils/nc-preview-predicate'
 
@@ -92,13 +92,17 @@ export class NcPropfindService {
     const contentLength = f.isDir ? undefined : String(f.size)
     const ocSize = String(f.isDir ? 0 : f.size)
 
+    // Stable positive id even when f.id is the negative-inode placeholder
+    // Sync-in stamps onto filesystem-only files. NC iOS rejects 0/negative
+    // values as cache keys, so we normalize via ncFileId().
+    const positiveId = ncFileId(f.id)
     const props: Record<string, unknown> = {
       'd:displayname': f.displayname,
       'd:getlastmodified': f.getlastmodified,
-      'd:getetag': f.getetag !== undefined ? f.getetag : `"${String(f.id)}-${String(f.mtime)}"`,
+      'd:getetag': f.getetag !== undefined ? f.getetag : `"${String(positiveId)}-${String(f.mtime)}"`,
       'd:resourcetype': resourcetype,
       'oc:id': buildOcId(f.id),
-      'oc:fileid': String(f.id ?? 0),
+      'oc:fileid': String(positiveId),
       'oc:permissions': letters,
       'ocs:share-permissions': shareMask,
       'oc:size': ocSize,
