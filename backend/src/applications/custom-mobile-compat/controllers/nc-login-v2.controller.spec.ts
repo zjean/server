@@ -138,4 +138,47 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     // Importantly: do NOT redirect to the OIDC login URL for unknown tokens.
     expect(res._redirected).toBeUndefined()
   })
+
+  describe('poll handlers accept the token from query string', () => {
+    // The Nextcloud iOS client (>= 33.x) sends the poll request as
+    //   POST /index.php/login/v2/poll?token=...
+    // with an empty body. The original implementation only parsed the body,
+    // so iOS clients always saw a 400 "missing token". Both `pollCanonical`
+    // and `pollAlt` (the path some clients hit) must accept the token from
+    // either source.
+    const creds = { server: 'https://x.test', loginName: 'alice', appPassword: 'APPPWD' }
+
+    it('pollCanonical resolves credentials when token comes only from query', async () => {
+      const flow = flows.initiate()
+      flows.completeWithCredentials(flow.loginToken, creds)
+      const res = fakeRes()
+      const out = await controller.pollCanonical(undefined, flow.pollToken, res)
+      expect(out).toEqual(creds)
+      expect(res._status).toBe(HttpStatus.OK)
+    })
+
+    it('pollAlt resolves credentials when token comes only from query', async () => {
+      const flow = flows.initiate()
+      flows.completeWithCredentials(flow.loginToken, creds)
+      const res = fakeRes()
+      const out = await controller.pollAlt(undefined, flow.pollToken, res)
+      expect(out).toEqual(creds)
+    })
+
+    it('pollCanonical still works with token in form-urlencoded body (existing clients)', async () => {
+      const flow = flows.initiate()
+      flows.completeWithCredentials(flow.loginToken, creds)
+      const res = fakeRes()
+      const out = await controller.pollCanonical(`token=${flow.pollToken}` as never, undefined, res)
+      expect(out).toEqual(creds)
+    })
+
+    it('returns 400 when token is missing from both body and query', async () => {
+      const res = fakeRes()
+      await expect(controller.pollCanonical(undefined, undefined, res)).rejects.toMatchObject({
+        message: 'missing token',
+        status: HttpStatus.BAD_REQUEST
+      })
+    })
+  })
 })
