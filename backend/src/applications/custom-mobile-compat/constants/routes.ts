@@ -46,5 +46,7 @@ export function ctrlPath(route: string): string {
   return route.startsWith('/') ? route.slice(1) : route
 }
 
-// Basic-Auth realm advertised by the guard and the DAV probe.
-export const NC_AUTH_REALM = 'Nextcloud'
+// Basic-Auth realm advertised by the guard and the DAV probe. Shown by iOS in
+// the system credential prompt ("Sign in to <realm>") and stored alongside the
+// password in some keychain pickers — keep it on-brand.
+export const NC_AUTH_REALM = 'Sync-in'
