@@ -19,8 +19,8 @@ describe(NcMobileOidcController.name, () => {
   let mobileOidc: { buildAuthorizationUrl: jest.Mock; exchangeAndResolveUser: jest.Mock }
   let usersManager: { generateAppPassword: jest.Mock }
 
-  function fakeReq(): FastifyRequest {
-    return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' } } as unknown as FastifyRequest
+  function fakeReq(query?: Record<string, string>): FastifyRequest {
+    return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }, query: query ?? {} } as unknown as FastifyRequest
   }
   function fakeRes() {
     const res: Partial<FastifyReply> & { _status?: number; _body?: string; _redirected?: string } = {
@@ -191,6 +191,33 @@ describe(NcMobileOidcController.name, () => {
       expect(res._status).toBe(HttpStatus.UNAUTHORIZED)
       expect(html).toContain('Sign-in failed')
       expect(usersManager.generateAppPassword).not.toHaveBeenCalled()
+    })
+
+    it('preserves all IdP query params (esp. iss per RFC 9207) on the callback URL passed to openid-client', async () => {
+      // Real-world failure: Authelia returns `iss` per RFC 9207 and openid-client
+      // validates it. If we drop `iss` when reconstructing the callback URL,
+      // openid-client throws OAuth INVALID_RESPONSE during code exchange. This
+      // test pins the contract that all IdP-provided query params are forwarded
+      // on the URL we hand to `exchangeAndResolveUser`.
+      const flow = flows.initiate()
+      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
+      usersManager.generateAppPassword.mockResolvedValueOnce({ password: 'APPPWD' })
+
+      const req = fakeReq({
+        code: 'CODE',
+        state: flow.loginToken,
+        iss: 'https://authelia.example.test',
+        scope: 'openid email profile groups'
+      })
+      const res = fakeRes()
+      await controller.callback('CODE', flow.loginToken, undefined, undefined, req, res)
+
+      const arg = mobileOidc.exchangeAndResolveUser.mock.calls[0][0]
+      expect(arg.callbackUrl.searchParams.get('code')).toBe('CODE')
+      expect(arg.callbackUrl.searchParams.get('state')).toBe(flow.loginToken)
+      expect(arg.callbackUrl.searchParams.get('iss')).toBe('https://authelia.example.test')
+      expect(arg.callbackUrl.searchParams.get('scope')).toBe('openid email profile groups')
     })
   })
 })
