@@ -6,6 +6,7 @@ import { getProps } from '../../files/utils/files'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
+import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
@@ -271,22 +272,33 @@ export class NcDavController {
   }
 
   // Inserts (or no-ops on existing) the `files` DB row for a just-uploaded
-  // file in the user's personal space, so subsequent PROPFINDs return a
-  // stable positive `oc:fileid` instead of the inode-derived placeholder
-  // Sync-in stamps onto FS-only files. Public for direct unit testing.
+  // file so subsequent PROPFINDs return a stable positive `oc:fileid` instead
+  // of the inode-derived placeholder Sync-in stamps onto FS-only files.
+  // Public for direct unit testing.
   //
-  // Out of scope (covered by the existing browse-time DB-row creation in
-  // `parseRootFiles` / share / lock / sync paths):
-  // - Shared spaces (different `getOrCreateSpaceFile` signature; needs the
-  //   space root's `dbFile` skeleton).
-  // - Trash repository (uploads don't go there).
+  // Two paths matching Sync-in's two `files`-row insert helpers:
+  //   - personal space   → spacesQueries.getOrCreateUserFile(userId, props)
+  //   - any other space  → spacesQueries.getOrCreateSpaceFile(0, props, dbFileFromSpace(userId, space))
+  //
+  // Trash repository is skipped — uploads don't go there.
   async ensureDbRowForUpload(req: FastifyDAVRequest): Promise<void> {
     const space = req.space
     const user = req.user as UserModel | undefined
-    if (!user || !space?.inPersonalSpace || !space.realPath || !space.relativeUrl) return
+    if (!user || !space?.realPath || !space.relativeUrl) return
+    if (space.inTrashRepository) return
     const fileProps = await getProps(space.realPath, space.relativeUrl, false)
     if (fileProps.isDir) return
-    await this.spacesQueries.getOrCreateUserFile(user.id, fileProps)
+
+    if (space.inPersonalSpace) {
+      await this.spacesQueries.getOrCreateUserFile(user.id, fileProps)
+      return
+    }
+    // Shared / external / standalone-space file → use the space-aware insert.
+    // `dbFileFromSpace` populates ownerId / spaceId / shareExternalId from the
+    // SpaceEnv; `fileProps` (path/name/size/...) overrides on merge inside
+    // `getOrCreateSpaceFile`.
+    const dbFile = dbFileFromSpace(user.id, space)
+    await this.spacesQueries.getOrCreateSpaceFile(0, fileProps, dbFile)
   }
 
   private redirectLegacy(req: FastifyDAVRequest, res: FastifyReply, rest: string): void {
