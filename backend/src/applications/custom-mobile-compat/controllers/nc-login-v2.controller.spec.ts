@@ -33,7 +33,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
   let flows: NcLoginFlowService
 
   function fakeRes() {
-    const res: Partial<FastifyReply> & { _status?: number; _redirected?: string; _headers: Record<string, string> } = {
+    const res: Partial<FastifyReply> & { _status?: number; _redirected?: string; _body?: unknown; _headers: Record<string, string> } = {
       _headers: {},
       header: jest.fn(function (this: FastifyReply, name: string, value: string) {
         ;(this as never as { _headers: Record<string, string> })._headers[name] = value
@@ -41,6 +41,10 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       }) as never,
       status: jest.fn(function (this: FastifyReply, n: number) {
         ;(this as never as { _status: number })._status = n
+        return this
+      }) as never,
+      send: jest.fn(function (this: FastifyReply, body?: unknown) {
+        ;(this as never as { _body: unknown })._body = body
         return this
       }) as never,
       redirect: jest.fn(function (this: FastifyReply, url: string, code?: number) {
@@ -51,7 +55,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
         return this
       }) as never
     }
-    return res as FastifyReply & { _status?: number; _redirected?: string; _headers: Record<string, string> }
+    return res as FastifyReply & { _status?: number; _redirected?: string; _body?: unknown; _headers: Record<string, string> }
   }
 
   beforeAll(async () => {
@@ -139,41 +143,72 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     expect(res._redirected).toBeUndefined()
   })
 
-  describe('poll handlers accept the token from query string', () => {
+  describe('poll handlers — token sources + response shape', () => {
     // The Nextcloud iOS client (>= 33.x) sends the poll request as
     //   POST /index.php/login/v2/poll?token=...
     // with an empty body. The original implementation only parsed the body,
     // so iOS clients always saw a 400 "missing token". Both `pollCanonical`
     // and `pollAlt` (the path some clients hit) must accept the token from
     // either source.
+    //
+    // Additionally: real Nextcloud server returns 404 with an empty/`[]`
+    // JSON body while pending. NC iOS rejects 404 + Nest's default error
+    // envelope (`{statusCode,message,error}`) as "invalid response". We
+    // mirror real-NC's shape: `[]` body on 404, the credentials object on
+    // 200.
     const creds = { server: 'https://x.test', loginName: 'alice', appPassword: 'APPPWD' }
 
-    it('pollCanonical resolves credentials when token comes only from query', async () => {
+    it('pollCanonical → 200 + creds JSON when token comes only from query', async () => {
       const flow = flows.initiate()
       flows.completeWithCredentials(flow.loginToken, creds)
       const res = fakeRes()
-      const out = await controller.pollCanonical(undefined, flow.pollToken, res)
-      expect(out).toEqual(creds)
+      await controller.pollCanonical(undefined, flow.pollToken, res)
       expect(res._status).toBe(HttpStatus.OK)
+      expect(res._body).toEqual(creds)
     })
 
-    it('pollAlt resolves credentials when token comes only from query', async () => {
+    it('pollAlt → 200 + creds JSON when token comes only from query', async () => {
       const flow = flows.initiate()
       flows.completeWithCredentials(flow.loginToken, creds)
       const res = fakeRes()
-      const out = await controller.pollAlt(undefined, flow.pollToken, res)
-      expect(out).toEqual(creds)
+      await controller.pollAlt(undefined, flow.pollToken, res)
+      expect(res._status).toBe(HttpStatus.OK)
+      expect(res._body).toEqual(creds)
     })
 
-    it('pollCanonical still works with token in form-urlencoded body (existing clients)', async () => {
+    it('pollCanonical still accepts token in form-urlencoded body (existing clients)', async () => {
       const flow = flows.initiate()
       flows.completeWithCredentials(flow.loginToken, creds)
       const res = fakeRes()
-      const out = await controller.pollCanonical(`token=${flow.pollToken}` as never, undefined, res)
-      expect(out).toEqual(creds)
+      await controller.pollCanonical(`token=${flow.pollToken}` as never, undefined, res)
+      expect(res._status).toBe(HttpStatus.OK)
+      expect(res._body).toEqual(creds)
     })
 
-    it('returns 400 when token is missing from both body and query', async () => {
+    it('pollCanonical → 404 + `[]` body when flow is still pending', async () => {
+      const flow = flows.initiate()
+      // Flow not completed — still 'pending'.
+      const res = fakeRes()
+      await controller.pollCanonical(undefined, flow.pollToken, res)
+      expect(res._status).toBe(HttpStatus.NOT_FOUND)
+      expect(res._body).toBe('[]')
+      // Critically: NOT the Nest exception envelope
+      expect(res._body).not.toEqual(expect.objectContaining({ statusCode: HttpStatus.NOT_FOUND }))
+    })
+
+    it('pollCanonical → 404 + `[]` body on second poll after consumption', async () => {
+      const flow = flows.initiate()
+      flows.completeWithCredentials(flow.loginToken, creds)
+      // First poll consumes
+      await controller.pollCanonical(undefined, flow.pollToken, fakeRes())
+      // Second poll: still 404, still `[]`
+      const res = fakeRes()
+      await controller.pollCanonical(undefined, flow.pollToken, res)
+      expect(res._status).toBe(HttpStatus.NOT_FOUND)
+      expect(res._body).toBe('[]')
+    })
+
+    it('400 when token is missing from both body and query', async () => {
       const res = fakeRes()
       await expect(controller.pollCanonical(undefined, undefined, res)).rejects.toMatchObject({
         message: 'missing token',
