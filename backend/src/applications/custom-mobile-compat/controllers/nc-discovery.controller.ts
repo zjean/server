@@ -19,8 +19,10 @@ export class NcDiscoveryController {
       installed: true,
       maintenance: false,
       needsDbUpgrade: false,
-      version: '29.0.0.10',
-      versionstring: '29.0.0-sync-in',
+      // Advertise as NC 33.x so modern mobile clients (iOS 33.x) accept us as
+      // a current peer. Major matters most; the patch (.0) is informational.
+      version: '33.0.0.0',
+      versionstring: '33.0.0-sync-in',
       edition: '',
       productname: 'Sync-in',
       extendedSupport: false
