@@ -1,8 +1,9 @@
 // Static capabilities payload returned from /ocs/v{1,2}.php/cloud/capabilities.
 // Values are tuned to tell stock NC mobile clients which features are available.
 //
-// - version advertised as 29.0.0 with an -sync-in edition suffix; clients gate
-//   some behavior on a server major >= 26 (login-v2 required, dav chunking v2).
+// - version advertised as 33.0.0 with an -sync-in edition suffix to match the
+//   modern NC mobile clients (iOS 33.x). Clients gate some behavior on a
+//   server major >= 26 (login-v2 required, dav chunking v2); 33 is fine.
 // - files_sharing.api_enabled: false hides the Share button in the mobile UI —
 //   we do not ship OCS sharing in this MVP.
 // - dav.chunking: "1.0" is the protocol mobile clients use; v2 is desktop-only.
@@ -22,10 +23,10 @@ export interface NcCapabilitiesPayload {
 export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
   return {
     version: {
-      major: 29,
+      major: 33,
       minor: 0,
       micro: 0,
-      string: '29.0.0-sync-in',
+      string: '33.0.0-sync-in',
       edition: '',
       extendedSupport: false
     },
@@ -91,9 +92,9 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
       // NC iOS reads `provisioning_api.version` to confirm `/ocs/v2.php/cloud/user`
       // and `/cloud/users/<me>` are valid endpoints. Without this block, some
       // iOS builds bail with a generic error after sign-in. Values mirror what
-      // upstream NC 29.x ships.
+      // upstream NC 33.x ships.
       provisioning_api: {
-        version: '1.21.0',
+        version: '1.22.0',
         AccountPropertyScopesVersion: 2,
         AccountPropertyScopesFederatedEnabled: true,
         AccountPropertyScopesPublishedEnabled: true

@@ -3,16 +3,16 @@ import { ncCapabilities } from './capabilities'
 describe('ncCapabilities', () => {
   const caps = ncCapabilities('https://sync-in.example.test')
 
-  it('advertises NC v29 server identity', () => {
-    expect(caps.version.major).toBe(29)
-    expect(caps.version.string).toBe('29.0.0-sync-in')
+  it('advertises NC v33 server identity', () => {
+    expect(caps.version.major).toBe(33)
+    expect(caps.version.string).toBe('33.0.0-sync-in')
   })
 
   describe('provisioning_api block', () => {
     // NC iOS reads `capabilities.provisioning_api.version` to gate the
     // /ocs/v2.php/cloud/user* endpoints. Without it, some iOS builds bail with
     // a generic "Fout" alert immediately after sign-in completes.
-    it('exposes a version string compatible with NC 29.x', () => {
+    it('exposes a version string compatible with NC 33.x', () => {
       const block = (caps.capabilities as Record<string, Record<string, unknown>>).provisioning_api
       expect(block).toBeDefined()
       expect(block.version).toEqual(expect.any(String))
