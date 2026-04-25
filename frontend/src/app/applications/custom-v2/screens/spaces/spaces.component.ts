@@ -9,7 +9,6 @@ import { SpaceModel } from '../../../spaces/models/space.model'
 import { ButtonComponent } from '../../components/button.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
-import { PillComponent } from '../../components/pill.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { CreateSpaceModalComponent } from './create-space-modal.component'
@@ -23,7 +22,6 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
     IconV2Component,
     ButtonComponent,
     IconButtonComponent,
-    PillComponent,
     ToBytesPipe,
     TimeAgoPipe,
     CreateSpaceModalComponent,
