@@ -8,7 +8,7 @@ import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
-import { escapeHtml, renderHtml } from '../utils/nc-html'
+import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 
 // NC Login Flow v2 — the 3-step authentication dance used by Nextcloud's
 // mobile apps.
@@ -39,7 +39,10 @@ export class NcLoginV2Controller {
     return {
       poll: {
         token: flow.pollToken,
-        endpoint: `${base}${NC_ROUTE.LOGIN_V2_POLL}`
+        // Advertise the canonical (no `/index.php/` prefix) form so our JSON
+        // byte-matches upstream. Both routes are mounted; this is purely
+        // about which one we hand the client.
+        endpoint: `${base}${NC_ROUTE.LOGIN_V2_POLL_ALT}`
       },
       login: `${base}/login/v2/flow/${flow.loginToken}`
     }
@@ -169,17 +172,16 @@ export class NcLoginV2Controller {
       expiration: null
     } as never)
 
-    this.flows.completeWithCredentials(loginToken, {
+    const creds = {
       server: this.response.baseUrl(req),
       loginName: authed.login,
       appPassword: appPwd.password
-    })
+    }
+    this.flows.completeWithCredentials(loginToken, creds)
 
     res.header('Content-Type', 'text/html; charset=utf-8')
-    return renderHtml({
-      title: 'Signed in',
-      body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
-    })
+    const success = renderNcSuccessBody(creds)
+    return renderHtml({ title: 'Signed in', body: success.body, headExtras: success.headExtras })
   }
 
   private async doPoll(body: PollBody, queryToken: string | undefined, res: FastifyReply): Promise<void> {

@@ -125,7 +125,7 @@ describe(NcMobileOidcService.name, () => {
       )
     })
 
-    it('returns null when no Sync-in user matches the OIDC email', async () => {
+    it('returns null when no Sync-in user matches the OIDC email or login', async () => {
       authProviderOIDC.getConfig.mockResolvedValueOnce(makeConfig(true))
       mockedAuthorizationCodeGrant.mockResolvedValueOnce({
         access_token: 'AT',
@@ -135,7 +135,8 @@ describe(NcMobileOidcService.name, () => {
         sub: 'idp-sub-999',
         email: 'ghost@example.test'
       })
-      usersManager.findUser.mockResolvedValueOnce(null)
+      // Both email lookup and login lookup miss → null
+      usersManager.findUser.mockResolvedValue(null)
 
       const out = await service.exchangeAndResolveUser({
         callbackUrl: new URL('https://api.example.test/custom-mobile/oidc/callback?code=CODE&state=FLOWTOKEN'),
@@ -144,6 +145,82 @@ describe(NcMobileOidcService.name, () => {
         nonce: 'NONCE'
       })
       expect(out).toBeNull()
+    })
+
+    it('falls back to preferred_username lookup when email lookup misses', async () => {
+      // Real-world case: user has Sync-in `email = janwiebe@janwie.be` and
+      // `login = janwiebe`, but Authelia returns a different email (`other@x`)
+      // because the Authelia profile carries a different address. The login
+      // (preferred_username) still matches.
+      authProviderOIDC.getConfig.mockResolvedValueOnce(makeConfig(true))
+      mockedAuthorizationCodeGrant.mockResolvedValueOnce({
+        access_token: 'AT',
+        claims: () => ({ sub: 'idp-sub' })
+      })
+      mockedFetchUserInfo.mockResolvedValueOnce({
+        sub: 'idp-sub',
+        email: 'other@elsewhere.test',
+        preferred_username: 'janwiebe'
+      })
+      const userObj = { id: 7, login: 'janwiebe', email: 'janwiebe@janwie.be' }
+      usersManager.findUser.mockResolvedValueOnce(null) // email lookup → miss
+      usersManager.findUser.mockResolvedValueOnce(userObj) // login lookup → hit
+
+      const out = await service.exchangeAndResolveUser({
+        callbackUrl: new URL('https://api.example.test/cb?code=C&state=S'),
+        expectedState: 'S',
+        codeVerifier: 'CV',
+        nonce: 'NONCE'
+      })
+      expect(out).toBe(userObj)
+      expect(usersManager.findUser).toHaveBeenNthCalledWith(1, 'other@elsewhere.test', false)
+      expect(usersManager.findUser).toHaveBeenNthCalledWith(2, 'janwiebe', false)
+    })
+
+    it('lowercases email before lookup (defensive against case-mismatched IdP claims)', async () => {
+      authProviderOIDC.getConfig.mockResolvedValueOnce(makeConfig(true))
+      mockedAuthorizationCodeGrant.mockResolvedValueOnce({
+        access_token: 'AT',
+        claims: () => ({ sub: 'idp-sub' })
+      })
+      mockedFetchUserInfo.mockResolvedValueOnce({
+        sub: 'idp-sub',
+        email: 'Alice@Example.Test',
+        preferred_username: 'alice'
+      })
+      usersManager.findUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
+
+      await service.exchangeAndResolveUser({
+        callbackUrl: new URL('https://api.example.test/cb?code=C&state=S'),
+        expectedState: 'S',
+        codeVerifier: 'CV',
+        nonce: 'NONCE'
+      })
+      expect(usersManager.findUser).toHaveBeenCalledWith('alice@example.test', false)
+    })
+
+    it('still works when IdP omits the email claim entirely (login fallback)', async () => {
+      authProviderOIDC.getConfig.mockResolvedValueOnce(makeConfig(true))
+      mockedAuthorizationCodeGrant.mockResolvedValueOnce({
+        access_token: 'AT',
+        claims: () => ({ sub: 'idp-sub' })
+      })
+      mockedFetchUserInfo.mockResolvedValueOnce({
+        sub: 'idp-sub',
+        preferred_username: 'janwiebe'
+        // no email claim — Authelia profile has no email set
+      })
+      const userObj = { id: 7, login: 'janwiebe' }
+      usersManager.findUser.mockResolvedValueOnce(userObj)
+
+      const out = await service.exchangeAndResolveUser({
+        callbackUrl: new URL('https://api.example.test/cb?code=C&state=S'),
+        expectedState: 'S',
+        codeVerifier: 'CV',
+        nonce: 'NONCE'
+      })
+      expect(out).toBe(userObj)
+      expect(usersManager.findUser).toHaveBeenCalledWith('janwiebe', false)
     })
 
     it('rejects ID token with no sub', async () => {

@@ -72,16 +72,29 @@ export class NcMobileOidcService {
     const subject = oidcConfig.security.skipSubjectCheck ? skipSubjectCheck : claims.sub
     const userInfo = await fetchUserInfo(config, tokens.access_token, subject)
 
-    const email = userInfo.email?.trim()
-    if (!email) {
-      throw new HttpException('No email address in OIDC profile', HttpStatus.BAD_REQUEST)
+    // Lowercase email defensively — DB collation is `_ci` so this is mostly
+    // belt-and-suspenders, but it also keeps the warn log readable.
+    const email = userInfo.email?.trim().toLowerCase()
+    const preferred = userInfo.preferred_username?.trim().toLowerCase()
+    if (!email && !preferred) {
+      throw new HttpException('OIDC profile has neither email nor preferred_username', HttpStatus.BAD_REQUEST)
     }
-    const fallbackLogin = email.split('@')[0] ?? userInfo.sub
-    const login = (userInfo.preferred_username ?? fallbackLogin).trim().toLowerCase()
-    const lookupKey = email || login
 
-    const user = await this.usersManager.findUser(lookupKey, false)
-    return user ?? null
+    // Two-step lookup: by email first (typical case — Sync-in user was
+    // created with their real email), then by login (covers IdPs that return
+    // a different email than what's in Sync-in's user table, or no email at
+    // all). Mobile is lookup-only — no auto-create.
+    let user: UserModel | null = email ? ((await this.usersManager.findUser(email, false)) ?? null) : null
+    if (!user && preferred && preferred !== email) {
+      user = (await this.usersManager.findUser(preferred, false)) ?? null
+    }
+    if (!user) {
+      this.logger.warn({
+        tag: this.exchangeAndResolveUser.name,
+        msg: `no Sync-in account matched OIDC profile — email=${email ?? '<absent>'} preferred_username=${preferred ?? '<absent>'} sub=${userInfo.sub}`
+      })
+    }
+    return user
   }
 
   private isPKCEEnabled(config: Configuration): boolean {

@@ -7,7 +7,7 @@ import { NC_ROUTE } from '../constants/routes'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
-import { escapeHtml, renderHtml } from '../utils/nc-html'
+import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 
 // Mobile OIDC delegation for the Nextcloud Login Flow v2 browser hop.
 //
@@ -116,15 +116,14 @@ export class NcMobileOidcController {
       expiration: null
     } as never)
 
-    this.flows.completeWithCredentials(state, {
+    const creds = {
       server: this.response.baseUrl(req),
       loginName: user.login,
       appPassword: appPwd.password
-    })
+    }
+    this.flows.completeWithCredentials(state, creds)
 
-    return renderHtml({
-      title: 'Signed in',
-      body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
-    })
+    const success = renderNcSuccessBody(creds)
+    return renderHtml({ title: 'Signed in', body: success.body, headExtras: success.headExtras })
   }
 }
