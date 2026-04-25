@@ -142,6 +142,13 @@ describe(NcMobileOidcController.name, () => {
       const res = fakeRes()
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
       expect(html).toContain('All set!')
+      // Success page must emit the NC client deep link so iOS / Android can
+      // hand off without waiting for the next poll. URL is HTML-escaped (`&`
+      // becomes `&amp;`) — browser un-escapes when following the meta refresh.
+      expect(html).toContain('nc://login/server:https%3A%2F%2Fsync-in.example.test')
+      expect(html).toContain('user:alice')
+      expect(html).toContain('password:APPPWD')
+      expect(html).toMatch(/<meta[^>]*http-equiv="refresh"[^>]*nc:\/\/login/)
 
       expect(mobileOidc.exchangeAndResolveUser).toHaveBeenCalledWith(
         expect.objectContaining({ expectedState: flow.loginToken, codeVerifier: 'CV', nonce: 'NONCE' })

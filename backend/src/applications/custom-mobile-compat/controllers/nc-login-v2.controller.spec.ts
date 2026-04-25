@@ -1,6 +1,6 @@
 import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
-import type { FastifyReply } from 'fastify'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
@@ -214,6 +214,24 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
         message: 'missing token',
         status: HttpStatus.BAD_REQUEST
       })
+    })
+  })
+
+  describe('initiate response shape (real-NC byte-parity)', () => {
+    function fakeReq(): FastifyRequest {
+      return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' } } as unknown as FastifyRequest
+    }
+
+    it('advertises the canonical /login/v2/poll endpoint (no /index.php prefix)', () => {
+      const out = controller.initiate(fakeReq())
+      // Real Nextcloud advertises /login/v2/poll (without /index.php). We
+      // mount both but should advertise the canonical form so the JSON
+      // byte-matches upstream and any client that string-matches works.
+      expect(out.poll.endpoint).toBe('https://sync-in.example.test/login/v2/poll')
+      expect(out.poll.endpoint).not.toContain('/index.php/')
+      expect(out.login).toMatch(/^https:\/\/sync-in\.example\.test\/login\/v2\/flow\/.+$/)
+      expect(out.poll.token).toEqual(expect.any(String))
+      expect(out.poll.token.length).toBeGreaterThan(0)
     })
   })
 })

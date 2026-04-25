@@ -1,4 +1,4 @@
-import { All, Controller, Get, HttpCode, HttpStatus, Req, Res } from '@nestjs/common'
+import { All, Controller, Get, Header, HttpCode, HttpStatus, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { NC_AUTH_REALM } from '../constants/routes'
@@ -9,8 +9,11 @@ import { NC_AUTH_REALM } from '../constants/routes'
 @AuthTokenSkip()
 export class NcDiscoveryController {
   // status.php — server identity. iOS/Android gate connection on this
-  // returning a sensible productname + version.
+  // returning a sensible productname + version. Real NC server emits
+  // `Access-Control-Allow-Origin: *` here for pre-login probe paths;
+  // mirror it.
   @Get('status.php')
+  @Header('Access-Control-Allow-Origin', '*')
   status(): NcStatus {
     return {
       installed: true,
