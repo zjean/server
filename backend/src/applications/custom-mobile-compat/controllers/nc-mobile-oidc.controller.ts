@@ -1,4 +1,4 @@
-import { Controller, Get, HttpStatus, Param, Query, Req, Res } from '@nestjs/common'
+import { Controller, Get, HttpStatus, Logger, Param, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
@@ -27,6 +27,8 @@ import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 @Controller()
 @AuthTokenSkip()
 export class NcMobileOidcController {
+  private readonly logger = new Logger(NcMobileOidcController.name)
+
   constructor(
     private readonly flows: NcLoginFlowService,
     private readonly mobileOidc: NcMobileOidcService,
@@ -96,9 +98,23 @@ export class NcMobileOidcController {
         nonce: flow.oidc.nonce
       })
     } catch (e) {
+      // openid-client wraps the underlying issue (token endpoint shape, JWT
+      // verification, JWKS fetch, etc.) in `e.cause`. Log enough context to
+      // diagnose without paging into a debugger.
+      const err = e as Error & { code?: string; cause?: unknown }
+      const causeMsg = err.cause instanceof Error ? `${err.cause.name}: ${err.cause.message}` : String(err.cause ?? '')
+      this.logger.warn({
+        tag: this.callback.name,
+        msg: `OIDC code exchange failed — ${err.message} [code=${err.code ?? '?'}] cause=${causeMsg}`,
+        stack: err.stack
+      })
       res.status(HttpStatus.UNAUTHORIZED)
-      const detail = e instanceof Error ? e.message : 'OIDC error'
-      return renderHtml({ title: 'Sign-in failed', body: `<h1>Sign-in failed</h1><p>${escapeHtml(detail)}.</p>` })
+      const detail = err.message
+      const causeLine = causeMsg ? `<p>Cause: ${escapeHtml(causeMsg)}</p>` : ''
+      return renderHtml({
+        title: 'Sign-in failed',
+        body: `<h1>Sign-in failed</h1><p>${escapeHtml(detail)}.</p>${causeLine}<p class="brand">See server logs for full diagnostic.</p>`
+      })
     }
 
     if (!user) {
