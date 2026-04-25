@@ -29,13 +29,18 @@ export interface OcsOptions {
   itemsperpage?: number
 }
 
-// OCS v1 uses HTTP 200 for errors and encodes the error in meta.statuscode.
-// OCS v2 uses the matching HTTP status. We return only meta+data here; the
-// caller is responsible for setting the right HTTP status on the reply.
+// OCS v1 uses 100 for "OK" and encodes errors in `meta.statuscode` while
+// keeping HTTP 200. OCS v2 mirrors the HTTP status (200 for OK). Default to
+// 200 because v2 is the modern path NC mobile clients hit; v1 callers pass
+// `{ statuscode: OCS_OK_V1 }` explicitly. NC iOS strict-checks v2 responses
+// and surfaces a "Fout" alert when statuscode is anything other than 200.
+export const OCS_OK_V1 = 100
+export const OCS_OK_V2 = 200
+
 export function ocsEnvelope<T>(data: T, opts: OcsOptions = {}): OcsEnvelope<T> {
   const meta: OcsMeta = {
     status: opts.status ?? 'ok',
-    statuscode: opts.statuscode ?? 100,
+    statuscode: opts.statuscode ?? OCS_OK_V2,
     message: opts.message ?? ''
   }
   if (opts.totalitems !== undefined) meta.totalitems = String(opts.totalitems)
