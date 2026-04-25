@@ -1,12 +1,6 @@
 import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
-import {
-  authorizationCodeGrant,
-  calculatePKCECodeChallenge,
-  fetchUserInfo,
-  randomNonce,
-  randomPKCECodeVerifier
-} from 'openid-client'
+import { authorizationCodeGrant, calculatePKCECodeChallenge, fetchUserInfo, randomNonce, randomPKCECodeVerifier } from 'openid-client'
 import { AuthProviderOIDC } from '../../../authentication/providers/oidc/auth-provider-oidc.service'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcMobileOidcService } from './nc-mobile-oidc.service'
@@ -58,11 +52,7 @@ describe(NcMobileOidcService.name, () => {
     usersManager = { findUser: jest.fn() }
 
     const moduleRef: TestingModule = await Test.createTestingModule({
-      providers: [
-        { provide: AuthProviderOIDC, useValue: authProviderOIDC },
-        { provide: UsersManager, useValue: usersManager },
-        NcMobileOidcService
-      ]
+      providers: [{ provide: AuthProviderOIDC, useValue: authProviderOIDC }, { provide: UsersManager, useValue: usersManager }, NcMobileOidcService]
     }).compile()
 
     moduleRef.useLogger(['fatal'])

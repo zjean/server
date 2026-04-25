@@ -92,10 +92,7 @@ describe(NcMobileOidcController.name, () => {
       })
       const res = fakeRes()
       await controller.start(flow.loginToken, fakeReq(), res)
-      expect(mobileOidc.buildAuthorizationUrl).toHaveBeenCalledWith(
-        flow.loginToken,
-        'https://sync-in.example.test/custom-mobile/oidc/callback'
-      )
+      expect(mobileOidc.buildAuthorizationUrl).toHaveBeenCalledWith(flow.loginToken, 'https://sync-in.example.test/custom-mobile/oidc/callback')
       const seen = flows.findByLoginToken(flow.loginToken)
       expect(seen?.status).toBe('oidc-pending')
       expect(seen?.oidc).toEqual({ codeVerifier: 'CV', nonce: 'NONCE' })

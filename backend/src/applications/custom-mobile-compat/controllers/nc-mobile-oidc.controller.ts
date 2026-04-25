@@ -72,7 +72,10 @@ export class NcMobileOidcController {
 
     if (!state) {
       res.status(HttpStatus.BAD_REQUEST)
-      return renderHtml({ title: 'Bad request', body: '<h1>Missing state</h1><p>This callback URL is meant to be opened by the identity provider.</p>' })
+      return renderHtml({
+        title: 'Bad request',
+        body: '<h1>Missing state</h1><p>This callback URL is meant to be opened by the identity provider.</p>'
+      })
     }
 
     const flow = this.flows.findByLoginToken(state)

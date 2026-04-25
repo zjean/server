@@ -32,10 +32,7 @@ export class NcMobileOidcService {
     private readonly usersManager: UsersManager
   ) {}
 
-  async buildAuthorizationUrl(
-    loginToken: string,
-    redirectUri: string
-  ): Promise<{ url: string; codeVerifier: string; nonce: string }> {
+  async buildAuthorizationUrl(loginToken: string, redirectUri: string): Promise<{ url: string; codeVerifier: string; nonce: string }> {
     const config = await this.authProviderOIDC.getConfig()
     const oidcConfig = configuration.auth.oidc
     const codeVerifier = randomPKCECodeVerifier()
@@ -57,12 +54,7 @@ export class NcMobileOidcService {
     return { url: authUrl.toString(), codeVerifier, nonce }
   }
 
-  async exchangeAndResolveUser(opts: {
-    callbackUrl: URL
-    expectedState: string
-    codeVerifier: string
-    nonce: string
-  }): Promise<UserModel | null> {
+  async exchangeAndResolveUser(opts: { callbackUrl: URL; expectedState: string; codeVerifier: string; nonce: string }): Promise<UserModel | null> {
     const config = await this.authProviderOIDC.getConfig()
     const oidcConfig = configuration.auth.oidc
     const isPKCEEnabled = this.isPKCEEnabled(config)
