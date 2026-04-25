@@ -55,7 +55,7 @@ export class NcMobileOidcController {
 
   @Get(NC_ROUTE.MOBILE_OIDC_CALLBACK.slice(1))
   async callback(
-    @Query('code') code: string,
+    @Query('code') _code: string,
     @Query('state') state: string,
     @Query('error') errorCode: string | undefined,
     @Query('error_description') errorDesc: string | undefined,
@@ -88,9 +88,17 @@ export class NcMobileOidcController {
 
     let user
     try {
+      // Forward EVERY query param the IdP sent — not just code+state. Authelia
+      // (and any RFC 9207 issuer) returns `iss` on the redirect; openid-client
+      // validates it against the discovery's issuer URL during the code
+      // exchange. Dropping `iss` causes openid-client to throw OAuth
+      // INVALID_RESPONSE. Mirrors the upstream web flow at
+      // auth-provider-oidc.service.ts:`callbackParams = new URLSearchParams(query)`.
       const callbackUrl = new URL(`${this.response.baseUrl(req)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`)
-      callbackUrl.searchParams.set('code', code)
-      callbackUrl.searchParams.set('state', state)
+      const reqQuery = (req.query ?? {}) as Record<string, unknown>
+      for (const [k, v] of Object.entries(reqQuery)) {
+        if (typeof v === 'string') callbackUrl.searchParams.set(k, v)
+      }
       user = await this.mobileOidc.exchangeAndResolveUser({
         callbackUrl,
         expectedState: state,
