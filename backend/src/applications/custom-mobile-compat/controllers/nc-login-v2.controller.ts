@@ -57,20 +57,12 @@ export class NcLoginV2Controller {
   //   - query string           (`?token=…`)             — NC iOS ≥ 33.x
   // We accept whichever the client sends.
   @Post(NC_ROUTE.LOGIN_V2_POLL.slice(1))
-  async pollCanonical(
-    @Body() body: PollBody,
-    @Query('token') queryToken: string | undefined,
-    @Res({ passthrough: true }) res: FastifyReply
-  ): Promise<PollResult> {
+  async pollCanonical(@Body() body: PollBody, @Query('token') queryToken: string | undefined, @Res() res: FastifyReply): Promise<void> {
     return this.doPoll(body, queryToken, res)
   }
 
   @Post(NC_ROUTE.LOGIN_V2_POLL_ALT.slice(1))
-  async pollAlt(
-    @Body() body: PollBody,
-    @Query('token') queryToken: string | undefined,
-    @Res({ passthrough: true }) res: FastifyReply
-  ): Promise<PollResult> {
+  async pollAlt(@Body() body: PollBody, @Query('token') queryToken: string | undefined, @Res() res: FastifyReply): Promise<void> {
     return this.doPoll(body, queryToken, res)
   }
 
@@ -190,26 +182,21 @@ export class NcLoginV2Controller {
     })
   }
 
-  private async doPoll(body: PollBody, queryToken: string | undefined, res: FastifyReply): Promise<PollResult> {
+  private async doPoll(body: PollBody, queryToken: string | undefined, res: FastifyReply): Promise<void> {
     const token = readPollToken(body) ?? (queryToken && queryToken.length > 0 ? queryToken : null)
     if (!token) {
       throw new HttpException('missing token', HttpStatus.BAD_REQUEST)
     }
     const creds = this.flows.consumeByPollToken(token)
     if (!creds) {
-      // NC protocol: 404 while pending + after consumption.
-      res.status(HttpStatus.NOT_FOUND)
-      throw new HttpException('', HttpStatus.NOT_FOUND)
+      // NC protocol: 404 while pending + after consumption — match real NC server's
+      // shape (empty `[]` JSON body). NC iOS rejects 404 + the default Nest
+      // `{statusCode,message,error}` envelope as "invalid response".
+      res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'application/json; charset=utf-8').send('[]')
+      return
     }
-    res.status(HttpStatus.OK)
-    return creds
+    res.status(HttpStatus.OK).header('Content-Type', 'application/json; charset=utf-8').send(creds)
   }
-}
-
-interface PollResult {
-  server: string
-  loginName: string
-  appPassword: string
 }
 
 interface PollBody {
