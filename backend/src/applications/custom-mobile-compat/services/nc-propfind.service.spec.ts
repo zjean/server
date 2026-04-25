@@ -116,4 +116,32 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:owner-id>alice</oc:owner-id>')
     expect(state.body).toContain('<oc:owner-display-name>alice</oc:owner-display-name>')
   })
+
+  it('emits a positive oc:fileid even when the upstream id is the negative-inode placeholder', async () => {
+    // Sync-in's filesystem-only files (those without a DB row yet — e.g.
+    // freshly-uploaded ones) carry `id = -stat.ino`. NC iOS uses oc:fileid /
+    // oc:id as the offline-cache primary key and rejects negative / zero
+    // values, so we must map them to a stable positive id (abs(inode)).
+    const fresh = new WebDAVFile(
+      { id: -987654, name: 'PDF Form Sample.pdf', isDir: false, size: 1234, ctime: Date.now(), mtime: Date.now(), mime: 'application/pdf' },
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([fresh]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+
+    // Crucially: NOT 0, NOT negative.
+    expect(state.body).toContain('<oc:fileid>987654</oc:fileid>')
+    expect(state.body).toContain('<oc:id>00000000000000987654syncin</oc:id>')
+    expect(state.body).not.toContain('<oc:fileid>0</oc:fileid>')
+    expect(state.body).not.toContain('<oc:fileid>-987654</oc:fileid>')
+  })
 })
