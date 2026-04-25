@@ -1,8 +1,10 @@
-import { All, Controller, HttpException, HttpStatus, Param, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
+import { All, Controller, HttpException, HttpStatus, Logger, Param, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { HTTP_METHOD } from '../../applications.constants'
+import { getProps } from '../../files/utils/files'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
+import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
@@ -25,9 +27,12 @@ import type { FastifyRequest } from 'fastify'
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)
 export class NcDavController {
+  private readonly logger = new Logger(NcDavController.name)
+
   constructor(
     private readonly resolver: NcPathResolverService,
     private readonly spacesManager: SpacesManager,
+    private readonly spacesQueries: SpacesQueries,
     private readonly webdav: WebDAVMethods,
     private readonly propfind: NcPropfindService
   ) {}
@@ -230,8 +235,23 @@ export class NcDavController {
       case HTTP_METHOD.HEAD:
       case HTTP_METHOD.GET:
         return this.webdav.headOrGet(req, res, repository)
-      case HTTP_METHOD.PUT:
-        return this.webdav.put(req, res)
+      case HTTP_METHOD.PUT: {
+        const result = await this.webdav.put(req, res)
+        // Sync-in's browse loop only inserts a DB row for files touched by
+        // rich features (shares/comments/locks/syncs). A plain WebDAV upload
+        // would otherwise stay FS-only forever, leaving NC iOS rendering it
+        // with the inode-derived placeholder fileid until something else
+        // promotes it. Force the row creation here so the file behaves like
+        // any other from the moment of upload. Best-effort — failures are
+        // logged but don't surface to the client.
+        this.ensureDbRowForUpload(req).catch((e) =>
+          this.logger.warn({
+            tag: 'invokeWebDAV.PUT',
+            msg: `DB row insert failed for ${req.space?.realPath ?? '?'}: ${(e as Error).message}`
+          })
+        )
+        return result
+      }
       case HTTP_METHOD.DELETE:
         return this.webdav.delete(req, res)
       case HTTP_METHOD.PROPPATCH:
@@ -248,6 +268,25 @@ export class NcDavController {
       default:
         throw new HttpException(`Method ${method} not supported`, HttpStatus.METHOD_NOT_ALLOWED)
     }
+  }
+
+  // Inserts (or no-ops on existing) the `files` DB row for a just-uploaded
+  // file in the user's personal space, so subsequent PROPFINDs return a
+  // stable positive `oc:fileid` instead of the inode-derived placeholder
+  // Sync-in stamps onto FS-only files. Public for direct unit testing.
+  //
+  // Out of scope (covered by the existing browse-time DB-row creation in
+  // `parseRootFiles` / share / lock / sync paths):
+  // - Shared spaces (different `getOrCreateSpaceFile` signature; needs the
+  //   space root's `dbFile` skeleton).
+  // - Trash repository (uploads don't go there).
+  async ensureDbRowForUpload(req: FastifyDAVRequest): Promise<void> {
+    const space = req.space
+    const user = req.user as UserModel | undefined
+    if (!user || !space?.inPersonalSpace || !space.realPath || !space.relativeUrl) return
+    const fileProps = await getProps(space.realPath, space.relativeUrl, false)
+    if (fileProps.isDir) return
+    await this.spacesQueries.getOrCreateUserFile(user.id, fileProps)
   }
 
   private redirectLegacy(req: FastifyDAVRequest, res: FastifyReply, rest: string): void {
