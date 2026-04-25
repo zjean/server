@@ -238,19 +238,24 @@ export class NcDavController {
         return this.webdav.headOrGet(req, res, repository)
       case HTTP_METHOD.PUT: {
         const result = await this.webdav.put(req, res)
-        // Sync-in's browse loop only inserts a DB row for files touched by
-        // rich features (shares/comments/locks/syncs). A plain WebDAV upload
-        // would otherwise stay FS-only forever, leaving NC iOS rendering it
-        // with the inode-derived placeholder fileid until something else
-        // promotes it. Force the row creation here so the file behaves like
-        // any other from the moment of upload. Best-effort — failures are
-        // logged but don't surface to the client.
-        this.ensureDbRowForUpload(req).catch((e) =>
+        // Synchronously create the DB row before returning. NC iOS issues a
+        // PROPFIND on the parent directory milliseconds after PUT to refresh
+        // its listing — if the row isn't there yet, our PROPFIND emits the
+        // inode-derived placeholder fileid (PR #83), iOS caches *that* as
+        // the file's primary key, and subsequent calls keyed on real DB id
+        // (notably /index.php/core/preview?fileId=…) 404 forever.
+        //
+        // Awaiting adds a few ms to the PUT response but eliminates the
+        // race. Failures are still best-effort — file is on disk, future
+        // browse-time reconcile may pick it up via other code paths.
+        try {
+          await this.ensureDbRowForUpload(req)
+        } catch (e) {
           this.logger.warn({
             tag: 'invokeWebDAV.PUT',
             msg: `DB row insert failed for ${req.space?.realPath ?? '?'}: ${(e as Error).message}`
           })
-        )
+        }
         return result
       }
       case HTTP_METHOD.DELETE:
