@@ -35,6 +35,23 @@ auth:
     refresh:
       secret: dev-refresh-secret-do-not-use-in-prod
       expiration: 4h
+  mfa:
+    totp:
+      enabled: true
+      issuer: Sync-in
+  # Stub LDAP block — only consumed when provider == 'ldap', but its presence
+  # is required so that LDAP unit tests can instantiate AuthProviderLDAP.
+  ldap:
+    servers: []
+    baseDN: 'ou=people,dc=example,dc=org'
+    filter: ''
+    attributes:
+      login: uid
+      email: mail
+    options:
+      autoCreateUser: false
+      autoCreatePermissions: []
+      enablePasswordAuthFallback: true
 
 applications:
   files:

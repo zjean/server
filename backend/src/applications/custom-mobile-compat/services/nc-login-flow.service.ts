@@ -5,21 +5,26 @@ import * as crypto from 'node:crypto'
 //
 // A flow lives for up to 20 minutes (Nextcloud's published token lifetime).
 // Each flow goes through these states:
-//   PENDING → the browser tab hasn't completed yet; poll returns 404.
-//   READY   → browser completed auth, app-password minted; next poll returns
-//             credentials once and the flow is consumed.
-//   DONE    → consumed; further polls return 404 forever. Eventually evicted.
+//   PENDING       → the browser tab hasn't completed yet; poll returns 404.
+//   OIDC-PENDING  → browser was redirected to the IdP; awaiting callback.
+//   READY         → browser completed auth, app-password minted; next poll
+//                   returns credentials once and the flow is consumed.
+//   DONE          → consumed; further polls return 404 forever. Eventually
+//                   evicted.
 //
 // Single-process only in this MVP; multi-instance deployments need a shared
 // backend (Redis). Flagged as follow-up in the design doc.
 
-export type LoginFlowStatus = 'pending' | 'ready' | 'done'
+export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'ready' | 'done'
 
 export interface LoginFlow {
   pollToken: string
   loginToken: string
   status: LoginFlowStatus
   createdAt: number
+  // Populated when the OIDC dance is initiated; carries PKCE + nonce across the
+  // browser round-trip so the callback can validate the IdP response.
+  oidc: { codeVerifier: string; nonce: string } | null
   // Populated when status flips to 'ready'. Cleared on first successful poll.
   credentials: { server: string; loginName: string; appPassword: string } | null
 }
@@ -42,6 +47,7 @@ export class NcLoginFlowService {
       loginToken,
       status: 'pending',
       createdAt: Date.now(),
+      oidc: null,
       credentials: null
     }
     // Enforce upper bound.
@@ -64,12 +70,25 @@ export class NcLoginFlowService {
     return flow
   }
 
-  // Called by the browser POST /login/v2/flow/{loginToken} after a successful
-  // login; stores the minted credentials on the flow so the next poll returns
-  // them.
-  completeWithCredentials(loginToken: string, creds: { server: string; loginName: string; appPassword: string }): boolean {
+  // Called when the browser tab is about to be redirected to the IdP. Stores
+  // PKCE + nonce so the callback can validate the IdP's response. Returns
+  // false if the flow is missing or already past the pending stage.
+  markOidcPending(loginToken: string, params: { codeVerifier: string; nonce: string }): boolean {
     const flow = this.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'pending') return false
+    flow.oidc = { codeVerifier: params.codeVerifier, nonce: params.nonce }
+    flow.status = 'oidc-pending'
+    return true
+  }
+
+  // Called by the browser POST /login/v2/flow/{loginToken} after a successful
+  // login; stores the minted credentials on the flow so the next poll returns
+  // them. Accepts both 'pending' (local form) and 'oidc-pending' (IdP
+  // callback) flows.
+  completeWithCredentials(loginToken: string, creds: { server: string; loginName: string; appPassword: string }): boolean {
+    const flow = this.findByLoginToken(loginToken)
+    if (!flow) return false
+    if (flow.status !== 'pending' && flow.status !== 'oidc-pending') return false
     flow.credentials = creds
     flow.status = 'ready'
     return true

@@ -98,4 +98,36 @@ describe(NcLoginFlowService.name, () => {
     expect(svc.findByLoginToken(flow.loginToken)).toBeNull()
     expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
   })
+
+  it('initiate sets oidc to null', () => {
+    const flow = svc.initiate()
+    expect(flow.oidc).toBeNull()
+  })
+
+  it('markOidcPending stores codeVerifier+nonce and flips status', () => {
+    const flow = svc.initiate()
+    expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })).toBe(true)
+    const seen = svc.findByLoginToken(flow.loginToken)
+    expect(seen?.status).toBe('oidc-pending')
+    expect(seen?.oidc).toEqual({ codeVerifier: 'cv', nonce: 'n' })
+  })
+
+  it('markOidcPending refuses non-pending flows', () => {
+    const flow = svc.initiate()
+    svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+    // already 'oidc-pending' — second call must fail
+    expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'x', nonce: 'y' })).toBe(false)
+  })
+
+  it('markOidcPending returns false for unknown loginToken', () => {
+    expect(svc.markOidcPending('nope', { codeVerifier: 'cv', nonce: 'n' })).toBe(false)
+  })
+
+  it('completeWithCredentials accepts oidc-pending flows', () => {
+    const flow = svc.initiate()
+    svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+    const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
+    expect(svc.completeWithCredentials(flow.loginToken, creds)).toBe(true)
+    expect(svc.consumeByPollToken(flow.pollToken)).toEqual(creds)
+  })
 })
