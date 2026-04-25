@@ -87,6 +87,16 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         group: { enabled: false },
         default_permissions: 1,
         federation: { outgoing: false, incoming: false }
+      },
+      // NC iOS reads `provisioning_api.version` to confirm `/ocs/v2.php/cloud/user`
+      // and `/cloud/users/<me>` are valid endpoints. Without this block, some
+      // iOS builds bail with a generic error after sign-in. Values mirror what
+      // upstream NC 29.x ships.
+      provisioning_api: {
+        version: '1.21.0',
+        AccountPropertyScopesVersion: 2,
+        AccountPropertyScopesFederatedEnabled: true,
+        AccountPropertyScopesPublishedEnabled: true
       }
       // Deliberately NOT advertising `notifications` or `activity` — an empty
       // ocs-endpoints array still prompts the iOS client to probe
