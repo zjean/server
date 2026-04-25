@@ -1,14 +1,23 @@
 import { acceptsJson, ocsEnvelope } from './ocs-envelope'
 
 describe('ocsEnvelope', () => {
-  it('returns the default envelope with status=ok, statuscode=100, message=""', () => {
+  it('defaults to OCS-v2 success shape (statuscode=200) — matches real NC server', () => {
+    // OCS v2 endpoints mirror the HTTP status in `meta.statuscode`. NC iOS
+    // strict-checks this and surfaces a "Fout" alert on `100`. Default to 200
+    // because v2 is the modern path; v1 endpoints opt in via `{ statuscode:
+    // OCS_OK_V1 }`.
     const env = ocsEnvelope({ hello: 'world' })
     expect(env).toEqual({
       ocs: {
-        meta: { status: 'ok', statuscode: 100, message: '' },
+        meta: { status: 'ok', statuscode: 200, message: '' },
         data: { hello: 'world' }
       }
     })
+  })
+
+  it('v1 callers pass `statuscode: 100` explicitly for legacy compat', () => {
+    const env = ocsEnvelope({ legacy: true }, { statuscode: 100 })
+    expect(env.ocs.meta.statuscode).toBe(100)
   })
 
   it('accepts status/statuscode/message overrides', () => {

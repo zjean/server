@@ -7,7 +7,7 @@ import { UsersManager } from '../../users/services/users-manager.service'
 import { ncCapabilities, type NcCapabilitiesPayload } from '../constants/capabilities'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcResponseService } from '../services/nc-response.service'
-import { type OcsEnvelope } from '../utils/ocs-envelope'
+import { OCS_OK_V1, type OcsEnvelope } from '../utils/ocs-envelope'
 
 // OCS endpoints hit by the NC mobile clients. Responses are JSON-only; see
 // NcResponseService.requireJson. Not covered here (deferred): shares, sharees,
@@ -30,7 +30,7 @@ export class NcOcsController {
   @Get('ocs/v1.php/cloud/capabilities')
   capabilitiesV1(@Req() req: FastifyRequest, @Res({ passthrough: true }) res: FastifyReply): OcsEnvelope<NcCapabilitiesPayload> {
     this.response.requireJson(req)
-    return this.response.json(res, ncCapabilities(this.response.baseUrl(req)))
+    return this.response.json(res, ncCapabilities(this.response.baseUrl(req)), { statuscode: OCS_OK_V1 })
   }
 
   @Get('ocs/v2.php/cloud/capabilities')
@@ -56,7 +56,7 @@ export class NcOcsController {
     @Req() req: FastifyRequest & { user: UserModel },
     @Res({ passthrough: true }) res: FastifyReply
   ): OcsEnvelope<NcUserPayload> {
-    return this.doUserProvisioning(userid, req, res)
+    return this.doUserProvisioning(userid, req, res, 1)
   }
 
   @Get('ocs/v2.php/cloud/users/:userid')
@@ -66,7 +66,7 @@ export class NcOcsController {
     @Req() req: FastifyRequest & { user: UserModel },
     @Res({ passthrough: true }) res: FastifyReply
   ): OcsEnvelope<NcUserPayload> {
-    return this.doUserProvisioning(userid, req, res)
+    return this.doUserProvisioning(userid, req, res, 2)
   }
 
   // DELETE apppassword — clients call this on explicit logout to invalidate
@@ -117,12 +117,17 @@ export class NcOcsController {
     return after[0]?.name ?? null
   }
 
-  private doUserProvisioning(userid: string, req: FastifyRequest & { user: UserModel }, res: FastifyReply): OcsEnvelope<NcUserPayload> {
+  private doUserProvisioning(
+    userid: string,
+    req: FastifyRequest & { user: UserModel },
+    res: FastifyReply,
+    ocsVersion: 1 | 2
+  ): OcsEnvelope<NcUserPayload> {
     this.response.requireJson(req)
     if (userid !== req.user.login) {
       throw new HttpException('forbidden', HttpStatus.FORBIDDEN)
     }
-    return this.response.json(res, buildUserPayload(req.user))
+    return this.response.json(res, buildUserPayload(req.user), ocsVersion === 1 ? { statuscode: OCS_OK_V1 } : {})
   }
 }
 
