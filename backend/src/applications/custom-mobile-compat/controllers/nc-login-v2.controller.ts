@@ -2,10 +2,13 @@ import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Req, Res
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
+import { AUTH_PROVIDER } from '../../../authentication/providers/auth-providers.constants'
+import { configuration } from '../../../configuration/config.environment'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
+import { escapeHtml, renderHtml } from '../utils/nc-html'
 
 // NC Login Flow v2 — the 3-step authentication dance used by Nextcloud's
 // mobile apps.
@@ -56,7 +59,14 @@ export class NcLoginV2Controller {
     return this.doPoll(body, res)
   }
 
-  // Step 2a — browser GETs the login page
+  // Step 2a — browser GETs the login page.
+  //
+  // Dispatches by `auth.provider`:
+  //   - non-oidc                          → render the local username/password form
+  //   - oidc + autoRedirect               → 302 to /custom-mobile/oidc/login/<token>
+  //   - oidc + button mode (autoRedirect=false) → render an "OIDC button" page;
+  //     local form is included beneath when oidc.options.enablePasswordAuth is true
+  //     (admins / guests / app-passwords still go through the local form)
   @Get(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
   renderLoginPage(@Param('token') loginToken: string, @Res({ passthrough: true }) res: FastifyReply): string {
     const flow = this.flows.findByLoginToken(loginToken)
@@ -74,6 +84,22 @@ export class NcLoginV2Controller {
         body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
       })
     }
+
+    const provider = configuration.auth?.provider
+    if (provider === AUTH_PROVIDER.OIDC) {
+      const opts = configuration.auth.oidc?.options ?? ({} as Record<string, unknown>)
+      if (opts.autoRedirect) {
+        res.redirect(`/custom-mobile/oidc/login/${loginToken}`, HttpStatus.FOUND)
+        // Empty body: the 302 + Location header is what the browser follows.
+        return ''
+      }
+      res.header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign in to Sync-in',
+        body: renderOidcButtonPage(loginToken, (opts.buttonText as string) || 'Continue with OpenID Connect', !!opts.enablePasswordAuth)
+      })
+    }
+
     res.header('Content-Type', 'text/html; charset=utf-8')
     return renderHtml({
       title: 'Sign in to Sync-in',
@@ -200,39 +226,6 @@ function clientIp(req: FastifyRequest): string {
   return (req.ip as string | undefined) ?? 'unknown'
 }
 
-// Minimal HTML rendering. Deliberately no external assets — safe behind any
-// reverse proxy, theme-agnostic, and keeps this module dependency-free on the
-// frontend side.
-function renderHtml({ title, body }: { title: string; body: string }): string {
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(title)}</title>
-<style>
-  :root { --bg:#0f172a; --card:#1e293b; --fg:#f1f5f9; --muted:#94a3b8; --accent:#0082c9; --border:#334155; --err:#ef4444; }
-  * { box-sizing:border-box; }
-  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--fg); }
-  .card { width:100%; max-width:360px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,.3); }
-  h1 { margin:0 0 8px; font-size:18px; }
-  p { margin:0 0 16px; color:var(--muted); font-size:14px; line-height:1.5; }
-  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
-  input { width:100%; padding:10px 12px; font-size:14px; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; outline:none; }
-  input:focus { border-color:var(--accent); }
-  button { width:100%; margin-top:18px; padding:11px; font-size:14px; font-weight:500; border:none; border-radius:8px; background:var(--accent); color:white; cursor:pointer; }
-  .err { color:var(--err); font-size:13px; margin-top:12px; }
-  .brand { font-size:12px; color:var(--muted); text-align:center; margin-top:18px; }
-</style>
-</head>
-<body>
-<div class="card">
-${body}
-</div>
-</body>
-</html>`
-}
-
 function renderLoginForm(loginToken: string, errorMsg?: string): string {
   const safeToken = escapeHtml(loginToken)
   const err = errorMsg ? `<div class="err">${escapeHtml(errorMsg)}</div>` : ''
@@ -249,6 +242,23 @@ function renderLoginForm(loginToken: string, errorMsg?: string): string {
 <div class="brand">Sync-in · Nextcloud-compatible login</div>`
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+function renderOidcButtonPage(loginToken: string, buttonText: string, includePasswordForm: boolean): string {
+  const safeToken = escapeHtml(loginToken)
+  const safeText = escapeHtml(buttonText)
+  const oidcLink = `<a class="btn" href="/custom-mobile/oidc/login/${safeToken}">${safeText}</a>`
+  const passwordSection = includePasswordForm
+    ? `<div class="divider">or sign in with a password</div>
+<form method="post" action="/login/v2/flow/${safeToken}" autocomplete="on">
+  <label for="login">Username or email</label>
+  <input id="login" name="login" type="text" required autocomplete="username" />
+  <label for="password">Password</label>
+  <input id="password" name="password" type="password" required autocomplete="current-password" />
+  <button type="submit">Grant access</button>
+</form>`
+    : ''
+  return `<h1>Sign in to Sync-in</h1>
+<p>Authorize the mobile app to access your account.</p>
+${oidcLink}
+${passwordSection}
+<div class="brand">Sync-in · Nextcloud-compatible login</div>`
 }

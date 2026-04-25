@@ -16,6 +16,10 @@ export const NC_ROUTE = {
   LOGIN_V2_POLL_ALT: '/login/v2/poll',
   LOGIN_V2_FLOW: '/login/v2/flow/:token',
 
+  // Mobile OIDC delegation (only mounted when auth.provider === 'oidc')
+  MOBILE_OIDC_LOGIN: '/custom-mobile/oidc/login/:token',
+  MOBILE_OIDC_CALLBACK: '/custom-mobile/oidc/callback',
+
   // OCS (capabilities public, others require app-password)
   OCS_CAPABILITIES_V1: '/ocs/v1.php/cloud/capabilities',
   OCS_CAPABILITIES_V2: '/ocs/v2.php/cloud/capabilities',
