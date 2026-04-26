@@ -88,11 +88,7 @@ describe(NcSyncReportService.name, () => {
     // result is actually used.
     filesQueries = { getSpaceFileId: jest.fn().mockResolvedValue(0) }
     moduleRef = await Test.createTestingModule({
-      providers: [
-        NcSyncReportService,
-        { provide: NcSyncLogService, useValue: log },
-        { provide: FilesQueries, useValue: filesQueries }
-      ]
+      providers: [NcSyncReportService, { provide: NcSyncLogService, useValue: log }, { provide: FilesQueries, useValue: filesQueries }]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(NcSyncReportService)
@@ -254,10 +250,7 @@ describe(NcSyncReportService.name, () => {
       // <oc:id> is `padStart(20, '0') + 'syncin'` of the file id
       expect(captured.body).toContain('<oc:id>00000000000000009999syncin</oc:id>')
       // Lookup must be called with the FS-derived FileProps and the SpaceEnv's dbFile.
-      expect(filesQueries.getSpaceFileId).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'photo.jpg', path: '.', isDir: false }),
-        space.dbFile
-      )
+      expect(filesQueries.getSpaceFileId).toHaveBeenCalledWith(expect.objectContaining({ name: 'photo.jpg', path: '.', isDir: false }), space.dbFile)
     })
 
     it('falls back to the inode placeholder when no DB row exists for the path', async () => {
