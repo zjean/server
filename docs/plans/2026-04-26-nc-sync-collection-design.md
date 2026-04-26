@@ -69,17 +69,40 @@ NC clients expect. Internally just `<seq>`.
 
 ### When to append a sync event
 
-Wrap each upstream verb in `NcDavController.invokeWebDAV`:
+**Subscribe to Sync-in's existing `FileEvent` global emitter at
+`backend/src/applications/files/events/file-events.ts`** instead of hooking
+each verb in `NcDavController`. The emitter already fires for **every** path
+that mutates files: web UI uploads, server-side cron, OnlyOffice /
+Collabora saves, the v3 SPA, our mobile WebDAV, etc. — payload is
+`{user, space, action, rPath}`.
 
-```text
-PUT     → after webdav.put() succeeds → log {type: create-or-update, path, name}
-DELETE  → after webdav.delete()       → log {type: delete, path, name}
-MOVE    → after webdav.copyMove()     → log delete(src) + create(dst)
-COPY    → after webdav.copyMove()     → log create(dst)
-MKCOL   → after webdav.mkcol()        → log {type: create, path, name, isDir: true}
+```ts
+// nc-sync-log.service.ts (sketch)
+@Injectable()
+export class NcSyncLogService implements OnModuleInit {
+  onModuleInit() {
+    FileEvent.on('event', (e) => this.append(e).catch(...))
+  }
+  private async append(e: FileEventEmit) {
+    // Map ACTION → sync-collection event type:
+    //   ADD            → 'create'
+    //   UPDATE         → 'update'
+    //   DELETE         → 'delete' (trashed)
+    //   DELETE_PERMANENTLY → 'delete' (gone for good)
+    // And derive (ownerId, path, name) from {user, space, rPath}.
+  }
+}
 ```
 
-Trashbin DELETE → emits as a delete event (the file disappears from the user's view).
+**Critically:** this means we don't add hooks in `NcDavController`'s verb
+handlers at all. Every verb that calls into upstream `webdav.put()`,
+`webdav.delete()`, `webdav.copyMove()`, etc. already emits via FileEvent.
+**Web UI / API / server-side mutations are captured for free** — they all
+flow through the same `FilesManager` / `WebDAVMethods` paths that emit.
+
+This was the missing piece in the first version of this scope: hooking only
+in our mobile controller would have left web-UI uploads invisible to the
+mobile sync.
 
 ### Pruning
 
