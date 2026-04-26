@@ -51,9 +51,19 @@ export class NcPropfindService {
     const repository = mode === 'trashbin' ? SPACE_REPOSITORY.TRASH : SPACE_REPOSITORY.FILES
 
     const responses: unknown[] = []
+    let isFirst = true
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
-        responses.push(this.buildResponse(f, space, mode))
+        // The first yielded entry from `webdavSpaces.listFiles` is the
+        // collection itself (with `isCurrent=true`); the rest are its
+        // children. Sync-in's "virtual endpoint protection" strips DELETE
+        // from `space.envPermissions` so a user can't delete their own
+        // personal-space root — but that protection MUST NOT propagate to
+        // child files, otherwise NC iOS hides the trash action for every
+        // file. Pass envPermissions for the root, full permissions for the
+        // children.
+        responses.push(this.buildResponse(f, space, mode, isFirst))
+        isFirst = false
       }
     } catch (e) {
       if (e instanceof HttpException) throw e
@@ -73,9 +83,13 @@ export class NcPropfindService {
     return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
   }
 
-  private buildResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPermissionsMode): Record<string, unknown> {
+  private buildResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPermissionsMode, isRoot: boolean): Record<string, unknown> {
     const href = f.href
-    const { letters, shareMask } = toNcPermissions(space.envPermissions ?? space.permissions, f.isDir, mode)
+    // Root entry: use envPermissions (which has DELETE stripped for "virtual
+    // endpoint protection"). Children: use the full space.permissions so the
+    // NC client renders the trash action and rename/move/etc. correctly.
+    const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
+    const { letters, shareMask } = toNcPermissions(sourcePerms, f.isDir, mode)
 
     // Owner: prefer the space root owner (share/external root); fall back to
     // the space owner field (which is populated for personal space from the
