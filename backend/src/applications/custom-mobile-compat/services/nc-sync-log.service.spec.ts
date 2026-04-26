@@ -43,11 +43,11 @@ describe(NcSyncLogService.name, () => {
     expect(captured).toEqual([{ ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'a.pdf', type: 'create', ts: 1000 }])
   })
 
-  it('FileEvent ADD → appends a `create` row with path stripped of space.realPath prefix', async () => {
+  it('FileEvent ADD → appends a `create` row with path stripped of space.realBasePath prefix', async () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: ACTION.ADD,
       rPath: '/data/janwiebe/files/personal/photo.jpg'
     })
@@ -61,7 +61,7 @@ describe(NcSyncLogService.name, () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: ACTION.UPDATE,
       rPath: '/data/janwiebe/files/personal/notes.md'
     })
@@ -73,7 +73,7 @@ describe(NcSyncLogService.name, () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: ACTION.DELETE_PERMANENTLY,
       rPath: '/data/janwiebe/files/personal/old.pdf'
     })
@@ -85,7 +85,7 @@ describe(NcSyncLogService.name, () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'trash', alias: 'personal', realPath: '/data/janwiebe/trash/personal' },
+      space: { repository: 'trash', alias: 'personal', realBasePath: '/data/janwiebe/trash/personal' },
       action: ACTION.ADD,
       rPath: '/data/janwiebe/trash/personal/old.pdf'
     })
@@ -98,7 +98,7 @@ describe(NcSyncLogService.name, () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: ACTION.ADD,
       rPath: '/data/janwiebe/files/personal/x.txt'
     })
@@ -110,7 +110,7 @@ describe(NcSyncLogService.name, () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: 'OPEN' as never, // not in our enum-to-type map
       rPath: '/data/janwiebe/files/personal/x.txt'
     })
@@ -118,11 +118,31 @@ describe(NcSyncLogService.name, () => {
     expect(captured).toEqual([])
   })
 
+  it('production rPath===space.realPath case stores the path relative to realBasePath (regression)', async () => {
+    // Real upstream emission: FilesManager fires `rPath: space.realPath`, where
+    // space.realPath already includes the file's full path (paths=['photos','cat.jpg'])
+    // while realBasePath is the space root. Stripping realPath would yield ''.
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      space: {
+        repository: 'files',
+        alias: 'personal',
+        realBasePath: '/data/janwiebe/files/personal',
+        realPath: '/data/janwiebe/files/personal/photos/cat.jpg'
+      },
+      action: ACTION.ADD,
+      rPath: '/data/janwiebe/files/personal/photos/cat.jpg'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured[0]).toMatchObject({ path: 'photos/cat.jpg', type: 'create' })
+  })
+
   it('skips events with no user', async () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: null,
-      space: { repository: 'files', alias: 'personal', realPath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
       action: ACTION.ADD,
       rPath: '/data/janwiebe/files/personal/x.txt'
     })

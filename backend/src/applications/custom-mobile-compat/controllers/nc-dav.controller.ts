@@ -14,6 +14,7 @@ import { WebDAVMethods } from '../../webdav/services/webdav-methods.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
+import { NcSyncReportService } from '../services/nc-sync-report.service'
 import type { FastifyRequest } from 'fastify'
 
 // NcDavController — WebDAV, trashbin, legacy redirect.
@@ -35,7 +36,8 @@ export class NcDavController {
     private readonly spacesManager: SpacesManager,
     private readonly spacesQueries: SpacesQueries,
     private readonly webdav: WebDAVMethods,
-    private readonly propfind: NcPropfindService
+    private readonly propfind: NcPropfindService,
+    private readonly syncReport: NcSyncReportService
   ) {}
 
   // /remote.php/webdav/* — legacy clients. 301 to the modern dav-files route.
@@ -271,6 +273,15 @@ export class NcDavController {
         return this.webdav.lock(req, res)
       case HTTP_METHOD.UNLOCK:
         return this.webdav.unlock(req, res)
+      case HTTP_METHOD.REPORT:
+        // RFC 6578 sync-collection. Only meaningful for the files
+        // repository — NC iOS doesn't issue REPORT against the trashbin
+        // URL, and our sync log only carries files/trash events keyed to
+        // the user's spaces.
+        if (mode !== 'files') {
+          throw new HttpException(`REPORT not supported on ${mode}`, HttpStatus.METHOD_NOT_ALLOWED)
+        }
+        return this.syncReport.respond(req, res)
       default:
         throw new HttpException(`Method ${method} not supported`, HttpStatus.METHOD_NOT_ALLOWED)
     }

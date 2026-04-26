@@ -2,14 +2,11 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
 import { XMLBuilder } from 'fast-xml-parser'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
-import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
-import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
-import { buildOcId, ncFileId } from '../utils/nc-oc-id'
-import { toNcPermissions, type NcPermissionsMode } from '../utils/nc-permissions'
-import { ncHasPreview } from '../utils/nc-preview-predicate'
+import { buildNcPropResponse } from '../utils/nc-prop-builder'
+import { type NcPermissionsMode } from '../utils/nc-permissions'
 
 // Nextcloud clients expect four namespaces on every <d:multistatus>:
 //   d   — DAV:                                        (lowercase prefix, NC convention)
@@ -28,8 +25,6 @@ const XMLNS = {
   nc: 'http://nextcloud.org/ns',
   ocs: 'http://open-collaboration-services.org/ns'
 }
-
-const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 
 @Injectable()
 export class NcPropfindService {
@@ -62,7 +57,7 @@ export class NcPropfindService {
         // child files, otherwise NC iOS hides the trash action for every
         // file. Pass envPermissions for the root, full permissions for the
         // children.
-        responses.push(this.buildResponse(f, space, mode, isFirst))
+        responses.push(buildNcPropResponse(f, space, mode, isFirst))
         isFirst = false
       }
     } catch (e) {
@@ -82,102 +77,6 @@ export class NcPropfindService {
     })
     return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
   }
-
-  private buildResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPermissionsMode, isRoot: boolean): Record<string, unknown> {
-    const href = f.href
-    // Root entry: use envPermissions (which has DELETE stripped for "virtual
-    // endpoint protection"). Children: use the full space.permissions so the
-    // NC client renders the trash action and rename/move/etc. correctly.
-    const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
-    const { letters, shareMask } = toNcPermissions(sourcePerms, f.isDir, mode)
-
-    // Owner: prefer the space root owner (share/external root); fall back to
-    // the space owner field (which is populated for personal space from the
-    // authenticated user earlier in the request pipeline).
-    const owner = space.root?.owner ?? { id: 0, login: '' }
-    const ownerDisplay = owner.login || ''
-
-    // d:resourcetype — <d:collection/> for dirs, empty for files
-    const resourcetype = f.isDir ? { 'd:collection': '' } : ''
-
-    // File size: rendered on both <d:getcontentlength> (files only) and
-    // <oc:size> (emitted for both files and dirs; dirs report 0 since
-    // Sync-in doesn't maintain a recursive size aggregate).
-    const contentLength = f.isDir ? undefined : String(f.size)
-    const ocSize = String(f.isDir ? 0 : f.size)
-
-    // Stable positive id even when f.id is the negative-inode placeholder
-    // Sync-in stamps onto filesystem-only files. NC iOS rejects 0/negative
-    // values as cache keys, so we normalize via ncFileId().
-    const positiveId = ncFileId(f.id)
-    const props: Record<string, unknown> = {
-      'd:displayname': f.displayname,
-      'd:getlastmodified': f.getlastmodified,
-      'd:getetag': f.getetag !== undefined ? f.getetag : `"${String(positiveId)}-${String(f.mtime)}"`,
-      'd:resourcetype': resourcetype,
-      'oc:id': buildOcId(f.id),
-      'oc:fileid': String(positiveId),
-      'oc:permissions': letters,
-      'ocs:share-permissions': shareMask,
-      'oc:size': ocSize,
-      // <oc:favorite> deliberately omitted. Sync-in doesn't model favorites
-      // anywhere in its DB / API / UI today (see
-      // docs/plans/2026-04-26-nc-favorites-disabled.md). When the prop is
-      // ABSENT, NC iOS / Android hide the star icon + "Add to favorites"
-      // action — which is honest. If we emitted '<oc:favorite>0</oc:favorite>'
-      // (the previous behavior), iOS still shows the action and tapping it
-      // would send a PROPPATCH we'd have to 501, surfacing as a confusing
-      // error toast. Re-add this prop once upstream Sync-in ships favorites.
-      'oc:owner-id': String(owner.login ?? ''),
-      'oc:owner-display-name': ownerDisplay,
-      'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
-      'nc:is-encrypted': '0',
-      'nc:mount-type': ''
-    }
-
-    if (!f.isDir) {
-      props['d:getcontenttype'] = f.getcontenttype
-      if (contentLength !== undefined) props['d:getcontentlength'] = contentLength
-    }
-
-    // Trashbin extras — NC mobile clients render "deleted X ago" + the
-    // original path using these three nc:* props. Sync-in doesn't persist a
-    // separate trashed-at timestamp, so we use mtime (the last-modified time
-    // at the moment of deletion is close enough for UX).
-    if (mode === 'trashbin') {
-      const baseName = stripTrashSuffix(f.name)
-      props['nc:trashbin-filename'] = baseName
-      props['nc:trashbin-original-location'] = originalLocationFor(f, space)
-      props['nc:trashbin-deletion-time'] = String(Math.floor((f.mtime ?? Date.now()) / 1000))
-    }
-
-    return {
-      'd:href': href,
-      'd:propstat': {
-        'd:prop': props,
-        'd:status': HTTP_OK_PROPSTAT_STATUS
-      }
-    }
-  }
-}
-
-// Deleted-file-in-trash names in some DAV servers carry a ".d<unix-ts>" suffix
-// to disambiguate collisions. Sync-in doesn't add one today, so this is a
-// no-op on current names — but keeping the trim is cheap and future-proof.
-function stripTrashSuffix(name: string): string {
-  const match = name.match(/^(.*)\.d\d+$/)
-  return match ? match[1] : name
-}
-
-function originalLocationFor(f: WebDAVFile, space: SpaceEnv): string {
-  // Prefer a share-origin external path when the file came in via a share;
-  // otherwise fall back to the file's name (the NC client still renders
-  // something sensible in that case).
-  const fromOrigin = (f as WebDAVFile & { origin?: { spaceRootExternalPath?: string } }).origin?.spaceRootExternalPath
-  if (typeof fromOrigin === 'string' && fromOrigin.length > 0) return fromOrigin
-  // Fall back to the space alias plus filename when no richer hint exists.
-  const alias = space.alias ?? ''
-  return alias ? `${alias}/${f.name}` : f.name
 }
 
 // Re-exported so the depth constant is obvious at the call site — callers
