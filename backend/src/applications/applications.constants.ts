@@ -7,7 +7,8 @@ export const HTTP_WEBDAV_METHOD = {
   COPY: 'COPY',
   MOVE: 'MOVE',
   LOCK: 'LOCK',
-  UNLOCK: 'UNLOCK'
+  UNLOCK: 'UNLOCK',
+  REPORT: 'REPORT'
 } as const
 
 export const HTTP_EXTRA_METHODS = {
