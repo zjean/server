@@ -52,7 +52,12 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
       dav: {
         chunking: '1.0',
         trashbin: '1.0',
-        bulkupload: '1.0'
+        bulkupload: '1.0',
+        // RFC 6578 sync-collection support — turns NC iOS / Android refresh
+        // from PROPFIND-polling into REPORT-incremental, ~1s latency from
+        // a server-side or other-device change. Implementation lives in
+        // NcSyncReportService + NcSyncLogService (PRs #92 / #94).
+        'sync-token': true
       },
       theming: {
         name: 'Sync-in',

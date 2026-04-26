@@ -36,4 +36,12 @@ describe('ncCapabilities', () => {
     const block = (caps.capabilities as Record<string, Record<string, unknown>>).files_sharing
     expect(block.api_enabled).toBe(false)
   })
+
+  it('advertises dav.sync-token so NC iOS uses REPORT instead of PROPFIND-polling', () => {
+    // RFC 6578 sync-collection support. Implemented in NcSyncReportService
+    // (PR #94). Removing this flag silently regresses mobile auto-refresh
+    // back to "manual-only" on pull-to-refresh / app foreground.
+    const block = (caps.capabilities as Record<string, Record<string, unknown>>).dav
+    expect(block['sync-token']).toBe(true)
+  })
 })
