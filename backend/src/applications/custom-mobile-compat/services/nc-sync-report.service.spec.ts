@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { FilesQueries } from '../../files/services/files-queries.service'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
@@ -12,7 +13,7 @@ import { NcSyncReportService } from './nc-sync-report.service'
 
 // Build a SpaceEnv-shaped object good enough for the prop builder, without
 // going through the real .setup() (which needs a UserModel + filesystem).
-function fakePersonalSpace(realBasePath: string, login: string): SpaceEnv {
+function fakePersonalSpace(realBasePath: string, login: string, userId = 7): SpaceEnv {
   const space = Object.create(SpaceEnv.prototype) as SpaceEnv
   Object.assign(space, {
     id: 1,
@@ -32,7 +33,11 @@ function fakePersonalSpace(realBasePath: string, login: string): SpaceEnv {
     relativeUrl: '.',
     url: `personal`,
     paths: [],
-    root: { id: 0, alias: '', name: '', permissions: 'arwdmsu', owner: { id: 7, login } }
+    // Mirrors what dbFileFromSpace produces for a personal space; the REPORT
+    // service passes this to FilesQueries.getSpaceFileId for path-based id
+    // resolution, so the test fake must populate it.
+    dbFile: { ownerId: userId, path: '.', inTrash: false },
+    root: { id: 0, alias: '', name: '', permissions: 'arwdmsu', owner: { id: userId, login } }
   })
   return space
 }
@@ -67,6 +72,7 @@ describe(NcSyncReportService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncReportService
   let log: { since: jest.Mock; minKeptToken: jest.Mock; currentToken: jest.Mock }
+  let filesQueries: { getSpaceFileId: jest.Mock }
   let tmpRoot: string
   let user: UserModel
   let space: SpaceEnv
@@ -77,8 +83,16 @@ describe(NcSyncReportService.name, () => {
       minKeptToken: jest.fn().mockResolvedValue(0),
       currentToken: jest.fn().mockResolvedValue(0)
     }
+    // Default: no DB row found → service falls back to inode placeholder.
+    // Individual tests override with a positive id to assert the lookup
+    // result is actually used.
+    filesQueries = { getSpaceFileId: jest.fn().mockResolvedValue(0) }
     moduleRef = await Test.createTestingModule({
-      providers: [NcSyncReportService, { provide: NcSyncLogService, useValue: log }]
+      providers: [
+        NcSyncReportService,
+        { provide: NcSyncLogService, useValue: log },
+        { provide: FilesQueries, useValue: filesQueries }
+      ]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(NcSyncReportService)
@@ -217,5 +231,79 @@ describe(NcSyncReportService.name, () => {
     await service.respond(buildReq(null) as never, reply)
     // space → %20, é → %C3%A9
     expect(captured.body).toContain('/remote.php/dav/files/janwiebe/my%20docs/r%C3%A9sum%C3%A9.pdf')
+  })
+
+  // Follow-up #1 from docs/plans/2026-04-26-nc-sync-collection-v2-followups.md.
+  // Without DB id resolution, REPORT returns the inode-derived placeholder id
+  // (Math.abs of the negative stat.ino getProps stamps onto FS-only files).
+  // NC iOS caches that as the file's primary key; a later PROPFIND returns
+  // the real DB id and iOS treats them as two different files.
+  describe('DB id resolution for create/update events', () => {
+    it('uses the real DB id from FilesQueries when the path has an existing files-table row', async () => {
+      const filePath = path.join(tmpRoot, 'photo.jpg')
+      await fs.writeFile(filePath, 'pretend-this-is-jpeg')
+      // existing personal-space row has id 9999; lookup returns it.
+      filesQueries.getSpaceFileId.mockResolvedValueOnce(9999)
+      log.since.mockResolvedValueOnce([
+        { id: 42, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'photo.jpg', type: 'create', ts: Date.now() }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(captured.body).toContain('<oc:fileid>9999</oc:fileid>')
+      // <oc:id> is `padStart(20, '0') + 'syncin'` of the file id
+      expect(captured.body).toContain('<oc:id>00000000000000009999syncin</oc:id>')
+      // Lookup must be called with the FS-derived FileProps and the SpaceEnv's dbFile.
+      expect(filesQueries.getSpaceFileId).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'photo.jpg', path: '.', isDir: false }),
+        space.dbFile
+      )
+    })
+
+    it('falls back to the inode placeholder when no DB row exists for the path', async () => {
+      // getSpaceFileId returns 0 (default mock) — no row.
+      const filePath = path.join(tmpRoot, 'orphan.txt')
+      await fs.writeFile(filePath, 'no db row yet')
+      log.since.mockResolvedValueOnce([
+        { id: 50, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'orphan.txt', type: 'create', ts: Date.now() }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      // Body should still emit *some* fileid (the placeholder); critically,
+      // it must NOT be 0 — NC iOS refuses to render rows keyed at 0 — and
+      // must NOT be 9999 (no row to find).
+      const match = captured.body!.match(/<oc:fileid>(\d+)<\/oc:fileid>/)
+      expect(match).not.toBeNull()
+      const id = Number(match![1])
+      expect(id).toBeGreaterThan(0)
+      expect(id).not.toBe(9999)
+    })
+
+    it('does not query FilesQueries for delete events (no propstat block to populate)', async () => {
+      log.since.mockResolvedValueOnce([
+        { id: 11, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'gone.pdf', type: 'delete', ts: Date.now() }
+      ])
+      const { reply } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+      expect(filesQueries.getSpaceFileId).not.toHaveBeenCalled()
+    })
+
+    it('tolerates a DB lookup failure — falls back to placeholder id without dropping the response', async () => {
+      const filePath = path.join(tmpRoot, 'photo.jpg')
+      await fs.writeFile(filePath, 'pretend-this-is-jpeg')
+      filesQueries.getSpaceFileId.mockRejectedValueOnce(new Error('db down'))
+      log.since.mockResolvedValueOnce([
+        { id: 42, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'photo.jpg', type: 'create', ts: Date.now() }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      // The propstat block still rendered (hadn't crashed the per-event
+      // try/catch); fileid is the placeholder, not zero.
+      expect(captured.body).toContain('HTTP/1.1 200 OK')
+      const match = captured.body!.match(/<oc:fileid>(\d+)<\/oc:fileid>/)
+      expect(Number(match![1])).toBeGreaterThan(0)
+    })
   })
 })

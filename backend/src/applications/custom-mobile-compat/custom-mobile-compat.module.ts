@@ -33,6 +33,9 @@ import { NcSyncReportService } from './services/nc-sync-report.service'
 const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
 
 @Module({
+  // FilesModule exports FilesQueries (used by NcSyncReportService for DB id
+  // resolution); SpacesModule provides spaces-aware helpers used elsewhere
+  // in this module.
   imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
   controllers: [
     NcDiscoveryController,
