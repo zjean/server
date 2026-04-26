@@ -120,7 +120,14 @@ export class NcPropfindService {
       'oc:permissions': letters,
       'ocs:share-permissions': shareMask,
       'oc:size': ocSize,
-      'oc:favorite': '0',
+      // <oc:favorite> deliberately omitted. Sync-in doesn't model favorites
+      // anywhere in its DB / API / UI today (see
+      // docs/plans/2026-04-26-nc-favorites-disabled.md). When the prop is
+      // ABSENT, NC iOS / Android hide the star icon + "Add to favorites"
+      // action — which is honest. If we emitted '<oc:favorite>0</oc:favorite>'
+      // (the previous behavior), iOS still shows the action and tapping it
+      // would send a PROPPATCH we'd have to 501, surfacing as a confusing
+      // error toast. Re-add this prop once upstream Sync-in ships favorites.
       'oc:owner-id': String(owner.login ?? ''),
       'oc:owner-display-name': ownerDisplay,
       'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
