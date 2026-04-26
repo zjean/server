@@ -8,6 +8,7 @@ import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
+import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { NcDavController } from './nc-dav.controller'
 
 // `getProps` does fs.stat. Mock it so the test doesn't need a real file on disk.
@@ -49,7 +50,8 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
         { provide: SpacesManager, useValue: {} },
         { provide: SpacesQueries, useValue: spacesQueries },
         { provide: WebDAVMethods, useValue: {} },
-        { provide: NcPropfindService, useValue: {} }
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)

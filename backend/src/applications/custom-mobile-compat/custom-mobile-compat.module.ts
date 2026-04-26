@@ -21,6 +21,7 @@ import { NcPathResolverService } from './services/nc-path-resolver.service'
 import { NcPropfindService } from './services/nc-propfind.service'
 import { NcResponseService } from './services/nc-response.service'
 import { NcSyncLogService } from './services/nc-sync-log.service'
+import { NcSyncReportService } from './services/nc-sync-report.service'
 
 // Custom add-on module: exposes a Nextcloud-compatible subset of URLs so that
 // stock Nextcloud iOS/Android clients can log in and sync against a Sync-in
@@ -50,6 +51,7 @@ const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
     NcChunkedUploadsService,
     NcPropfindService,
     NcSyncLogService,
+    NcSyncReportService,
     ...(oidcEnabled ? [NcMobileOidcService] : [])
   ]
 })
