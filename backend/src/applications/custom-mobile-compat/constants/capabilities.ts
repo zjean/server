@@ -68,7 +68,7 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         'color-element': '#0082c9',
         'color-element-bright': '#0082c9',
         'color-element-dark': '#0082c9',
-        logo: `${serverUrl}/favicon.ico`,
+        logo: `${serverUrl}/index.php/apps/theming/image/logo`,
         background: '',
         'background-plain': true,
         'background-default': true
