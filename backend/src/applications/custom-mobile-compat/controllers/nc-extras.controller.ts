@@ -68,7 +68,11 @@ export class NcExtrasController {
   // /remote.php/dav/files/{user}/ prefix), `x` + `y` (pixel dimensions —
   // we use the max of the two for the thumbnail square; NC clients request
   // square thumbs and letterbox client-side).
-  @Get('index.php/core/preview')
+  // Both the bare path and the `.png` extension form are honored. Real NC
+  // serves both, and different NC iOS code paths / Android client versions
+  // pick one or the other; declaring both as routes on the same handler keeps
+  // us compatible with all of them.
+  @Get(['index.php/core/preview', 'index.php/core/preview.png'])
   @UseGuards(NcBasicAuthGuard)
   @Header('cache-control', 'private,max-age=3600')
   async preview(
@@ -94,8 +98,14 @@ export class NcExtrasController {
 
     try {
       const stream = await this.filesManager.generateThumbnail(space, size)
-      res.header('content-type', 'image/jpeg')
-      return new StreamableFile(stream, { type: 'image/jpeg' })
+      // generateThumbnail emits WebP bytes (sharp `.webp(...)` in
+      // backend/src/common/image.ts). Labeling them as JPEG would break NC
+      // clients that dispatch decoders by Content-Type — the JPEG decoder
+      // hits a WebP RIFF header and the cell renders blank. NC iOS supports
+      // WebP since iOS 14 (current min target ≥ iOS 15) and the Android
+      // client decodes WebP natively; this matches real NC ≥ 25.
+      res.header('content-type', 'image/webp')
+      return new StreamableFile(stream, { type: 'image/webp' })
     } catch (e) {
       // FileError.status is HTTP_STATUS. Everything else: treat as no preview.
       const err = e as { status?: number; message?: string }

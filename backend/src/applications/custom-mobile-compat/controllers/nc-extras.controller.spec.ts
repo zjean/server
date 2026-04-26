@@ -157,7 +157,7 @@ describe(NcExtrasController.name, () => {
     it('streams a thumbnail for a resolvable image path', async () => {
       const fakeSpace = { realPath: '/tmp/img.png' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
-      const stream = Readable.from([Buffer.from('jpegdata')])
+      const stream = Readable.from([Buffer.from('webpdata')])
       generateThumbnail.mockResolvedValueOnce(stream)
 
       const req = fakePreviewReq()
@@ -167,6 +167,18 @@ describe(NcExtrasController.name, () => {
       expect(spaceEnv).toHaveBeenCalledTimes(1)
       expect(generateThumbnail).toHaveBeenCalledWith(fakeSpace, 128)
       expect(result).toBeInstanceOf(StreamableFile)
+      // Content-Type must match the actual bytes — generateThumbnail emits
+      // WebP via sharp, so labeling as image/jpeg breaks NC clients that
+      // dispatch decoders by MIME type (was the "black square" bug).
+      expect(res.header).toHaveBeenCalledWith('content-type', 'image/webp')
+    })
+
+    it('registers both /preview and /preview.png so all NC client variants resolve', () => {
+      // @Get(...) is stacked on the same handler. Nest stores each declared
+      // path in the method's metadata; verify both ended up there.
+      const paths: unknown = Reflect.getMetadata('path', NcExtrasController.prototype.preview)
+      const list = Array.isArray(paths) ? paths : [paths]
+      expect(list).toEqual(expect.arrayContaining(['index.php/core/preview', 'index.php/core/preview.png']))
     })
 
     it('maps "not an image" into a 404 for the client', async () => {
