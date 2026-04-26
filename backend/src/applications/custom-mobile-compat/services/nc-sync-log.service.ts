@@ -90,6 +90,15 @@ export class NcSyncLogService implements OnModuleInit {
     return Number(row?.max ?? 0)
   }
 
+  // Lowest event id still in the log (i.e. not yet pruned). Returns 0 when
+  // the log is empty. The REPORT handler returns 412 Precondition Failed
+  // for any token < minKeptToken so the client knows its sync horizon has
+  // been forgotten and falls back to a full re-sync.
+  async minKeptToken(): Promise<number> {
+    const [row] = await this.db.select({ min: sql<number>`MIN(${ncSyncEvents.id})` }).from(ncSyncEvents)
+    return Number(row?.min ?? 0)
+  }
+
   // Drop events older than `keepDays`. Run from a daily cron in production.
   async prune(keepDays = DEFAULT_KEEP_DAYS): Promise<number> {
     const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000
@@ -106,7 +115,7 @@ export class NcSyncLogService implements OnModuleInit {
   // Map a Sync-in FileEvent payload to one of our log rows.
   private async handleFileEvent(e: {
     user: { id: number }
-    space: { repository: string; alias?: string; realPath?: string }
+    space: { repository: string; alias?: string; realPath?: string; realBasePath?: string }
     action: ACTION
     rPath: string
   }): Promise<void> {
@@ -116,10 +125,17 @@ export class NcSyncLogService implements OnModuleInit {
     const type = mapAction(e.action)
     if (!type) return
     // rPath is the absolute filesystem path; we only persist the path
-    // relative to the space root in the log. The REPORT handler normalizes
-    // this back to a NC-style /remote.php/dav/files/<user>/... href when it
-    // emits the response.
-    const path = stripSpaceRealPathPrefix(e.rPath, e.space)
+    // relative to the space root (realBasePath) in the log. The REPORT
+    // handler normalizes this back to a NC-style /remote.php/dav/files/<user>/...
+    // href when it emits the response.
+    //
+    // We strip realBasePath rather than realPath because upstream emits
+    // `rPath: space.realPath` (the file's full path). On a PUT to
+    // /files/<user>/photos/cat.jpg the spaceEnv has paths=['photos','cat.jpg'],
+    // so realPath === rPath and stripping realPath would yield ''. realBasePath
+    // is the space root itself (e.g. /data/<user>/files), independent of the
+    // request URL.
+    const path = stripSpaceRealBasePathPrefix(e.rPath, e.space)
     await this.append({ ownerId: e.user.id, repository, spaceAlias, path, type, ts: Date.now() })
   }
 }
@@ -138,7 +154,7 @@ function mapAction(action: ACTION | undefined): NcSyncEvent['type'] | null {
   }
 }
 
-function stripSpaceRealPathPrefix(rPath: string, space: { realPath?: string }): string {
-  if (!space.realPath || !rPath.startsWith(space.realPath)) return rPath
-  return rPath.slice(space.realPath.length).replace(/^\/+/, '')
+function stripSpaceRealBasePathPrefix(rPath: string, space: { realBasePath?: string }): string {
+  if (!space.realBasePath || !rPath.startsWith(space.realBasePath)) return rPath
+  return rPath.slice(space.realBasePath.length).replace(/^\/+/, '')
 }
