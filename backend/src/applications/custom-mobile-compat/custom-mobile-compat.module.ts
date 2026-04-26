@@ -12,6 +12,7 @@ import { NcExtrasController } from './controllers/nc-extras.controller'
 import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
+import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
@@ -43,6 +44,7 @@ const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
     NcOcsController,
     NcDavController,
     NcExtrasController,
+    NcThemingController,
     NcUploadsController,
     ...(oidcEnabled ? [NcMobileOidcController] : [])
   ],
