@@ -117,6 +117,43 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:owner-display-name>alice</oc:owner-display-name>')
   })
 
+  it('children inherit space.permissions, not envPermissions — so trash/D survives the virtual-endpoint-protection strip on the root', async () => {
+    // Sync-in strips DELETE from envPermissions on the personal-space root
+    // ("virtual endpoint protection") so a user can't delete their own
+    // home. That MUST NOT cascade to children, otherwise NC iOS hides the
+    // Move-to-trash action for every file.
+    const root = new WebDAVFile(
+      { id: 1, name: 'personal', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/alice/',
+      true
+    )
+    const child = new WebDAVFile(
+      { id: 2, name: 'photo.jpg', isDir: false, size: 1, ctime: Date.now(), mtime: Date.now(), mime: 'image/jpeg' },
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([root, child]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      // envPermissions has DELETE stripped (real-world value for personal root)
+      envPermissions: 'a:m:si:so',
+      // space.permissions retains DELETE
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+
+    // Root response: no D (matches envPermissions strip — protect the root)
+    const rootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(rootBlock).toMatch(/<oc:permissions>[^D]*<\/oc:permissions>/)
+
+    // Child response: HAS D (full permissions)
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/photo.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toMatch(/<oc:permissions>[^<]*D[^<]*<\/oc:permissions>/)
+  })
+
   it('emits a positive oc:fileid even when the upstream id is the negative-inode placeholder', async () => {
     // Sync-in's filesystem-only files (those without a DB row yet — e.g.
     // freshly-uploaded ones) carry `id = -stat.ino`. NC iOS uses oc:fileid /
