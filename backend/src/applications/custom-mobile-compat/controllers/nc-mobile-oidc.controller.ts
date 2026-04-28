@@ -1,8 +1,6 @@
 import { Controller, Get, HttpStatus, Logger, Param, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
-import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
-import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
@@ -33,7 +31,6 @@ export class NcMobileOidcController {
   constructor(
     private readonly flows: NcLoginFlowService,
     private readonly mobileOidc: NcMobileOidcService,
-    private readonly usersManager: UsersManager,
     private readonly appPasswords: NcAppPasswordService,
     private readonly response: NcResponseService
   ) {}
@@ -145,11 +142,7 @@ export class NcMobileOidcController {
     try {
       await this.appPasswords.pruneMobileAppPasswords(user)
       const tokenShort = state.slice(0, 8)
-      const appPwd = await this.usersManager.generateAppPassword(user, {
-        name: `mobile ${tokenShort}`,
-        app: AUTH_SCOPE.MOBILE_NC,
-        expiration: null
-      } as never)
+      const appPwd = await this.appPasswords.mintMobileAppPassword(user, `mobile ${tokenShort}`)
       creds = {
         server: this.response.baseUrl(req),
         loginName: user.login,

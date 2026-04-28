@@ -1,6 +1,5 @@
 import { Body, Controller, Get, HttpException, HttpStatus, Logger, Param, Post, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
-import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { AUTH_PROVIDER } from '../../../authentication/providers/auth-providers.constants'
 import { configuration } from '../../../configuration/config.environment'
@@ -176,11 +175,7 @@ export class NcLoginV2Controller {
     try {
       await this.appPasswords.pruneMobileAppPasswords(authed)
       const tokenShort = loginToken.slice(0, 8)
-      const appPwd = await this.usersManager.generateAppPassword(authed, {
-        name: `mobile ${tokenShort}`,
-        app: AUTH_SCOPE.MOBILE_NC,
-        expiration: null
-      } as never)
+      const appPwd = await this.appPasswords.mintMobileAppPassword(authed, `mobile ${tokenShort}`)
       creds = {
         server: this.response.baseUrl(req),
         loginName: authed.login,

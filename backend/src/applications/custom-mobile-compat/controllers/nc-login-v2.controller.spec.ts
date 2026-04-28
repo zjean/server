@@ -65,8 +65,11 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       providers: [
         NcLoginFlowService,
         NcResponseService,
-        { provide: UsersManager, useValue: { findUser: jest.fn(), logUser: jest.fn(), generateAppPassword: jest.fn() } },
-        { provide: NcAppPasswordService, useValue: { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0) } }
+        { provide: UsersManager, useValue: { findUser: jest.fn(), logUser: jest.fn() } },
+        {
+          provide: NcAppPasswordService,
+          useValue: { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0), mintMobileAppPassword: jest.fn() }
+        }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
