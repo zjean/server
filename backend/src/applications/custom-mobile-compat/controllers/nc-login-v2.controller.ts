@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, Post, Query, Req, Res } from '@nestjs/common'
+import { Body, Controller, Get, HttpException, HttpStatus, Logger, Param, Post, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
@@ -6,6 +6,7 @@ import { AUTH_PROVIDER } from '../../../authentication/providers/auth-providers.
 import { configuration } from '../../../configuration/config.environment'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
+import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
 import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
@@ -25,9 +26,12 @@ import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 @Controller()
 @AuthTokenSkip()
 export class NcLoginV2Controller {
+  private readonly logger = new Logger(NcLoginV2Controller.name)
+
   constructor(
     private readonly flows: NcLoginFlowService,
     private readonly usersManager: UsersManager,
+    private readonly appPasswords: NcAppPasswordService,
     private readonly response: NcResponseService
   ) {}
 
@@ -163,21 +167,39 @@ export class NcLoginV2Controller {
       })
     }
 
-    // Mint a fresh AUTH_SCOPE.MOBILE_NC app password. Use a unique slug based
-    // on the flow's loginToken so repeated sign-ins don't collide.
-    const tokenShort = loginToken.slice(0, 8)
-    const appPwd = await this.usersManager.generateAppPassword(authed, {
-      name: `mobile ${tokenShort}`,
-      app: AUTH_SCOPE.MOBILE_NC,
-      expiration: null
-    } as never)
-
-    const creds = {
-      server: this.response.baseUrl(req),
-      loginName: authed.login,
-      appPassword: appPwd.password
+    // Bound MOBILE_NC row growth, then mint. Same protective wrapper as the
+    // OIDC callback path: a DB error or name-collision race here used to
+    // bubble out as a Nest JSON 500 envelope, which iOS surfaces as a
+    // generic "Fout" alert because the flow stays pending and polling
+    // eventually times out.
+    let creds: { server: string; loginName: string; appPassword: string }
+    try {
+      await this.appPasswords.pruneMobileAppPasswords(authed)
+      const tokenShort = loginToken.slice(0, 8)
+      const appPwd = await this.usersManager.generateAppPassword(authed, {
+        name: `mobile ${tokenShort}`,
+        app: AUTH_SCOPE.MOBILE_NC,
+        expiration: null
+      } as never)
+      creds = {
+        server: this.response.baseUrl(req),
+        loginName: authed.login,
+        appPassword: appPwd.password
+      }
+      this.flows.completeWithCredentials(loginToken, creds)
+    } catch (e) {
+      const err = e as Error
+      this.logger.warn({
+        tag: this.submitLoginPage.name,
+        msg: `app-password mint or flow completion failed — ${err.message}`,
+        stack: err.stack
+      })
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign-in failed',
+        body: `<h1>Sign-in failed</h1><p>${escapeHtml(err.message)}.</p><p class="brand">See server logs for full diagnostic.</p>`
+      })
     }
-    this.flows.completeWithCredentials(loginToken, creds)
 
     res.header('Content-Type', 'text/html; charset=utf-8')
     const success = renderNcSuccessBody(creds)
