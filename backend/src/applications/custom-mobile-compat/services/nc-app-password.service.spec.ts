@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
+import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcAppPasswordService } from './nc-app-password.service'
 
 describe(NcAppPasswordService.name, () => {
@@ -9,13 +10,21 @@ describe(NcAppPasswordService.name, () => {
   let service: NcAppPasswordService
   let listAppPasswords: jest.Mock
   let deleteAppPassword: jest.Mock
+  let getUserSecrets: jest.Mock
+  let updateUserOrGuest: jest.Mock
   const fakeUser = { id: 7, login: 'alice' } as UserModel
 
   beforeAll(async () => {
     listAppPasswords = jest.fn()
     deleteAppPassword = jest.fn()
+    getUserSecrets = jest.fn()
+    updateUserOrGuest = jest.fn()
     moduleRef = await Test.createTestingModule({
-      providers: [NcAppPasswordService, { provide: UsersManager, useValue: { listAppPasswords, deleteAppPassword } }]
+      providers: [
+        NcAppPasswordService,
+        { provide: UsersManager, useValue: { listAppPasswords, deleteAppPassword } },
+        { provide: UsersQueries, useValue: { getUserSecrets, updateUserOrGuest } }
+      ]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(NcAppPasswordService)
@@ -28,6 +37,8 @@ describe(NcAppPasswordService.name, () => {
   beforeEach(() => {
     listAppPasswords.mockReset()
     deleteAppPassword.mockReset()
+    getUserSecrets.mockReset()
+    updateUserOrGuest.mockReset()
   })
 
   function row(name: string, ageDays: number, app: AUTH_SCOPE = AUTH_SCOPE.MOBILE_NC) {
@@ -104,5 +115,64 @@ describe(NcAppPasswordService.name, () => {
     ])
     await service.pruneMobileAppPasswords(fakeUser)
     expect(deleteAppPassword.mock.calls.map(([, n]) => n)).toContain('no-date')
+  })
+
+  describe('mintMobileAppPassword', () => {
+    // Why these tests live here: the cleartext returned by mintMobileAppPassword
+    // gets dropped into the `nc://login/server:...&password:...` deep-link.
+    // If the cleartext contains URL-special characters that the receiving NC
+    // client decodes during URL parsing (e.g. `&`, `#`, `%`), the password
+    // gets truncated mid-flight and the very first authenticated request
+    // is rejected with 401 — surfacing as the user-visible "Fout: Unauthorized"
+    // alert. The contract this test pins is: the cleartext is base64url
+    // (A–Z, a–z, 0–9, `-`, `_`) and nothing else.
+    const URL_SAFE_RE = /^[A-Za-z0-9_-]+$/
+
+    it('returns URL-safe cleartext (no &, #, %, or other URL-significant chars)', async () => {
+      getUserSecrets.mockResolvedValueOnce({})
+      updateUserOrGuest.mockResolvedValueOnce(true)
+      const result = await service.mintMobileAppPassword(fakeUser, 'mobile abc12345')
+      expect(result.password).toMatch(URL_SAFE_RE)
+      expect(result.password.length).toBeGreaterThanOrEqual(20)
+    })
+
+    it('produces a fresh password on each call (sanity check on randomness)', async () => {
+      getUserSecrets.mockResolvedValue({})
+      updateUserOrGuest.mockResolvedValue(true)
+      const a = await service.mintMobileAppPassword(fakeUser, 'mobile aa')
+      const b = await service.mintMobileAppPassword(fakeUser, 'mobile bb')
+      expect(a.password).not.toBe(b.password)
+    })
+
+    it('persists a new MOBILE_NC row with the hashed cleartext', async () => {
+      getUserSecrets.mockResolvedValueOnce({})
+      updateUserOrGuest.mockResolvedValueOnce(true)
+      await service.mintMobileAppPassword(fakeUser, 'mobile abc12345')
+      expect(updateUserOrGuest).toHaveBeenCalledTimes(1)
+      const [userId, set] = updateUserOrGuest.mock.calls[0]
+      expect(userId).toBe(fakeUser.id)
+      const newRow = set.secrets.appPasswords[0]
+      expect(newRow.app).toBe(AUTH_SCOPE.MOBILE_NC)
+      expect(newRow.name).toBe('mobile abc12345')
+      // Stored value MUST be the bcrypt hash, not the cleartext.
+      expect(newRow.password).toMatch(/^\$2[aby]\$/)
+    })
+
+    it('rejects with 400 when the slugified name collides with an existing row', async () => {
+      getUserSecrets.mockResolvedValueOnce({ appPasswords: [{ name: 'mobile abc12345', app: AUTH_SCOPE.MOBILE_NC, password: 'hash' }] })
+      await expect(service.mintMobileAppPassword(fakeUser, 'mobile abc12345')).rejects.toMatchObject({
+        message: 'Name already used',
+        status: 400
+      })
+      expect(updateUserOrGuest).not.toHaveBeenCalled()
+    })
+
+    it('rejects with 500 when the secrets write fails', async () => {
+      getUserSecrets.mockResolvedValueOnce({})
+      updateUserOrGuest.mockResolvedValueOnce(false)
+      await expect(service.mintMobileAppPassword(fakeUser, 'mobile abc12345')).rejects.toMatchObject({
+        status: 500
+      })
+    })
   })
 })

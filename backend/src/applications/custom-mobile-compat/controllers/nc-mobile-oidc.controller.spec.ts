@@ -19,7 +19,7 @@ describe(NcMobileOidcController.name, () => {
   let flows: NcLoginFlowService
   let mobileOidc: { buildAuthorizationUrl: jest.Mock; exchangeAndResolveUser: jest.Mock }
   let usersManager: { generateAppPassword: jest.Mock }
-  let appPasswords: { pruneMobileAppPasswords: jest.Mock }
+  let appPasswords: { pruneMobileAppPasswords: jest.Mock; mintMobileAppPassword: jest.Mock }
 
   function fakeReq(query?: Record<string, string>): FastifyRequest {
     return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }, query: query ?? {} } as unknown as FastifyRequest
@@ -46,7 +46,7 @@ describe(NcMobileOidcController.name, () => {
   beforeAll(async () => {
     mobileOidc = { buildAuthorizationUrl: jest.fn(), exchangeAndResolveUser: jest.fn() }
     usersManager = { generateAppPassword: jest.fn() }
-    appPasswords = { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0) }
+    appPasswords = { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0), mintMobileAppPassword: jest.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcMobileOidcController],
       providers: [
@@ -141,7 +141,7 @@ describe(NcMobileOidcController.name, () => {
       const flow = flows.initiate()
       flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
-      usersManager.generateAppPassword.mockResolvedValueOnce({ password: 'APPPWD' })
+      appPasswords.mintMobileAppPassword.mockResolvedValueOnce({ name: 'mobile abc12345', password: 'APPPWD' })
 
       const res = fakeRes()
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
@@ -157,16 +157,13 @@ describe(NcMobileOidcController.name, () => {
       expect(mobileOidc.exchangeAndResolveUser).toHaveBeenCalledWith(
         expect.objectContaining({ expectedState: flow.loginToken, codeVerifier: 'CV', nonce: 'NONCE' })
       )
-      expect(usersManager.generateAppPassword).toHaveBeenCalledWith(
-        expect.objectContaining({ login: 'alice' }),
-        expect.objectContaining({ name: expect.stringMatching(/^mobile /), app: expect.anything(), expiration: null })
-      )
+      expect(appPasswords.mintMobileAppPassword).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }), expect.stringMatching(/^mobile /))
       // Prune runs before mint so the row count stays bounded — without
       // this, repeated OAuth attempts pile up MOBILE_NC rows and slow down
       // post-login auth (validateAppPassword bcrypt-loops every row).
       expect(appPasswords.pruneMobileAppPasswords).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }))
       const pruneOrder = appPasswords.pruneMobileAppPasswords.mock.invocationCallOrder[0]
-      const mintOrder = usersManager.generateAppPassword.mock.invocationCallOrder[0]
+      const mintOrder = appPasswords.mintMobileAppPassword.mock.invocationCallOrder[0]
       expect(pruneOrder).toBeLessThan(mintOrder)
 
       // Flow should now hand off credentials on next poll
@@ -187,7 +184,7 @@ describe(NcMobileOidcController.name, () => {
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.UNAUTHORIZED)
       expect(html).toContain('No Sync-in account')
-      expect(usersManager.generateAppPassword).not.toHaveBeenCalled()
+      expect(appPasswords.mintMobileAppPassword).not.toHaveBeenCalled()
       // Flow not marked ready
       expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
     })
@@ -201,20 +198,20 @@ describe(NcMobileOidcController.name, () => {
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.UNAUTHORIZED)
       expect(html).toContain('Sign-in failed')
-      expect(usersManager.generateAppPassword).not.toHaveBeenCalled()
+      expect(appPasswords.mintMobileAppPassword).not.toHaveBeenCalled()
     })
 
     // Regression guard for the "Fout" alert on the in-app browser. If
-    // generateAppPassword throws (DB error, name-collision race), the
+    // mintMobileAppPassword throws (DB error, name-collision race), the
     // failure used to bubble out as a Nest JSON 500 envelope which iOS
     // surfaced as a generic alert because the flow stayed oidc-pending
     // and polling timed out. We now wrap the mint+complete block and
     // render an HTML diagnostic instead.
-    it('renders sign-in-failed HTML when generateAppPassword throws; flow stays not-ready so retry is possible', async () => {
+    it('renders sign-in-failed HTML when mintMobileAppPassword throws; flow stays not-ready so retry is possible', async () => {
       const flow = flows.initiate()
       flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
-      usersManager.generateAppPassword.mockRejectedValueOnce(new HttpException('Name already used', HttpStatus.BAD_REQUEST))
+      appPasswords.mintMobileAppPassword.mockRejectedValueOnce(new HttpException('Name already used', HttpStatus.BAD_REQUEST))
 
       const res = fakeRes()
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
@@ -235,7 +232,7 @@ describe(NcMobileOidcController.name, () => {
       const flow = flows.initiate()
       flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
-      usersManager.generateAppPassword.mockResolvedValueOnce({ password: 'APPPWD' })
+      appPasswords.mintMobileAppPassword.mockResolvedValueOnce({ name: 'mobile abc12345', password: 'APPPWD' })
 
       const req = fakeReq({
         code: 'CODE',
