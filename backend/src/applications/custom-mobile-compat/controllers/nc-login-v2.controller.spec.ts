@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { UsersManager } from '../../users/services/users-manager.service'
+import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
 import { NcLoginV2Controller } from './nc-login-v2.controller'
@@ -64,7 +65,8 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       providers: [
         NcLoginFlowService,
         NcResponseService,
-        { provide: UsersManager, useValue: { findUser: jest.fn(), logUser: jest.fn(), generateAppPassword: jest.fn() } }
+        { provide: UsersManager, useValue: { findUser: jest.fn(), logUser: jest.fn(), generateAppPassword: jest.fn() } },
+        { provide: NcAppPasswordService, useValue: { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0) } }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])

@@ -2,6 +2,7 @@ import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { UsersManager } from '../../users/services/users-manager.service'
+import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
@@ -18,6 +19,7 @@ describe(NcMobileOidcController.name, () => {
   let flows: NcLoginFlowService
   let mobileOidc: { buildAuthorizationUrl: jest.Mock; exchangeAndResolveUser: jest.Mock }
   let usersManager: { generateAppPassword: jest.Mock }
+  let appPasswords: { pruneMobileAppPasswords: jest.Mock }
 
   function fakeReq(query?: Record<string, string>): FastifyRequest {
     return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }, query: query ?? {} } as unknown as FastifyRequest
@@ -44,13 +46,15 @@ describe(NcMobileOidcController.name, () => {
   beforeAll(async () => {
     mobileOidc = { buildAuthorizationUrl: jest.fn(), exchangeAndResolveUser: jest.fn() }
     usersManager = { generateAppPassword: jest.fn() }
+    appPasswords = { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0) }
     moduleRef = await Test.createTestingModule({
       controllers: [NcMobileOidcController],
       providers: [
         NcLoginFlowService,
         NcResponseService,
         { provide: NcMobileOidcService, useValue: mobileOidc },
-        { provide: UsersManager, useValue: usersManager }
+        { provide: UsersManager, useValue: usersManager },
+        { provide: NcAppPasswordService, useValue: appPasswords }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
@@ -157,6 +161,13 @@ describe(NcMobileOidcController.name, () => {
         expect.objectContaining({ login: 'alice' }),
         expect.objectContaining({ name: expect.stringMatching(/^mobile /), app: expect.anything(), expiration: null })
       )
+      // Prune runs before mint so the row count stays bounded — without
+      // this, repeated OAuth attempts pile up MOBILE_NC rows and slow down
+      // post-login auth (validateAppPassword bcrypt-loops every row).
+      expect(appPasswords.pruneMobileAppPasswords).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }))
+      const pruneOrder = appPasswords.pruneMobileAppPasswords.mock.invocationCallOrder[0]
+      const mintOrder = usersManager.generateAppPassword.mock.invocationCallOrder[0]
+      expect(pruneOrder).toBeLessThan(mintOrder)
 
       // Flow should now hand off credentials on next poll
       const creds = flows.consumeByPollToken(flow.pollToken)
@@ -191,6 +202,28 @@ describe(NcMobileOidcController.name, () => {
       expect(res._status).toBe(HttpStatus.UNAUTHORIZED)
       expect(html).toContain('Sign-in failed')
       expect(usersManager.generateAppPassword).not.toHaveBeenCalled()
+    })
+
+    // Regression guard for the "Fout" alert on the in-app browser. If
+    // generateAppPassword throws (DB error, name-collision race), the
+    // failure used to bubble out as a Nest JSON 500 envelope which iOS
+    // surfaced as a generic alert because the flow stayed oidc-pending
+    // and polling timed out. We now wrap the mint+complete block and
+    // render an HTML diagnostic instead.
+    it('renders sign-in-failed HTML when generateAppPassword throws; flow stays not-ready so retry is possible', async () => {
+      const flow = flows.initiate()
+      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
+      usersManager.generateAppPassword.mockRejectedValueOnce(new HttpException('Name already used', HttpStatus.BAD_REQUEST))
+
+      const res = fakeRes()
+      const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
+      expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+      expect(html).toContain('Sign-in failed')
+      expect(html).toContain('Name already used')
+      // Flow must remain not-ready so the next /poll returns 404, the
+      // browser session expires cleanly, and the user can retry.
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
     })
 
     it('preserves all IdP query params (esp. iss per RFC 9207) on the callback URL passed to openid-client', async () => {

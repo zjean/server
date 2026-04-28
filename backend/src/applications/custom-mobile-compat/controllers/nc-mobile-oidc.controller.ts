@@ -4,6 +4,7 @@ import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NC_ROUTE } from '../constants/routes'
+import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
@@ -33,6 +34,7 @@ export class NcMobileOidcController {
     private readonly flows: NcLoginFlowService,
     private readonly mobileOidc: NcMobileOidcService,
     private readonly usersManager: UsersManager,
+    private readonly appPasswords: NcAppPasswordService,
     private readonly response: NcResponseService
   ) {}
 
@@ -133,19 +135,40 @@ export class NcMobileOidcController {
       })
     }
 
-    const tokenShort = state.slice(0, 8)
-    const appPwd = await this.usersManager.generateAppPassword(user, {
-      name: `mobile ${tokenShort}`,
-      app: AUTH_SCOPE.MOBILE_NC,
-      expiration: null
-    } as never)
-
-    const creds = {
-      server: this.response.baseUrl(req),
-      loginName: user.login,
-      appPassword: appPwd.password
+    // Bound MOBILE_NC row growth, then mint. Both calls inside the same
+    // catch — if either fails (DB error, name-collision race, write
+    // rejection), we render a useful HTML error instead of letting the
+    // exception escape to Nest's default JSON envelope (which the in-app
+    // browser surfaces as a generic "Fout" alert because the flow stays
+    // oidc-pending and iOS keeps polling until it times out).
+    let creds: { server: string; loginName: string; appPassword: string }
+    try {
+      await this.appPasswords.pruneMobileAppPasswords(user)
+      const tokenShort = state.slice(0, 8)
+      const appPwd = await this.usersManager.generateAppPassword(user, {
+        name: `mobile ${tokenShort}`,
+        app: AUTH_SCOPE.MOBILE_NC,
+        expiration: null
+      } as never)
+      creds = {
+        server: this.response.baseUrl(req),
+        loginName: user.login,
+        appPassword: appPwd.password
+      }
+      this.flows.completeWithCredentials(state, creds)
+    } catch (e) {
+      const err = e as Error
+      this.logger.warn({
+        tag: this.callback.name,
+        msg: `app-password mint or flow completion failed — ${err.message}`,
+        stack: err.stack
+      })
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR)
+      return renderHtml({
+        title: 'Sign-in failed',
+        body: `<h1>Sign-in failed</h1><p>${escapeHtml(err.message)}.</p><p class="brand">See server logs for full diagnostic.</p>`
+      })
     }
-    this.flows.completeWithCredentials(state, creds)
 
     const success = renderNcSuccessBody(creds)
     return renderHtml({ title: 'Signed in', body: success.body, headExtras: success.headExtras })

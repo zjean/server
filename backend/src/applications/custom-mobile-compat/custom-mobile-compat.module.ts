@@ -15,6 +15,7 @@ import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
+import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcMobileOidcService } from './services/nc-mobile-oidc.service'
@@ -50,6 +51,7 @@ const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
   ],
   providers: [
     NcBasicAuthGuard,
+    NcAppPasswordService,
     NcLoginFlowService,
     NcPathResolverService,
     NcResponseService,
