@@ -921,5 +921,17 @@
   "Clear all": "Alles wissen",
   "Dismiss": "Sluiten",
   "Search people or groups": "Zoek personen of groepen",
-  "No matches": "Geen resultaten"
+  "No matches": "Geen resultaten",
+  "preview_counter": "{{ current }} van {{ total }}",
+  "preview_counter_one": "1 van 1",
+  "Close (Esc)": "Sluiten (Esc)",
+  "Previous (←)": "Vorige (←)",
+  "Next (→)": "Volgende (→)",
+  "Fullscreen": "Volledig scherm",
+  "Switch to PDF view": "Terug naar PDF-weergave",
+  "Edit in OnlyOffice": "Bewerken in OnlyOffice",
+  "Info": "Info",
+  "Preview not available": "Voorvertoning niet beschikbaar",
+  "Download the file to view its contents.": "Download het bestand om de inhoud te bekijken.",
+  "Download": "Downloaden"
 }

@@ -17,7 +17,8 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isAudioMime, isImageMime, isPdfMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isPreviewable } from '../../utils/classify-file'
+import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -89,8 +90,6 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
-  protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
-  protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
 
   ngOnInit(): void {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -101,10 +100,9 @@ export class FileDetailComponent implements OnInit {
         return
       }
       const tab = params.get('tab') as InspectorTab | null
-      if (tab && this.tabs.some((t) => t.id === tab)) {
-        this.tab.set(tab)
-      }
-      this.loadFile(path)
+      const tabRequested = !!(tab && this.tabs.some((t) => t.id === tab))
+      if (tabRequested) this.tab.set(tab)
+      this.loadFile(path, tabRequested)
     })
   }
 
@@ -151,7 +149,7 @@ export class FileDetailComponent implements OnInit {
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path } }).catch(console.error)
   }
 
-  private loadFile(path: string): void {
+  private loadFile(path: string, tabRequested: boolean): void {
     this.loading.set(true)
     this.errorMessage.set(null)
     this.currentPath.set(path)
@@ -176,6 +174,16 @@ export class FileDetailComponent implements OnInit {
             this.errorMessage.set('File not found in parent folder.')
             this.file.set(null)
             this.loading.set(false)
+            return
+          }
+          // If the user landed on /v2/file?path=foo without an explicit
+          // tab and the file is renderable in the unified preview, send
+          // them to the overlay instead. The page would otherwise just
+          // show a no-preview / one-of-two-supported-types fallback,
+          // which is silly when a richer surface exists. Comment / share /
+          // activity links continue to land here because they pin a tab.
+          if (!tabRequested && isPreviewable(match)) {
+            this.router.navigate(['/', V2_PATH, V2_ROUTES.RECENTS], { queryParams: { preview: path }, replaceUrl: true }).catch(console.error)
             return
           }
           this.file.set(match)

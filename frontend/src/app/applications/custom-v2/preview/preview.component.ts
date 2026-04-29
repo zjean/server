@@ -15,6 +15,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
@@ -26,7 +27,7 @@ import { IconButtonComponent } from '../components/icon-button.component'
 import { assetsUrl } from '../../files/files.constants'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { isTextEditable } from '../utils/classify-file'
-import { isImageMime, isPdfMime, isTextViewerMime } from '../utils/mime-to-glyph'
+import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime } from '../utils/mime-to-glyph'
 import { isOfficeExtension } from '../utils/office'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { OfficeViewComponent } from './office-view.component'
@@ -37,13 +38,15 @@ export type PreviewMode = 'overlay' | 'standalone'
 
 // Pick the sibling predicate based on the current file's media class so
 // prev/next stays meaningful (image -> image, pdf -> pdf, office -> office,
-// text -> text).
+// text -> text, video -> video, audio -> audio).
 function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => boolean {
   if (!current) return () => false
   if (isImageMime(current.mime)) return (f) => isImageMime(f.mime)
   if (isPdfMime(current.mime)) return (f) => isPdfMime(f.mime)
   if (isOfficeExtension(current.name)) return (f) => isOfficeExtension(f.name)
   if (isTextViewerMime(current.mime) && isTextEditable(current)) return (f) => isTextViewerMime(f.mime) && isTextEditable(f)
+  if (isVideoMime(current.mime)) return (f) => isVideoMime(f.mime)
+  if (isAudioMime(current.mime)) return (f) => isAudioMime(f.mime)
   return () => false
 }
 
@@ -66,7 +69,7 @@ function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => b
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview.component.html',
   styleUrl: './preview.component.scss',
-  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe, L10nTranslatePipe]
 })
 export class PreviewComponent {
   private readonly http = inject(HttpClient)
@@ -76,6 +79,7 @@ export class PreviewComponent {
   private readonly sanitizer = inject(DomSanitizer)
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   // Path is driven from the parent: PreviewOverlayComponent passes the
   // overlay's current path; the standalone route component passes the
@@ -128,6 +132,8 @@ export class PreviewComponent {
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
   protected readonly isOffice = computed(() => isOfficeExtension(this.file()?.name))
+  protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
+  protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
   // True for plain-text / source-code files we can open in CodeMirror.
   // Filters out office-by-extension and the unsupported list (binary stuff
   // that has a text-y mime but really shouldn't be edited as text).
@@ -214,6 +220,15 @@ export class PreviewComponent {
       if (window.history.length > 1) window.history.back()
       else window.close()
     }
+  }
+
+  // Trigger a download of the current file via the spaces operation API.
+  // Used by the no-preview fallback so unrenderable types still have an
+  // affordance. _self target so the browser uses its native download flow.
+  protected download(): void {
+    const p = this.path()
+    if (!p || typeof window === 'undefined') return
+    window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_self')
   }
 
   protected onImageLoad(): void {

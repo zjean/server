@@ -117,6 +117,80 @@
     display: block;
   }
 
+  &__video {
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+  }
+
+  &__audio-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  &__audio-glyph {
+    color: var(--si-fg-muted);
+    opacity: 0.6;
+  }
+
+  &__audio-name {
+    font-size: 13px;
+    font-family: var(--si-mono);
+    color: var(--si-fg);
+    max-width: 480px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__audio {
+    width: 420px;
+    max-width: 100%;
+  }
+
+  &__no-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+  }
+
+  &__no-preview-icon {
+    color: var(--si-fg-muted);
+    opacity: 0.5;
+  }
+
+  &__no-preview-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--si-fg);
+  }
+
+  &__no-preview-lede {
+    font-size: 12.5px;
+    color: var(--si-fg-muted);
+    margin-bottom: 8px;
+  }
+
+  &__no-preview-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--si-line);
+    background: var(--si-bg0);
+    color: var(--si-fg);
+    border-radius: 6px;
+    font-size: 12.5px;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  &__no-preview-btn:hover {
+    background: var(--si-bg2);
+  }
+
   &__state {
     font-size: 13px;
     color: var(--si-fg-muted);
