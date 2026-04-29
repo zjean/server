@@ -9,15 +9,10 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isPreviewable } from '../../utils/classify-file'
+import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
-
-// Search results carry only `mime` (no FileProps), so the predicate is
-// inlined here instead of using utils/classify-file's `isPreviewable(file)`.
-function isPreviewableMime(mime: string | null | undefined): boolean {
-  return isImageMime(mime) || isPdfMime(mime)
-}
 
 const MIN_QUERY = 2
 const LIMIT = 100
@@ -92,7 +87,7 @@ export class SearchComponent implements OnInit {
     // Backend FileContent.path is the parent directory; the filename lives in `name`.
     // Compose the full path the viewer/file-detail screens expect.
     const fullPath = `${r.path}/${r.name}`
-    if (isPreviewableMime(r.mime)) {
+    if (isPreviewable({ name: r.name, mime: r.mime })) {
       this.previewOverlay.open(fullPath)
       return
     }
@@ -103,7 +98,7 @@ export class SearchComponent implements OnInit {
   // route.
   protected onResultAuxClick(event: MouseEvent, r: FileContentModel): void {
     if (event.button !== 1) return
-    if (!isPreviewableMime(r.mime)) return
+    if (!isPreviewable({ name: r.name, mime: r.mime })) return
     event.preventDefault()
     openPreviewInNewTab(`${r.path}/${r.name}`)
   }

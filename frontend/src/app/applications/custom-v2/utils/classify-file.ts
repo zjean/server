@@ -2,6 +2,7 @@ import { COLLABORA_ONLINE_EXTENSIONS } from '@sync-in-server/backend/src/applica
 import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.constants'
 import { MAX_TEXT_FILE_SIZE, UNSUPPORTED_VIEW_EXTENSIONS } from '../../files/files.constants'
 import { isAudioMime, isImageMime, isPdfMime, isVideoMime } from './mime-to-glyph'
+import { isOfficeExtension } from './office'
 
 interface ClassifiableFile {
   name: string
@@ -26,12 +27,12 @@ export function isTextEditable(file: ClassifiableFile): boolean {
 }
 
 // Files the unified preview overlay (and standalone /v2/preview route) can
-// render directly. Phase B covers images and PDFs; Phase C/D extend this to
-// office and text/code. Anything not covered here continues to land on the
-// classic file-detail page or a type-specific dialog.
+// render directly. Phases A-C cover images, PDFs, and OnlyOffice files;
+// Phase D extends with text/code. Anything not covered here continues to
+// land on the file-detail page.
 export function isPreviewable(file: ClassifiableFile): boolean {
   if (file.isDir) return false
-  return isImageMime(file.mime) || isPdfMime(file.mime)
+  return isImageMime(file.mime) || isPdfMime(file.mime) || isOfficeExtension(file.name)
 }
 
 function getExtension(name: string): string {

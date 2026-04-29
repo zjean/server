@@ -26,24 +26,27 @@ import { IconButtonComponent } from '../components/icon-button.component'
 import { assetsUrl } from '../../files/files.constants'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { isImageMime, isPdfMime } from '../utils/mime-to-glyph'
+import { isOfficeExtension } from '../utils/office'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
+import { OfficeViewComponent } from './office-view.component'
 import { PreviewOverlayService } from './preview-overlay.service'
 
 export type PreviewMode = 'overlay' | 'standalone'
 
 // Pick the sibling predicate based on the current file's media class so
-// prev/next stays meaningful (image -> image, pdf -> pdf, etc.). Phases
-// C/D extend this with office and text/code predicates.
+// prev/next stays meaningful (image -> image, pdf -> pdf, office -> office).
+// Phase D extends this with a text/code predicate.
 function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => boolean {
   if (!current) return () => false
   if (isImageMime(current.mime)) return (f) => isImageMime(f.mime)
   if (isPdfMime(current.mime)) return (f) => isPdfMime(f.mime)
+  if (isOfficeExtension(current.name)) return (f) => isOfficeExtension(f.name)
   return () => false
 }
 
 // Unified preview shell. Renders chrome (header, sibling nav, info pane,
-// close) once and switches body content by mime type. Phase A only wires
-// the image sub-view; pdf/office/text are slot-stubbed for later phases.
+// close) once and switches body content by mime type. Phases A-C wire
+// image, pdf, and OnlyOffice; text/code arrives in D.
 //
 // Mounted in two contexts:
 //  - overlay  — by PreviewOverlayComponent in layout-v2, fixed-position
@@ -60,7 +63,7 @@ function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => b
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview.component.html',
   styleUrl: './preview.component.scss',
-  imports: [IconV2Component, IconButtonComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, ToBytesPipe, TimeAgoPipe]
 })
 export class PreviewComponent {
   private readonly http = inject(HttpClient)
@@ -87,6 +90,11 @@ export class PreviewComponent {
   protected readonly resolution = signal<string>('')
   protected readonly loadError = signal<string | null>(null)
   protected readonly infoOpen = signal(false)
+
+  // For PDFs only: 'pdf' (default, pdf.js iframe) or 'office' (OnlyOffice
+  // editor for editable PDFs). Office files always render as office; this
+  // toggle is only relevant when the current file is a PDF.
+  protected readonly pdfStage = signal<'pdf' | 'office'>('pdf')
 
   protected readonly currentIndex = computed(() => {
     const p = this.path()
@@ -116,16 +124,29 @@ export class PreviewComponent {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
+  protected readonly isOffice = computed(() => isOfficeExtension(this.file()?.name))
+
+  // True when the body should render OnlyOffice — either the file itself
+  // is an office doc, or it's a PDF that the user toggled into edit mode.
+  protected readonly showOfficeEmbed = computed(() => this.isOffice() || (this.isPdf() && this.pdfStage() === 'office'))
+
+  // PDF-only edit affordance — show a small toggle button when the user
+  // could swap from the read-only pdf.js view to the OnlyOffice editor.
+  // (The OfficeView itself surfaces "OnlyOffice not available" if the
+  // server has no document server configured, so we don't pre-check here.)
+  protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
 
   constructor() {
     // Re-load whenever the input path changes. Covers in-overlay sibling
     // navigation (path mutates without component remounting) AND the
-    // initial mount.
+    // initial mount. Reset pdfStage on every navigation so a previous
+    // PDF's "edit" toggle doesn't leak into the next file.
     effect(() => {
       const p = this.path()
       if (!p) return
       this.resolution.set('')
       this.loadError.set(null)
+      this.pdfStage.set('pdf')
       this.loadFile(p)
     })
   }
@@ -164,6 +185,10 @@ export class PreviewComponent {
 
   protected toggleInfo(): void {
     this.infoOpen.update((v) => !v)
+  }
+
+  protected toggleToOffice(): void {
+    this.pdfStage.update((s) => (s === 'pdf' ? 'office' : 'pdf'))
   }
 
   protected close(): void {
@@ -225,7 +250,8 @@ export class PreviewComponent {
           const match = result.files.find((f) => f.name === name)
           if (match) this.file.set(match)
           // Sibling list filtered to the same media class as the current
-          // file so prev/next stays meaningful (image -> image, pdf -> pdf).
+          // file so prev/next stays meaningful (image -> image, pdf -> pdf,
+          // office -> office).
           const cls = sameClassPredicate(match)
           this.siblings.set(result.files.filter((f) => !f.isDir && cls(f)))
         },
