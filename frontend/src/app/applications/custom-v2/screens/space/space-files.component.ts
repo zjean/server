@@ -57,6 +57,8 @@ import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable } from '../../utils/classify-file'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPdfInNewTab } from '../../utils/open-pdf'
+import { openPreviewInNewTab } from '../../preview/open-preview'
+import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -108,6 +110,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly textEditorDialog = inject(TextEditorDialogService)
+  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly dockRail = inject(DockRailService)
@@ -455,10 +458,9 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.SPACES, alias, ...segs, file.name]).catch(console.error)
       return
     }
-    const segs = this.pathSegments().map((s) => s.path)
-    const fullPath = [SPACE_REPOSITORY.FILES, alias, ...segs, file.name].join('/')
+    const fullPath = this.buildFullPath(alias, file)
     if (isImageMime(file.mime)) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
+      this.previewOverlay.open(fullPath, file)
       return
     }
     if (isPdfMime(file.mime)) {
@@ -473,6 +475,22 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+  }
+
+  // Middle-click on a previewable file row → new tab with the chromeless
+  // preview route. Phase A: image only.
+  protected onRowAuxClick(event: MouseEvent, file: FileProps): void {
+    if (event.button !== 1 || file.isDir) return
+    const alias = this.currentAlias()
+    if (!alias) return
+    if (!isImageMime(file.mime)) return
+    event.preventDefault()
+    openPreviewInNewTab(this.buildFullPath(alias, file))
+  }
+
+  private buildFullPath(alias: string, file: FileProps): string {
+    const segs = this.pathSegments().map((s) => s.path)
+    return [SPACE_REPOSITORY.FILES, alias, ...segs, file.name].join('/')
   }
 
   protected onFilterInput(event: Event): void {

@@ -9,6 +9,7 @@ import { TextEditorDialogComponent } from '../components/text-editor-dialog.comp
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
+import { PreviewOverlayComponent } from '../preview/preview-overlay.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
@@ -42,7 +43,8 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
-    TextEditorDialogComponent
+    TextEditorDialogComponent,
+    PreviewOverlayComponent
   ]
 })
 export class LayoutV2Component implements OnInit {

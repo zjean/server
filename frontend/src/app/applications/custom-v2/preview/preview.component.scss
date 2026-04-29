@@ -1,3 +1,7 @@
+// Preview shell. Two visual modes:
+//  - default (overlay): contained box with margin + radius, sits inside
+//    the overlay backdrop above the v2 layout
+//  - standalone: full-bleed, no margin/radius, fills the new tab viewport
 :host {
   display: flex;
   flex: 1 1 auto;
@@ -6,7 +10,7 @@
   background: var(--si-bg0);
 }
 
-.viewer {
+.preview {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -16,6 +20,12 @@
   border-radius: var(--si-r3);
   overflow: hidden;
   margin: 12px;
+
+  &--standalone {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
 
   &__header {
     height: 32px;

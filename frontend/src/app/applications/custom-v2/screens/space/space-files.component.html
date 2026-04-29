@@ -109,6 +109,7 @@
                 class="file-row"
                 [class.file-row--selected]="isSelected(f)"
                 (click)="onRowClick($event, f)"
+                (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="file-row__select" (click)="$event.stopPropagation(); toggleSelection(f)">
@@ -160,6 +161,7 @@
                 class="file-card"
                 [class.file-card--selected]="isSelected(f)"
                 (click)="onRowClick($event, f)"
+                (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="file-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
@@ -199,6 +201,7 @@
                 class="gallery-card"
                 [class.gallery-card--selected]="isSelected(f)"
                 (click)="onRowClick($event, f)"
+                (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="gallery-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">

@@ -11,6 +11,8 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPdfInNewTab } from '../../utils/open-pdf'
+import { openPreviewInNewTab } from '../../preview/open-preview'
+import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 const MIN_QUERY = 2
 const LIMIT = 100
@@ -25,6 +27,7 @@ const LIMIT = 100
 export class SearchComponent implements OnInit {
   private readonly filesService = inject(FilesService)
   private readonly router = inject(Router)
+  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
@@ -85,7 +88,7 @@ export class SearchComponent implements OnInit {
     // Compose the full path the viewer/file-detail screens expect.
     const fullPath = `${r.path}/${r.name}`
     if (isImageMime(r.mime)) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
+      this.previewOverlay.open(fullPath)
       return
     }
     if (isPdfMime(r.mime)) {
@@ -93,5 +96,14 @@ export class SearchComponent implements OnInit {
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+  }
+
+  // Middle-click on a search result → new tab with the chromeless preview
+  // route. Phase A: image only.
+  protected onResultAuxClick(event: MouseEvent, r: FileContentModel): void {
+    if (event.button !== 1) return
+    if (!isImageMime(r.mime)) return
+    event.preventDefault()
+    openPreviewInNewTab(`${r.path}/${r.name}`)
   }
 }

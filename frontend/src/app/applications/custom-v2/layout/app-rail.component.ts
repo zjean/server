@@ -39,7 +39,7 @@ export class AppRailComponent {
         `/${V2_PATH}/${V2_ROUTES.SPACES}`,
         `/${V2_PATH}/${V2_ROUTES.SHARED}`,
         `/${V2_PATH}/${V2_ROUTES.TRASH}`,
-        `/${V2_PATH}/${V2_ROUTES.VIEWER}`,
+        `/${V2_PATH}/${V2_ROUTES.PREVIEW}`,
         `/${V2_PATH}/${V2_ROUTES.FILE}`
       ]
     },

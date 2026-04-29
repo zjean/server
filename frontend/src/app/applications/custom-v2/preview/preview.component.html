@@ -1,0 +1,67 @@
+<section class="preview" [class.preview--standalone]="mode() === 'standalone'">
+  <header class="preview__header">
+    <app-v2-icon name="image" [size]="12" class="preview__header-icon" />
+    <span class="preview__header-name">{{ fileName() }}</span>
+    <div class="preview__header-actions">
+      <app-v2-icon-btn iconName="x" [size]="26" title="Close (Esc)" (click)="close()" />
+    </div>
+  </header>
+
+  <div class="preview__toolbar">
+    <app-v2-icon-btn iconName="chevLeft" [size]="30" title="Previous (←)" (click)="previous()" />
+    <app-v2-icon-btn iconName="chevRight" [size]="30" title="Next (→)" (click)="next()" />
+    @if (isImage()) {
+      <app-v2-icon-btn iconName="box" [size]="30" title="Fullscreen" (click)="fullscreen()" />
+    }
+    <div class="preview__counter">
+      @if (siblings().length > 1) {
+        {{ currentIndex() + 1 }} of {{ siblings().length }}
+      } @else if (file()) {
+        1 of 1
+      }
+    </div>
+    <app-v2-icon-btn iconName="info" [size]="30" title="Info" [active]="infoOpen()" (click)="toggleInfo()" />
+  </div>
+
+  <div class="preview__body">
+    <div class="preview__stage">
+      @if (loadError(); as err) {
+        <div class="preview__state">{{ err }}</div>
+      } @else if (isImage() && imageUrl()) {
+        <img
+          #imageEl
+          class="preview__image"
+          [src]="imageUrl()"
+          [alt]="fileName()"
+          (load)="onImageLoad()"
+          (error)="onImageError()"
+        />
+      } @else if (file()) {
+        <!-- Phase A: only image is wired. Other types fall through here -->
+        <!-- until B/C/D land. Fallback shows the type, doesn't 404. -->
+        <div class="preview__state">
+          Preview not yet available for this file type ({{ file()!.mime }}).
+        </div>
+      }
+    </div>
+    @if (infoOpen() && file(); as f) {
+      <aside class="preview__info">
+        <div class="preview__info-head">Info</div>
+        <dl class="preview__kv">
+          <dt>Name</dt>
+          <dd class="preview__kv-val preview__kv-val--mono">{{ f.name }}</dd>
+          <dt>Type</dt>
+          <dd class="preview__kv-val">{{ f.mime }}</dd>
+          <dt>Size</dt>
+          <dd class="preview__kv-val preview__kv-val--mono">{{ f.size | toBytes: 2 : true }}</dd>
+          @if (resolution()) {
+            <dt>Dimensions</dt>
+            <dd class="preview__kv-val preview__kv-val--mono">{{ resolution() }}</dd>
+          }
+          <dt>Modified</dt>
+          <dd class="preview__kv-val">{{ f.mtime | amTimeAgo }}</dd>
+        </dl>
+      </aside>
+    }
+  </div>
+</section>
