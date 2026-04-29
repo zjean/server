@@ -32,6 +32,13 @@ export const NC_ROUTE = {
   AVATAR: '/index.php/avatar/:user/:size',
   PREVIEW: '/index.php/core/preview',
 
+  // OnlyOffice connector (NC plugin protocol). Mounted only when
+  // applications.files.onlyoffice.enabled === true (see CustomMobileCompatModule).
+  ONLYOFFICE_CONFIG: '/index.php/apps/onlyoffice/config',
+  ONLYOFFICE_TRACK: '/index.php/apps/onlyoffice/track',
+  ONLYOFFICE_EMPTY: '/index.php/apps/onlyoffice/empty',
+  ONLYOFFICE_SAVE: '/index.php/apps/onlyoffice/save',
+
   // WebDAV (files, uploads, trashbin)
   DAV_FILES_PREFIX: '/remote.php/dav/files',
   DAV_UPLOADS_PREFIX: '/remote.php/dav/uploads',
