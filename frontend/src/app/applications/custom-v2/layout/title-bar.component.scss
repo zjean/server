@@ -151,16 +151,20 @@
   }
 
   .title-bar__brand-text,
-  .title-bar__nav,
-  .title-bar__crumb-sep {
+  .title-bar__nav {
     display: none;
   }
 
-  .title-bar__crumb:not(.title-bar__crumb--last) {
-    display: none;
-  }
-
+  // Keep the full breadcrumb chain visible on mobile so users still see
+  // their position in the hierarchy ("Files / Personal", not just
+  // "Personal"). The container's overflow:hidden + the per-crumb
+  // text-overflow:ellipsis already handle squeeze cases.
   .title-bar__breadcrumbs {
     padding: 0 4px;
+    gap: 4px;
+  }
+
+  .title-bar__crumb {
+    font-size: 12px;
   }
 }

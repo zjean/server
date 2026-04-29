@@ -551,3 +551,31 @@
     opacity: 0.5;
   }
 }
+
+// Mobile (<768px): drop the info / size / modified columns from the
+// list view so the row fits without horizontal scroll. Users get the
+// missing metadata via the file's info dock-tab. The kebab actions
+// column is also force-shown — opacity:0 only-on-hover doesn't work
+// on touch.
+:host-context(.layout-v2--mobile) {
+  .file-table__head,
+  .file-row {
+    grid-template-columns: 28px minmax(0, 1fr) 40px;
+    padding: 0 12px;
+  }
+
+  // Header cells are positional spans (Name / Info / Size / Modified / blank);
+  // hide cells 3-5 so the visible head matches the new 3-column body.
+  .file-table__head > :nth-child(3),
+  .file-table__head > :nth-child(4),
+  .file-table__head > :nth-child(5),
+  .file-row__info,
+  .file-row__size,
+  .file-row__modified {
+    display: none;
+  }
+
+  .file-row__actions {
+    opacity: 1;
+  }
+}
