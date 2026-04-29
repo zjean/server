@@ -9,15 +9,10 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isPreviewable } from '../../utils/classify-file'
+import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
-
-// Recents rows carry only `mime` (no FileProps), so we inline the predicate
-// here instead of using utils/classify-file's `isPreviewable(file)`.
-function isPreviewableMime(mime: string | null | undefined): boolean {
-  return isImageMime(mime) || isPdfMime(mime)
-}
 
 const RECENT_LIMIT = 20
 
@@ -68,7 +63,7 @@ export class RecentsComponent implements OnInit {
 
   protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
     const fullPath = `${parentPath}/${fileName}`
-    if (isPreviewableMime(mime)) {
+    if (isPreviewable({ name: fileName, mime })) {
       this.previewOverlay.open(fullPath)
       return
     }
@@ -79,7 +74,7 @@ export class RecentsComponent implements OnInit {
   // route.
   protected onRowAuxClick(event: MouseEvent, parentPath: string, fileName: string, mime: string | null | undefined): void {
     if (event.button !== 1) return
-    if (!isPreviewableMime(mime)) return
+    if (!isPreviewable({ name: fileName, mime })) return
     event.preventDefault()
     openPreviewInNewTab(`${parentPath}/${fileName}`)
   }

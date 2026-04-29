@@ -13,6 +13,15 @@
     @if (isImage()) {
       <app-v2-icon-btn iconName="box" [size]="30" title="Fullscreen" (click)="fullscreen()" />
     }
+    @if (canToggleToOffice()) {
+      <app-v2-icon-btn
+        iconName="pencil"
+        [size]="30"
+        [active]="pdfStage() === 'office'"
+        [title]="pdfStage() === 'office' ? 'Switch to PDF view' : 'Edit in OnlyOffice'"
+        (click)="toggleToOffice()"
+      />
+    }
     <div class="preview__counter">
       @if (siblings().length > 1) {
         {{ currentIndex() + 1 }} of {{ siblings().length }}
@@ -24,9 +33,11 @@
   </div>
 
   <div class="preview__body">
-    <div class="preview__stage" [class.preview__stage--bare]="isPdf()">
+    <div class="preview__stage" [class.preview__stage--bare]="isPdf() || showOfficeEmbed()">
       @if (loadError(); as err) {
         <div class="preview__state">{{ err }}</div>
+      } @else if (showOfficeEmbed() && file(); as f) {
+        <app-v2-preview-office-view [path]="path()" [file]="f" />
       } @else if (isImage() && imageUrl()) {
         <img
           #imageEl
@@ -39,7 +50,7 @@
       } @else if (isPdf() && pdfSafeUrl(); as url) {
         <iframe class="preview__iframe" [src]="url"></iframe>
       } @else if (file()) {
-        <!-- Phase B: image + pdf wired. Office/text/code arrive in C/D. -->
+        <!-- Phases A-C: image, pdf, office wired. Text/code arrives in D. -->
         <!-- Fallback shows the type so the user isn't staring at a blank -->
         <!-- panel; download/open-with affordance arrives in Phase E. -->
         <div class="preview__state">
