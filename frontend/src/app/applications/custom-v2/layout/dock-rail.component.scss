@@ -3,6 +3,10 @@
   flex-shrink: 0;
 }
 
+:host.dock-rail-host--hidden {
+  display: none;
+}
+
 .dock-rail {
   width: 40px;
   flex-shrink: 0;

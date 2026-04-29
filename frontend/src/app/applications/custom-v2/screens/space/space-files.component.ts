@@ -52,6 +52,7 @@ import { PillComponent } from '../../components/pill.component'
 import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
+import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable } from '../../utils/classify-file'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
@@ -109,6 +110,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly textEditorDialog = inject(TextEditorDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
+  private readonly dockRail = inject(DockRailService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
@@ -221,6 +223,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.clearSelection()
@@ -245,6 +248,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.navSubscription?.unsubscribe()
     this.spaceSubscription?.unsubscribe()
+    this.dockRail.clear()
   }
 
   protected setMode(mode: BrowserMode): void {
