@@ -174,9 +174,7 @@ export class PreviewComponent {
     if (this.mode() === 'overlay') {
       this.overlay.open(path, null)
     } else {
-      this.router
-        .navigate(['/', V2_PATH, V2_ROUTES.PREVIEW], { queryParams: { path }, replaceUrl: true })
-        .catch(console.error)
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.PREVIEW], { queryParams: { path }, replaceUrl: true }).catch(console.error)
     }
   }
 
