@@ -1,9 +1,9 @@
 import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { OnlyOfficeManager } from '../../files/modules/only-office/only-office-manager.service'
-import { FilesQueries } from '../../files/services/files-queries.service'
-import { SpacesManager } from '../../spaces/services/spaces-manager.service'
+import { OnlyOfficeGuard } from '../../files/modules/only-office/only-office.guard'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
+import { NcOnlyOfficeFileResolver } from '../services/nc-onlyoffice-file-resolver.service'
 import { NcOnlyOfficeTranslatorService } from '../services/nc-onlyoffice-translator.service'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './nc-onlyoffice.controller'
 
@@ -11,9 +11,8 @@ describe('NcOnlyOfficeController', () => {
   let controller: NcOnlyOfficeController
 
   const onlyOfficeManagerMock = { getSettings: jest.fn(), callBack: jest.fn() }
-  const filesQueriesMock = { getUserFile: jest.fn() }
-  const spacesManagerMock = { spaceEnv: jest.fn() }
   const translatorMock = { toNcEnvelope: jest.fn() }
+  const resolverMock = { resolve: jest.fn() }
 
   beforeEach(async () => {
     jest.clearAllMocks()
@@ -21,9 +20,8 @@ describe('NcOnlyOfficeController', () => {
       controllers: [NcOnlyOfficeController],
       providers: [
         { provide: OnlyOfficeManager, useValue: onlyOfficeManagerMock },
-        { provide: FilesQueries, useValue: filesQueriesMock },
-        { provide: SpacesManager, useValue: spacesManagerMock },
-        { provide: NcOnlyOfficeTranslatorService, useValue: translatorMock }
+        { provide: NcOnlyOfficeTranslatorService, useValue: translatorMock },
+        { provide: NcOnlyOfficeFileResolver, useValue: resolverMock }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -54,7 +52,7 @@ describe('NcOnlyOfficeController', () => {
     })
 
     it('returns 404 when file does not belong to user', async () => {
-      filesQueriesMock.getUserFile.mockResolvedValue(null)
+      resolverMock.resolve.mockResolvedValue(null)
       await expect(controller.config(fakeReq, '42')).rejects.toThrow(HttpException)
       try {
         await controller.config(fakeReq, '42')
@@ -64,20 +62,48 @@ describe('NcOnlyOfficeController', () => {
     })
 
     it('resolves fileId, calls OnlyOfficeManager.getSettings, returns translator output', async () => {
-      filesQueriesMock.getUserFile.mockResolvedValue({ id: 42, path: 'docs/a.docx' })
       const fakeSpace = { url: 'files/personal/docs/a.docx' }
-      spacesManagerMock.spaceEnv.mockResolvedValue(fakeSpace)
+      resolverMock.resolve.mockResolvedValue(fakeSpace)
       const fakeSyncIn = { documentServerUrl: 'x', config: {}, hasLock: false }
       onlyOfficeManagerMock.getSettings.mockResolvedValue(fakeSyncIn)
-      translatorMock.toNcEnvelope.mockReturnValue({ shaped: true })
+      translatorMock.toNcEnvelope.mockReturnValue({ shaped: true, editorConfig: {} })
 
       const out = await controller.config(fakeReq, '42')
 
-      expect(filesQueriesMock.getUserFile).toHaveBeenCalledWith(7, 42)
-      expect(spacesManagerMock.spaceEnv).toHaveBeenCalledWith(fakeUser, ['files', 'personal', 'docs', 'a.docx'])
+      expect(resolverMock.resolve).toHaveBeenCalledWith(fakeUser, 42)
       expect(onlyOfficeManagerMock.getSettings).toHaveBeenCalledWith(fakeUser, fakeSpace, fakeReq)
       expect(translatorMock.toNcEnvelope).toHaveBeenCalledWith(fakeSyncIn)
-      expect(out).toEqual({ shaped: true })
+      expect(out).toMatchObject({ shaped: true })
+    })
+
+    it('rewrites editorConfig.callbackUrl to /index.php/apps/onlyoffice/track preserving the user token', async () => {
+      resolverMock.resolve.mockResolvedValue({ url: 'x' })
+      onlyOfficeManagerMock.getSettings.mockResolvedValue({})
+      translatorMock.toNcEnvelope.mockReturnValue({
+        editorConfig: {
+          callbackUrl: 'https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx?token=user-jwt-abc'
+        }
+      })
+
+      const out = await controller.config(fakeReq, '42')
+      const u = new URL((out as any).editorConfig.callbackUrl)
+      expect(u.pathname).toBe('/index.php/apps/onlyoffice/track')
+      expect(u.searchParams.get('fileId')).toBe('42')
+      expect(u.searchParams.get('token')).toBe('user-jwt-abc')
+      expect(u.origin).toBe('https://sync-in.test')
+    })
+
+    it('leaves callbackUrl unchanged when the original has no token query (defensive)', async () => {
+      resolverMock.resolve.mockResolvedValue({ url: 'x' })
+      onlyOfficeManagerMock.getSettings.mockResolvedValue({})
+      translatorMock.toNcEnvelope.mockReturnValue({
+        editorConfig: { callbackUrl: 'https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx' }
+      })
+
+      const out = await controller.config(fakeReq, '42')
+      expect((out as any).editorConfig.callbackUrl).toBe(
+        'https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx'
+      )
     })
   })
 
@@ -90,14 +116,24 @@ describe('NcOnlyOfficeController', () => {
   })
 })
 
-describe('NcOnlyOfficeCallbackController (stub)', () => {
+describe('NcOnlyOfficeCallbackController', () => {
   let controller: NcOnlyOfficeCallbackController
 
+  const onlyOfficeManagerMock = { getSettings: jest.fn(), callBack: jest.fn() }
+  const resolverMock = { resolve: jest.fn() }
+
   beforeEach(async () => {
+    jest.clearAllMocks()
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NcOnlyOfficeCallbackController],
-      providers: []
-    }).compile()
+      providers: [
+        { provide: OnlyOfficeManager, useValue: onlyOfficeManagerMock },
+        { provide: NcOnlyOfficeFileResolver, useValue: resolverMock }
+      ]
+    })
+      .overrideGuard(OnlyOfficeGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
     controller = module.get(NcOnlyOfficeCallbackController)
   })
 
@@ -105,7 +141,42 @@ describe('NcOnlyOfficeCallbackController (stub)', () => {
     expect(controller).toBeDefined()
   })
 
-  it('track() throws 501 in phase 1', () => {
-    expect(() => controller.track()).toThrow(HttpException)
+  describe('track()', () => {
+    const fakeUser: any = { id: 7, login: 'jane' }
+    const fakeReq: any = { user: fakeUser }
+
+    it('returns error envelope when fileId is missing', async () => {
+      const out = await controller.track(fakeReq, undefined, { token: 'oo-payload' })
+      expect(out).toEqual({ error: 'fileId required' })
+    })
+
+    it('returns error envelope when fileId is non-numeric', async () => {
+      const out = await controller.track(fakeReq, 'abc', { token: 'oo-payload' })
+      expect(out).toEqual({ error: 'fileId required' })
+    })
+
+    it('returns error envelope when file is unresolvable', async () => {
+      resolverMock.resolve.mockResolvedValue(null)
+      const out = await controller.track(fakeReq, '42', { token: 'oo-payload' })
+      expect(out).toEqual({ error: 'file not found' })
+    })
+
+    it('returns error envelope when body has no token', async () => {
+      resolverMock.resolve.mockResolvedValue({ url: 'x' })
+      const out = await controller.track(fakeReq, '42', {})
+      expect(out).toEqual({ error: 'callback token required' })
+    })
+
+    it('dispatches valid callbacks into OnlyOfficeManager.callBack', async () => {
+      const fakeSpace = { url: 'files/personal/docs/a.docx' }
+      resolverMock.resolve.mockResolvedValue(fakeSpace)
+      onlyOfficeManagerMock.callBack.mockResolvedValue({ error: 0 })
+
+      const out = await controller.track(fakeReq, '42', { token: 'oo-payload-jwt' })
+
+      expect(resolverMock.resolve).toHaveBeenCalledWith(fakeUser, 42)
+      expect(onlyOfficeManagerMock.callBack).toHaveBeenCalledWith(fakeUser, fakeSpace, 'oo-payload-jwt')
+      expect(out).toEqual({ error: 0 })
+    })
   })
 })

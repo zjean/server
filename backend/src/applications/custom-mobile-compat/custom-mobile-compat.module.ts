@@ -20,6 +20,7 @@ import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcMobileOidcService } from './services/nc-mobile-oidc.service'
+import { NcOnlyOfficeFileResolver } from './services/nc-onlyoffice-file-resolver.service'
 import { NcOnlyOfficeTranslatorService } from './services/nc-onlyoffice-translator.service'
 import { NcPathResolverService } from './services/nc-path-resolver.service'
 import { NcPropfindService } from './services/nc-propfind.service'
@@ -67,7 +68,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcSyncLogService,
     NcSyncReportService,
     ...(oidcEnabled ? [NcMobileOidcService] : []),
-    ...(onlyofficeEnabled ? [NcOnlyOfficeTranslatorService] : [])
+    ...(onlyofficeEnabled ? [NcOnlyOfficeTranslatorService, NcOnlyOfficeFileResolver] : [])
   ]
 })
 export class CustomMobileCompatModule {}
