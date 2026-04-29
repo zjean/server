@@ -2,6 +2,7 @@ import { Routes } from '@angular/router'
 import { APP_PATH } from './app.constants'
 import { adminRoutes } from './applications/admin/admin.routes'
 import { LayoutV2Component } from './applications/custom-v2/layout/layout-v2.component'
+import { PreviewPageComponent } from './applications/custom-v2/preview/preview-page.component'
 import { PdfViewerComponent } from './applications/custom-v2/screens/pdf-viewer/pdf-viewer.component'
 import { uiVersionGuard } from './applications/custom-v2/ui-version.guard'
 import { V2_PATH, V2_ROUTES } from './applications/custom-v2/v2.constants'
@@ -23,6 +24,15 @@ export const routes: Routes = [
     // fills the whole tab — no v2 sidebar/header chrome around the viewer.
     path: `${V2_PATH}/${V2_ROUTES.PDF}`,
     component: PdfViewerComponent,
+    canActivate: [authGuard]
+  },
+  {
+    // Standalone (chromeless) preview route — what middle-click /
+    // window.open lands on. Sibling of the v2 layout so the new tab has
+    // no v2 sidebar/header. Image-only in Phase A; pdf/office/text added
+    // in subsequent phases.
+    path: `${V2_PATH}/${V2_ROUTES.PREVIEW}`,
+    component: PreviewPageComponent,
     canActivate: [authGuard]
   },
   {

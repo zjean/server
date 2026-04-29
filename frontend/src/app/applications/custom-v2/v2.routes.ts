@@ -16,14 +16,12 @@ import { SpaceFilesComponent } from './screens/space/space-files.component'
 import { SpacesComponent } from './screens/spaces/spaces.component'
 import { TrashComponent } from './screens/trash/trash.component'
 import { TrashBinComponent } from './screens/trash-bin/trash-bin.component'
-import { ViewerComponent } from './screens/viewer/viewer.component'
 import { V2_ROUTES } from './v2.constants'
 
 export const v2Routes: Routes = [
   { path: V2_ROUTES.STUB, pathMatch: 'full', redirectTo: V2_ROUTES.RECENTS },
   { path: V2_ROUTES.KIT, component: KitComponent },
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
-  { path: V2_ROUTES.VIEWER, component: ViewerComponent },
   { path: V2_ROUTES.FILE, component: FileDetailComponent },
   {
     path: V2_ROUTES.PERSONAL,

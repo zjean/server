@@ -11,6 +11,8 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPdfInNewTab } from '../../utils/open-pdf'
+import { openPreviewInNewTab } from '../../preview/open-preview'
+import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 const RECENT_LIMIT = 20
 
@@ -26,6 +28,7 @@ export class RecentsComponent implements OnInit {
   private readonly commentsService = inject(CommentsService)
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
+  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
 
   protected readonly files = computed(() => this.store.filesRecents().slice(0, RECENT_LIMIT))
@@ -61,7 +64,7 @@ export class RecentsComponent implements OnInit {
   protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
     const fullPath = `${parentPath}/${fileName}`
     if (isImageMime(mime)) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
+      this.previewOverlay.open(fullPath)
       return
     }
     if (isPdfMime(mime)) {
@@ -69,5 +72,14 @@ export class RecentsComponent implements OnInit {
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+  }
+
+  // Middle-click on a recents row → new tab with the chromeless preview
+  // route. Phase A: image only.
+  protected onRowAuxClick(event: MouseEvent, parentPath: string, fileName: string, mime: string | null | undefined): void {
+    if (event.button !== 1) return
+    if (!isImageMime(mime)) return
+    event.preventDefault()
+    openPreviewInNewTab(`${parentPath}/${fileName}`)
   }
 }
