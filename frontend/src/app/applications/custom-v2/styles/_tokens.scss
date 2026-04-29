@@ -36,14 +36,18 @@
   --si-border: var(--si-line-strong);
 
   // ─── Text — cool-white with a breath of navy ─────────────────────────
-  --si-fg:       #f6f7fb;
-  --si-fg:       oklch(0.98 0.010 240);
-  --si-fg-muted: #b8bccb;
-  --si-fg-muted: oklch(0.78 0.028 240);
-  --si-fg-faint: #878ca0;
-  --si-fg-faint: oklch(0.60 0.035 240);
-  --si-fg-ghost: #575d74;
-  --si-fg-ghost: oklch(0.42 0.040 245);
+  // fg-faint lifted from 0.60 → 0.72 so subtitles clear WCAG AA against bg2/bg3.
+  // Tertiary added for true footnote-class text that intentionally recedes.
+  --si-fg:           #f6f7fb;
+  --si-fg:           oklch(0.98 0.010 240);
+  --si-fg-muted:     #b8bccb;
+  --si-fg-muted:     oklch(0.78 0.028 240);
+  --si-fg-faint:     #a4a9bd;
+  --si-fg-faint:     oklch(0.72 0.030 240);
+  --si-fg-tertiary:  #878ca0;
+  --si-fg-tertiary:  oklch(0.60 0.035 240);
+  --si-fg-ghost:     #575d74;
+  --si-fg-ghost:     oklch(0.42 0.040 245);
 
   // ─── Accent — electric cyan-teal, slick dashboard energy ─────────────
   // hue 200 sits beautifully against navy.
@@ -100,11 +104,15 @@
   --si-cyan-soft:  rgba(134, 212, 226, 0.16);
   --si-cyan-soft:  oklch(0.84 0.13 210 / 0.16);
 
-  // ─── Type system — unified modern grotesk ────────────────────────────
-  --si-sans:    'Inter Tight Variable', 'Geist Variable', system-ui, -apple-system, sans-serif;
-  --si-display: 'Inter Tight Variable', 'Geist Variable', system-ui, sans-serif;
-  --si-serif:   'Inter Tight Variable', 'Geist Variable', system-ui, sans-serif;
-  --si-mono:    'JetBrains Mono Variable', ui-monospace, monospace;
+  // ─── Type system — sans/display split ────────────────────────────────
+  // Inter Tight is a display cut: tight sidebearings, geometric counters.
+  // Lovely at ≥24px on dark, wiry at 11–13px. Use it only for --si-display.
+  // Body / UI / serif italic / "mono" all resolve to regular Inter so the
+  // workbench reads body-warm instead of display-crisp.
+  --si-sans:    'Inter Variable', 'Geist Variable', system-ui, -apple-system, sans-serif;
+  --si-display: 'Inter Tight Variable', 'Inter Variable', 'Geist Variable', system-ui, sans-serif;
+  --si-serif:   'Inter Variable', 'Geist Variable', system-ui, sans-serif;
+  --si-mono:    'Inter Variable', 'Geist Variable', system-ui, sans-serif;
 
   // ─── Radii ───────────────────────────────────────────────────────────
   --si-r1: 5px;

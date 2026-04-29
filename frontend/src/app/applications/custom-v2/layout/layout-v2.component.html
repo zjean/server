@@ -7,12 +7,12 @@
   <main class="layout-v2__content">
     <router-outlet />
   </main>
-  @if (layoutV2.dockActive()) {
+  @if (activeDockLabel()) {
     <aside
       class="layout-v2__dock-panel"
       [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null"
     >
-      <div class="layout-v2__dock-panel-header">{{ layoutV2.dockActive() }}</div>
+      <div class="layout-v2__dock-panel-header">{{ activeDockLabel() }}</div>
       <p class="layout-v2__dock-panel-empty">Coming soon.</p>
     </aside>
   }

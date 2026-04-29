@@ -2,15 +2,16 @@
 // (encapsulation: None) so the fonts and the .v2-root token scope only apply
 // when the /v2 route tree is active. Classic routes stay on their Inter stack.
 //
-// tokens-v4 unified the type stack on Inter Tight (sans/display/serif all
-// resolve to it — the ornamental Instrument Serif italic is gone). Geist kept
-// as a fallback in case Inter Tight fails to load.
+// Type system is split: regular Inter for body / UI / metadata, Inter Tight
+// reserved for display-sized headlines via --si-display.
+// Smoothing left at OS default (grayscale w/ subpixel) — antialiased on dark
+// strips perceived stroke weight and was the source of the "too crisp" feel.
 
 @use './tokens';
 
+@import '@fontsource-variable/inter';
 @import '@fontsource-variable/inter-tight';
 @import '@fontsource-variable/geist';
-@import '@fontsource-variable/jetbrains-mono';
 
 .v2-root {
   display: flex;
@@ -19,9 +20,12 @@
   color: var(--si-fg);
   background: var(--si-bg0);
   font-family: var(--si-sans);
-  font-feature-settings: 'ss01', 'cv11';
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01', 'cv11', 'tnum';
+  font-variant-numeric: tabular-nums;
+  font-weight: 440;
+  font-variation-settings: 'wght' 440;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
 
   a {
     color: var(--si-accent);

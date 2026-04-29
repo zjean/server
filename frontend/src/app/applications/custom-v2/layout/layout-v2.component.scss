@@ -11,6 +11,10 @@
   min-height: 0;
   background: var(--si-bg2);
   position: relative;
+  // Defensive: any stray horizontal protrusion (e.g. an absolute-positioned
+  // indicator overshooting a rail edge) must not cascade into a page-wide
+  // horizontal scrollbar. Vertical scrolling lives inside .layout-v2__content.
+  overflow: hidden;
 }
 
 .layout-v2__content {
