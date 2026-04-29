@@ -24,7 +24,7 @@
   </div>
 
   <div class="preview__body">
-    <div class="preview__stage">
+    <div class="preview__stage" [class.preview__stage--bare]="isPdf()">
       @if (loadError(); as err) {
         <div class="preview__state">{{ err }}</div>
       } @else if (isImage() && imageUrl()) {
@@ -36,9 +36,12 @@
           (load)="onImageLoad()"
           (error)="onImageError()"
         />
+      } @else if (isPdf() && pdfSafeUrl(); as url) {
+        <iframe class="preview__iframe" [src]="url"></iframe>
       } @else if (file()) {
-        <!-- Phase A: only image is wired. Other types fall through here -->
-        <!-- until B/C/D land. Fallback shows the type, doesn't 404. -->
+        <!-- Phase B: image + pdf wired. Office/text/code arrive in C/D. -->
+        <!-- Fallback shows the type so the user isn't staring at a blank -->
+        <!-- panel; download/open-with affordance arrives in Phase E. -->
         <div class="preview__state">
           Preview not yet available for this file type ({{ file()!.mime }}).
         </div>

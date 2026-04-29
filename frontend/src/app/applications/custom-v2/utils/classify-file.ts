@@ -25,6 +25,15 @@ export function isTextEditable(file: ClassifiableFile): boolean {
   return true
 }
 
+// Files the unified preview overlay (and standalone /v2/preview route) can
+// render directly. Phase B covers images and PDFs; Phase C/D extend this to
+// office and text/code. Anything not covered here continues to land on the
+// classic file-detail page or a type-specific dialog.
+export function isPreviewable(file: ClassifiableFile): boolean {
+  if (file.isDir) return false
+  return isImageMime(file.mime) || isPdfMime(file.mime)
+}
+
 function getExtension(name: string): string {
   const dot = name.lastIndexOf('.')
   if (dot < 0 || dot === name.length - 1) return ''

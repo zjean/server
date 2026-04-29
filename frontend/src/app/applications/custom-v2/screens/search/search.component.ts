@@ -10,9 +10,14 @@ import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPdfInNewTab } from '../../utils/open-pdf'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
+
+// Search results carry only `mime` (no FileProps), so the predicate is
+// inlined here instead of using utils/classify-file's `isPreviewable(file)`.
+function isPreviewableMime(mime: string | null | undefined): boolean {
+  return isImageMime(mime) || isPdfMime(mime)
+}
 
 const MIN_QUERY = 2
 const LIMIT = 100
@@ -87,22 +92,18 @@ export class SearchComponent implements OnInit {
     // Backend FileContent.path is the parent directory; the filename lives in `name`.
     // Compose the full path the viewer/file-detail screens expect.
     const fullPath = `${r.path}/${r.name}`
-    if (isImageMime(r.mime)) {
+    if (isPreviewableMime(r.mime)) {
       this.previewOverlay.open(fullPath)
-      return
-    }
-    if (isPdfMime(r.mime)) {
-      openPdfInNewTab(fullPath)
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
   // Middle-click on a search result → new tab with the chromeless preview
-  // route. Phase A: image only.
+  // route.
   protected onResultAuxClick(event: MouseEvent, r: FileContentModel): void {
     if (event.button !== 1) return
-    if (!isImageMime(r.mime)) return
+    if (!isPreviewableMime(r.mime)) return
     event.preventDefault()
     openPreviewInNewTab(`${r.path}/${r.name}`)
   }
