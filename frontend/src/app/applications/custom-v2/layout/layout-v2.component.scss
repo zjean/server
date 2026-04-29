@@ -10,6 +10,7 @@
   display: flex;
   min-height: 0;
   background: var(--si-bg2);
+  position: relative;
 }
 
 .layout-v2__content {
@@ -44,5 +45,133 @@
     font-family: var(--si-sans);
     font-size: 13px;
     color: var(--si-fg-muted);
+  }
+}
+
+.layout-v2__backdrop {
+  display: none;
+}
+
+// ---------------------------------------------------------------------------
+// Mobile (< 768px) overrides. The `.layout-v2--mobile` class is set on the
+// LayoutV2Component host element. ViewEncapsulation.None on this component
+// makes the rules below global, so they reach into title-bar / left-nav /
+// dock-panel descendants regardless of those components' encapsulation.
+// ---------------------------------------------------------------------------
+
+.layout-v2--mobile {
+  // Dock-panel becomes a right-anchored slide-in sheet over content.
+  .layout-v2__dock-panel {
+    position: fixed;
+    top: 40px;
+    right: 40px; // dock-rail width
+    bottom: 0;
+    width: 85vw;
+    max-width: 360px;
+    z-index: 40;
+    transform: translateX(110%);
+    transition: transform 200ms ease-out;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+
+    &--open {
+      transform: translateX(0);
+    }
+  }
+
+  // Backdrop covers content while an overlay is open. The modifier classes
+  // leave the rail on the same side as the open overlay uncovered, so its
+  // clicks still reach the icons (e.g. tap an app-rail icon to switch
+  // modules — NavigationEnd auto-closes the drawer).
+  .layout-v2__backdrop {
+    display: block;
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.32);
+    animation: layout-v2-backdrop-in 160ms ease-out;
+
+    &--left {
+      left: 48px; // keep app-rail interactive while left-nav drawer is open
+    }
+
+    &--right {
+      right: 40px; // keep dock-rail interactive while dock-panel sheet is open
+    }
+  }
+
+  // Lock content scroll while an overlay is open.
+  &.layout-v2--overlay-open .layout-v2__content {
+    overflow: hidden;
+  }
+
+  // Title-bar trim: drop brand text, back/forward, intermediate breadcrumbs.
+  .title-bar__brand {
+    width: auto;
+    padding: 0 12px;
+    cursor: pointer;
+  }
+
+  .title-bar__brand-text,
+  .title-bar__nav,
+  .title-bar__crumb-sep {
+    display: none;
+  }
+
+  .title-bar__crumb:not(.title-bar__crumb--last) {
+    display: none;
+  }
+
+  .title-bar__breadcrumbs {
+    padding: 0 4px;
+  }
+
+  // Bump app-rail items to meet WCAG 2.5.5 (≥44×44 touch target).
+  .app-rail__item {
+    width: 44px;
+    height: 44px;
+  }
+
+  // Left-nav becomes a fixed slide-in drawer over content+app-rail.
+  app-v2-left-nav {
+    position: fixed;
+    top: 40px;
+    left: 48px; // right of app-rail
+    bottom: 0;
+    width: 280px;
+    max-width: calc(100vw - 48px);
+    z-index: 40;
+    transform: translateX(-110%);
+    transition: transform 200ms ease-out;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+
+    &.left-nav--open {
+      transform: translateX(0);
+    }
+
+    // Inner .left-nav already has its own background/border; keep them.
+    .left-nav {
+      height: 100%;
+      width: 100%;
+    }
+  }
+}
+
+@keyframes layout-v2-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-v2--mobile {
+    .layout-v2__dock-panel,
+    app-v2-left-nav {
+      transition: none;
+    }
+    .layout-v2__backdrop {
+      animation: none;
+    }
   }
 }

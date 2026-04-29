@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core'
-import { toSignal } from '@angular/core/rxjs-interop'
-import { Router, RouterLink, RouterLinkActive } from '@angular/router'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router'
+import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
+import { LayoutV2Service } from './layout-v2.service'
 
 interface NavEntry {
   id: string
@@ -19,16 +21,26 @@ interface NavEntry {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './left-nav.component.html',
   styleUrl: './left-nav.component.scss',
+  host: {
+    '[class.left-nav--open]': 'layoutV2.leftNavOpen()',
+    '[attr.id]': "'v2-left-nav'",
+    '[attr.role]': "isDialogMode() ? 'dialog' : null",
+    '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
+    '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
+  },
   imports: [IconV2Component, RouterLink, RouterLinkActive, ToBytesPipe]
 })
 export class LeftNavComponent {
+  protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
+  private readonly destroyRef = inject(DestroyRef)
 
   protected readonly user = toSignal(this.store.user)
   protected readonly userAvatar = toSignal(this.store.userAvatarUrl)
   protected readonly sharedOpen = signal(true)
   protected readonly adminOpen = signal(true)
+  protected readonly isDialogMode = computed(() => this.layoutV2.isMobile() && this.layoutV2.leftNavOpen())
 
   protected readonly workspace: NavEntry[] = [
     { id: 'recents', label: 'Recents', icon: 'clock', route: `/${V2_PATH}/${V2_ROUTES.RECENTS}` },
@@ -53,6 +65,19 @@ export class LeftNavComponent {
   // but the maintainer. Lives in the LeftNav footer so it's visible on every
   // v2 page and discharges the network clause for the v2 tree.
   protected readonly sourceUrl = 'https://github.com/zjean/server'
+
+  constructor() {
+    this.router.events
+      .pipe(
+        filter((ev): ev is NavigationEnd => ev instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => {
+        if (this.layoutV2.isMobile() && this.layoutV2.leftNavOpen()) {
+          this.layoutV2.closeLeftNav()
+        }
+      })
+  }
 
   protected toggleShared(): void {
     this.sharedOpen.update((v) => !v)
