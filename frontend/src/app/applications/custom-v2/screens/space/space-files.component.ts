@@ -19,7 +19,8 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { combineLatest, Subscription } from 'rxjs'
-import { pairwise } from 'rxjs/operators'
+import { filter } from 'rxjs/operators'
+import { FileEvent } from '../../../files/interfaces/file-event.interface'
 import { StoreService } from '../../../../store/store.service'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
@@ -108,9 +109,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
   private spaceSubscription: Subscription | null = null
-  private pendingDropRefresh = false
-  private pendingDeleteRefresh = false
-  private pendingCopyMoveRefresh = false
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
@@ -224,16 +222,20 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       this.clearSelection()
       this.loadFiles()
     })
-    this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
-      if (prev.length > 0 && curr.length === 0) {
-        if (this.pendingDropRefresh || this.pendingDeleteRefresh || this.pendingCopyMoveRefresh) {
-          this.pendingDropRefresh = false
-          this.pendingDeleteRefresh = false
-          this.pendingCopyMoveRefresh = false
-          this.refresh()
-        }
-      }
-    })
+    // Refresh on each task affecting this folder, not just when the active queue
+    // empties — a single hung upload (e.g. a backgrounded tab pausing requests)
+    // can leave activeTasks > 0 forever, suppressing the UI feedback for every
+    // upload that did succeed. Mirrors classic spaces-browser's filesOnEvent reload.
+    this.store.filesOnEvent
+      .pipe(
+        filter((ev: FileEvent | null) => {
+          if (!ev) return false
+          const here = this.currentUploadRoute()
+          return ev.filePath === here || ev.fileDstPath === here
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => this.refresh())
   }
 
   ngOnDestroy(): void {
@@ -346,7 +348,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    this.pendingDeleteRefresh = true
     const stubs = files.map((f) => this.buildFileStub(f))
     this.filesService.delete(stubs)
     this.toast.success(files.length === 1 ? `Moving "${files[0].name}" to trash…` : `Moving ${files.length} items to trash…`)
@@ -401,7 +402,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     })
     if (!dst) return
     const stubs = files.map((f) => this.buildFileStub(f))
-    this.pendingCopyMoveRefresh = true
     this.filesService.copyMove(stubs, dst.path, op).catch(console.error)
     const verb = isMove ? 'Moving' : 'Copying'
     this.toast.success(files.length === 1 ? `${verb} "${files[0].name}"…` : `${verb} ${files.length} items…`)
@@ -479,7 +479,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     })
     if (!dst) return
     const stub = this.buildFileStub(file)
-    this.pendingCopyMoveRefresh = true
     this.filesService.copyMove([stub], dst.path, op).catch(console.error)
     this.toast.success(isMove ? `Moving "${file.name}"…` : `Copying "${file.name}"…`)
   }
@@ -503,7 +502,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    this.pendingDeleteRefresh = true
     this.filesService.delete([this.buildFileStub(file)])
     this.toast.success(`Moving "${file.name}" to trash…`)
   }
@@ -648,7 +646,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   protected onDropFiles(event: DragEvent): void {
     this.filesService.currentRoute = this.currentUploadRoute()
-    this.pendingDropRefresh = true
     this.filesUpload.onDropFiles(event, [])
   }
 
