@@ -18,6 +18,7 @@ export const V2_ROUTES = {
   SHARED_VIA_LINKS: 'shared/via-links',
   TRASH: 'trash',
   VIEWER: 'viewer',
+  PDF: 'pdf',
   FILE: 'file',
   SEARCH: 'search',
   SETTINGS: 'settings',

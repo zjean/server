@@ -9,7 +9,8 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { openPdfInNewTab } from '../../utils/open-pdf'
 
 const RECENT_LIMIT = 20
 
@@ -61,6 +62,10 @@ export class RecentsComponent implements OnInit {
     const fullPath = `${parentPath}/${fileName}`
     if (isImageMime(mime)) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
+      return
+    }
+    if (isPdfMime(mime)) {
+      openPdfInNewTab(fullPath)
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
