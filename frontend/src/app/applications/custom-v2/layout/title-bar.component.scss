@@ -139,3 +139,28 @@
     object-fit: cover;
   }
 }
+
+// Mobile trim — gated on the layout's `.layout-v2--mobile` class via
+// :host-context so these rules carry the same Emulated encapsulation as
+// the desktop ones and don't lose the cascade tiebreaker.
+:host-context(.layout-v2--mobile) {
+  .title-bar__brand {
+    width: auto;
+    padding: 0 12px;
+    cursor: pointer;
+  }
+
+  .title-bar__brand-text,
+  .title-bar__nav,
+  .title-bar__crumb-sep {
+    display: none;
+  }
+
+  .title-bar__crumb:not(.title-bar__crumb--last) {
+    display: none;
+  }
+
+  .title-bar__breadcrumbs {
+    padding: 0 4px;
+  }
+}

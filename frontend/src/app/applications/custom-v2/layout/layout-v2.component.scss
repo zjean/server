@@ -106,58 +106,12 @@
   &.layout-v2--overlay-open .layout-v2__content {
     overflow: hidden;
   }
-
-  // Title-bar trim: drop brand text, back/forward, intermediate breadcrumbs.
-  .title-bar__brand {
-    width: auto;
-    padding: 0 12px;
-    cursor: pointer;
-  }
-
-  .title-bar__brand-text,
-  .title-bar__nav,
-  .title-bar__crumb-sep {
-    display: none;
-  }
-
-  .title-bar__crumb:not(.title-bar__crumb--last) {
-    display: none;
-  }
-
-  .title-bar__breadcrumbs {
-    padding: 0 4px;
-  }
-
-  // Bump app-rail items to meet WCAG 2.5.5 (≥44×44 touch target).
-  .app-rail__item {
-    width: 44px;
-    height: 44px;
-  }
-
-  // Left-nav becomes a fixed slide-in drawer over content+app-rail.
-  app-v2-left-nav {
-    position: fixed;
-    top: 40px;
-    left: 48px; // right of app-rail
-    bottom: 0;
-    width: 280px;
-    max-width: calc(100vw - 48px);
-    z-index: 40;
-    transform: translateX(-110%);
-    transition: transform 200ms ease-out;
-    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
-
-    &.left-nav--open {
-      transform: translateX(0);
-    }
-
-    // Inner .left-nav already has its own background/border; keep them.
-    .left-nav {
-      height: 100%;
-      width: 100%;
-    }
-  }
 }
+
+// Cross-component mobile rules (title-bar trim, app-rail touch target,
+// left-nav drawer) live in their respective component SCSS files using
+// :host-context(.layout-v2--mobile) — moving them out of here avoids
+// losing the cascade tiebreaker against those components' Emulated rules.
 
 @keyframes layout-v2-backdrop-in {
   from { opacity: 0; }
@@ -165,13 +119,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .layout-v2--mobile {
-    .layout-v2__dock-panel,
-    app-v2-left-nav {
-      transition: none;
-    }
-    .layout-v2__backdrop {
-      animation: none;
-    }
+  .layout-v2--mobile .layout-v2__dock-panel {
+    transition: none;
+  }
+  .layout-v2--mobile .layout-v2__backdrop {
+    animation: none;
   }
 }

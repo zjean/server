@@ -3,6 +3,38 @@
   flex-shrink: 0;
 }
 
+// Mobile drawer — gated on the layout's `.layout-v2--mobile` class via
+// :host-context so the encapsulation matches the desktop rules. The
+// drawer slides in from the left over content; the inner .left-nav
+// fills the host so background + border render at full drawer width.
+:host-context(.layout-v2--mobile) {
+  position: fixed;
+  top: 40px;
+  left: 48px; // right of app-rail
+  bottom: 0;
+  width: 280px;
+  max-width: calc(100vw - 48px);
+  z-index: 40;
+  transform: translateX(-110%);
+  transition: transform 200ms ease-out;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+
+  &.left-nav--open {
+    transform: translateX(0);
+  }
+
+  .left-nav {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host-context(.layout-v2--mobile) {
+    transition: none;
+  }
+}
+
 .left-nav {
   width: 180px;
   flex-shrink: 0;
