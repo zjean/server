@@ -8,7 +8,8 @@ import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/space
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { combineLatest, Subscription } from 'rxjs'
-import { pairwise } from 'rxjs/operators'
+import { filter } from 'rxjs/operators'
+import { FileEvent } from '../../../files/interfaces/file-event.interface'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { StoreService } from '../../../../store/store.service'
@@ -57,7 +58,6 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
-  private pendingDeleteRefresh = false
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly files = signal<FileProps[]>([])
@@ -106,12 +106,26 @@ export class TrashBinComponent implements OnInit, OnDestroy {
       this.syncBreadcrumbs()
       this.loadFiles()
     })
-    this.store.filesActiveTasks.pipe(pairwise(), takeUntilDestroyed(this.destroyRef)).subscribe(([prev, curr]) => {
-      if (prev.length > 0 && curr.length === 0 && this.pendingDeleteRefresh) {
-        this.pendingDeleteRefresh = false
-        this.refresh()
-      }
-    })
+    // Refresh on each completed task affecting this folder, not just when the
+    // active queue empties — a single hung task would otherwise prevent any
+    // refresh from firing. Mirrors classic spaces-browser's filesOnEvent reload.
+    this.store.filesOnEvent
+      .pipe(
+        filter((ev: FileEvent | null) => {
+          if (!ev) return false
+          const here = this.currentFolderRoute()
+          return ev.filePath === here || ev.fileDstPath === here
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => this.refresh())
+  }
+
+  private currentFolderRoute(): string {
+    const alias = this.currentAlias()
+    if (!alias) return ''
+    const segs = this.pathSegments().map((s) => s.path)
+    return [SPACE_REPOSITORY.TRASH, alias, ...segs].join('/')
   }
 
   ngOnDestroy(): void {
@@ -156,7 +170,6 @@ export class TrashBinComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    this.pendingDeleteRefresh = true
     this.filesService.delete([this.buildFileStub(file)])
     this.toast.success(`Deleting "${file.name}"…`)
   }
@@ -172,7 +185,6 @@ export class TrashBinComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    this.pendingDeleteRefresh = true
     this.filesService.delete(items.map((f) => this.buildFileStub(f)))
     this.toast.success(`Emptying trash…`)
   }
