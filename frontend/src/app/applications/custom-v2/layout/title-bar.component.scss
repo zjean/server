@@ -95,11 +95,21 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: pointer;
+
+    &:hover {
+      color: #fff;
+    }
   }
 
   &__crumb--last {
     font-weight: 600;
     color: #fff;
+    cursor: default;
+
+    &:hover {
+      color: #fff;
+    }
   }
 
   &__crumb-icon {

@@ -37,17 +37,15 @@
 
   &__hero-title {
     margin: 6px 0 0;
-    font-family: var(--si-serif);
+    font-family: var(--si-display);
     font-size: 28px;
-    font-weight: 400;
-    font-style: italic;
+    font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.4px;
     line-height: 1.1;
   }
 
   &__hero-name {
-    font-style: normal;
     font-family: var(--si-display);
     font-weight: 500;
   }
