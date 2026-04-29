@@ -12,6 +12,7 @@ import { NcExtrasController } from './controllers/nc-extras.controller'
 import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
+import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
@@ -33,6 +34,10 @@ import { NcSyncReportService } from './services/nc-sync-report.service'
 // (browser hop → IdP → app-password handoff). See
 // docs/plans/2026-04-25-mobile-nc-oidc-login-design.md.
 const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
+// Mounted only when OnlyOffice is enabled — FilesModule re-exports
+// OnlyOfficeModule conditionally on the same flag, so requiring DI on
+// disabled deployments would fail at boot.
+const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled === true
 
 @Module({
   // FilesModule exports FilesQueries (used by NcSyncReportService for DB id
@@ -47,7 +52,8 @@ const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
     NcExtrasController,
     NcThemingController,
     NcUploadsController,
-    ...(oidcEnabled ? [NcMobileOidcController] : [])
+    ...(oidcEnabled ? [NcMobileOidcController] : []),
+    ...(onlyofficeEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController] : [])
   ],
   providers: [
     NcBasicAuthGuard,
