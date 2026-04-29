@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { API_SHARES_LINKS } from '@sync-in-server/backend/src/applications/shares/constants/routes'
@@ -16,6 +16,7 @@ import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
 export type SharedVariant = 'with-me' | 'with-others' | 'via-links'
@@ -59,12 +60,13 @@ const CONFIGS: Record<SharedVariant, VariantConfig> = {
   styleUrl: './shared.component.scss',
   imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
-export class SharedComponent implements OnInit {
+export class SharedComponent implements OnInit, OnDestroy {
   private readonly sharesService = inject(SharesService)
   private readonly http = inject(HttpClient)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly dockRail = inject(DockRailService)
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
@@ -87,11 +89,17 @@ export class SharedComponent implements OnInit {
   protected readonly shares = computed(() => this.config().filter(this.allShares()))
 
   ngOnInit(): void {
+    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
     this.breadcrumbs.setBreadcrumbs([
       { label: 'Shared', icon: 'share' },
       { label: CONFIGS[this.variant()].title, icon: CONFIGS[this.variant()].icon }
     ])
     this.refresh()
+  }
+
+  ngOnDestroy(): void {
+    this.subscription?.unsubscribe()
+    this.dockRail.clear()
   }
 
   protected refresh(): void {

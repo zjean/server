@@ -25,6 +25,7 @@ import { PillComponent } from '../../components/pill.component'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
+import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
@@ -55,6 +56,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
+  private readonly dockRail = inject(DockRailService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
@@ -102,6 +104,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   })
 
   ngOnInit(): void {
+    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.loadFiles()
@@ -130,6 +133,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navSubscription?.unsubscribe()
+    this.dockRail.clear()
   }
 
   protected refresh(): void {
