@@ -106,6 +106,29 @@
   &.layout-v2--overlay-open .layout-v2__content {
     overflow: hidden;
   }
+
+  // File-screen toolbars wrap on mobile rather than overflowing
+  // horizontally. The screen SCSS files don't set flex-wrap, so this
+  // adds the property without competing — no specificity tiebreaker
+  // needed. `personal__filter` width is also reset because the 240px
+  // fixed value pushes the search input past viewport width.
+  .personal__toolbar,
+  .spaces__toolbar,
+  .shared__toolbar,
+  .trash__toolbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  // The .personal block class is reused by space-files.component.scss
+  // (Emulated encap means rules above only match the personal component;
+  // space-files needs its own match — see above selector list). This
+  // global rule reaches both because it has no encap attribute.
+  .personal__filter {
+    width: auto;
+    flex: 1 1 160px;
+    min-width: 0;
+  }
 }
 
 // Cross-component mobile rules (title-bar trim, app-rail touch target,
