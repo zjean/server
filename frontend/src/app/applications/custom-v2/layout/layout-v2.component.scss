@@ -94,7 +94,7 @@
     animation: layout-v2-backdrop-in 160ms ease-out;
 
     &--left {
-      left: 56px; // keep app-rail (mobile width) interactive while drawer is open
+      left: 44px; // keep app-rail (mobile width) interactive while drawer is open
     }
 
     &--right {
