@@ -3,33 +3,33 @@
     <app-v2-icon name="image" [size]="12" class="preview__header-icon" />
     <span class="preview__header-name">{{ fileName() }}</span>
     <div class="preview__header-actions">
-      <app-v2-icon-btn iconName="x" [size]="26" title="Close (Esc)" (click)="close()" />
+      <app-v2-icon-btn iconName="x" [size]="26" [title]="'Close (Esc)' | translate: locale.language" (click)="close()" />
     </div>
   </header>
 
   <div class="preview__toolbar">
-    <app-v2-icon-btn iconName="chevLeft" [size]="30" title="Previous (←)" (click)="previous()" />
-    <app-v2-icon-btn iconName="chevRight" [size]="30" title="Next (→)" (click)="next()" />
+    <app-v2-icon-btn iconName="chevLeft" [size]="30" [title]="'Previous (←)' | translate: locale.language" (click)="previous()" />
+    <app-v2-icon-btn iconName="chevRight" [size]="30" [title]="'Next (→)' | translate: locale.language" (click)="next()" />
     @if (isImage()) {
-      <app-v2-icon-btn iconName="box" [size]="30" title="Fullscreen" (click)="fullscreen()" />
+      <app-v2-icon-btn iconName="box" [size]="30" [title]="'Fullscreen' | translate: locale.language" (click)="fullscreen()" />
     }
     @if (canToggleToOffice()) {
       <app-v2-icon-btn
         iconName="pencil"
         [size]="30"
         [active]="pdfStage() === 'office'"
-        [title]="pdfStage() === 'office' ? 'Switch to PDF view' : 'Edit in OnlyOffice'"
+        [title]="(pdfStage() === 'office' ? 'Switch to PDF view' : 'Edit in OnlyOffice') | translate: locale.language"
         (click)="toggleToOffice()"
       />
     }
     <div class="preview__counter">
       @if (siblings().length > 1) {
-        {{ currentIndex() + 1 }} of {{ siblings().length }}
+        {{ 'preview_counter' | translate: locale.language : { current: currentIndex() + 1, total: siblings().length } }}
       } @else if (file()) {
-        1 of 1
+        {{ 'preview_counter_one' | translate: locale.language }}
       }
     </div>
-    <app-v2-icon-btn iconName="info" [size]="30" title="Info" [active]="infoOpen()" (click)="toggleInfo()" />
+    <app-v2-icon-btn iconName="info" [size]="30" [title]="'Info' | translate: locale.language" [active]="infoOpen()" (click)="toggleInfo()" />
   </div>
 
   <div class="preview__body">
@@ -63,27 +63,29 @@
         <!-- No-preview fallback for unrenderable types (zips, binaries, etc.). -->
         <div class="preview__no-preview">
           <app-v2-icon name="doc" [size]="56" class="preview__no-preview-icon" />
-          <div class="preview__no-preview-title">Preview not available</div>
-          <div class="preview__no-preview-lede">Download the file to view its contents.</div>
-          <button type="button" class="preview__no-preview-btn" (click)="download()">Download</button>
+          <div class="preview__no-preview-title">{{ 'Preview not available' | translate: locale.language }}</div>
+          <div class="preview__no-preview-lede">{{ 'Download the file to view its contents.' | translate: locale.language }}</div>
+          <button type="button" class="preview__no-preview-btn" (click)="download()">
+            {{ 'Download' | translate: locale.language }}
+          </button>
         </div>
       }
     </div>
     @if (infoOpen() && file(); as f) {
       <aside class="preview__info">
-        <div class="preview__info-head">Info</div>
+        <div class="preview__info-head">{{ 'Info' | translate: locale.language }}</div>
         <dl class="preview__kv">
-          <dt>Name</dt>
+          <dt>{{ 'Name' | translate: locale.language }}</dt>
           <dd class="preview__kv-val preview__kv-val--mono">{{ f.name }}</dd>
-          <dt>Type</dt>
+          <dt>{{ 'Type' | translate: locale.language }}</dt>
           <dd class="preview__kv-val">{{ f.mime }}</dd>
-          <dt>Size</dt>
+          <dt>{{ 'Size' | translate: locale.language }}</dt>
           <dd class="preview__kv-val preview__kv-val--mono">{{ f.size | toBytes: 2 : true }}</dd>
           @if (resolution()) {
-            <dt>Dimensions</dt>
+            <dt>{{ 'Dimensions' | translate: locale.language }}</dt>
             <dd class="preview__kv-val preview__kv-val--mono">{{ resolution() }}</dd>
           }
-          <dt>Modified</dt>
+          <dt>{{ 'Modified' | translate: locale.language }}</dt>
           <dd class="preview__kv-val">{{ f.mtime | amTimeAgo }}</dd>
         </dl>
       </aside>

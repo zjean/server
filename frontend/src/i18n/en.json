@@ -88,5 +88,7 @@
   "v3_drop_indexes": "Drop every search index on this server? Content search will not work until indexing runs again.",
   "Search people or groups": "Search people or groups",
   "Searching…": "Searching…",
-  "No matches": "No matches"
+  "No matches": "No matches",
+  "preview_counter": "{{ current }} of {{ total }}",
+  "preview_counter_one": "1 of 1"
 }

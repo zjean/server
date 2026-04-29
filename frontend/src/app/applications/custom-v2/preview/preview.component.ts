@@ -15,6 +15,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
@@ -68,7 +69,7 @@ function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => b
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview.component.html',
   styleUrl: './preview.component.scss',
-  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe, L10nTranslatePipe]
 })
 export class PreviewComponent {
   private readonly http = inject(HttpClient)
@@ -78,6 +79,7 @@ export class PreviewComponent {
   private readonly sanitizer = inject(DomSanitizer)
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   // Path is driven from the parent: PreviewOverlayComponent passes the
   // overlay's current path; the standalone route component passes the
