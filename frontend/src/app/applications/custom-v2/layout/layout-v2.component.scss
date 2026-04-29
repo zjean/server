@@ -10,6 +10,7 @@
   display: flex;
   min-height: 0;
   background: var(--si-bg2);
+  position: relative;
 }
 
 .layout-v2__content {
@@ -44,5 +45,107 @@
     font-family: var(--si-sans);
     font-size: 13px;
     color: var(--si-fg-muted);
+  }
+}
+
+.layout-v2__backdrop {
+  display: none;
+}
+
+// ---------------------------------------------------------------------------
+// Mobile (< 768px) overrides. The `.layout-v2--mobile` class is set on the
+// LayoutV2Component host element. ViewEncapsulation.None on this component
+// makes the rules below global, so they reach into title-bar / left-nav /
+// dock-panel descendants regardless of those components' encapsulation.
+// ---------------------------------------------------------------------------
+
+.layout-v2--mobile {
+  // Dock-panel becomes a right-anchored slide-in sheet over content.
+  .layout-v2__dock-panel {
+    position: fixed;
+    top: 40px;
+    right: 40px; // dock-rail width
+    bottom: 0;
+    width: 85vw;
+    max-width: 360px;
+    z-index: 40;
+    transform: translateX(110%);
+    transition: transform 200ms ease-out;
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+
+    &--open {
+      transform: translateX(0);
+    }
+  }
+
+  // Backdrop covers content while an overlay is open. The modifier classes
+  // leave the rail on the same side as the open overlay uncovered, so its
+  // clicks still reach the icons (e.g. tap an app-rail icon to switch
+  // modules — NavigationEnd auto-closes the drawer).
+  .layout-v2__backdrop {
+    display: block;
+    position: fixed;
+    top: 40px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 39;
+    background: rgba(0, 0, 0, 0.32);
+    animation: layout-v2-backdrop-in 160ms ease-out;
+
+    &--left {
+      left: 44px; // keep app-rail (mobile width) interactive while drawer is open
+    }
+
+    &--right {
+      right: 40px; // keep dock-rail interactive while dock-panel sheet is open
+    }
+  }
+
+  // Lock content scroll while an overlay is open.
+  &.layout-v2--overlay-open .layout-v2__content {
+    overflow: hidden;
+  }
+
+  // File-screen toolbars wrap on mobile rather than overflowing
+  // horizontally. The screen SCSS files don't set flex-wrap, so this
+  // adds the property without competing — no specificity tiebreaker
+  // needed. `personal__filter` width is also reset because the 240px
+  // fixed value pushes the search input past viewport width.
+  .personal__toolbar,
+  .spaces__toolbar,
+  .shared__toolbar,
+  .trash__toolbar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  // The .personal block class is reused by space-files.component.scss
+  // (Emulated encap means rules above only match the personal component;
+  // space-files needs its own match — see above selector list). This
+  // global rule reaches both because it has no encap attribute.
+  .personal__filter {
+    width: auto;
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+}
+
+// Cross-component mobile rules (title-bar trim, app-rail touch target,
+// left-nav drawer) live in their respective component SCSS files using
+// :host-context(.layout-v2--mobile) — moving them out of here avoids
+// losing the cascade tiebreaker against those components' Emulated rules.
+
+@keyframes layout-v2-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-v2--mobile .layout-v2__dock-panel {
+    transition: none;
+  }
+  .layout-v2--mobile .layout-v2__backdrop {
+    animation: none;
   }
 }

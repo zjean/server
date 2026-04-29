@@ -5,11 +5,12 @@ import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { UserType } from '../../users/interfaces/user.interface'
-import { IconV2Component } from '../icons/icon-v2.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { LogoComponent } from '../components/logo.component'
-import { NotificationsBellComponent } from './notifications-bell.component'
+import { IconV2Component } from '../icons/icon-v2.component'
 import { V2BreadcrumbService } from './breadcrumb.service'
+import { LayoutV2Service } from './layout-v2.service'
+import { NotificationsBellComponent } from './notifications-bell.component'
 
 @Component({
   selector: 'app-v2-title-bar',
@@ -20,6 +21,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
 })
 export class TitleBarComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly location = inject(Location)
   private readonly router = inject(Router)
   private readonly store = inject(StoreService)
@@ -39,6 +41,12 @@ export class TitleBarComponent {
 
   protected forward(): void {
     this.location.forward()
+  }
+
+  protected onBrandClick(): void {
+    if (this.layoutV2.isMobile()) {
+      this.layoutV2.toggleLeftNav()
+    }
   }
 
   protected navigateSegment(route: string | string[] | undefined): void {

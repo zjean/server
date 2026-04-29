@@ -7,13 +7,25 @@
   <main class="layout-v2__content">
     <router-outlet />
   </main>
-  @if (dockActive()) {
-    <aside class="layout-v2__dock-panel">
-      <div class="layout-v2__dock-panel-header">{{ dockActive() }}</div>
+  @if (layoutV2.dockActive()) {
+    <aside
+      class="layout-v2__dock-panel"
+      [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null"
+    >
+      <div class="layout-v2__dock-panel-header">{{ layoutV2.dockActive() }}</div>
       <p class="layout-v2__dock-panel-empty">Coming soon.</p>
     </aside>
   }
-  <app-v2-dock-rail [active]="dockActive()" (dockChange)="onDockChange($event)" />
+  <app-v2-dock-rail [active]="layoutV2.dockActive()" (dockChange)="onDockChange($event)" />
+  @if (layoutV2.isMobile() && (layoutV2.leftNavOpen() || layoutV2.dockActive() !== null)) {
+    <div
+      class="layout-v2__backdrop"
+      [class.layout-v2__backdrop--left]="layoutV2.leftNavOpen()"
+      [class.layout-v2__backdrop--right]="layoutV2.dockActive() !== null"
+      (click)="onBackdropClick()"
+      aria-hidden="true"
+    ></div>
+  }
 </div>
 <app-v2-toast-host />
 <app-v2-confirm-dialog />

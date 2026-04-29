@@ -21,8 +21,20 @@
     gap: 10px;
     padding: 0 14px;
     background: rgba(0, 0, 0, 0.22);
+    border-top: none;
     border-right: 1px solid rgba(0, 0, 0, 0.35);
+    border-bottom: none;
+    border-left: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: default;
     flex-shrink: 0;
+
+    &:focus-visible {
+      outline: 2px solid var(--si-accent);
+      outline-offset: -2px;
+    }
   }
 
   &__brand-text {
@@ -125,5 +137,30 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+}
+
+// Mobile trim — gated on the layout's `.layout-v2--mobile` class via
+// :host-context so these rules carry the same Emulated encapsulation as
+// the desktop ones and don't lose the cascade tiebreaker.
+:host-context(.layout-v2--mobile) {
+  .title-bar__brand {
+    width: auto;
+    padding: 0 12px;
+    cursor: pointer;
+  }
+
+  .title-bar__brand-text,
+  .title-bar__nav,
+  .title-bar__crumb-sep {
+    display: none;
+  }
+
+  .title-bar__crumb:not(.title-bar__crumb--last) {
+    display: none;
+  }
+
+  .title-bar__breadcrumbs {
+    padding: 0 4px;
   }
 }

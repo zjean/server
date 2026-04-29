@@ -1,4 +1,4 @@
-import { Component, HostBinding, OnInit, signal, ViewEncapsulation } from '@angular/core'
+import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
@@ -10,6 +10,7 @@ import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
+import { LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
 import { TitleBarComponent } from './title-bar.component'
 import { TransfersPopoverComponent } from './transfers-popover.component'
@@ -19,6 +20,12 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   templateUrl: './layout-v2.component.html',
   styleUrls: ['../styles/v2.scss', './layout-v2.component.scss'],
   encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    class: 'v2-root',
+    '[class.layout-v2--mobile]': 'layoutV2.isMobile()',
+    '[class.layout-v2--overlay-open]': 'layoutV2.leftNavOpen() || layoutV2.dockActive() !== null'
+  },
   imports: [
     RouterOutlet,
     TitleBarComponent,
@@ -36,15 +43,33 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   ]
 })
 export class LayoutV2Component implements OnInit {
-  @HostBinding('class.v2-root') readonly v2Root = true
-
-  protected readonly dockActive = signal<DockTabId | null>(null)
+  protected readonly layoutV2 = inject(LayoutV2Service)
+  private resizeRaf: number | null = null
 
   ngOnInit() {
     setUiVersion('v2')
   }
 
+  @HostListener('window:resize')
+  onResize(): void {
+    if (this.resizeRaf !== null) return
+    this.resizeRaf = requestAnimationFrame(() => {
+      this.resizeRaf = null
+      this.layoutV2.syncViewport(window.innerWidth)
+    })
+  }
+
   protected onDockChange(tab: DockTabId | null): void {
-    this.dockActive.set(tab)
+    this.layoutV2.setDock(tab)
+  }
+
+  protected onBackdropClick(): void {
+    if (this.layoutV2.leftNavOpen()) {
+      this.layoutV2.closeLeftNav()
+      return
+    }
+    if (this.layoutV2.dockActive() !== null) {
+      this.layoutV2.setDock(null)
+    }
   }
 }

@@ -1,11 +1,19 @@
 <div class="title-bar">
-  <div class="title-bar__brand">
+  <button
+    type="button"
+    class="title-bar__brand"
+    (click)="onBrandClick()"
+    [attr.aria-expanded]="layoutV2.isMobile() ? layoutV2.leftNavOpen() : null"
+    [attr.aria-controls]="layoutV2.isMobile() ? 'v2-left-nav' : null"
+    [attr.aria-label]="layoutV2.isMobile() ? 'Toggle navigation' : null"
+    [attr.tabindex]="layoutV2.isMobile() ? 0 : -1"
+  >
     <app-v2-logo [size]="22" />
     <div class="title-bar__brand-text">
       <span class="title-bar__brand-name">Sync-In</span>
       <span class="title-bar__brand-eyebrow">Files</span>
     </div>
-  </div>
+  </button>
   <div class="title-bar__nav">
     <app-v2-icon-btn iconName="chevLeft" [size]="26" color="rgba(255,255,255,0.75)" (click)="back()" />
     <app-v2-icon-btn iconName="chevRight" [size]="26" color="rgba(255,255,255,0.4)" (click)="forward()" />
