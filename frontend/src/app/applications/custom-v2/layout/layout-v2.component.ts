@@ -22,7 +22,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    'class': 'v2-root',
+    class: 'v2-root',
     '[class.layout-v2--mobile]': 'layoutV2.isMobile()',
     '[class.layout-v2--overlay-open]': 'layoutV2.leftNavOpen() || layoutV2.dockActive() !== null'
   },

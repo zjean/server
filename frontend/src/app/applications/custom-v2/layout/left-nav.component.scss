@@ -10,14 +10,14 @@
 :host-context(.layout-v2--mobile) {
   position: fixed;
   top: 40px;
-  left: 48px; // right of app-rail
+  left: 56px; // right of app-rail (mobile width)
   bottom: 0;
   width: 280px;
-  max-width: calc(100vw - 48px);
+  max-width: calc(100vw - 56px);
   z-index: 40;
-  // Slide fully off the viewport: shift by element width PLUS the 48px
-  // `left` offset so the right edge lands at viewport x=0 (not x=20).
-  transform: translateX(calc(-100% - 48px));
+  // Slide fully off the viewport: shift by element width PLUS the 56px
+  // `left` offset so the right edge lands at viewport x=0 (not x=28).
+  transform: translateX(calc(-100% - 56px));
   transition: transform 200ms ease-out;
   box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
 

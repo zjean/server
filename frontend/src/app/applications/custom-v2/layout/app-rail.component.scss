@@ -56,8 +56,14 @@
   }
 }
 
-// Bump items to ≥44×44 touch targets on mobile (WCAG 2.5.5).
+// Bump column + items on mobile: ≥44×44 touch targets (WCAG 2.5.5)
+// and a 6px gutter on each side so the active-item highlight has
+// breathing room against the viewport edge.
 :host-context(.layout-v2--mobile) {
+  .app-rail {
+    width: 56px;
+  }
+
   .app-rail__item {
     width: 44px;
     height: 44px;
