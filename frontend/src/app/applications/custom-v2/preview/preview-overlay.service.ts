@@ -33,6 +33,21 @@ export class PreviewOverlayService {
   readonly current = signal<PreviewTarget | null>(null)
   readonly isOpen = computed(() => this.current() !== null)
 
+  // Optional close-guard registered by the active sub-view (e.g. text/code
+  // editor) so unsaved-changes confirmation can run before the overlay
+  // closes. Returns true to allow close, false to cancel.
+  //
+  // Limitation: only fires on close() (shell X-button + Esc). Does NOT
+  // fire when the user navigates away via browser back/forward (popstate
+  // is fundamentally asynchronous and uncancellable in browsers without
+  // beforeunload). For browser back, the sub-view's ngOnDestroy still
+  // releases the lock; unsaved content is lost. The status indicator
+  // ("Modified") warns the user.
+  private closeGuard: (() => Promise<boolean>) | null = null
+  setCloseGuard(guard: (() => Promise<boolean>) | null): void {
+    this.closeGuard = guard
+  }
+
   constructor() {
     // Re-read the URL on every router event AND on raw popstate so the
     // overlay reflects ?preview=... whenever it changes. Router's
@@ -64,8 +79,15 @@ export class PreviewOverlayService {
   // history.length-based detection conservatively — if we can't be sure
   // we own the entry, fall back to replaceState so we never strand a
   // bogus history entry.
-  close(): void {
+  //
+  // Async because a registered closeGuard (e.g. unsaved-changes
+  // confirmation) may need to await user input before allowing close.
+  async close(): Promise<void> {
     if (this.current() === null) return
+    if (this.closeGuard) {
+      const ok = await this.closeGuard()
+      if (!ok) return
+    }
     // We always pushed exactly one entry on open(), so back() restores
     // the underlying route's URL without re-running resolvers.
     if (typeof window !== 'undefined' && window.history.length > 1) {

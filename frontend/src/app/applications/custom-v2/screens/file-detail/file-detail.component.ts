@@ -17,9 +17,7 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
-import { CodeEditor } from '@acrodata/code-editor'
-import { FormsModule } from '@angular/forms'
+import { isAudioMime, isImageMime, isPdfMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -40,8 +38,6 @@ interface TabDef {
     FileGlyphComponent,
     ButtonComponent,
     CommentsPanelComponent,
-    CodeEditor,
-    FormsModule,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -95,10 +91,6 @@ export class FileDetailComponent implements OnInit {
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
   protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
   protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
-  protected readonly isText = computed(() => isTextViewerMime(this.file()?.mime))
-  protected readonly textContent = signal<string>('')
-  protected readonly textLoading = signal(false)
-  protected readonly textError = signal<string | null>(null)
 
   ngOnInit(): void {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -155,27 +147,6 @@ export class FileDetailComponent implements OnInit {
     window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_blank')
   }
 
-  private loadTextContent(): void {
-    const p = this.currentPath()
-    if (!p) return
-    this.textLoading.set(true)
-    this.textError.set(null)
-    this.http
-      .get(`${API_FILES_OPERATION}/${encodeUrl(p)}`, { responseType: 'text' })
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (body) => {
-          this.textContent.set(body)
-          this.textLoading.set(false)
-        },
-        error: (e: HttpErrorResponse) => {
-          this.textError.set(e.status === 403 ? 'You do not have access to this file.' : 'Failed to load file contents.')
-          this.textContent.set('')
-          this.textLoading.set(false)
-        }
-      })
-  }
-
   private goTo(path: string): void {
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path } }).catch(console.error)
   }
@@ -211,11 +182,6 @@ export class FileDetailComponent implements OnInit {
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
           this.breadcrumbs.setBreadcrumbs([{ label: 'Personal', icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.PERSONAL] }, { label: match.name }])
-          if (isTextViewerMime(match.mime)) this.loadTextContent()
-          else {
-            this.textContent.set('')
-            this.textError.set(null)
-          }
         },
         error: (e: HttpErrorResponse) => {
           this.errorMessage.set(e.status === 403 ? 'You do not have access to this file.' : 'Failed to load file.')

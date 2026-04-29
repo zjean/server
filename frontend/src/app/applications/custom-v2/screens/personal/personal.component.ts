@@ -38,7 +38,6 @@ import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { LinkDialogService } from '../../components/link-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
-import { TextEditorDialogService } from '../../components/text-editor-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
@@ -53,7 +52,7 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isPreviewable, isTextEditable } from '../../utils/classify-file'
+import { isPreviewable } from '../../utils/classify-file'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
@@ -107,7 +106,6 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly promptDialog = inject(PromptDialogService)
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
-  private readonly textEditorDialog = inject(TextEditorDialogService)
   private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
@@ -452,12 +450,6 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const fullPath = this.buildFullPath(file)
     if (isPreviewable(file)) {
       this.previewOverlay.open(fullPath, file)
-      return
-    }
-    if (isTextEditable(file)) {
-      // isWriteable=true is optimistic — server-side LOCK will fail with 403 if
-      // the user lacks permission, and the editor dialog falls back to read-only.
-      this.textEditorDialog.open({ fullPath, file, isWriteable: true })
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
