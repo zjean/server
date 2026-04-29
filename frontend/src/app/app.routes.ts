@@ -3,7 +3,6 @@ import { APP_PATH } from './app.constants'
 import { adminRoutes } from './applications/admin/admin.routes'
 import { LayoutV2Component } from './applications/custom-v2/layout/layout-v2.component'
 import { PreviewPageComponent } from './applications/custom-v2/preview/preview-page.component'
-import { PdfViewerComponent } from './applications/custom-v2/screens/pdf-viewer/pdf-viewer.component'
 import { uiVersionGuard } from './applications/custom-v2/ui-version.guard'
 import { V2_PATH, V2_ROUTES } from './applications/custom-v2/v2.constants'
 import { v2Routes } from './applications/custom-v2/v2.routes'
@@ -20,17 +19,10 @@ import { LayoutComponent } from './layout/layout.component'
 
 export const routes: Routes = [
   {
-    // Mounted as a top-level sibling of the v2 layout so the pdf.js iframe
-    // fills the whole tab — no v2 sidebar/header chrome around the viewer.
-    path: `${V2_PATH}/${V2_ROUTES.PDF}`,
-    component: PdfViewerComponent,
-    canActivate: [authGuard]
-  },
-  {
     // Standalone (chromeless) preview route — what middle-click /
     // window.open lands on. Sibling of the v2 layout so the new tab has
-    // no v2 sidebar/header. Image-only in Phase A; pdf/office/text added
-    // in subsequent phases.
+    // no v2 sidebar/header. Image + pdf wired in Phases A/B; office and
+    // text/code arrive in C/D.
     path: `${V2_PATH}/${V2_ROUTES.PREVIEW}`,
     component: PreviewPageComponent,
     canActivate: [authGuard]

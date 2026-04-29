@@ -10,9 +10,14 @@ import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPdfInNewTab } from '../../utils/open-pdf'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
+
+// Recents rows carry only `mime` (no FileProps), so we inline the predicate
+// here instead of using utils/classify-file's `isPreviewable(file)`.
+function isPreviewableMime(mime: string | null | undefined): boolean {
+  return isImageMime(mime) || isPdfMime(mime)
+}
 
 const RECENT_LIMIT = 20
 
@@ -63,22 +68,18 @@ export class RecentsComponent implements OnInit {
 
   protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
     const fullPath = `${parentPath}/${fileName}`
-    if (isImageMime(mime)) {
+    if (isPreviewableMime(mime)) {
       this.previewOverlay.open(fullPath)
-      return
-    }
-    if (isPdfMime(mime)) {
-      openPdfInNewTab(fullPath)
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
   // Middle-click on a recents row → new tab with the chromeless preview
-  // route. Phase A: image only.
+  // route.
   protected onRowAuxClick(event: MouseEvent, parentPath: string, fileName: string, mime: string | null | undefined): void {
     if (event.button !== 1) return
-    if (!isImageMime(mime)) return
+    if (!isPreviewableMime(mime)) return
     event.preventDefault()
     openPreviewInNewTab(`${parentPath}/${fileName}`)
   }

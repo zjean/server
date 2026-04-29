@@ -13,6 +13,7 @@ import {
   viewChild
 } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { Router } from '@angular/router'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
@@ -22,12 +23,23 @@ import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { IconButtonComponent } from '../components/icon-button.component'
+import { assetsUrl } from '../../files/files.constants'
 import { IconV2Component } from '../icons/icon-v2.component'
-import { isImageMime } from '../utils/mime-to-glyph'
+import { isImageMime, isPdfMime } from '../utils/mime-to-glyph'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { PreviewOverlayService } from './preview-overlay.service'
 
 export type PreviewMode = 'overlay' | 'standalone'
+
+// Pick the sibling predicate based on the current file's media class so
+// prev/next stays meaningful (image -> image, pdf -> pdf, etc.). Phases
+// C/D extend this with office and text/code predicates.
+function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => boolean {
+  if (!current) return () => false
+  if (isImageMime(current.mime)) return (f) => isImageMime(f.mime)
+  if (isPdfMime(current.mime)) return (f) => isPdfMime(f.mime)
+  return () => false
+}
 
 // Unified preview shell. Renders chrome (header, sibling nav, info pane,
 // close) once and switches body content by mime type. Phase A only wires
@@ -55,7 +67,9 @@ export class PreviewComponent {
   private readonly destroyRef = inject(DestroyRef)
   private readonly overlay = inject(PreviewOverlayService)
   private readonly router = inject(Router)
+  private readonly sanitizer = inject(DomSanitizer)
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
+  private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
 
   // Path is driven from the parent: PreviewOverlayComponent passes the
   // overlay's current path; the standalone route component passes the
@@ -91,7 +105,17 @@ export class PreviewComponent {
     return p ? `${API_FILES_OPERATION}/${encodeUrl(p)}` : ''
   })
 
+  // Resolves to e.g. `assets/pdfjs/web/viewer.html?file=/api/app/spaces/operation/<encoded path>`.
+  // The relative `assets/...` resolves against `<base href="/">` (set in
+  // index.html) so the iframe loads `/assets/pdfjs/web/viewer.html?file=...`.
+  protected readonly pdfSafeUrl = computed<SafeResourceUrl | null>(() => {
+    const p = this.path()
+    if (!p || !this.isPdf()) return null
+    return this.sanitizer.bypassSecurityTrustResourceUrl(`${this.pdfjsViewerUrl}${API_FILES_OPERATION}/${encodeUrl(p)}`)
+  })
+
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
+  protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
 
   constructor() {
     // Re-load whenever the input path changes. Covers in-overlay sibling
@@ -201,9 +225,8 @@ export class PreviewComponent {
           const match = result.files.find((f) => f.name === name)
           if (match) this.file.set(match)
           // Sibling list filtered to the same media class as the current
-          // file so prev/next stays meaningful (image -> image, etc.).
-          // Phase A only handles image; later phases extend the predicate.
-          const cls = match && isImageMime(match.mime) ? (f: FileProps) => isImageMime(f.mime) : (_f: FileProps) => false
+          // file so prev/next stays meaningful (image -> image, pdf -> pdf).
+          const cls = sameClassPredicate(match)
           this.siblings.set(result.files.filter((f) => !f.isDir && cls(f)))
         },
         error: (e: HttpErrorResponse) => {

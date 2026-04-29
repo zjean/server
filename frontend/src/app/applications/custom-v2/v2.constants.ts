@@ -17,7 +17,6 @@ export const V2_ROUTES = {
   SHARED_WITH_OTHERS: 'shared/with-others',
   SHARED_VIA_LINKS: 'shared/via-links',
   TRASH: 'trash',
-  PDF: 'pdf',
   PREVIEW: 'preview',
   FILE: 'file',
   SEARCH: 'search',

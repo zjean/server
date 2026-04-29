@@ -53,9 +53,8 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isTextEditable } from '../../utils/classify-file'
-import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPdfInNewTab } from '../../utils/open-pdf'
+import { isPreviewable, isTextEditable } from '../../utils/classify-file'
+import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
@@ -451,12 +450,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
       return
     }
     const fullPath = this.buildFullPath(file)
-    if (isImageMime(file.mime)) {
+    if (isPreviewable(file)) {
       this.previewOverlay.open(fullPath, file)
-      return
-    }
-    if (isPdfMime(file.mime)) {
-      openPdfInNewTab(fullPath)
       return
     }
     if (isTextEditable(file)) {
@@ -469,12 +464,11 @@ export class PersonalComponent implements OnInit, OnDestroy {
   }
 
   // Middle-click on a previewable file row → new tab with the chromeless
-  // preview route. Phase A: image only. Other types added as their phases
-  // land. button === 1 is the middle-button code; auxclick fires for non-
-  // primary buttons in modern browsers.
+  // preview route. button === 1 is the middle-button code; auxclick fires
+  // for non-primary buttons in modern browsers.
   protected onRowAuxClick(event: MouseEvent, file: FileProps): void {
     if (event.button !== 1 || file.isDir) return
-    if (!isImageMime(file.mime)) return
+    if (!isPreviewable(file)) return
     event.preventDefault()
     openPreviewInNewTab(this.buildFullPath(file))
   }
