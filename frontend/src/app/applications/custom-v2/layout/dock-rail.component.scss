@@ -44,9 +44,12 @@
     }
   }
 
+  // Anchor on the LEFT (panel-facing) edge of the tab. Right-side anchoring
+  // pushed the bar past the rail's right edge — which is the rightmost element
+  // in the layout — causing horizontal page overflow and a phantom scrollbar.
   &__indicator {
     position: absolute;
-    right: -8px;
+    left: -8px;
     top: 6px;
     bottom: 6px;
     width: 2.5px;
