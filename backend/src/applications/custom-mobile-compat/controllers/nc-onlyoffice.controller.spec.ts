@@ -2,6 +2,7 @@ import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { OnlyOfficeManager } from '../../files/modules/only-office/only-office-manager.service'
 import { OnlyOfficeGuard } from '../../files/modules/only-office/only-office.guard'
+import { FilesManager } from '../../files/services/files-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcOnlyOfficeFileResolver } from '../services/nc-onlyoffice-file-resolver.service'
 import { NcOnlyOfficeTranslatorService } from '../services/nc-onlyoffice-translator.service'
@@ -12,7 +13,8 @@ describe('NcOnlyOfficeController', () => {
 
   const onlyOfficeManagerMock = { getSettings: jest.fn(), callBack: jest.fn() }
   const translatorMock = { toNcEnvelope: jest.fn() }
-  const resolverMock = { resolve: jest.fn() }
+  const resolverMock = { resolve: jest.fn(), resolveChild: jest.fn() }
+  const filesManagerMock = { mkFile: jest.fn() }
 
   beforeEach(async () => {
     jest.clearAllMocks()
@@ -21,7 +23,8 @@ describe('NcOnlyOfficeController', () => {
       providers: [
         { provide: OnlyOfficeManager, useValue: onlyOfficeManagerMock },
         { provide: NcOnlyOfficeTranslatorService, useValue: translatorMock },
-        { provide: NcOnlyOfficeFileResolver, useValue: resolverMock }
+        { provide: NcOnlyOfficeFileResolver, useValue: resolverMock },
+        { provide: FilesManager, useValue: filesManagerMock }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -107,12 +110,53 @@ describe('NcOnlyOfficeController', () => {
     })
   })
 
-  it('empty() still throws 501 (phase 4)', () => {
-    expect(() => controller.empty()).toThrow(HttpException)
+  describe('empty()', () => {
+    const fakeUser: any = { id: 7, login: 'jane' }
+    const fakeReq: any = { user: fakeUser }
+
+    it('returns 400 when fileId missing', async () => {
+      await expect(controller.empty(fakeReq, undefined, 'a.docx')).rejects.toThrow(HttpException)
+    })
+
+    it('returns 400 when name missing', async () => {
+      await expect(controller.empty(fakeReq, '5', undefined)).rejects.toThrow(HttpException)
+    })
+
+    it('returns 400 for unsupported template extension', async () => {
+      await expect(controller.empty(fakeReq, '5', 'a.pdf')).rejects.toThrow(/unsupported/)
+    })
+
+    it('returns 404 when parent does not resolve', async () => {
+      resolverMock.resolveChild.mockResolvedValue(null)
+      await expect(controller.empty(fakeReq, '5', 'a.docx')).rejects.toThrow(HttpException)
+    })
+
+    it('creates the file via FilesManager.mkFile and returns the name', async () => {
+      const fakeSpace = { url: 'files/personal/docs/a.docx' }
+      resolverMock.resolveChild.mockResolvedValue(fakeSpace)
+      filesManagerMock.mkFile.mockResolvedValue(undefined)
+
+      const out = await controller.empty(fakeReq, '5', 'a.docx')
+
+      expect(resolverMock.resolveChild).toHaveBeenCalledWith(fakeUser, 5, 'a.docx')
+      // checkDocument=true triggers the sample-template copy path in mkFile.
+      expect(filesManagerMock.mkFile).toHaveBeenCalledWith(fakeUser, fakeSpace, false, true, true)
+      expect(out).toEqual({ name: 'a.docx' })
+    })
+
+    it('accepts xlsx and pptx in addition to docx', async () => {
+      resolverMock.resolveChild.mockResolvedValue({ url: 'x' })
+      filesManagerMock.mkFile.mockResolvedValue(undefined)
+
+      await expect(controller.empty(fakeReq, '5', 'a.xlsx')).resolves.toEqual({ name: 'a.xlsx' })
+      await expect(controller.empty(fakeReq, '5', 'a.pptx')).resolves.toEqual({ name: 'a.pptx' })
+    })
   })
 
-  it('save() still throws 501 (phase 4)', () => {
-    expect(() => controller.save()).toThrow(HttpException)
+  describe('save()', () => {
+    it('returns ok envelope (no-op ack — real saves happen via /track status 6)', () => {
+      expect(controller.save()).toEqual({ status: 'ok' })
+    })
   })
 })
 

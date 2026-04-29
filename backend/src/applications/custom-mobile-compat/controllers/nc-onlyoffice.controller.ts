@@ -3,11 +3,17 @@ import type { FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { OnlyOfficeManager } from '../../files/modules/only-office/only-office-manager.service'
 import { OnlyOfficeGuard } from '../../files/modules/only-office/only-office.guard'
+import { FilesManager } from '../../files/services/files-manager.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcOnlyOfficeFileResolver } from '../services/nc-onlyoffice-file-resolver.service'
 import type { NcOnlyOfficeEnvelope } from '../services/nc-onlyoffice-translator.service'
 import { NcOnlyOfficeTranslatorService } from '../services/nc-onlyoffice-translator.service'
+
+// Extensions advertised in capabilities.ts files.onlyoffice.templates. Mobile
+// app should only call /empty for these; we gate defensively in case of
+// drift or a custom client.
+const TEMPLATE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx'])
 
 // NcOnlyOfficeController — exposes the Nextcloud OnlyOffice connector
 // protocol so the OnlyOffice Documents mobile app can edit Sync-in files via
@@ -27,7 +33,8 @@ export class NcOnlyOfficeController {
   constructor(
     private readonly onlyOfficeManager: OnlyOfficeManager,
     private readonly translator: NcOnlyOfficeTranslatorService,
-    private readonly resolver: NcOnlyOfficeFileResolver
+    private readonly resolver: NcOnlyOfficeFileResolver,
+    private readonly filesManager: FilesManager
   ) {}
 
   // GET /index.php/apps/onlyoffice/config?fileId=<id>
@@ -62,16 +69,56 @@ export class NcOnlyOfficeController {
     return env
   }
 
+  // POST /index.php/apps/onlyoffice/empty?fileId=<parentId>&name=<filename>
+  //
+  // Creates a new document inside the parent folder. Reuses the upstream
+  // FilesManager.mkFile sample-template path (third arg `checkDocument=true`
+  // copies a pre-shipped .docx/.xlsx/.pptx skeleton when the extension matches
+  // DOCUMENT_TYPE) — same path the classic UI's "Create new document" hits.
+  //
+  // Returns minimal metadata: `{ name }`. The mobile app refreshes its file
+  // listing to discover the new file's id, then immediately re-enters /config
+  // with that id. Returning the id here would require a second DB lookup
+  // because mkFile-emitted FileEvents are buffered/async; the refresh path is
+  // simpler and matches how the classic UI handles new-doc creation.
   @Post('index.php/apps/onlyoffice/empty')
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  empty(): never {
-    throw new HttpException('not implemented', HttpStatus.NOT_IMPLEMENTED)
+  async empty(
+    @Req() req: FastifyRequest & { user: UserModel },
+    @Query('fileId') parentId?: string,
+    @Query('name') name?: string
+  ): Promise<{ name: string }> {
+    const pid = Number.parseInt(parentId ?? '', 10)
+    if (!Number.isFinite(pid) || pid <= 0) {
+      throw new HttpException('fileId required', HttpStatus.BAD_REQUEST)
+    }
+    if (!name) {
+      throw new HttpException('name required', HttpStatus.BAD_REQUEST)
+    }
+    const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
+    if (!TEMPLATE_EXTENSIONS.has(ext)) {
+      throw new HttpException(`unsupported template extension: ${ext}`, HttpStatus.BAD_REQUEST)
+    }
+    const space = await this.resolver.resolveChild(req.user, pid, name)
+    if (!space) {
+      throw new HttpException('parent not found', HttpStatus.NOT_FOUND)
+    }
+    // checkDocument=true triggers sample-template copy in mkFile when the
+    // extension matches DOCUMENT_TYPE (docx/xlsx/pptx are all included).
+    await this.filesManager.mkFile(req.user, space, false, true, true)
+    return { name }
   }
 
+  // POST /index.php/apps/onlyoffice/save?fileId=<id>
+  //
+  // NC mobile occasionally posts here to nudge a save. Sync-in's actual save
+  // flow runs through /track status 6/7 from the OnlyOffice document server
+  // — this endpoint is acknowledged but doesn't trigger anything server-side.
+  // If real-world testing shows lost edits, revisit by issuing a forcesave
+  // command to the doc server here.
   @Post('index.php/apps/onlyoffice/save')
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  save(): never {
-    throw new HttpException('not implemented', HttpStatus.NOT_IMPLEMENTED)
+  @HttpCode(HttpStatus.OK)
+  save(): { status: 'ok' } {
+    return { status: 'ok' }
   }
 }
 

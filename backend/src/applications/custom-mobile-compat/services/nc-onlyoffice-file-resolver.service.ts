@@ -31,4 +31,26 @@ export class NcOnlyOfficeFileResolver {
       return null
     }
   }
+
+  // Resolve a parent fileId + child name into a SpaceEnv pointing at the
+  // (possibly non-existent) child. Used by /empty when NC mobile asks to
+  // create a new document inside an existing folder. Empty parent path is
+  // accepted — that's the personal-space root case.
+  async resolveChild(user: UserModel, parentFileId: number, childName: string): Promise<SpaceEnv | null> {
+    if (!childName || childName.includes('/') || childName.includes('\\')) return null
+    let row: { id: number; path: string } | null = null
+    try {
+      row = await this.filesQueries.getUserFile(user.id, parentFileId)
+    } catch {
+      return null
+    }
+    if (!row) return null
+    const parentSegments = (row.path ?? '').split('/').filter(Boolean)
+    const urlSegments = ['files', 'personal', ...parentSegments, childName]
+    try {
+      return await this.spacesManager.spaceEnv(user, urlSegments)
+    } catch {
+      return null
+    }
+  }
 }
