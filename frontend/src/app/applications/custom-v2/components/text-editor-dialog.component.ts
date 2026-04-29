@@ -49,20 +49,8 @@ type EditorTheme = 'light' | 'dark'
             }
           </span>
           <span class="ted__spacer"></span>
-          <app-v2-icon-btn
-            iconName="search"
-            [size]="26"
-            title="Search (Ctrl/Cmd+F)"
-            [active]="searchOpen()"
-            (click)="toggleSearch()"
-          />
-          <app-v2-icon-btn
-            iconName="list"
-            [size]="26"
-            title="Line wrap"
-            [active]="lineWrap()"
-            (click)="toggleLineWrap()"
-          />
+          <app-v2-icon-btn iconName="search" [size]="26" title="Search (Ctrl/Cmd+F)" [active]="searchOpen()" (click)="toggleSearch()" />
+          <app-v2-icon-btn iconName="list" [size]="26" title="Line wrap" [active]="lineWrap()" (click)="toggleLineWrap()" />
           @if (writeable()) {
             <app-v2-icon-btn
               [iconName]="readonly() ? 'lock' : 'unlock'"
@@ -71,12 +59,7 @@ type EditorTheme = 'light' | 'dark'
               (click)="toggleReadonly()"
             />
           }
-          <app-v2-btn
-            kind="primary"
-            size="sm"
-            [disabled]="!writeable() || readonly() || !isModified() || saving()"
-            (click)="save()"
-          >
+          <app-v2-btn kind="primary" size="sm" [disabled]="!writeable() || readonly() || !isModified() || saving()" (click)="save()">
             {{ 'Save' | translate: locale.language }}
           </app-v2-btn>
           <app-v2-icon-btn iconName="x" [size]="26" title="Close (Esc)" (click)="onCloseClick()" />

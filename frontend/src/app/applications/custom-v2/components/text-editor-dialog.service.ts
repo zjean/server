@@ -10,12 +10,10 @@ export interface TextEditorDialogInput {
   isWriteable: boolean
 }
 
-interface PendingDialog extends TextEditorDialogInput {}
-
 @Injectable({ providedIn: 'root' })
 export class TextEditorDialogService {
   // Component reads this; null means dialog is closed.
-  readonly pending = signal<PendingDialog | null>(null)
+  readonly pending = signal<TextEditorDialogInput | null>(null)
 
   open(input: TextEditorDialogInput): void {
     this.pending.set({ ...input })
