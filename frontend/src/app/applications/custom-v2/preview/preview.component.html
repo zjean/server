@@ -51,11 +51,21 @@
         />
       } @else if (isPdf() && pdfSafeUrl(); as url) {
         <iframe class="preview__iframe" [src]="url"></iframe>
+      } @else if (isVideo() && imageUrl()) {
+        <video class="preview__video" [src]="imageUrl()" controls playsinline preload="metadata"></video>
+      } @else if (isAudio() && imageUrl()) {
+        <div class="preview__audio-wrap">
+          <app-v2-icon name="audio" [size]="72" class="preview__audio-glyph" />
+          <div class="preview__audio-name">{{ fileName() }}</div>
+          <audio class="preview__audio" [src]="imageUrl()" controls preload="metadata"></audio>
+        </div>
       } @else if (file()) {
-        <!-- Phases A-D: image, pdf, office, text/code wired. Audio/video and -->
-        <!-- a "no preview" download fallback arrive in Phase E. -->
-        <div class="preview__state">
-          Preview not yet available for this file type ({{ file()!.mime }}).
+        <!-- No-preview fallback for unrenderable types (zips, binaries, etc.). -->
+        <div class="preview__no-preview">
+          <app-v2-icon name="doc" [size]="56" class="preview__no-preview-icon" />
+          <div class="preview__no-preview-title">Preview not available</div>
+          <div class="preview__no-preview-lede">Download the file to view its contents.</div>
+          <button type="button" class="preview__no-preview-btn" (click)="download()">Download</button>
         </div>
       }
     </div>

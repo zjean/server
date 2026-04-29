@@ -17,7 +17,7 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isAudioMime, isImageMime, isPdfMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -89,8 +89,6 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
-  protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
-  protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
 
   ngOnInit(): void {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
