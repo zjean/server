@@ -39,6 +39,7 @@ import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { LinkDialogService } from '../../components/link-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
+import { TextEditorDialogService } from '../../components/text-editor-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
@@ -52,6 +53,7 @@ import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
+import { isTextEditable } from '../../utils/classify-file'
 import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPdfInNewTab } from '../../utils/open-pdf'
 
@@ -104,6 +106,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly promptDialog = inject(PromptDialogService)
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
+  private readonly textEditorDialog = inject(TextEditorDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly destroyRef = inject(DestroyRef)
@@ -456,6 +459,13 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     }
     if (isPdfMime(file.mime)) {
       openPdfInNewTab(fullPath)
+      return
+    }
+    if (isTextEditable(file)) {
+      // isWriteable=true is optimistic — the server enforces permissions when we
+      // attempt the LOCK request, and the dialog falls back to read-only on 403.
+      // TODO: derive from real space permissions once v2 surfaces them.
+      this.textEditorDialog.open({ fullPath, file, isWriteable: true })
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
