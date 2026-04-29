@@ -51,7 +51,8 @@ import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isImageMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { openPdfInNewTab } from '../../utils/open-pdf'
 import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
@@ -443,6 +444,10 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
     if (isImageMime(file.mime)) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.VIEWER], { queryParams: { path: fullPath } }).catch(console.error)
+      return
+    }
+    if (isPdfMime(file.mime)) {
+      openPdfInNewTab(fullPath)
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)

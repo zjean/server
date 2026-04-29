@@ -2,8 +2,9 @@ import { Routes } from '@angular/router'
 import { APP_PATH } from './app.constants'
 import { adminRoutes } from './applications/admin/admin.routes'
 import { LayoutV2Component } from './applications/custom-v2/layout/layout-v2.component'
+import { PdfViewerComponent } from './applications/custom-v2/screens/pdf-viewer/pdf-viewer.component'
 import { uiVersionGuard } from './applications/custom-v2/ui-version.guard'
-import { V2_PATH } from './applications/custom-v2/v2.constants'
+import { V2_PATH, V2_ROUTES } from './applications/custom-v2/v2.constants'
 import { v2Routes } from './applications/custom-v2/v2.routes'
 import { linksRoutes } from './applications/links/links.routes'
 import { RECENTS_PATH } from './applications/recents/recents.constants'
@@ -17,6 +18,13 @@ import { authRoutes } from './auth/auth.routes'
 import { LayoutComponent } from './layout/layout.component'
 
 export const routes: Routes = [
+  {
+    // Mounted as a top-level sibling of the v2 layout so the pdf.js iframe
+    // fills the whole tab — no v2 sidebar/header chrome around the viewer.
+    path: `${V2_PATH}/${V2_ROUTES.PDF}`,
+    component: PdfViewerComponent,
+    canActivate: [authGuard]
+  },
   {
     path: V2_PATH,
     component: LayoutV2Component,
