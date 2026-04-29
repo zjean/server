@@ -27,12 +27,11 @@ export function isTextEditable(file: ClassifiableFile): boolean {
 }
 
 // Files the unified preview overlay (and standalone /v2/preview route) can
-// render directly. Phases A-C cover images, PDFs, and OnlyOffice files;
-// Phase D extends with text/code. Anything not covered here continues to
-// land on the file-detail page.
+// render directly. Phases A-D cover images, PDFs, OnlyOffice, and text/code.
+// Anything not covered here continues to land on the file-detail page.
 export function isPreviewable(file: ClassifiableFile): boolean {
   if (file.isDir) return false
-  return isImageMime(file.mime) || isPdfMime(file.mime) || isOfficeExtension(file.name)
+  return isImageMime(file.mime) || isPdfMime(file.mime) || isOfficeExtension(file.name) || isTextEditable(file)
 }
 
 function getExtension(name: string): string {

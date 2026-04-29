@@ -33,11 +33,13 @@
   </div>
 
   <div class="preview__body">
-    <div class="preview__stage" [class.preview__stage--bare]="isPdf() || showOfficeEmbed()">
+    <div class="preview__stage" [class.preview__stage--bare]="isPdf() || showOfficeEmbed() || isText()">
       @if (loadError(); as err) {
         <div class="preview__state">{{ err }}</div>
       } @else if (showOfficeEmbed() && file(); as f) {
         <app-v2-preview-office-view [path]="path()" [file]="f" />
+      } @else if (isText() && file(); as f) {
+        <app-v2-preview-text-code-view [path]="path()" [file]="f" />
       } @else if (isImage() && imageUrl()) {
         <img
           #imageEl
@@ -50,9 +52,8 @@
       } @else if (isPdf() && pdfSafeUrl(); as url) {
         <iframe class="preview__iframe" [src]="url"></iframe>
       } @else if (file()) {
-        <!-- Phases A-C: image, pdf, office wired. Text/code arrives in D. -->
-        <!-- Fallback shows the type so the user isn't staring at a blank -->
-        <!-- panel; download/open-with affordance arrives in Phase E. -->
+        <!-- Phases A-D: image, pdf, office, text/code wired. Audio/video and -->
+        <!-- a "no preview" download fallback arrive in Phase E. -->
         <div class="preview__state">
           Preview not yet available for this file type ({{ file()!.mime }}).
         </div>

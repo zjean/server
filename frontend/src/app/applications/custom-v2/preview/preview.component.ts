@@ -25,22 +25,25 @@ import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { assetsUrl } from '../../files/files.constants'
 import { IconV2Component } from '../icons/icon-v2.component'
-import { isImageMime, isPdfMime } from '../utils/mime-to-glyph'
+import { isTextEditable } from '../utils/classify-file'
+import { isImageMime, isPdfMime, isTextViewerMime } from '../utils/mime-to-glyph'
 import { isOfficeExtension } from '../utils/office'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { OfficeViewComponent } from './office-view.component'
 import { PreviewOverlayService } from './preview-overlay.service'
+import { TextCodeViewComponent } from './text-code-view.component'
 
 export type PreviewMode = 'overlay' | 'standalone'
 
 // Pick the sibling predicate based on the current file's media class so
-// prev/next stays meaningful (image -> image, pdf -> pdf, office -> office).
-// Phase D extends this with a text/code predicate.
+// prev/next stays meaningful (image -> image, pdf -> pdf, office -> office,
+// text -> text).
 function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => boolean {
   if (!current) return () => false
   if (isImageMime(current.mime)) return (f) => isImageMime(f.mime)
   if (isPdfMime(current.mime)) return (f) => isPdfMime(f.mime)
   if (isOfficeExtension(current.name)) return (f) => isOfficeExtension(f.name)
+  if (isTextViewerMime(current.mime) && isTextEditable(current)) return (f) => isTextViewerMime(f.mime) && isTextEditable(f)
   return () => false
 }
 
@@ -63,7 +66,7 @@ function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => b
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview.component.html',
   styleUrl: './preview.component.scss',
-  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, ToBytesPipe, TimeAgoPipe]
+  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe]
 })
 export class PreviewComponent {
   private readonly http = inject(HttpClient)
@@ -125,6 +128,13 @@ export class PreviewComponent {
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
   protected readonly isOffice = computed(() => isOfficeExtension(this.file()?.name))
+  // True for plain-text / source-code files we can open in CodeMirror.
+  // Filters out office-by-extension and the unsupported list (binary stuff
+  // that has a text-y mime but really shouldn't be edited as text).
+  protected readonly isText = computed(() => {
+    const f = this.file()
+    return !!f && isTextViewerMime(f.mime) && isTextEditable(f)
+  })
 
   // True when the body should render OnlyOffice — either the file itself
   // is an office doc, or it's a PDF that the user toggled into edit mode.
