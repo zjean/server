@@ -16,7 +16,7 @@ import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
-import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
+import { DockRailService } from '../../layout/dock-rail.service'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
 export type SharedVariant = 'with-me' | 'with-others' | 'via-links'
@@ -89,7 +89,11 @@ export class SharedComponent implements OnInit, OnDestroy {
   protected readonly shares = computed(() => this.config().filter(this.allShares()))
 
   ngOnInit(): void {
-    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
+    // Shared rows act as direct links (click → open) — there's no
+    // single-row selection state for the dock panel to read against.
+    // Skip the dock-rail registration so the rail auto-hides instead of
+    // surfacing tabs that resolve to "Select a file…" empty states.
+    this.dockRail.clear()
     this.breadcrumbs.setBreadcrumbs([
       { label: 'Shared', icon: 'share' },
       { label: CONFIGS[this.variant()].title, icon: CONFIGS[this.variant()].icon }
