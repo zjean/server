@@ -1,3 +1,5 @@
+import { configuration } from '../../../configuration/config.environment'
+
 // Static capabilities payload returned from /ocs/v{1,2}.php/cloud/capabilities.
 // Values are tuned to tell stock NC mobile clients which features are available.
 //
@@ -20,7 +22,23 @@ export interface NcCapabilitiesPayload {
   capabilities: Record<string, unknown>
 }
 
+// OnlyOffice connector capability block. NC mobile (and the OnlyOffice
+// Documents app on its Nextcloud connection) gate the "Open with OnlyOffice"
+// action on this object's presence. Mimetypes mirror what NC's plugin
+// advertises so the mobile app's mimetype-gate matches.
+const ONLYOFFICE_CAPABILITY = {
+  version: '9.0.0',
+  mimetypes: [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ],
+  templates: ['docx', 'xlsx', 'pptx']
+} as const
+
 export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
+  const onlyofficeBlock = configuration.applications.files.onlyoffice.enabled ? { onlyoffice: ONLYOFFICE_CAPABILITY } : {}
+
   return {
     version: {
       major: 33,
@@ -47,7 +65,8 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         versioning: false,
         // Preview available for image mimes via /index.php/core/preview?file=<path>.
         // Non-images return 404 and the client falls back to a download.
-        preview: true
+        preview: true,
+        ...onlyofficeBlock
       },
       dav: {
         chunking: '1.0',
