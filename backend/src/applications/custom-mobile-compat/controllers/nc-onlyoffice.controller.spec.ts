@@ -5,6 +5,7 @@ import { OnlyOfficeGuard } from '../../files/modules/only-office/only-office.gua
 import { FilesManager } from '../../files/services/files-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcOnlyOfficeFileResolver } from '../services/nc-onlyoffice-file-resolver.service'
+import { NcOnlyOfficeForceSaveService } from '../services/nc-onlyoffice-force-save.service'
 import { NcOnlyOfficeTranslatorService } from '../services/nc-onlyoffice-translator.service'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './nc-onlyoffice.controller'
 
@@ -15,6 +16,7 @@ describe('NcOnlyOfficeController', () => {
   const translatorMock = { toNcEnvelope: jest.fn() }
   const resolverMock = { resolve: jest.fn(), resolveChild: jest.fn() }
   const filesManagerMock = { mkFile: jest.fn() }
+  const forceSaveMock = { forceSave: jest.fn() }
 
   beforeEach(async () => {
     jest.clearAllMocks()
@@ -24,7 +26,8 @@ describe('NcOnlyOfficeController', () => {
         { provide: OnlyOfficeManager, useValue: onlyOfficeManagerMock },
         { provide: NcOnlyOfficeTranslatorService, useValue: translatorMock },
         { provide: NcOnlyOfficeFileResolver, useValue: resolverMock },
-        { provide: FilesManager, useValue: filesManagerMock }
+        { provide: FilesManager, useValue: filesManagerMock },
+        { provide: NcOnlyOfficeForceSaveService, useValue: forceSaveMock }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -154,8 +157,37 @@ describe('NcOnlyOfficeController', () => {
   })
 
   describe('save()', () => {
-    it('returns ok envelope (no-op ack — real saves happen via /track status 6)', () => {
-      expect(controller.save()).toEqual({ status: 'ok' })
+    const fakeUser: any = { id: 7, login: 'jane' }
+    const fakeReq: any = { user: fakeUser }
+
+    it('returns error envelope when fileId is missing', async () => {
+      const out = await controller.save(fakeReq, undefined)
+      expect(out).toEqual({ status: 'error', reason: 'fileId required' })
+    })
+
+    it('returns error envelope when file does not resolve', async () => {
+      resolverMock.resolve.mockResolvedValue(null)
+      const out = await controller.save(fakeReq, '42')
+      expect(out).toEqual({ status: 'error', reason: 'file not found' })
+    })
+
+    it('issues forceSave and returns ok on success', async () => {
+      const fakeSpace = { url: 'files/personal/docs/a.docx' }
+      resolverMock.resolve.mockResolvedValue(fakeSpace)
+      forceSaveMock.forceSave.mockResolvedValue({ ok: true })
+
+      const out = await controller.save(fakeReq, '42')
+
+      expect(forceSaveMock.forceSave).toHaveBeenCalledWith(fakeSpace)
+      expect(out).toEqual({ status: 'ok' })
+    })
+
+    it('returns error envelope when forceSave fails', async () => {
+      resolverMock.resolve.mockResolvedValue({ url: 'x' })
+      forceSaveMock.forceSave.mockResolvedValue({ ok: false, reason: 'ECONNREFUSED' })
+
+      const out = await controller.save(fakeReq, '42')
+      expect(out).toEqual({ status: 'error', reason: 'ECONNREFUSED' })
     })
   })
 })

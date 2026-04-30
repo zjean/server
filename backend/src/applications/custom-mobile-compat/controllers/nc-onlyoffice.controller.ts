@@ -7,6 +7,7 @@ import { FilesManager } from '../../files/services/files-manager.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcOnlyOfficeFileResolver } from '../services/nc-onlyoffice-file-resolver.service'
+import { NcOnlyOfficeForceSaveService } from '../services/nc-onlyoffice-force-save.service'
 import type { NcOnlyOfficeEnvelope } from '../services/nc-onlyoffice-translator.service'
 import { NcOnlyOfficeTranslatorService } from '../services/nc-onlyoffice-translator.service'
 
@@ -34,7 +35,8 @@ export class NcOnlyOfficeController {
     private readonly onlyOfficeManager: OnlyOfficeManager,
     private readonly translator: NcOnlyOfficeTranslatorService,
     private readonly resolver: NcOnlyOfficeFileResolver,
-    private readonly filesManager: FilesManager
+    private readonly filesManager: FilesManager,
+    private readonly forceSave: NcOnlyOfficeForceSaveService
   ) {}
 
   // GET /index.php/apps/onlyoffice/config?fileId=<id>
@@ -110,15 +112,33 @@ export class NcOnlyOfficeController {
 
   // POST /index.php/apps/onlyoffice/save?fileId=<id>
   //
-  // NC mobile occasionally posts here to nudge a save. Sync-in's actual save
-  // flow runs through /track status 6/7 from the OnlyOffice document server
-  // — this endpoint is acknowledged but doesn't trigger anything server-side.
-  // If real-world testing shows lost edits, revisit by issuing a forcesave
-  // command to the doc server here.
+  // NC mobile posts here when the user explicitly hits Save. Issues a
+  // `forcesave` command to the OnlyOffice document server, which immediately
+  // re-invokes our /track endpoint with status 6 — that's the path real
+  // persistence runs through. Without this, edits sit in the doc server's
+  // memory until autosave fires (default 1–2 minutes), which produces a
+  // surprising window of lost edits if the mobile session is interrupted
+  // right after the user pressed Save.
+  //
+  // Returns the OnlyOffice protocol envelope shape; the mobile app gates
+  // its UI feedback on `status === 'ok'`. Errors are surfaced with a reason
+  // string for debugging but the mobile UX is the same either way.
   @Post('index.php/apps/onlyoffice/save')
   @HttpCode(HttpStatus.OK)
-  save(): { status: 'ok' } {
-    return { status: 'ok' }
+  async save(
+    @Req() req: FastifyRequest & { user: UserModel },
+    @Query('fileId') fileId?: string
+  ): Promise<{ status: 'ok' | 'error'; reason?: string }> {
+    const id = Number.parseInt(fileId ?? '', 10)
+    if (!Number.isFinite(id) || id <= 0) {
+      return { status: 'error', reason: 'fileId required' }
+    }
+    const space = await this.resolver.resolve(req.user, id)
+    if (!space) {
+      return { status: 'error', reason: 'file not found' }
+    }
+    const result = await this.forceSave.forceSave(space)
+    return result.ok ? { status: 'ok' } : { status: 'error', reason: result.reason }
   }
 }
 
