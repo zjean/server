@@ -40,6 +40,17 @@ import { FilesQuotaManager } from './services/files-quota-manager.service'
     FilesEventManager,
     FilesQuotaManager
   ],
-  exports: [FilesManager, FilesQueries, FilesLockManager, FilesQuotaManager, FilesMethods, FilesRecents]
+  exports: [
+    FilesManager,
+    FilesQueries,
+    FilesLockManager,
+    FilesQuotaManager,
+    FilesMethods,
+    FilesRecents,
+    // Re-export OnlyOfficeModule so consumers of FilesModule (currently the
+    // custom-mobile-compat NC OnlyOffice connector) get DI access to the
+    // manager + guard exported above.
+    ...(configuration.applications.files.onlyoffice.enabled ? [OnlyOfficeModule] : [])
+  ]
 })
 export class FilesModule {}
