@@ -99,7 +99,7 @@
     // every available pixel.
     &--bare {
       padding: 0;
-      background: #1f1f1f;
+      background: var(--si-bg0);
     }
   }
 
