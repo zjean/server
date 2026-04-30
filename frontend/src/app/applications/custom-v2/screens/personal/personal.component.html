@@ -253,5 +253,12 @@
     (closed)="closeMenu()"
   />
 
-  <app-v2-fab icon="plus" [ariaLabel]="'New folder' | translate: locale.language" (action)="newFolder()" />
+  <app-v2-fab icon="plus" [ariaLabel]="'Create' | translate: locale.language" (action)="fabSheetOpen.set(true)" />
+  <app-v2-action-sheet
+    [open]="fabSheetOpen()"
+    title="Create"
+    [items]="fabSheetItems"
+    (selected)="onFabSheetSelect($event)"
+    (closed)="fabSheetOpen.set(false)"
+  />
 </div>

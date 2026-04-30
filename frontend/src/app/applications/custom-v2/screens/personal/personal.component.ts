@@ -40,6 +40,7 @@ import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
+import { ActionSheetComponent } from '../../components/action-sheet.component'
 import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
@@ -90,6 +91,7 @@ function readStoredMode(): BrowserMode {
     ContextMenuComponent,
     DropZoneDirective,
     FabComponent,
+    ActionSheetComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -126,6 +128,16 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly filter = signal('')
   protected readonly mode = signal<BrowserMode>(readStoredMode())
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
+  // Mobile FAB-driven action sheet. Opens with a list of "create"
+  // options (the same ones available in the desktop toolbar) and
+  // dispatches by id when picked.
+  protected readonly fabSheetOpen = signal(false)
+  protected readonly fabSheetItems: readonly { id: string; label: string; icon: IconV2Name }[] = [
+    { id: 'new-folder', label: 'New folder', icon: 'plus' },
+    { id: 'new-text', label: 'New text file', icon: 'pencil' },
+    { id: 'download-url', label: 'Download from URL', icon: 'globe' },
+    { id: 'upload', label: 'Upload', icon: 'upload' }
+  ]
 
   protected readonly selection = signal<Set<number>>(new Set())
   private selectionAnchorId: number | null = null
@@ -700,6 +712,26 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (!input) return
     input.value = ''
     input.click()
+  }
+
+  // Dispatch the mobile FAB action sheet's selection back to the
+  // existing toolbar handlers — keeps a single implementation per
+  // action and avoids the sheet drifting from desktop behavior.
+  protected onFabSheetSelect(id: string): void {
+    switch (id) {
+      case 'new-folder':
+        this.newFolder()
+        return
+      case 'new-text':
+        this.newTextFile()
+        return
+      case 'download-url':
+        this.downloadFromUrl()
+        return
+      case 'upload':
+        this.triggerFilePicker()
+        return
+    }
   }
 
   protected onFilePicked(event: Event): void {
