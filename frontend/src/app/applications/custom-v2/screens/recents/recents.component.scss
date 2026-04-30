@@ -14,7 +14,9 @@
   overflow: auto;
 
   &__hero {
-    padding: 22px 22px 16px;
+    // Match the page-header rhythm we set on Personal/Spaces so a user
+    // moving between them sees the same breathing room.
+    padding: 32px 28px 22px;
     display: flex;
     align-items: flex-end;
     gap: 20px;
@@ -26,11 +28,13 @@
   }
 
   &__hero-eyebrow {
+    // Stack .micro: 11px / 500 / 0.06em letter-spacing (was 600 / 1px,
+    // which read as too-tracked at this size).
     margin: 0;
     font-family: var(--si-display);
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--si-fg-muted);
   }
@@ -41,8 +45,8 @@
     font-size: 28px;
     font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.4px;
-    line-height: 1.1;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
   }
 
   &__hero-name {
@@ -53,8 +57,8 @@
   &__grid {
     display: grid;
     grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-    gap: 12px;
-    padding: 0 18px 18px;
+    gap: 14px;
+    padding: 0 28px 28px;
     flex: 1 1 auto;
     min-height: 0;
 
@@ -65,14 +69,15 @@
 }
 
 .recents-panel {
+  // Stack .card: flat — subtle border, no shadow. The previous shadow2
+  // lift made these read as floating cards rather than chrome panels.
   display: flex;
   flex-direction: column;
   background: var(--si-bg3);
-  border: 1px solid var(--si-line-strong);
+  border: 1px solid var(--si-line);
   border-radius: var(--si-r3);
   overflow: hidden;
   min-height: 0;
-  box-shadow: var(--si-shadow2);
 
   &__header {
     height: 38px;
@@ -138,7 +143,9 @@
   }
 
   &__name {
-    font-size: 13px;
+    // Stack body scale (14px / 500). Matches the file-row name treatment
+    // on Personal so a row in Recents reads with the same weight.
+    font-size: 14px;
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.1px;
@@ -152,7 +159,7 @@
     align-items: center;
     gap: 5px;
     margin-top: 3px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--si-fg-faint);
     min-width: 0;
   }
