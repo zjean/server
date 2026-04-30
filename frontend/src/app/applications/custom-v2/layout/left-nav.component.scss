@@ -38,13 +38,16 @@
 }
 
 .left-nav {
-  width: 200px;
+  // Stack's full sidebar is 248px — gives nav rows their breathing room
+  // and lets badges sit comfortably to the right of the label without
+  // truncation. 200px was a hold-over from before the app-rail merged in.
+  width: 248px;
   flex-shrink: 0;
   background: var(--si-bg1);
   border-right: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
-  padding: 10px;
+  padding: 14px 12px 12px;
   gap: 2px;
   font-family: var(--si-sans);
 
