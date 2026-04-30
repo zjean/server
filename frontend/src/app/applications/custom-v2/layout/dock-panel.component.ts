@@ -8,7 +8,7 @@ import { DockRailService } from './dock-rail.service'
 import { LayoutV2Service } from './layout-v2.service'
 
 // Hosts the body of the right dock panel. Switches by LayoutV2Service.dockActive()
-// (info / comment / tree) and reads the single-selected file from
+// (info / comment) and reads the single-selected file from
 // DockRailService.currentSelected(). When nothing is selected, renders a
 // scoped empty state instead of letting the inner components break.
 @Component({
@@ -78,12 +78,6 @@ import { LayoutV2Service } from './layout-v2.service'
             <div class="dp__empty-lede" l10nTranslate>Select a file to see its comment thread.</div>
           </div>
         }
-      } @else if (active() === 'tree') {
-        <div class="dp__empty">
-          <app-v2-icon name="shareTree" [size]="20" />
-          <div class="dp__empty-title" l10nTranslate>Tree view</div>
-          <div class="dp__empty-lede" l10nTranslate>Folder tree picker arrives in a later phase.</div>
-        </div>
       }
     </div>
   `,

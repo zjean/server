@@ -49,10 +49,11 @@ export class DockRailService {
 }
 
 // Standard tab set for any screen that browses files with selection.
-// Matches classic's SpacesNavComponent registration: Info / Tree / Comments
-// (clipboard would only appear when populated — defer until clipboard wires up).
+// Tree is registered upstream but the panel was a "Coming soon" placeholder
+// in v2 — surfacing it as an enabled rail icon read as an unfinished
+// promise, so it's been retired until the folder-tree picker actually has a
+// landing. Comments + Info cover the file-scoped inspector needs today.
 export const FILE_BROWSER_DOCK_TABS: DockTab[] = [
   { id: 'info', icon: 'info', label: 'Info' },
-  { id: 'tree', icon: 'shareTree', label: 'Tree' },
   { id: 'comment', icon: 'comment', label: 'Comments' }
 ]
