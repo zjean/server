@@ -14,6 +14,7 @@ import { DockPanelComponent } from './dock-panel.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
 import { LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
+import { PageBreadcrumbComponent } from './page-breadcrumb.component'
 import { TitleBarComponent } from './title-bar.component'
 import { TransfersPopoverComponent } from './transfers-popover.component'
 
@@ -33,6 +34,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     TitleBarComponent,
     AppRailComponent,
     LeftNavComponent,
+    PageBreadcrumbComponent,
     DockRailComponent,
     DockPanelComponent,
     TransfersPopoverComponent,

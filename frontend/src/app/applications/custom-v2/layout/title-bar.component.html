@@ -18,19 +18,7 @@
     <app-v2-icon-btn iconName="chevLeft" [size]="26" color="rgba(255,255,255,0.75)" (click)="back()" />
     <app-v2-icon-btn iconName="chevRight" [size]="26" color="rgba(255,255,255,0.4)" (click)="forward()" />
   </div>
-  <div class="title-bar__breadcrumbs">
-    @for (b of breadcrumbs(); track $index; let i = $index; let last = $last) {
-      @if (i > 0) {
-        <app-v2-icon name="chevRight" [size]="11" class="title-bar__crumb-sep" />
-      }
-      <span class="title-bar__crumb" [class.title-bar__crumb--last]="last" (click)="navigateSegment(b.route)">
-        @if (b.icon) {
-          <app-v2-icon [name]="b.icon" [size]="13" class="title-bar__crumb-icon" />
-        }
-        {{ b.label | translate: locale.language }}
-      </span>
-    }
-  </div>
+  <div class="title-bar__spacer"></div>
   <div class="title-bar__right">
     <ng-content select="[titleBarRight]"></ng-content>
     <app-v2-notifications-bell />

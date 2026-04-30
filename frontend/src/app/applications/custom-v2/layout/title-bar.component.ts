@@ -1,14 +1,10 @@
 import { Location } from '@angular/common'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
-import { Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { UserType } from '../../users/interfaces/user.interface'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { LogoComponent } from '../components/logo.component'
-import { IconV2Component } from '../icons/icon-v2.component'
-import { V2BreadcrumbService } from './breadcrumb.service'
 import { LayoutV2Service } from './layout-v2.service'
 import { NotificationsBellComponent } from './notifications-bell.component'
 
@@ -17,15 +13,12 @@ import { NotificationsBellComponent } from './notifications-bell.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss',
-  imports: [IconV2Component, IconButtonComponent, LogoComponent, NotificationsBellComponent, L10nTranslatePipe]
+  imports: [IconButtonComponent, LogoComponent, NotificationsBellComponent]
 })
 export class TitleBarComponent {
-  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly location = inject(Location)
-  private readonly router = inject(Router)
   private readonly store = inject(StoreService)
-  protected readonly breadcrumbs = inject(V2BreadcrumbService).segments
   protected user: UserType | null = null
   protected userAvatar: string | null = null
   private subscriptions: Subscription[] = []
@@ -47,11 +40,6 @@ export class TitleBarComponent {
     if (this.layoutV2.isMobile()) {
       this.layoutV2.toggleLeftNav()
     }
-  }
-
-  protected navigateSegment(route: string | string[] | undefined): void {
-    if (!route) return
-    this.router.navigate(Array.isArray(route) ? route : [route]).catch(console.error)
   }
 
   protected userInitials(): string {
