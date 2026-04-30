@@ -11,8 +11,6 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { LayoutV2Service } from './layout-v2.service'
-import { NotificationsBellComponent } from './notifications-bell.component'
-import { TransfersPopoverComponent } from './transfers-popover.component'
 
 interface NavEntry {
   id: string
@@ -37,8 +35,6 @@ interface NavEntry {
     IconV2Component,
     AvatarComponent,
     LogoComponent,
-    NotificationsBellComponent,
-    TransfersPopoverComponent,
     RouterLink,
     RouterLinkActive,
     ToBytesPipe,
@@ -92,9 +88,9 @@ export class LeftNavComponent {
   protected readonly peopleRoute = `/${V2_PATH}/${V2_ROUTES.PEOPLE}`
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
   protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
-  // Sidebar header (wordmark + transfers + bell) is desktop-only — mobile
-  // keeps these in the title-bar so they're reachable without opening the
-  // drawer.
+  // Sidebar header (wordmark) is desktop-only — mobile already shows the
+  // wordmark via the title-bar's brand button, so an extra header in the
+  // drawer would duplicate it.
   protected readonly showHeader = computed(() => !this.layoutV2.isMobile())
 
   // AGPL §13 source link — required when the server is deployed for anyone

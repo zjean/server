@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject, OnInit, signal, viewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
-import { Router } from '@angular/router'
+import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FileContentModel } from '../../../files/models/file-content.model'
 import { FilesService } from '../../../files/services/files.service'
@@ -27,6 +27,7 @@ const LIMIT = 100
 export class SearchComponent implements OnInit {
   private readonly filesService = inject(FilesService)
   private readonly router = inject(Router)
+  private readonly route = inject(ActivatedRoute)
   private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
@@ -44,6 +45,17 @@ export class SearchComponent implements OnInit {
 
   ngOnInit(): void {
     this.breadcrumbs.setBreadcrumbs([{ label: 'Search', icon: 'search' }])
+    // Seed from `?q=` so the top-bar's global search input can hand a query
+    // off here without losing it. We subscribe rather than read once so the
+    // user can paste a different query into the URL bar mid-session.
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const q = (params.get('q') ?? '').trim()
+      if (!q || q === this.query()) return
+      this.query.set(q)
+      const el = this.input()?.nativeElement
+      if (el) el.value = q
+      this.onSubmit()
+    })
     queueMicrotask(() => this.input()?.nativeElement.focus())
   }
 

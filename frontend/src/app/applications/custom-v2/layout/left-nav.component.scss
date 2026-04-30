@@ -48,10 +48,10 @@
   gap: 2px;
   font-family: var(--si-sans);
 
-  // Sidebar header — wordmark on the left, transfers + notifications bell
-  // on the right. Replaces the desktop title-bar's bell+transfers cluster
-  // so the chrome collapses into one column. Mobile keeps the title-bar
-  // and skips this header (showHeader = !isMobile).
+  // Sidebar header — wordmark only. Transfers + notifications bell live
+  // in the desktop top-bar (Stack pattern); the sidebar reads as pure
+  // navigation. Mobile keeps the title-bar and skips this header
+  // (showHeader = !isMobile).
   &__header {
     display: flex;
     align-items: center;
@@ -91,13 +91,6 @@
     color: var(--si-fg-faint);
     margin-top: 3px;
     text-transform: uppercase;
-  }
-
-  &__header-actions {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    flex-shrink: 0;
   }
 
   &__section-label {

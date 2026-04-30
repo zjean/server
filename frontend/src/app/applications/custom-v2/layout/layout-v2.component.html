@@ -2,11 +2,15 @@
   <app-v2-title-bar>
     <app-v2-transfers-popover titleBarRight />
   </app-v2-title-bar>
+} @else {
+  <app-v2-top-bar />
 }
 <div class="layout-v2__body">
   <app-v2-left-nav />
   <main class="layout-v2__content">
-    <app-v2-page-breadcrumb />
+    @if (layoutV2.isMobile()) {
+      <app-v2-page-breadcrumb />
+    }
     <router-outlet />
   </main>
   @if (layoutV2.dockActive() !== null) {
