@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, HostListener, inject, viewChild } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, viewChild } from '@angular/core'
 import { Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { IconV2Component } from '../icons/icon-v2.component'
@@ -53,13 +53,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
 
       <form class="topbar__search" (submit)="onSearchSubmit($event)" role="search">
         <app-v2-icon name="search" [size]="14" class="topbar__search-icon" />
-        <input
-          #searchInput
-          type="search"
-          class="topbar__search-input"
-          [placeholder]="placeholder()"
-          autocomplete="off"
-        />
+        <input #searchInput type="search" class="topbar__search-input" [placeholder]="placeholder()" autocomplete="off" />
         <span class="topbar__search-kbd" aria-hidden="true">{{ shortcutLabel }}</span>
       </form>
 

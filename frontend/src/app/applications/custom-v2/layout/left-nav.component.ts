@@ -31,15 +31,7 @@ interface NavEntry {
     '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
     '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
   },
-  imports: [
-    IconV2Component,
-    AvatarComponent,
-    LogoComponent,
-    RouterLink,
-    RouterLinkActive,
-    ToBytesPipe,
-    L10nTranslateDirective
-  ]
+  imports: [IconV2Component, AvatarComponent, LogoComponent, RouterLink, RouterLinkActive, ToBytesPipe, L10nTranslateDirective]
 })
 export class LeftNavComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
