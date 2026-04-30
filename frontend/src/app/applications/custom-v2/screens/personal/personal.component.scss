@@ -14,7 +14,10 @@
   min-height: 0;
 
   &__toolbar {
-    padding: 20px 22px 14px;
+    // Stack page-header padding: more generous than the previous
+    // 20/22/14 so the lifted 22px title has room to breathe and the
+    // toolbar reads as a header band, not a thin strip.
+    padding: 28px 28px 20px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
