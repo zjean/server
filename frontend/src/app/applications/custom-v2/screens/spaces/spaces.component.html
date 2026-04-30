@@ -44,8 +44,8 @@
           </div>
           <div class="space-row__quota">
             @if (s.storageQuota && s.storageQuota > 0) {
-              {{ s.storageUsage | toBytes: 1 : true }} / {{ s.storageQuota | toBytes }}
-            } @else {
+              {{ (s.storageUsage ?? 0) | toBytes: 1 : true }} / {{ s.storageQuota | toBytes }}
+            } @else if (s.storageUsage) {
               {{ s.storageUsage | toBytes: 1 : true }}
             }
           </div>
