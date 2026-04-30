@@ -1,30 +1,90 @@
 <div class="recents">
   <header class="recents__hero">
-    <div class="recents__hero-left">
-      <p class="recents__hero-eyebrow">Recents · {{ nowLabel }}</p>
-      <h1 class="recents__hero-title">
-        <span class="recents__hero-greeting">{{ greeting() }}, </span>
-        <span class="recents__hero-name">{{ firstName() }}.</span>
-      </h1>
+    <div class="recents__kicker">
+      <app-v2-icon name="clock" [size]="11" class="recents__kicker-icon" />
+      <span class="recents__kicker-text">Workspace · {{ nowLabel }}</span>
     </div>
+    <h1 class="recents__title">Recents</h1>
+    <p class="recents__lede">
+      Files you and your collaborators have touched recently.
+    </p>
   </header>
 
-  <div class="recents__grid">
-    <section class="recents-panel">
-      <header class="recents-panel__header">
-        <app-v2-icon name="doc" [size]="13" class="recents-panel__header-icon" />
-        <span class="recents-panel__title">Files</span>
-        <span class="recents-panel__count">{{ files().length }}</span>
+  @if (pinnedFiles().length > 0) {
+    <section class="recents__section">
+      <header class="recents__section-head">
+        <span class="recents__section-label">Pick up where you left off</span>
+        <span class="recents__count-pill">{{ pinnedFiles().length }}</span>
       </header>
-      <div class="recents-panel__body">
-        @for (f of files(); track f.id) {
+      <div class="recents__pinned-grid">
+        @for (f of pinnedFiles(); track f.id) {
+          <button
+            type="button"
+            class="pinned-card"
+            (click)="openFile(f.path, f.name, f.mime)"
+            (auxclick)="onRowAuxClick($event, f.path, f.name, f.mime)"
+          >
+            <div class="pinned-card__thumb">
+              <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="56" [rounded]="12" />
+              <span class="pinned-card__time">{{ f.mtime | amTimeAgo }}</span>
+            </div>
+            <div class="pinned-card__name">{{ f.name }}</div>
+            <div class="pinned-card__sub">
+              <app-v2-icon name="folder" [size]="10" class="pinned-card__sub-icon" />
+              <span class="pinned-card__path">{{ f.showedPath || '/' }}</span>
+            </div>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  @if (pinnedComments().length > 0) {
+    <section class="recents__section">
+      <header class="recents__section-head">
+        <span class="recents__section-label">Recent comments</span>
+        <span class="recents__count-pill">{{ pinnedComments().length }}</span>
+      </header>
+      <div class="recents__comments-grid">
+        @for (c of pinnedComments(); track c.id) {
+          <button
+            type="button"
+            class="comment-card"
+            (click)="openFile(c.file.path, c.file.name, c.file.mime)"
+            (auxclick)="onRowAuxClick($event, c.file.path, c.file.name, c.file.mime)"
+          >
+            <div class="comment-card__file">
+              <app-v2-file-glyph [type]="mimeToGlyph(c.file.mime)" [size]="20" [rounded]="5" />
+              <span class="comment-card__file-name">{{ c.file.name }}</span>
+            </div>
+            <div class="comment-card__author">
+              <app-v2-avatar [user]="commentAvatar(c.author)" [size]="22" />
+              <span class="comment-card__author-name">{{ c.author?.fullName || c.author?.login }}</span>
+              <span class="comment-card__when">{{ c.modifiedAt | amTimeAgo }}</span>
+            </div>
+            <p class="comment-card__body">{{ c.content }}</p>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  @if (buckets().length > 0) {
+    <section class="recents__section recents__section--list">
+      @for (g of buckets(); track g.key) {
+        <header class="bucket-head">
+          <span class="recents__section-label">{{ g.label }}</span>
+          <span class="recents__count-pill">{{ g.items.length }}</span>
+          <div class="bucket-rule"></div>
+        </header>
+        @for (f of g.items; track f.id) {
           <button
             type="button"
             class="recent-row"
             (click)="openFile(f.path, f.name, f.mime)"
             (auxclick)="onRowAuxClick($event, f.path, f.name, f.mime)"
           >
-            <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="32" [rounded]="7" />
+            <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
             <div class="recent-row__meta">
               <div class="recent-row__name">{{ f.name }}</div>
               <div class="recent-row__sub">
@@ -34,61 +94,20 @@
             </div>
             <div class="recent-row__time">{{ f.mtime | amTimeAgo }}</div>
           </button>
-        } @empty {
-          <div class="recents-empty">
-            <div class="recents-empty__icon">
-              <app-v2-icon name="doc" [size]="20" />
-            </div>
-            <div class="recents-empty__title">No recent files</div>
-            <div class="recents-empty__lede">Files you open or change will appear here.</div>
-          </div>
         }
-      </div>
+      }
     </section>
+  }
 
-    <section class="recents-panel">
-      <header class="recents-panel__header">
-        <app-v2-icon name="comment" [size]="13" class="recents-panel__header-icon" />
-        <span class="recents-panel__title">Comments</span>
-        <span class="recents-panel__count">{{ comments().length }}</span>
-      </header>
-      <div class="recents-panel__body">
-        @for (c of comments(); track c.id) {
-          <button
-            type="button"
-            class="recent-comment"
-            (click)="openFile(c.file.path, c.file.name, c.file.mime)"
-            (auxclick)="onRowAuxClick($event, c.file.path, c.file.name, c.file.mime)"
-          >
-            <div class="recent-comment__avatar">
-              @if (c.author?.avatarUrl) {
-                <img class="recent-comment__avatar-img" [src]="c.author.avatarUrl" alt="" />
-              } @else {
-                <span>{{ (c.author?.fullName || c.author?.login || '?')[0] }}</span>
-              }
-            </div>
-            <div class="recent-comment__body">
-              <div class="recent-comment__head">
-                <span class="recent-comment__author">{{ c.author?.fullName || c.author?.login }}</span>
-                <span class="recent-comment__when">{{ c.modifiedAt | amTimeAgo }}</span>
-              </div>
-              <p class="recent-comment__text">{{ c.content }}</p>
-              <div class="recent-comment__file">
-                <app-v2-icon name="doc" [size]="10" />
-                <span>{{ c.file.name }}</span>
-              </div>
-            </div>
-          </button>
-        } @empty {
-          <div class="recents-empty">
-            <div class="recents-empty__icon">
-              <app-v2-icon name="comment" [size]="20" />
-            </div>
-            <div class="recents-empty__title">No recent comments</div>
-            <div class="recents-empty__lede">Threads on files you're following will appear here.</div>
-          </div>
-        }
+  @if (!hasAny()) {
+    <div class="recents-empty">
+      <div class="recents-empty__icon">
+        <app-v2-icon name="doc" [size]="22" />
       </div>
-    </section>
-  </div>
+      <div class="recents-empty__title">No recent activity</div>
+      <div class="recents-empty__lede">
+        Files you open or change, and threads on files you follow, will appear here.
+      </div>
+    </div>
+  }
 </div>
