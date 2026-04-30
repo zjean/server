@@ -84,4 +84,12 @@ export class SpacesComponent implements OnInit {
   protected memberCount(space: SpaceModel): number {
     return (space.counts?.users ?? 0) + (space.counts?.groups ?? 0)
   }
+
+  // Storage usage as a 0-100 percentage. Caps at 100 so a quota
+  // overshoot doesn't render past the card edge.
+  protected quotaPct(space: SpaceModel): number {
+    if (!space.storageQuota || space.storageQuota <= 0) return 0
+    const pct = ((space.storageUsage ?? 0) / space.storageQuota) * 100
+    return Math.min(Math.max(pct, 0), 100)
+  }
 }
