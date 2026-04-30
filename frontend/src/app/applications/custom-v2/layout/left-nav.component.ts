@@ -1,13 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router'
+import { L10nTranslateDirective } from 'angular-l10n'
 import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
+import { LogoComponent } from '../components/logo.component'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { LayoutV2Service } from './layout-v2.service'
+import { NotificationsBellComponent } from './notifications-bell.component'
+import { TransfersPopoverComponent } from './transfers-popover.component'
 
 interface NavEntry {
   id: string
@@ -28,7 +32,16 @@ interface NavEntry {
     '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
     '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
   },
-  imports: [IconV2Component, RouterLink, RouterLinkActive, ToBytesPipe]
+  imports: [
+    IconV2Component,
+    LogoComponent,
+    NotificationsBellComponent,
+    TransfersPopoverComponent,
+    RouterLink,
+    RouterLinkActive,
+    ToBytesPipe,
+    L10nTranslateDirective
+  ]
 })
 export class LeftNavComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
@@ -60,6 +73,11 @@ export class LeftNavComponent {
   ]
 
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
+  protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
+  // Sidebar header (wordmark + transfers + bell) is desktop-only — mobile
+  // keeps these in the title-bar so they're reachable without opening the
+  // drawer.
+  protected readonly showHeader = computed(() => !this.layoutV2.isMobile())
 
   // AGPL §13 source link — required when the server is deployed for anyone
   // but the maintainer. Lives in the LeftNav footer so it's visible on every

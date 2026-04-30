@@ -1,4 +1,20 @@
 <nav class="left-nav">
+  @if (showHeader()) {
+    <header class="left-nav__header">
+      <div class="left-nav__brand">
+        <app-v2-logo [size]="20" />
+        <div class="left-nav__brand-text">
+          <span class="left-nav__brand-name">Sync-In</span>
+          <span class="left-nav__brand-eyebrow">Files</span>
+        </div>
+      </div>
+      <div class="left-nav__header-actions">
+        <app-v2-transfers-popover />
+        <app-v2-notifications-bell />
+      </div>
+    </header>
+  }
+
   <div class="left-nav__section-label">Workspace</div>
   @for (it of workspace; track it.id) {
     <a
@@ -85,9 +101,20 @@
           {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
           @if ((user()?.storageQuota ?? 0) > 0) {
             / {{ user()?.storageQuota | toBytes }}
+          } @else {
+            <span class="left-nav__user-usage-sep">·</span>
+            <span l10nTranslate>unlimited</span>
           }
         </div>
       </div>
+      <a
+        class="left-nav__user-cog"
+        [routerLink]="settingsRoute"
+        [attr.aria-label]="'Settings'"
+        title="Settings"
+      >
+        <app-v2-icon name="settings" [size]="14" />
+      </a>
     </div>
   }
   <a

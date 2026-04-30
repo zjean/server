@@ -1,6 +1,8 @@
-<app-v2-title-bar>
-  <app-v2-transfers-popover titleBarRight />
-</app-v2-title-bar>
+@if (layoutV2.isMobile()) {
+  <app-v2-title-bar>
+    <app-v2-transfers-popover titleBarRight />
+  </app-v2-title-bar>
+}
 <div class="layout-v2__body">
   <app-v2-app-rail />
   <app-v2-left-nav />

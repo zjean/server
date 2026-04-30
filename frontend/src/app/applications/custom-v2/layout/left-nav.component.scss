@@ -39,7 +39,7 @@
 }
 
 .left-nav {
-  width: 180px;
+  width: 200px;
   flex-shrink: 0;
   background: var(--si-bg1);
   border-right: 1px solid var(--si-line);
@@ -48,6 +48,58 @@
   padding: 10px;
   gap: 2px;
   font-family: var(--si-sans);
+
+  // Sidebar header — wordmark on the left, transfers + notifications bell
+  // on the right. Replaces the desktop title-bar's bell+transfers cluster
+  // so the chrome collapses into one column. Mobile keeps the title-bar
+  // and skips this header (showHeader = !isMobile).
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--si-line);
+  }
+
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__brand-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
+    min-width: 0;
+  }
+
+  &__brand-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.1px;
+    color: var(--si-fg);
+    font-family: var(--si-display);
+  }
+
+  &__brand-eyebrow {
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 1.1px;
+    color: var(--si-fg-faint);
+    margin-top: 3px;
+    text-transform: uppercase;
+  }
+
+  &__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
 
   &__section-label {
     font-size: 10px;
@@ -188,6 +240,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  &__user-usage-sep {
+    color: var(--si-fg-ghost);
+    margin: 0 3px;
+  }
+
+  &__user-cog {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--si-fg-faint);
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--si-bg4);
+      color: var(--si-fg);
+    }
   }
 
   &__source {
