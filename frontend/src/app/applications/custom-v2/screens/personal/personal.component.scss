@@ -23,6 +23,13 @@
     align-items: center;
     gap: 4px;
     background: var(--si-bg2);
+    transition: background var(--dur-1, 120ms) ease;
+
+    // Selection mode: tint the whole toolbar so it's clear the screen
+    // is in a different state. Subtle amber wash, no inner border.
+    &--selecting {
+      background: var(--si-accent-soft);
+    }
   }
 
   &__title {

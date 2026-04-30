@@ -20,6 +20,12 @@
     align-items: center;
     gap: 4px;
     background: var(--si-bg2);
+    transition: background var(--dur-1, 120ms) ease;
+
+    // Selection-mode tint: see personal.component.scss for rationale.
+    &--selecting {
+      background: var(--si-accent-soft);
+    }
   }
 
   &__title {

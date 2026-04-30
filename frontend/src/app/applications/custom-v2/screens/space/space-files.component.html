@@ -1,5 +1,5 @@
 <div class="personal">
-  <header class="personal__toolbar">
+  <header class="personal__toolbar" [class.personal__toolbar--selecting]="hasSelection()">
     <div class="personal__title">
       <div class="personal__title-text">
         @if (pathSegments().length === 0) {
