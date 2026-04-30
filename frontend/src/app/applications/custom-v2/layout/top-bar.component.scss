@@ -1,6 +1,12 @@
 :host {
   display: block;
   flex-shrink: 0;
+  // Keep the bar pinned to the top of the main scroll area when its
+  // sibling router-outlet content scrolls. The body sets overflow:auto on
+  // .layout-v2__content, which becomes the sticky containing block.
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .topbar {
@@ -14,12 +20,45 @@
   font-family: var(--si-sans);
   color: var(--si-fg);
 
+  // Back/forward chevrons. Stack pattern: subtle ghost buttons that hint
+  // at navigation depth without competing with the breadcrumb.
+  &__history {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  &__chev {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 8px;
+    color: var(--si-fg-faint);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--si-bg2);
+      color: var(--si-fg);
+    }
+  }
+
   &__crumbs {
     display: flex;
     align-items: center;
     gap: 8px;
+    // The breadcrumb area should give back its space first when widths
+    // get tight: shrink before the spacer collapses, so search + actions
+    // stay reachable. Min-width 0 plus the truncating last segment lets
+    // the row stay on a single line at any width.
     min-width: 0;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   &__crumb {
@@ -36,11 +75,13 @@
     white-space: nowrap;
     cursor: default;
     color: var(--si-fg-faint);
+    min-width: 0;
 
     &--link {
       color: var(--si-fg-faint);
       cursor: pointer;
       transition: color 120ms ease;
+      flex-shrink: 1;
 
       &:hover {
         color: var(--si-fg);
@@ -50,7 +91,18 @@
     &--last {
       color: var(--si-fg);
       font-weight: 500;
+      // Truncate the deepest segment first — long file/folder names
+      // would otherwise push the whole row past the search input.
+      flex: 0 1 auto;
+      min-width: 0;
     }
+  }
+
+  &__crumb-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   &__crumb-sep {
@@ -64,24 +116,31 @@
   }
 
   &__spacer {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    min-width: 16px;
   }
 
-  // Search field — Stack pattern: 240px, soft surface, focus pulls accent
-  // border + lifts to bg3. Submitting routes to /v2/search?q=…; the actual
-  // results UI lives there.
+  // Search field — Stack pattern: 240px base, soft surface, focus pulls
+  // accent border + lifts to bg3. Submitting routes to /v2/search?q=…; the
+  // actual results UI lives there.
+  //
+  // The flex basis is 240 with a min-width of 36 so the field shrinks
+  // smoothly as the viewport narrows (the breadcrumb's `overflow: hidden`
+  // gives back its space first; once the spacer fully collapses, the search
+  // narrows toward icon-only). At ≤1024 a media query parks it at the
+  // 36px floor for a stable square-button look.
   &__search {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 240px;
+    flex: 0 1 240px;
+    min-width: 36px;
     height: 34px;
     padding: 0 10px 0 12px;
     background: var(--si-bg2);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     transition: border-color 120ms ease, background 120ms ease;
-    flex-shrink: 0;
 
     &:focus-within {
       border-color: var(--si-accent);
@@ -133,10 +192,37 @@
     gap: 4px;
     flex-shrink: 0;
   }
+
+  // Avatar at the top-right opens settings — same destination as the cog
+  // button on the left-nav user-card, so users have a discoverable entry
+  // point regardless of which surface they're attending to.
+  &__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 4px;
+    border-radius: 999px;
+    text-decoration: none;
+    transition: box-shadow 120ms ease, transform 120ms ease;
+
+    &:hover {
+      box-shadow: 0 0 0 2px var(--si-line-strong);
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+  }
 }
 
-// Tablet — drop the kbd hint to keep room for breadcrumbs.
-@media (max-width: 1024px) {
+// The topbar lives inside the main content area, so its available width is
+// roughly viewport − sidebar (248). Breakpoints are picked against the
+// viewport because that's where the user resizes; the offsets below match
+// the points where the bar actually starts to crowd.
+
+// Tablet — drop the kbd hint and the back/forward chevs first to give the
+// breadcrumb its space. Search shrinks too.
+@media (max-width: 1180px) {
   .topbar__search {
     width: 200px;
   }
@@ -145,13 +231,16 @@
   }
 }
 
-// Narrow desktop — collapse search to an icon-only button-shaped input.
-// Below 768px the layout switches to the mobile title-bar entirely so this
-// only applies to a small range, but it prevents an awkward squish.
-@media (max-width: 880px) {
+// Narrow desktop — collapse search to an icon-only square. Below 768px the
+// layout switches to the mobile title-bar entirely, so this only matters
+// in the 768–1024 sliver where desktop chrome stays.
+@media (max-width: 1024px) {
   .topbar {
-    padding: 0 16px;
+    padding: 0 14px;
     gap: 8px;
+  }
+  .topbar__history {
+    display: none;
   }
   .topbar__search {
     width: 36px;
@@ -161,5 +250,8 @@
   .topbar__search-input,
   .topbar__search-kbd {
     display: none;
+  }
+  .topbar__avatar {
+    margin-left: 0;
   }
 }

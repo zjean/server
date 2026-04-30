@@ -3,7 +3,10 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  background: var(--si-bg2);
+  // Match the Stack page surface (bg-0) — the layout body uses the same
+  // value, but each screen sets its own background for cases where the
+  // screen is rendered standalone (e.g. inside a dialog).
+  background: var(--si-bg0);
 }
 
 .recents {
@@ -307,7 +310,7 @@
   padding: 16px 0 10px;
   position: sticky;
   top: 0;
-  background: linear-gradient(var(--si-bg2) 70%, transparent);
+  background: linear-gradient(var(--si-bg0) 70%, transparent);
   z-index: 1;
 }
 

@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, viewChild } from '@angular/core'
-import { Router } from '@angular/router'
+import { toSignal } from '@angular/core/rxjs-interop'
+import { Router, RouterLink } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
+import { StoreService } from '../../../store/store.service'
+import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { V2BreadcrumbService } from './breadcrumb.service'
@@ -20,9 +23,18 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
 @Component({
   selector: 'app-v2-top-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconV2Component, NotificationsBellComponent, TransfersPopoverComponent, L10nTranslatePipe],
+  imports: [IconV2Component, AvatarComponent, NotificationsBellComponent, TransfersPopoverComponent, RouterLink, L10nTranslatePipe],
   template: `
     <header class="topbar">
+      <div class="topbar__history">
+        <button type="button" class="topbar__chev" [attr.aria-label]="'Back' | translate: locale.language" (click)="goBack()">
+          <app-v2-icon name="chevLeft" [size]="14" />
+        </button>
+        <button type="button" class="topbar__chev" [attr.aria-label]="'Forward' | translate: locale.language" (click)="goForward()">
+          <app-v2-icon name="chevRight" [size]="14" />
+        </button>
+      </div>
+
       <nav class="topbar__crumbs" aria-label="Breadcrumb">
         @if (segments().length === 0) {
           <span class="topbar__crumb topbar__crumb--last">{{ 'Sync-In' | translate: locale.language }}</span>
@@ -36,14 +48,14 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
               @if (b.icon) {
                 <app-v2-icon [name]="b.icon" [size]="13" class="topbar__crumb-icon" />
               }
-              {{ b.label | translate: locale.language }}
+              <span class="topbar__crumb-label">{{ b.label | translate: locale.language }}</span>
             </button>
           } @else {
             <span class="topbar__crumb topbar__crumb--last">
               @if (b.icon) {
                 <app-v2-icon [name]="b.icon" [size]="13" class="topbar__crumb-icon" />
               }
-              {{ b.label | translate: locale.language }}
+              <span class="topbar__crumb-label">{{ b.label | translate: locale.language }}</span>
             </span>
           }
         }
@@ -60,6 +72,9 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
       <div class="topbar__actions">
         <app-v2-transfers-popover />
         <app-v2-notifications-bell />
+        <a class="topbar__avatar" [routerLink]="settingsRoute" [attr.title]="'Settings' | translate: locale.language">
+          <app-v2-avatar [user]="meAvatar()" [size]="28" />
+        </a>
       </div>
     </header>
   `,
@@ -70,8 +85,26 @@ export class TopBarComponent {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly layoutV2 = inject(LayoutV2Service)
+  private readonly store = inject(StoreService)
   protected readonly segments = this.breadcrumbs.segments
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput')
+
+  // Avatar trigger at the top-right — clicks through to /v2/settings, same
+  // destination as the cog button on the left-nav user-card. Funnels into
+  // the same shared <app-v2-avatar> renderer (gradient + initials) so the
+  // same person renders consistently in both surfaces.
+  private readonly user = toSignal(this.store.user)
+  private readonly userAvatar = toSignal(this.store.userAvatarUrl)
+  protected readonly meAvatar = computed<AvatarUser>(() => {
+    const u = this.user()
+    const seed = u?.login ?? u?.fullName ?? ''
+    return {
+      initials: avatarInitials(u?.fullName ?? u?.login ?? '?'),
+      hue: avatarHue(seed),
+      imageUrl: this.userAvatar() ?? null
+    }
+  })
+  protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
 
   // Mac uses ⌘, everything else gets Ctrl. Computed once on construction —
   // the platform doesn't change during the session.
@@ -98,6 +131,18 @@ export class TopBarComponent {
     ev.preventDefault()
     el.focus()
     el.select()
+  }
+
+  // History chevs use the browser's history stack rather than Router state
+  // because the v2 shell sits inside the same window history as the classic
+  // UI — we want "back" to land wherever the user actually came from, not
+  // just the previous v2 route.
+  protected goBack(): void {
+    if (typeof history !== 'undefined') history.back()
+  }
+
+  protected goForward(): void {
+    if (typeof history !== 'undefined') history.forward()
   }
 
   protected navigate(route: string | string[] | undefined): void {
