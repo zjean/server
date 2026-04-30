@@ -1,186 +1,197 @@
-// Sync-In v2 design tokens — ported from sync-in/project/src/tokens-v5.jsx
-// Mood: "slick navy" — deep, truly blue base (hue 245, real chroma), electric
-// cyan-teal accent. Stripe-dashboard meets Arc: confidently blue, never gray.
+// Sync-In v2 design tokens — "Stack" warm-dark + amber palette.
+// Mood: warm-leaning neutrals (hue 260, very low chroma so they read as
+// near-neutral, not blue-tinted) with a single confident amber accent.
+// Replaces the previous "slick navy" cyan+periwinkle tokens. Variable
+// names are unchanged so existing consumers across the v2 tree keep
+// resolving — only the values shift hue and chroma.
+//
 // Scoped under .v2-root so nothing leaks into the classic layout.
-// hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the fallback.
+// hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the
+// fallback.
 
 .v2-root {
-  // ─── Backgrounds — deep navy, real chroma (not gray with a hint) ─────
-  // hue 245 = true blue-violet; chroma 0.035–0.05 reads unmistakably BLUE
-  // even at low lightness.
-  --si-bg0: #161a26;                     // outermost — deep navy
-  --si-bg0: oklch(0.17 0.040 245);
-  --si-bg1: #1c2132;                     // sidebar / rails
-  --si-bg1: oklch(0.21 0.042 245);
-  --si-bg2: #232a40;                     // content canvas
-  --si-bg2: oklch(0.25 0.044 245);
-  --si-bg3: #2d354e;                     // cards / panels
-  --si-bg3: oklch(0.30 0.046 245);
-  --si-bg4: #38415e;                     // hover surface
-  --si-bg4: oklch(0.36 0.048 245);
-  --si-bg5: #454f70;                     // active surface
-  --si-bg5: oklch(0.43 0.050 245);
-  --si-bg6: #566187;                     // lifted element
-  --si-bg6: oklch(0.52 0.050 245);
+  // ─── Backgrounds — warm-leaning neutrals (hue 260, near-zero chroma) ─
+  // Stack's surface scale is bg-0..bg-4 (oklch L 20→34); we extend up to
+  // bg-6 for hover/lifted states to keep parity with the previous slot
+  // count. Chroma stays under 0.012 so surfaces never read as cool blue.
+  --si-bg0: #1f1f24;                     // outermost — deepest warm dark
+  --si-bg0: oklch(0.20 0.008 260);
+  --si-bg1: #25252b;                     // sidebar / rails
+  --si-bg1: oklch(0.23 0.009 260);
+  --si-bg2: #2b2b32;                     // content canvas / card
+  --si-bg2: oklch(0.26 0.010 260);
+  --si-bg3: #34343c;                     // card hover / input bg
+  --si-bg3: oklch(0.30 0.011 260);
+  --si-bg4: #3d3d46;                     // selected row
+  --si-bg4: oklch(0.34 0.011 260);
+  --si-bg5: #494952;                     // active surface
+  --si-bg5: oklch(0.40 0.012 260);
+  --si-bg6: #5a5a64;                     // lifted element
+  --si-bg6: oklch(0.48 0.012 260);
 
-  // ─── Lines — tinted with the base hue so they don't go gray ──────────
-  --si-line:        rgba(172, 184, 216, 0.12);
-  --si-line:        oklch(0.80 0.04 245 / 0.12);
-  --si-line-strong: rgba(183, 196, 228, 0.20);
-  --si-line-strong: oklch(0.85 0.05 245 / 0.20);
-  --si-line-bold:   rgba(196, 209, 239, 0.30);
-  --si-line-bold:   oklch(0.90 0.06 245 / 0.30);
+  // ─── Lines — same hue family, faint by default ───────────────────────
+  --si-line:        rgba(166, 166, 178, 0.18);
+  --si-line:        oklch(0.34 0.012 260 / 0.6);
+  --si-line-strong: rgba(178, 178, 192, 0.30);
+  --si-line-strong: oklch(0.40 0.014 260);
+  --si-line-bold:   rgba(196, 196, 210, 0.42);
+  --si-line-bold:   oklch(0.50 0.014 260 / 0.7);
 
   // Alias — referenced by form controls, dialogs, context menus, inspector.
-  // Maps to the mid-strength line so borders read as quiet structure.
   --si-border: var(--si-line-strong);
 
-  // ─── Text — cool-white with a breath of navy ─────────────────────────
-  // fg-faint lifted from 0.60 → 0.72 so subtitles clear WCAG AA against bg2/bg3.
-  // Tertiary added for true footnote-class text that intentionally recedes.
-  --si-fg:           #f6f7fb;
-  --si-fg:           oklch(0.98 0.010 240);
-  --si-fg-muted:     #b8bccb;
-  --si-fg-muted:     oklch(0.78 0.028 240);
-  --si-fg-faint:     #a4a9bd;
-  --si-fg-faint:     oklch(0.72 0.030 240);
-  --si-fg-tertiary:  #878ca0;
-  --si-fg-tertiary:  oklch(0.60 0.035 240);
-  --si-fg-ghost:     #575d74;
-  --si-fg-ghost:     oklch(0.42 0.040 245);
+  // ─── Text — warm-white (hue 90/95), recedes slightly toward yellow ───
+  // Stack's text hues sit at 90–95 so the warm dark surfaces don't make
+  // text read as faintly violet (which it does at hue 240 / 260).
+  --si-fg:           #f5f3ec;
+  --si-fg:           oklch(0.96 0.005 95);
+  --si-fg-muted:     #c2bdaf;
+  --si-fg-muted:     oklch(0.78 0.014 90);
+  --si-fg-faint:     #a8a394;
+  --si-fg-faint:     oklch(0.68 0.014 90);
+  --si-fg-tertiary:  #8d887a;
+  --si-fg-tertiary:  oklch(0.58 0.012 90);
+  --si-fg-ghost:     #635f54;
+  --si-fg-ghost:     oklch(0.45 0.012 90);
 
-  // ─── Accent — electric cyan-teal, slick dashboard energy ─────────────
-  // hue 200 sits beautifully against navy.
-  --si-accent:       #5fc9d7;
-  --si-accent:       oklch(0.78 0.14 200);
-  --si-accent-soft:  rgba(95, 201, 215, 0.16);
-  --si-accent-soft:  oklch(0.78 0.14 200 / 0.16);
-  --si-accent-line:  rgba(95, 201, 215, 0.45);
-  --si-accent-line:  oklch(0.78 0.14 200 / 0.45);
-  --si-accent-deep:  #1e6b75;
-  --si-accent-deep:  oklch(0.44 0.12 200);
-  --si-accent-fg:    #081018;
-  --si-accent-fg:    oklch(0.16 0.04 220);
-  --si-accent-hover: #7fdbe6;
-  --si-accent-hover: oklch(0.85 0.15 200);
+  // ─── Accent — warm amber, single confident primary ───────────────────
+  // Stack collapses the previous two-accent system (cyan + periwinkle)
+  // to one amber. Active sidebar rows, primary buttons, focus rings,
+  // and active app-rail icons all resolve here.
+  --si-accent:       #f0c373;
+  --si-accent:       oklch(0.78 0.15 65);
+  --si-accent-soft:  rgba(240, 195, 115, 0.12);
+  --si-accent-soft:  oklch(0.78 0.15 65 / 0.12);
+  --si-accent-line:  rgba(240, 195, 115, 0.45);
+  --si-accent-line:  oklch(0.78 0.15 65 / 0.45);
+  --si-accent-deep:  #8a5a1f;
+  --si-accent-deep:  oklch(0.50 0.12 65);
+  --si-accent-fg:    #2a1c0a;                // text on amber primary
+  --si-accent-fg:    oklch(0.20 0.04 60);
+  --si-accent-hover: #f6cf85;
+  --si-accent-hover: oklch(0.82 0.15 65);
 
-  // ─── Nav — soft periwinkle, contrasts navy without fighting cyan ─────
-  --si-nav:      #a49cf2;
-  --si-nav:      oklch(0.78 0.15 275);
-  --si-nav-soft: rgba(164, 156, 242, 0.20);
-  --si-nav-soft: oklch(0.78 0.15 275 / 0.20);
-  --si-nav-line: rgba(164, 156, 242, 0.45);
-  --si-nav-line: oklch(0.78 0.15 275 / 0.45);
+  // ─── Nav — alias of accent (Stack uses one accent everywhere) ────────
+  // Kept as a separate token name so consumers don't break, but values
+  // resolve to the amber primary. If we later want a coral secondary
+  // for nav specifically, this is the slot to adjust.
+  --si-nav:      var(--si-accent);
+  --si-nav-soft: var(--si-accent-soft);
+  --si-nav-line: var(--si-accent-line);
 
-  // ─── Title bar — one step deeper than bg0, stronger chroma ───────────
-  --si-chrome-bg:      #1f2844;
-  --si-chrome-bg:      oklch(0.22 0.065 245);
-  --si-chrome-bg-dark: #1f2844;
-  --si-chrome-bg-dark: oklch(0.22 0.065 245);
+  // ─── Title bar — one step deeper than bg0, warm neutral (not blue) ───
+  --si-chrome-bg:      #1a1a1f;
+  --si-chrome-bg:      oklch(0.17 0.008 260);
+  --si-chrome-bg-dark: #1a1a1f;
+  --si-chrome-bg-dark: oklch(0.17 0.008 260);
 
   // ─── Semantic palette ────────────────────────────────────────────────
-  --si-green:      #6bd199;
-  --si-green:      oklch(0.80 0.16 155);
-  --si-green-soft: rgba(107, 209, 153, 0.16);
-  --si-green-soft: oklch(0.80 0.16 155 / 0.16);
+  --si-green:      #8ad6a3;
+  --si-green:      oklch(0.82 0.14 155);
+  --si-green-soft: rgba(138, 214, 163, 0.16);
+  --si-green-soft: oklch(0.82 0.14 155 / 0.16);
 
-  --si-amber:      #f2c566;
-  --si-amber:      oklch(0.85 0.14 80);
-  --si-amber-soft: rgba(242, 197, 102, 0.16);
-  --si-amber-soft: oklch(0.85 0.14 80 / 0.16);
+  --si-amber:      #f0c373;
+  --si-amber:      oklch(0.78 0.15 65);
+  --si-amber-soft: rgba(240, 195, 115, 0.16);
+  --si-amber-soft: oklch(0.78 0.15 65 / 0.16);
 
-  --si-rose:       #ef7c70;
-  --si-rose:       oklch(0.74 0.19 18);
-  --si-rose-soft:  rgba(239, 124, 112, 0.16);
-  --si-rose-soft:  oklch(0.74 0.19 18 / 0.16);
+  --si-rose:       #ee8576;
+  --si-rose:       oklch(0.74 0.18 25);
+  --si-rose-soft:  rgba(238, 133, 118, 0.16);
+  --si-rose-soft:  oklch(0.74 0.18 25 / 0.16);
 
-  --si-violet:      #c68ae6;
-  --si-violet:      oklch(0.78 0.17 305);
-  --si-violet-soft: rgba(198, 138, 230, 0.16);
-  --si-violet-soft: oklch(0.78 0.17 305 / 0.16);
+  --si-violet:      #c89be6;
+  --si-violet:      oklch(0.78 0.14 295);
+  --si-violet-soft: rgba(200, 155, 230, 0.18);
+  --si-violet-soft: oklch(0.78 0.14 295 / 0.18);
 
-  --si-cyan:       #86d4e2;
-  --si-cyan:       oklch(0.84 0.13 210);
-  --si-cyan-soft:  rgba(134, 212, 226, 0.16);
-  --si-cyan-soft:  oklch(0.84 0.13 210 / 0.16);
+  --si-cyan:       #95cfd9;
+  --si-cyan:       oklch(0.82 0.10 220);
+  --si-cyan-soft:  rgba(149, 207, 217, 0.18);
+  --si-cyan-soft:  oklch(0.82 0.10 220 / 0.18);
 
-  // ─── Type system — sans/display split ────────────────────────────────
-  // Inter Tight is a display cut: tight sidebearings, geometric counters.
-  // Lovely at ≥24px on dark, wiry at 11–13px. Use it only for --si-display.
-  // Body / UI / serif italic / "mono" all resolve to regular Inter so the
-  // workbench reads body-warm instead of display-crisp.
-  --si-sans:    'Inter Variable', 'Geist Variable', system-ui, -apple-system, sans-serif;
-  --si-display: 'Inter Tight Variable', 'Inter Variable', 'Geist Variable', system-ui, sans-serif;
-  --si-serif:   'Inter Variable', 'Geist Variable', system-ui, sans-serif;
-  --si-mono:    'Inter Variable', 'Geist Variable', system-ui, sans-serif;
+  // ─── Type system — Geist sans/display, JetBrains Mono ────────────────
+  // Stack ships on Geist Variable. We don't have a Geist Mono package on
+  // the install (only @fontsource-variable/jetbrains-mono); JBM is the
+  // closest neighbor in feel and ships with the existing dep set.
+  --si-sans:    'Geist Variable', 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --si-display: 'Geist Variable', 'Inter Variable', system-ui, sans-serif;
+  --si-serif:   'Geist Variable', 'Inter Variable', system-ui, sans-serif;
+  --si-mono:    'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
   // ─── Radii ───────────────────────────────────────────────────────────
-  --si-r1: 5px;
-  --si-r2: 8px;
-  --si-r3: 12px;
-  --si-r4: 18px;
+  --si-r1: 6px;
+  --si-r2: 10px;
+  --si-r3: 14px;
+  --si-r4: 20px;
 
-  // ─── Shadows — deep navy, not neutral black, stays in-palette ────────
+  // ─── Shadows — warm dark, in-palette with the new neutrals ───────────
   --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --si-shadow1: 0 1px 2px oklch(0.10 0.05 245 / 0.45);
+  --si-shadow1: 0 1px 2px oklch(0.10 0.008 260 / 0.45);
   --si-shadow2: 0 6px 22px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.32);
-  --si-shadow2: 0 6px 22px oklch(0.10 0.05 245 / 0.50), 0 1px 3px oklch(0.10 0.05 245 / 0.32);
+  --si-shadow2: 0 6px 22px oklch(0.10 0.008 260 / 0.50), 0 1px 3px oklch(0.10 0.008 260 / 0.32);
   --si-shadow3: 0 20px 60px rgba(0, 0, 0, 0.6), 0 6px 18px rgba(0, 0, 0, 0.38);
-  --si-shadow3: 0 20px 60px oklch(0.10 0.05 245 / 0.60), 0 6px 18px oklch(0.10 0.05 245 / 0.38);
+  --si-shadow3: 0 20px 60px oklch(0.10 0.008 260 / 0.60), 0 6px 18px oklch(0.10 0.008 260 / 0.38);
 
-  // ─── File-type color coding (FILE_COLORS in tokens-v5.jsx) ───────────
-  --fc-image-bg:   rgba(198, 138, 230, 0.20);
-  --fc-image-bg:   oklch(0.78 0.17 305 / 0.20);
-  --fc-image-fg:   #d6a8ef;
-  --fc-image-fg:   oklch(0.88 0.14 305);
+  // ─── File-type color coding ──────────────────────────────────────────
+  // Folders move to coral (hue 38) so they don't blend into the amber
+  // active-row tint. Sheet stays green, doc stays cool blue (info), pdf
+  // stays rose, deck takes the amber slot exclusively.
+  --fc-image-bg:   rgba(200, 155, 230, 0.20);
+  --fc-image-bg:   oklch(0.78 0.14 295 / 0.20);
+  --fc-image-fg:   #d6b4ee;
+  --fc-image-fg:   oklch(0.86 0.12 295);
 
-  --fc-video-bg:   rgba(239, 124, 112, 0.20);
-  --fc-video-bg:   oklch(0.74 0.19 18 / 0.20);
-  --fc-video-fg:   #f39585;
-  --fc-video-fg:   oklch(0.84 0.16 18);
+  --fc-video-bg:   rgba(238, 133, 118, 0.20);
+  --fc-video-bg:   oklch(0.74 0.18 25 / 0.20);
+  --fc-video-fg:   #f59c8c;
+  --fc-video-fg:   oklch(0.82 0.16 25);
 
-  --fc-doc-bg:     rgba(134, 212, 226, 0.20);
-  --fc-doc-bg:     oklch(0.84 0.13 210 / 0.20);
-  --fc-doc-fg:     #b8e1ea;
-  --fc-doc-fg:     oklch(0.90 0.10 210);
+  --fc-doc-bg:     rgba(123, 178, 220, 0.20);
+  --fc-doc-bg:     oklch(0.72 0.10 220 / 0.20);
+  --fc-doc-fg:     #b0d2ec;
+  --fc-doc-fg:     oklch(0.86 0.10 220);
 
-  --fc-sheet-bg:   rgba(107, 209, 153, 0.20);
-  --fc-sheet-bg:   oklch(0.80 0.16 155 / 0.20);
-  --fc-sheet-fg:   #9cdfbc;
+  --fc-sheet-bg:   rgba(138, 214, 163, 0.20);
+  --fc-sheet-bg:   oklch(0.82 0.14 155 / 0.20);
+  --fc-sheet-fg:   #a4dfb7;
   --fc-sheet-fg:   oklch(0.88 0.13 155);
 
-  --fc-pdf-bg:     rgba(239, 124, 112, 0.20);
-  --fc-pdf-bg:     oklch(0.74 0.19 18 / 0.20);
-  --fc-pdf-fg:     #f39585;
-  --fc-pdf-fg:     oklch(0.84 0.16 18);
+  --fc-pdf-bg:     rgba(238, 133, 118, 0.20);
+  --fc-pdf-bg:     oklch(0.74 0.18 25 / 0.20);
+  --fc-pdf-fg:     #f59c8c;
+  --fc-pdf-fg:     oklch(0.82 0.16 25);
 
-  --fc-deck-bg:    rgba(242, 197, 102, 0.20);
-  --fc-deck-bg:    oklch(0.85 0.14 80 / 0.20);
-  --fc-deck-fg:    #f6d68a;
-  --fc-deck-fg:    oklch(0.92 0.11 80);
+  --fc-deck-bg:    rgba(240, 195, 115, 0.20);
+  --fc-deck-bg:    oklch(0.78 0.15 65 / 0.20);
+  --fc-deck-fg:    #f6d28a;
+  --fc-deck-fg:    oklch(0.86 0.13 65);
 
-  --fc-folder-bg:  rgba(164, 156, 242, 0.20);
-  --fc-folder-bg:  oklch(0.78 0.15 275 / 0.20);
-  --fc-folder-fg:  #bcb6f6;
-  --fc-folder-fg:  oklch(0.86 0.13 275);
+  // Folder = coral, NOT amber, so active nav (amber soft-fill) reads
+  // as a distinct surface against folder rows in the file list.
+  --fc-folder-bg:  rgba(232, 137, 100, 0.22);
+  --fc-folder-bg:  oklch(0.74 0.16 38 / 0.22);
+  --fc-folder-fg:  #f0a78a;
+  --fc-folder-fg:  oklch(0.82 0.14 38);
 
-  --fc-code-bg:    rgba(122, 199, 193, 0.20);
-  --fc-code-bg:    oklch(0.78 0.12 185 / 0.20);
-  --fc-code-fg:    #a8d8d4;
-  --fc-code-fg:    oklch(0.88 0.10 185);
+  --fc-code-bg:    rgba(149, 207, 217, 0.20);
+  --fc-code-bg:    oklch(0.82 0.10 220 / 0.20);
+  --fc-code-fg:    #b3dbe2;
+  --fc-code-fg:    oklch(0.88 0.09 220);
 
-  --fc-audio-bg:   rgba(230, 135, 189, 0.20);
-  --fc-audio-bg:   oklch(0.78 0.16 335 / 0.20);
-  --fc-audio-fg:   #eaa3c6;
-  --fc-audio-fg:   oklch(0.88 0.14 335);
+  --fc-audio-bg:   rgba(228, 154, 200, 0.20);
+  --fc-audio-bg:   oklch(0.78 0.14 335 / 0.20);
+  --fc-audio-fg:   #ebb1d1;
+  --fc-audio-fg:   oklch(0.86 0.13 335);
 
-  --fc-archive-bg: rgba(194, 153, 112, 0.20);
-  --fc-archive-bg: oklch(0.76 0.10 55 / 0.20);
-  --fc-archive-fg: #d4b48d;
-  --fc-archive-fg: oklch(0.84 0.08 55);
+  --fc-archive-bg: rgba(196, 168, 132, 0.20);
+  --fc-archive-bg: oklch(0.76 0.08 75 / 0.20);
+  --fc-archive-fg: #d6b890;
+  --fc-archive-fg: oklch(0.84 0.07 75);
 
   --fc-default-bg: rgba(255, 255, 255, 0.07);
   --fc-default-bg: oklch(1 0 0 / 0.07);
-  --fc-default-fg: #b8bccb;
-  --fc-default-fg: oklch(0.78 0.028 240);
+  --fc-default-fg: #c2bdaf;
+  --fc-default-fg: oklch(0.78 0.014 90);
 }
