@@ -25,7 +25,7 @@ import { PillComponent } from '../../components/pill.component'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
-import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
+import { DockRailService } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
@@ -104,7 +104,11 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   })
 
   ngOnInit(): void {
-    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
+    // Trash rows act as direct links (click → open) and the only
+    // available action is permanent-delete from the row menu — there's
+    // no single-row selection state for the dock panel to read against.
+    // Skip the dock-rail registration so the rail auto-hides.
+    this.dockRail.clear()
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.loadFiles()

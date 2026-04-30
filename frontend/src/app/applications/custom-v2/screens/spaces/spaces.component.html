@@ -21,47 +21,75 @@
   } @else if (spaces().length === 0) {
     <div class="spaces__state" l10nTranslate>You don't belong to any spaces yet.</div>
   } @else {
-    <div class="space-table">
-      <div class="space-table__head">
-        <span l10nTranslate>Name</span>
-        <span l10nTranslate>Quota</span>
-        <span l10nTranslate>Members</span>
-        <span l10nTranslate>Modified</span>
-        <span></span>
-      </div>
+    <div class="space-grid">
       @for (s of sortedSpaces(); track s.id) {
-        <button type="button" class="space-row" (click)="openSpace(s)">
-          <div class="space-row__name">
-            <span class="space-row__glyph">
-              <app-v2-icon name="box" [size]="15" />
+        <button type="button" class="space-card" (click)="openSpace(s)">
+          <div class="space-card__head">
+            <span class="space-card__glyph">
+              <app-v2-icon name="box" [size]="18" />
             </span>
-            <div class="space-row__meta">
-              <div class="space-row__title">{{ s.name }}</div>
+            <div class="space-card__name-block">
+              <div class="space-card__name">{{ s.name }}</div>
               @if (s.description) {
-                <div class="space-row__description">{{ s.description }}</div>
+                <div class="space-card__description">{{ s.description }}</div>
               }
             </div>
+            <app-v2-icon-btn iconName="more" [size]="22" class="space-card__more" />
           </div>
-          <div class="space-row__quota">
-            @if (s.storageQuota && s.storageQuota > 0) {
-              {{ (s.storageUsage ?? 0) | toBytes: 1 : true }} / {{ s.storageQuota | toBytes }}
-            } @else if (s.storageUsage) {
-              {{ s.storageUsage | toBytes: 1 : true }}
-            }
-          </div>
-          <div class="space-row__members">{{ memberCount(s) }}</div>
-          <div class="space-row__modified">
+
+          @if (s.storageQuota && s.storageQuota > 0) {
+            <div class="space-card__quota">
+              <div class="space-card__quota-bar" [attr.aria-label]="'Storage usage' | translate: locale.language">
+                <div
+                  class="space-card__quota-fill"
+                  [class.space-card__quota-fill--warn]="quotaPct(s) >= 75 && quotaPct(s) < 92"
+                  [class.space-card__quota-fill--danger]="quotaPct(s) >= 92"
+                  [style.width.%]="quotaPct(s)"
+                ></div>
+              </div>
+              <div class="space-card__quota-label">
+                {{ s.storageUsage ?? 0 | toBytes: 1 : true }}
+                <span class="space-card__quota-sep">/</span>
+                {{ s.storageQuota | toBytes }}
+              </div>
+            </div>
+          } @else if (s.storageUsage) {
+            <div class="space-card__quota">
+              <div class="space-card__quota-label">
+                {{ s.storageUsage | toBytes: 1 : true }}
+                <span class="space-card__quota-sep">·</span>
+                <span l10nTranslate>unlimited</span>
+              </div>
+            </div>
+          }
+
+          <div class="space-card__footer">
+            <div class="space-card__stats">
+              @if (managerAvatars(s).length > 0) {
+                <app-v2-avatar-stack [users]="managerAvatars(s)" [total]="memberCount(s)" [size]="22" [max]="3" />
+              } @else {
+                <span class="space-card__stat">
+                  <app-v2-icon name="person" [size]="12" />
+                  {{ memberCount(s) }}
+                </span>
+              }
+              @if ((s.counts?.shares ?? 0) > 0) {
+                <span class="space-card__stat">
+                  <app-v2-icon name="share" [size]="12" />
+                  {{ s.counts.shares }}
+                </span>
+              }
+            </div>
             @if (s.modifiedAt) {
-              {{ s.modifiedAt | amTimeAgo }}
+              <div class="space-card__modified">{{ s.modifiedAt | amTimeAgo }}</div>
             }
-          </div>
-          <div class="space-row__actions">
-            <app-v2-icon-btn iconName="more" [size]="24" />
           </div>
         </button>
       }
     </div>
   }
 </div>
+
+<app-v2-fab icon="plus" [ariaLabel]="'Create space' | translate: locale.language" (action)="createSpace()" />
 
 <app-v2-create-space-modal [open]="createOpen()" (closed)="onCreateClosed()" (created)="onSpaceCreated()" />

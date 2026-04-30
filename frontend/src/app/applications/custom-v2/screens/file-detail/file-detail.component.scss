@@ -200,50 +200,39 @@
 
   &__tabs {
     display: flex;
-    padding: 6px 8px;
-    gap: 2px;
+    padding: 8px 12px;
+    gap: 4px;
     border-bottom: 1px solid var(--si-line);
     background: var(--si-bg1);
   }
 
   &__tab {
     flex: 1;
-    height: 30px;
-    padding: 0 6px;
+    height: 32px;
+    padding: 0 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
+    gap: 6px;
     background: transparent;
-    color: var(--si-fg-muted);
+    color: var(--si-fg-subtle, var(--si-fg-muted));
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 11.5px;
+    font-size: 13px;
     font-weight: 500;
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
-    position: relative;
     transition: background 120ms ease, color 120ms ease;
 
     &:hover {
       color: var(--si-fg);
     }
 
-    &--active {
+    &--active,
+    &--active:hover {
       background: var(--si-bg3);
       color: var(--si-fg);
-
-      &::after {
-        content: '';
-        position: absolute;
-        bottom: -6px;
-        left: 15%;
-        right: 15%;
-        height: 2px;
-        background: var(--si-accent);
-        border-radius: 2px;
-      }
     }
   }
 

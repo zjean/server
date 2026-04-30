@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
+import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
-import { DockRailService } from './dock-rail.service'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
@@ -10,11 +9,14 @@ import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { PreviewOverlayComponent } from '../preview/preview-overlay.component'
 import { setUiVersion } from '../ui-version'
-import { AppRailComponent } from './app-rail.component'
+import { BottomTabBarComponent } from './bottom-tab-bar.component'
+import { DockPanelComponent } from './dock-panel.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
 import { LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
+import { PageBreadcrumbComponent } from './page-breadcrumb.component'
 import { TitleBarComponent } from './title-bar.component'
+import { TopBarComponent } from './top-bar.component'
 import { TransfersPopoverComponent } from './transfers-popover.component'
 
 @Component({
@@ -31,9 +33,11 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   imports: [
     RouterOutlet,
     TitleBarComponent,
-    AppRailComponent,
+    TopBarComponent,
     LeftNavComponent,
+    PageBreadcrumbComponent,
     DockRailComponent,
+    DockPanelComponent,
     TransfersPopoverComponent,
     ToastHostComponent,
     ConfirmDialogComponent,
@@ -42,17 +46,12 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
-    PreviewOverlayComponent
+    PreviewOverlayComponent,
+    BottomTabBarComponent
   ]
 })
 export class LayoutV2Component implements OnInit {
   protected readonly layoutV2 = inject(LayoutV2Service)
-  private readonly dockRail = inject(DockRailService)
-  protected readonly activeDockLabel = computed<string | null>(() => {
-    const id = this.layoutV2.dockActive()
-    if (id === null) return null
-    return this.dockRail.tabs().find((t) => t.id === id)?.label ?? null
-  })
   private resizeRaf: number | null = null
 
   ngOnInit() {

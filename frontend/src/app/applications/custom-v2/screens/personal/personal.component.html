@@ -1,52 +1,50 @@
 <div class="personal">
-  <header class="personal__toolbar">
-    <div class="personal__title">
-      <div class="personal__title-text">
-        @if (pathSegments().length === 0) {
-          <span l10nTranslate>Personal</span>
-        } @else {
-          {{ folderLabel() }}
-        }
+  <header class="personal__toolbar" [class.personal__toolbar--selecting]="hasSelection()">
+    <div class="personal__row personal__row--top">
+      <div class="personal__title">
+        <div class="personal__title-text">
+          @if (pathSegments().length === 0) {
+            <span l10nTranslate>Personal</span>
+          } @else {
+            {{ folderLabel() }}
+          }
+        </div>
+        <div class="personal__title-meta">
+          {{ (files().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: files().length } }}
+          @if (totalSize() > 0) {
+            · {{ totalSize() | toBytes: 1 : true }}
+          }
+        </div>
       </div>
-      <div class="personal__title-meta">
-        {{ (files().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: files().length } }}
-        @if (totalSize() > 0) {
-          · {{ totalSize() | toBytes: 1 : true }}
-        }
-      </div>
+
+      @if (hasSelection()) {
+        <div class="personal__selection">
+          <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Deselect all' | translate: locale.language" />
+          <span class="personal__selection-count">
+            {{ 'v3_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
+            @if (selectionSize() > 0) {
+              · {{ selectionSize() | toBytes: 1 : true }}
+            }
+          </span>
+          <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
+        </div>
+      } @else {
+        <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
+        <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+        <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+        <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
+      }
     </div>
 
-    <span class="personal__divider"></span>
-
-    @if (hasSelection()) {
-      <div class="personal__selection">
-        <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Deselect all' | translate: locale.language" />
-        <span class="personal__selection-count">
-          {{ 'v3_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
-          @if (selectionSize() > 0) {
-            · {{ selectionSize() | toBytes: 1 : true }}
-          }
-        </span>
-        <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
-      </div>
-    } @else {
-      <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
-    }
-    <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
-
     @if (!hasSelection()) {
-      <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
-      <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
-
-      <div class="personal__toolbar-right">
+      <div class="personal__row personal__row--bottom">
         <div class="personal__filter">
           <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
           <input
@@ -73,6 +71,8 @@
         </div>
       </div>
     }
+
+    <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
   </header>
 
   <div class="personal__body" appV2DropZone (dropped)="onDropFiles($event)">
@@ -251,5 +251,14 @@
     [open]="menu() !== null"
     [anchor]="menu()"
     (closed)="closeMenu()"
+  />
+
+  <app-v2-fab icon="plus" [ariaLabel]="'Create' | translate: locale.language" (action)="fabSheetOpen.set(true)" />
+  <app-v2-action-sheet
+    [open]="fabSheetOpen()"
+    title="Create"
+    [items]="fabSheetItems"
+    (selected)="onFabSheetSelect($event)"
+    (closed)="fabSheetOpen.set(false)"
   />
 </div>

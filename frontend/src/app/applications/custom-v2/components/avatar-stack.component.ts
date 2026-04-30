@@ -56,9 +56,17 @@ export interface AvatarStackUser extends AvatarUser {
 export class AvatarStackComponent {
   readonly users = input.required<AvatarStackUser[]>()
   readonly size = input<number>(22)
+  // Optional override for the overflow count. When provided (e.g. a space card
+  // knows the total member count but only has avatar identities for managers),
+  // the "+N" chip is computed against `total` instead of users.length.
+  readonly total = input<number | undefined>(undefined)
   @Input() max = 3
 
   readonly shown = computed(() => this.users().slice(0, this.max))
-  readonly extraCount = computed(() => Math.max(0, this.users().length - this.max))
+  readonly extraCount = computed(() => {
+    const total = this.total()
+    const visible = this.shown().length
+    return total === undefined ? Math.max(0, this.users().length - visible) : Math.max(0, total - visible)
+  })
   readonly extraFontSize = computed(() => Math.round(this.size() * 0.4 * 10) / 10)
 }

@@ -2,16 +2,15 @@
 // (encapsulation: None) so the fonts and the .v2-root token scope only apply
 // when the /v2 route tree is active. Classic routes stay on their Inter stack.
 //
-// Type system is split: regular Inter for body / UI / metadata, Inter Tight
-// reserved for display-sized headlines via --si-display.
-// Smoothing left at OS default (grayscale w/ subpixel) — antialiased on dark
-// strips perceived stroke weight and was the source of the "too crisp" feel.
+// Type system is Geist (sans + display) with JetBrains Mono for monospace
+// surfaces (filenames in chrome, kbd hints, file size readouts). Inter is
+// kept in the fallback chain so a brief load lag doesn't flash system-ui.
 
 @use './tokens';
 
-@import '@fontsource-variable/inter';
-@import '@fontsource-variable/inter-tight';
 @import '@fontsource-variable/geist';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
 
 .v2-root {
   display: flex;
@@ -20,7 +19,7 @@
   color: var(--si-fg);
   background: var(--si-bg0);
   font-family: var(--si-sans);
-  font-feature-settings: 'ss01', 'cv11', 'tnum';
+  font-feature-settings: 'ss01', 'cv11', 'cv03';
   font-variant-numeric: tabular-nums;
   font-weight: 440;
   font-variation-settings: 'wght' 440;

@@ -1,9 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router'
+import { L10nTranslateDirective } from 'angular-l10n'
 import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
+import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
+import { LogoComponent } from '../components/logo.component'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
@@ -28,7 +31,7 @@ interface NavEntry {
     '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
     '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
   },
-  imports: [IconV2Component, RouterLink, RouterLinkActive, ToBytesPipe]
+  imports: [IconV2Component, AvatarComponent, LogoComponent, RouterLink, RouterLinkActive, ToBytesPipe, L10nTranslateDirective]
 })
 export class LeftNavComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
@@ -42,7 +45,22 @@ export class LeftNavComponent {
   protected readonly adminOpen = signal(true)
   protected readonly isDialogMode = computed(() => this.layoutV2.isMobile() && this.layoutV2.leftNavOpen())
 
+  // AvatarUser entry for the current user — funnels into the same
+  // `<app-v2-avatar>` rendering path the AvatarStack on Space cards uses,
+  // so the same person renders with the same gradient + initials in both
+  // places. The store's avatar URL takes precedence when present.
+  protected readonly meAvatar = computed<AvatarUser>(() => {
+    const u = this.user()
+    const seed = u?.login ?? u?.fullName ?? ''
+    return {
+      initials: avatarInitials(u?.fullName ?? u?.login ?? ''),
+      hue: avatarHue(seed),
+      imageUrl: this.userAvatar() ?? null
+    }
+  })
+
   protected readonly workspace: NavEntry[] = [
+    { id: 'search', label: 'Search', icon: 'search', route: `/${V2_PATH}/${V2_ROUTES.SEARCH}` },
     { id: 'recents', label: 'Recents', icon: 'clock', route: `/${V2_PATH}/${V2_ROUTES.RECENTS}` },
     { id: 'personal', label: 'Personal', icon: 'folder', route: `/${V2_PATH}/${V2_ROUTES.PERSONAL}` },
     { id: 'spaces', label: 'Spaces', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.SPACES}` }
@@ -59,7 +77,13 @@ export class LeftNavComponent {
     { id: 'admin-groups', label: 'Groups', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.ADMIN_GROUPS}` }
   ]
 
+  protected readonly peopleRoute = `/${V2_PATH}/${V2_ROUTES.PEOPLE}`
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
+  protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
+  // Sidebar header (wordmark) is desktop-only — mobile already shows the
+  // wordmark via the title-bar's brand button, so an extra header in the
+  // drawer would duplicate it.
+  protected readonly showHeader = computed(() => !this.layoutV2.isMobile())
 
   // AGPL §13 source link — required when the server is deployed for anyone
   // but the maintainer. Lives in the LeftNav footer so it's visible on every

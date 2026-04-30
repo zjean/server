@@ -28,28 +28,11 @@
 .layout-v2__dock-panel {
   width: 320px;
   flex-shrink: 0;
-  background: var(--si-bg2);
+  background: var(--si-bg1);
   border-left: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
-  padding: 18px 20px;
-
-  &-header {
-    font-family: var(--si-display);
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: -0.01em;
-    color: var(--si-fg);
-    text-transform: capitalize;
-    margin-bottom: 12px;
-  }
-
-  &-empty {
-    margin: 0;
-    font-family: var(--si-sans);
-    font-size: 13px;
-    color: var(--si-fg-muted);
-  }
+  min-width: 0;
 }
 
 .layout-v2__backdrop {
@@ -64,12 +47,22 @@
 // ---------------------------------------------------------------------------
 
 .layout-v2--mobile {
+  // Reserve room for the bottom tab bar (60px + safe-area inset). The
+  // bar is fixed-positioned so it doesn't take flex space; padding-bottom
+  // on the scrollable content area keeps the last item from sitting
+  // under the bar.
+  .layout-v2__content {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
   // Dock-panel becomes a right-anchored slide-in sheet over content.
+  // bottom is offset by the tab-bar height so the sheet doesn't overlap
+  // the tab destinations.
   .layout-v2__dock-panel {
     position: fixed;
     top: 40px;
-    right: 40px; // dock-rail width
-    bottom: 0;
+    right: 48px; // dock-rail width
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     width: 85vw;
     max-width: 360px;
     z-index: 40;
@@ -82,27 +75,23 @@
     }
   }
 
-  // Backdrop covers content while an overlay is open. The modifier classes
-  // leave the rail on the same side as the open overlay uncovered, so its
-  // clicks still reach the icons (e.g. tap an app-rail icon to switch
-  // modules — NavigationEnd auto-closes the drawer).
+  // Backdrop covers content while an overlay is open. The right modifier
+  // leaves the dock-rail uncovered so its icons stay tappable while the
+  // dock-panel sheet is open. The left side has no rail any more — the
+  // drawer slides in from x=0 directly.
   .layout-v2__backdrop {
     display: block;
     position: fixed;
     top: 40px;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     z-index: 39;
     background: rgba(0, 0, 0, 0.32);
     animation: layout-v2-backdrop-in 160ms ease-out;
 
-    &--left {
-      left: 44px; // keep app-rail (mobile width) interactive while drawer is open
-    }
-
     &--right {
-      right: 40px; // keep dock-rail interactive while dock-panel sheet is open
+      right: 48px; // keep dock-rail interactive while dock-panel sheet is open
     }
   }
 

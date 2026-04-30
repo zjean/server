@@ -14,12 +14,18 @@
   min-height: 0;
 
   &__toolbar {
-    padding: 20px 22px 14px;
+    padding: 28px 28px 20px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: 4px;
     background: var(--si-bg2);
+    transition: background var(--dur-1, 120ms) ease;
+
+    // Selection-mode tint: see personal.component.scss for rationale.
+    &--selecting {
+      background: var(--si-accent-soft);
+    }
   }
 
   &__title {
@@ -30,20 +36,22 @@
   }
 
   &__title-text {
-    font-size: 17px;
-    font-weight: 600;
+    // See personal.component.scss for rationale (Stack page-title scale).
+    font-size: 26px;
+    font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.3px;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
     font-family: var(--si-display);
   }
 
   &__title-meta {
-    font-size: 10.5px;
-    line-height: 14px;
-    min-height: 14px;
-    color: var(--si-fg-faint);
-    font-family: var(--si-mono);
-    margin-top: 1px;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 18px;
+    color: var(--si-fg-muted);
+    font-family: var(--si-sans);
+    margin-top: 4px;
   }
 
   &__divider {
@@ -188,9 +196,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px dashed var(--si-accent, #3b82f6);
+    border: 2px dashed var(--si-accent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--si-accent, #3b82f6) 8%, var(--si-bg2));
+    background: color-mix(in srgb, var(--si-accent) 8%, var(--si-bg2));
     opacity: 0;
     transition: opacity 100ms ease;
     pointer-events: none;

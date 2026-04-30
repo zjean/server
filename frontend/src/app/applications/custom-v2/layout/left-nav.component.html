@@ -1,4 +1,16 @@
 <nav class="left-nav">
+  @if (showHeader()) {
+    <header class="left-nav__header">
+      <div class="left-nav__brand">
+        <app-v2-logo [size]="20" />
+        <div class="left-nav__brand-text">
+          <span class="left-nav__brand-name">Sync-In</span>
+          <span class="left-nav__brand-eyebrow">Files</span>
+        </div>
+      </div>
+    </header>
+  }
+
   <div class="left-nav__section-label">Workspace</div>
   @for (it of workspace; track it.id) {
     <a
@@ -6,7 +18,6 @@
       routerLinkActive="left-nav__item--active"
       class="left-nav__item"
     >
-      <span class="left-nav__indicator"></span>
       <app-v2-icon [name]="it.icon" [size]="15" />
       <span class="left-nav__label">{{ it.label }}</span>
     </a>
@@ -31,7 +42,6 @@
         routerLinkActive="left-nav__item--active"
         class="left-nav__item left-nav__item--sub"
       >
-        <span class="left-nav__indicator"></span>
         <app-v2-icon [name]="it.icon" [size]="15" />
         <span class="left-nav__label">{{ it.label }}</span>
       </a>
@@ -58,7 +68,6 @@
           routerLinkActive="left-nav__item--active"
           class="left-nav__item left-nav__item--sub"
         >
-          <span class="left-nav__indicator"></span>
           <app-v2-icon [name]="it.icon" [size]="15" />
           <span class="left-nav__label">{{ it.label }}</span>
         </a>
@@ -68,30 +77,38 @@
 
   <div class="left-nav__fill"></div>
   <div class="left-nav__divider"></div>
+  <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+    <app-v2-icon name="person" [size]="15" />
+    <span class="left-nav__label">People</span>
+  </a>
   <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
-    <span class="left-nav__indicator"></span>
     <app-v2-icon name="trash" [size]="15" />
     <span class="left-nav__label">Trash</span>
   </a>
 
   @if (user()) {
     <div class="left-nav__user-card">
-      <div class="left-nav__user-avatar">
-        @if (userAvatar()) {
-          <img class="left-nav__user-avatar-img" [src]="userAvatar()" alt="" />
-        } @else {
-          <span class="left-nav__user-avatar-initials">{{ (user()?.fullName ?? user()?.login ?? '')[0] }}</span>
-        }
-      </div>
+      <app-v2-avatar [user]="meAvatar()" [size]="28" />
       <div class="left-nav__user-meta">
         <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
         <div class="left-nav__user-usage">
           {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
           @if ((user()?.storageQuota ?? 0) > 0) {
             / {{ user()?.storageQuota | toBytes }}
+          } @else {
+            <span class="left-nav__user-usage-sep">·</span>
+            <span l10nTranslate>unlimited</span>
           }
         </div>
       </div>
+      <a
+        class="left-nav__user-cog"
+        [routerLink]="settingsRoute"
+        [attr.aria-label]="'Settings'"
+        title="Settings"
+      >
+        <app-v2-icon name="settings" [size]="14" />
+      </a>
     </div>
   }
   <a

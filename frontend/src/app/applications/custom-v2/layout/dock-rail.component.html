@@ -8,9 +8,6 @@
         [attr.title]="t.label"
         (click)="toggle(t.id)"
       >
-        @if (active === t.id) {
-          <span class="dock-rail__indicator"></span>
-        }
         <app-v2-icon [name]="t.icon" [size]="15" />
       </button>
     }

@@ -30,9 +30,12 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
         border-color: var(--si-line);
       }
       .pill--indigo {
-        background: var(--si-nav-soft);
-        color: oklch(0.86 0.12 275);
-        border-color: var(--si-nav-line);
+        // Legacy "indigo" pill name — under the Stack palette it resolves
+        // to the amber accent, since nav and accent have collapsed to one
+        // hue. Kept as an alias so existing call sites don't churn.
+        background: var(--si-accent-soft);
+        color: var(--si-accent);
+        border-color: var(--si-accent-line);
       }
       .pill--green {
         background: var(--si-green-soft);
@@ -61,7 +64,7 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
       }
       .pill--warm {
         background: var(--si-accent-soft);
-        color: oklch(0.9 0.13 200);
+        color: var(--si-accent);
         border-color: var(--si-accent-line);
       }
     `

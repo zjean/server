@@ -236,7 +236,7 @@
   }
 
   &__input:focus {
-    border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
+    border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
   }
 }
 
@@ -263,8 +263,8 @@
     width: 34px;
     height: 34px;
     border-radius: var(--si-r2);
-    background: var(--si-nav-soft);
-    color: oklch(0.86 0.12 275);
+    background: var(--si-accent-soft);
+    color: var(--si-accent);
     display: flex;
     align-items: center;
     justify-content: center;

@@ -6,7 +6,10 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
+import { avatarHue, avatarInitials } from '../../components/avatar.component'
+import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { ButtonComponent } from '../../components/button.component'
+import { FabComponent } from '../../components/fab.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -20,7 +23,9 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
   styleUrl: './spaces.component.scss',
   imports: [
     IconV2Component,
+    AvatarStackComponent,
     ButtonComponent,
+    FabComponent,
     IconButtonComponent,
     ToBytesPipe,
     TimeAgoPipe,
@@ -83,5 +88,29 @@ export class SpacesComponent implements OnInit {
 
   protected memberCount(space: SpaceModel): number {
     return (space.counts?.users ?? 0) + (space.counts?.groups ?? 0)
+  }
+
+  // Avatar entries for the card's manager stack. The list endpoint
+  // (`spacesWithDetails`) only joins manager identities, so non-manager
+  // members fall into the overflow chip via [total]=memberCount.
+  protected managerAvatars(space: SpaceModel): AvatarStackUser[] {
+    return (space.managers ?? []).map((m) => ({
+      id: m.login ?? m.id,
+      initials: avatarInitials(m.name ?? m.login ?? ''),
+      hue: avatarHue(m.login ?? m.name ?? String(m.id)),
+      // MemberModel populates avatarUrl from userAvatarUrl(login) in its
+      // constructor; surfacing it here means the same user renders with
+      // the same backend-generated PNG in the user-card and the manager
+      // stack — gradient + initials only kick in when no login is set.
+      imageUrl: m.avatarUrl ?? null
+    }))
+  }
+
+  // Storage usage as a 0-100 percentage. Caps at 100 so a quota
+  // overshoot doesn't render past the card edge.
+  protected quotaPct(space: SpaceModel): number {
+    if (!space.storageQuota || space.storageQuota <= 0) return 0
+    const pct = ((space.storageUsage ?? 0) / space.storageQuota) * 100
+    return Math.min(Math.max(pct, 0), 100)
   }
 }

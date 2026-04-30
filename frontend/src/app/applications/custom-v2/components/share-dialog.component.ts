@@ -127,9 +127,7 @@ interface RowMember extends ShareMemberInput {
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
-        box-shadow:
-          0 4px 14px rgba(0, 0, 0, 0.12),
-          0 18px 40px rgba(0, 0, 0, 0.16);
+        box-shadow: var(--si-shadow3);
       }
       .sd__title {
         font-size: 15px;

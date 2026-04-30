@@ -3,8 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
 import { CommentsService } from '../../../comments/services/comments.service'
 import { FilesService } from '../../../files/services/files.service'
+import { FileRecentModel } from '../../../files/models/file-recent.model'
 import { StoreService } from '../../../../store/store.service'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
+import { AvatarComponent, avatarHue, avatarInitials, AvatarUser } from '../../components/avatar.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -15,13 +17,21 @@ import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 const RECENT_LIMIT = 20
+const PINNED_FILE_COUNT = 4
+const PINNED_COMMENT_COUNT = 3
+
+interface RecentBucket {
+  key: 'today' | 'yesterday' | 'earlier'
+  label: string
+  items: FileRecentModel[]
+}
 
 @Component({
   selector: 'app-v2-recents',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recents.component.html',
   styleUrl: './recents.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, TimeAgoPipe]
+  imports: [IconV2Component, FileGlyphComponent, AvatarComponent, TimeAgoPipe]
 })
 export class RecentsComponent implements OnInit {
   private readonly filesService = inject(FilesService)
@@ -31,7 +41,7 @@ export class RecentsComponent implements OnInit {
   private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
 
-  protected readonly files = computed(() => this.store.filesRecents().slice(0, RECENT_LIMIT))
+  private readonly files = computed(() => this.store.filesRecents().slice(0, RECENT_LIMIT))
   protected readonly comments = computed(() => this.store.commentsRecents().slice(0, RECENT_LIMIT))
   protected readonly user = toSignal(this.store.user)
 
@@ -42,18 +52,49 @@ export class RecentsComponent implements OnInit {
     day: 'numeric'
   })
 
-  protected readonly greeting = computed(() => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 18) return 'Good afternoon'
-    return 'Good evening'
+  // Top of the recents list — surfaced as 4-up "Pick up where you left off"
+  // cards. The remainder feeds the grouped activity list below so the user
+  // still has access to everything that's loaded.
+  protected readonly pinnedFiles = computed(() => this.files().slice(0, PINNED_FILE_COUNT))
+  protected readonly restFiles = computed(() => this.files().slice(PINNED_FILE_COUNT))
+  protected readonly pinnedComments = computed(() => this.comments().slice(0, PINNED_COMMENT_COUNT))
+
+  // Group remaining files by mtime bucket (today / yesterday / earlier).
+  // We can't show an action taxonomy ("Edited", "Commented") without an
+  // activity-feed endpoint, so the grouping carries the time signal alone
+  // and the row body stays neutral.
+  protected readonly buckets = computed<RecentBucket[]>(() => {
+    const items = this.restFiles()
+    if (items.length === 0) return []
+
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const startOfYesterday = startOfToday - 24 * 60 * 60 * 1000
+
+    const today: FileRecentModel[] = []
+    const yesterday: FileRecentModel[] = []
+    const earlier: FileRecentModel[] = []
+    // mtime is stored as ms (consistent with classic widgets that pipe it
+    // straight into amTimeAgo without scaling).
+    for (const f of items) {
+      const t = Number(f.mtime)
+      if (!Number.isFinite(t)) {
+        earlier.push(f)
+        continue
+      }
+      if (t >= startOfToday) today.push(f)
+      else if (t >= startOfYesterday) yesterday.push(f)
+      else earlier.push(f)
+    }
+
+    const out: RecentBucket[] = []
+    if (today.length) out.push({ key: 'today', label: 'Today', items: today })
+    if (yesterday.length) out.push({ key: 'yesterday', label: 'Yesterday', items: yesterday })
+    if (earlier.length) out.push({ key: 'earlier', label: 'Earlier', items: earlier })
+    return out
   })
 
-  protected readonly firstName = computed(() => {
-    const full = this.user()?.fullName?.trim()
-    if (full) return full.split(/\s+/)[0]
-    return this.user()?.login ?? ''
-  })
+  protected readonly hasAny = computed(() => this.files().length > 0 || this.comments().length > 0)
 
   ngOnInit(): void {
     this.breadcrumbs.setBreadcrumbs([{ label: 'Recents', icon: 'clock' }])
@@ -77,5 +118,17 @@ export class RecentsComponent implements OnInit {
     if (!isPreviewable({ name: fileName, mime })) return
     event.preventDefault()
     openPreviewInNewTab(`${parentPath}/${fileName}`)
+  }
+
+  // AvatarUser projection for a comment author. Funnels into the same shared
+  // <app-v2-avatar> renderer the left-nav user-card and Space cards use, so
+  // the same person renders with the same gradient + initials everywhere.
+  protected commentAvatar(author: { fullName?: string; login?: string; avatarUrl?: string } | null | undefined): AvatarUser {
+    const seed = author?.login ?? author?.fullName ?? ''
+    return {
+      initials: avatarInitials(author?.fullName ?? author?.login ?? '?'),
+      hue: avatarHue(seed),
+      imageUrl: author?.avatarUrl ?? null
+    }
   }
 }

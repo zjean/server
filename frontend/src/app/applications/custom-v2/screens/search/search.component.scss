@@ -90,7 +90,7 @@
     &--active {
       background: var(--si-accent-soft);
       border-color: var(--si-accent-line);
-      color: oklch(0.9 0.13 200);
+      color: var(--si-accent);
     }
   }
 
