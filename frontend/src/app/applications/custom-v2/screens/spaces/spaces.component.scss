@@ -14,7 +14,7 @@
   overflow: auto;
 
   &__toolbar {
-    padding: 28px 28px 20px;
+    padding: 32px 28px 22px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -28,17 +28,17 @@
   &__title {
     display: flex;
     flex-direction: column;
-    margin-right: 14px;
+    margin-right: 18px;
     min-width: 168px;
   }
 
   &__title-text {
     // See personal.component.scss for rationale (Stack page-title scale).
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.015em;
-    line-height: 1.2;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
     font-family: var(--si-display);
   }
 
@@ -48,7 +48,7 @@
     min-height: 18px;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 2px;
+    margin-top: 4px;
   }
 
   &__divider {

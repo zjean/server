@@ -37,11 +37,11 @@
 
   &__title-text {
     // See personal.component.scss for rationale (Stack page-title scale).
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.015em;
-    line-height: 1.2;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
     font-family: var(--si-display);
   }
 
@@ -51,7 +51,7 @@
     min-height: 18px;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 2px;
+    margin-top: 4px;
   }
 
   &__divider {
