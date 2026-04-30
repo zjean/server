@@ -92,13 +92,7 @@
 
   @if (user()) {
     <div class="left-nav__user-card">
-      <div class="left-nav__user-avatar">
-        @if (userAvatar()) {
-          <img class="left-nav__user-avatar-img" [src]="userAvatar()" alt="" />
-        } @else {
-          <span class="left-nav__user-avatar-initials">{{ (user()?.fullName ?? user()?.login ?? '')[0] }}</span>
-        }
-      </div>
+      <app-v2-avatar [user]="meAvatar()" [size]="28" />
       <div class="left-nav__user-meta">
         <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
         <div class="left-nav__user-usage">

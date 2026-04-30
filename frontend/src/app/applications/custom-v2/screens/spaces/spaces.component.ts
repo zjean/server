@@ -6,6 +6,7 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
+import { avatarHue, avatarInitials } from '../../components/avatar.component'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { ButtonComponent } from '../../components/button.component'
 import { FabComponent } from '../../components/fab.component'
@@ -96,7 +97,12 @@ export class SpacesComponent implements OnInit {
     return (space.managers ?? []).map((m) => ({
       id: m.login ?? m.id,
       initials: avatarInitials(m.name ?? m.login ?? ''),
-      hue: avatarHue(m.login ?? m.name ?? String(m.id))
+      hue: avatarHue(m.login ?? m.name ?? String(m.id)),
+      // MemberModel populates avatarUrl from userAvatarUrl(login) in its
+      // constructor; surfacing it here means the same user renders with
+      // the same backend-generated PNG in the user-card and the manager
+      // stack — gradient + initials only kick in when no login is set.
+      imageUrl: m.avatarUrl ?? null
     }))
   }
 
@@ -107,16 +113,4 @@ export class SpacesComponent implements OnInit {
     const pct = ((space.storageUsage ?? 0) / space.storageQuota) * 100
     return Math.min(Math.max(pct, 0), 100)
   }
-}
-
-function avatarInitials(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean)
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
-  return (parts[0]?.slice(0, 2) ?? '··').toUpperCase()
-}
-
-function avatarHue(seed: string): number {
-  let h = 5381
-  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h) ^ seed.charCodeAt(i)
-  return Math.abs(h) % 360
 }

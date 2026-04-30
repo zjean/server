@@ -5,6 +5,7 @@ import { L10nTranslateDirective } from 'angular-l10n'
 import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
+import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
 import { LogoComponent } from '../components/logo.component'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
@@ -34,6 +35,7 @@ interface NavEntry {
   },
   imports: [
     IconV2Component,
+    AvatarComponent,
     LogoComponent,
     NotificationsBellComponent,
     TransfersPopoverComponent,
@@ -54,6 +56,20 @@ export class LeftNavComponent {
   protected readonly sharedOpen = signal(true)
   protected readonly adminOpen = signal(true)
   protected readonly isDialogMode = computed(() => this.layoutV2.isMobile() && this.layoutV2.leftNavOpen())
+
+  // AvatarUser entry for the current user — funnels into the same
+  // `<app-v2-avatar>` rendering path the AvatarStack on Space cards uses,
+  // so the same person renders with the same gradient + initials in both
+  // places. The store's avatar URL takes precedence when present.
+  protected readonly meAvatar = computed<AvatarUser>(() => {
+    const u = this.user()
+    const seed = u?.login ?? u?.fullName ?? ''
+    return {
+      initials: avatarInitials(u?.fullName ?? u?.login ?? ''),
+      hue: avatarHue(seed),
+      imageUrl: this.userAvatar() ?? null
+    }
+  })
 
   protected readonly workspace: NavEntry[] = [
     { id: 'search', label: 'Search', icon: 'search', route: `/${V2_PATH}/${V2_ROUTES.SEARCH}` },
