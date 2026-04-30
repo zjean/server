@@ -174,7 +174,7 @@ interface FormState {
         user-select: none;
       }
       .ld__toggle input[type='checkbox'] {
-        accent-color: var(--si-accent, #3b82f6);
+        accent-color: var(--si-accent);
       }
       .ld__row {
         display: flex;
@@ -197,7 +197,7 @@ interface FormState {
         transition: border-color 120ms ease;
       }
       .ld__input:focus {
-        border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .ld__input--date {
         margin-top: 6px;

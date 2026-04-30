@@ -69,9 +69,7 @@ const VIEWPORT_GUTTER = 8
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 8px;
-        box-shadow:
-          0 4px 10px rgba(0, 0, 0, 0.08),
-          0 12px 28px rgba(0, 0, 0, 0.12);
+        box-shadow: var(--si-shadow2);
         display: flex;
         flex-direction: column;
         gap: 1px;
@@ -103,10 +101,10 @@ const VIEWPORT_GUTTER = 8
         cursor: not-allowed;
       }
       .ctx-menu__item--danger {
-        color: var(--si-danger, #c0392b);
+        color: var(--si-rose);
       }
       .ctx-menu__item--danger:hover:not(:disabled) {
-        background: rgba(192, 57, 43, 0.08);
+        background: var(--si-rose-soft);
       }
       .ctx-menu__icon-spacer {
         display: inline-block;

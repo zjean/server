@@ -196,7 +196,7 @@ const ROOT_SHARES: FileTree = {
         background: var(--si-bg2);
       }
       .tp-node--selected {
-        background: color-mix(in srgb, var(--si-accent, #3b82f6) 14%, transparent);
+        background: color-mix(in srgb, var(--si-accent) 14%, transparent);
       }
       .tp-node--disabled {
         opacity: 0.5;

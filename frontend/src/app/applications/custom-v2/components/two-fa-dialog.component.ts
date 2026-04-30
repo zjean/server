@@ -121,7 +121,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         transition: border-color 120ms ease;
       }
       .tfa-dialog__input:focus {
-        border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .tfa-dialog__input--totp {
         text-align: center;

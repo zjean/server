@@ -192,9 +192,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px dashed var(--si-accent, #3b82f6);
+    border: 2px dashed var(--si-accent);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--si-accent, #3b82f6) 8%, var(--si-bg2));
+    background: color-mix(in srgb, var(--si-accent) 8%, var(--si-bg2));
     opacity: 0;
     transition: opacity 100ms ease;
     pointer-events: none;
