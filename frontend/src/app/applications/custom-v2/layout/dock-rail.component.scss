@@ -8,19 +8,22 @@
 }
 
 .dock-rail {
-  width: 40px;
+  // Match the left app-rail width (48px desktop) so the layout reads as
+  // mirrored chrome instead of asymmetric. Stack's "rails on both sides"
+  // pattern depends on the visual weight matching.
+  width: 48px;
   flex-shrink: 0;
   background: var(--si-bg1);
   border-left: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   padding: 8px 0;
 
   &__tab {
-    width: 30px;
-    height: 30px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;

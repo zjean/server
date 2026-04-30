@@ -51,7 +51,7 @@
   .layout-v2__dock-panel {
     position: fixed;
     top: 40px;
-    right: 40px; // dock-rail width
+    right: 48px; // dock-rail width
     bottom: 0;
     width: 85vw;
     max-width: 360px;
@@ -85,7 +85,7 @@
     }
 
     &--right {
-      right: 40px; // keep dock-rail interactive while dock-panel sheet is open
+      right: 48px; // keep dock-rail interactive while dock-panel sheet is open
     }
   }
 
