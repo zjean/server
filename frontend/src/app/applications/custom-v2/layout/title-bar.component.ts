@@ -1,9 +1,7 @@
-import { Location } from '@angular/common'
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
 import { Subscription } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { UserType } from '../../users/interfaces/user.interface'
-import { IconButtonComponent } from '../components/icon-button.component'
 import { LogoComponent } from '../components/logo.component'
 import { LayoutV2Service } from './layout-v2.service'
 import { NotificationsBellComponent } from './notifications-bell.component'
@@ -13,11 +11,10 @@ import { NotificationsBellComponent } from './notifications-bell.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss',
-  imports: [IconButtonComponent, LogoComponent, NotificationsBellComponent]
+  imports: [LogoComponent, NotificationsBellComponent]
 })
 export class TitleBarComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
-  private readonly location = inject(Location)
   private readonly store = inject(StoreService)
   protected user: UserType | null = null
   protected userAvatar: string | null = null
@@ -28,18 +25,8 @@ export class TitleBarComponent {
     this.subscriptions.push(this.store.userAvatarUrl.subscribe((avatar: string) => (this.userAvatar = avatar)))
   }
 
-  protected back(): void {
-    this.location.back()
-  }
-
-  protected forward(): void {
-    this.location.forward()
-  }
-
   protected onBrandClick(): void {
-    if (this.layoutV2.isMobile()) {
-      this.layoutV2.toggleLeftNav()
-    }
+    this.layoutV2.toggleLeftNav()
   }
 
   protected userInitials(): string {
