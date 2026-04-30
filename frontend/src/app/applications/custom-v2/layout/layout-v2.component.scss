@@ -75,10 +75,10 @@
     }
   }
 
-  // Backdrop covers content while an overlay is open. The modifier classes
-  // leave the rail on the same side as the open overlay uncovered, so its
-  // clicks still reach the icons (e.g. tap an app-rail icon to switch
-  // modules — NavigationEnd auto-closes the drawer).
+  // Backdrop covers content while an overlay is open. The right modifier
+  // leaves the dock-rail uncovered so its icons stay tappable while the
+  // dock-panel sheet is open. The left side has no rail any more — the
+  // drawer slides in from x=0 directly.
   .layout-v2__backdrop {
     display: block;
     position: fixed;
@@ -89,10 +89,6 @@
     z-index: 39;
     background: rgba(0, 0, 0, 0.32);
     animation: layout-v2-backdrop-in 160ms ease-out;
-
-    &--left {
-      left: 44px; // keep app-rail (mobile width) interactive while drawer is open
-    }
 
     &--right {
       right: 48px; // keep dock-rail interactive while dock-panel sheet is open

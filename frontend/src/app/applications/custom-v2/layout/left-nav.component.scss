@@ -5,20 +5,19 @@
 
 // Mobile drawer — gated on the layout's `.layout-v2--mobile` class via
 // :host-context so the encapsulation matches the desktop rules. The
-// drawer slides in from the left over content; the inner .left-nav
-// fills the host so background + border render at full drawer width.
+// drawer slides in from the left edge of the viewport over content.
+// (No more app-rail offset — the rail was retired and Search + People
+// moved into this drawer as nav rows.)
 :host-context(.layout-v2--mobile) {
   position: fixed;
   top: 40px;
-  left: 44px; // right of app-rail (mobile width)
+  left: 0;
   // Stop above the bottom tab bar so the drawer doesn't sit under it.
   bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   width: 280px;
-  max-width: calc(100vw - 44px);
+  max-width: 100vw;
   z-index: 40;
-  // Slide fully off the viewport: shift by element width PLUS the 44px
-  // `left` offset so the right edge lands at viewport x=0.
-  transform: translateX(calc(-100% - 44px));
+  transform: translateX(-100%);
   transition: transform 200ms ease-out;
   box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
 

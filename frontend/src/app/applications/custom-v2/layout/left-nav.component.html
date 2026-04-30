@@ -81,6 +81,10 @@
 
   <div class="left-nav__fill"></div>
   <div class="left-nav__divider"></div>
+  <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+    <app-v2-icon name="person" [size]="15" />
+    <span class="left-nav__label">People</span>
+  </a>
   <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
     <app-v2-icon name="trash" [size]="15" />
     <span class="left-nav__label">Trash</span>

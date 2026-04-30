@@ -9,7 +9,6 @@ import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { PreviewOverlayComponent } from '../preview/preview-overlay.component'
 import { setUiVersion } from '../ui-version'
-import { AppRailComponent } from './app-rail.component'
 import { BottomTabBarComponent } from './bottom-tab-bar.component'
 import { DockPanelComponent } from './dock-panel.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
@@ -33,7 +32,6 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   imports: [
     RouterOutlet,
     TitleBarComponent,
-    AppRailComponent,
     LeftNavComponent,
     PageBreadcrumbComponent,
     DockRailComponent,

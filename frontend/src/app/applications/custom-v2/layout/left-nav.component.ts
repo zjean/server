@@ -56,6 +56,7 @@ export class LeftNavComponent {
   protected readonly isDialogMode = computed(() => this.layoutV2.isMobile() && this.layoutV2.leftNavOpen())
 
   protected readonly workspace: NavEntry[] = [
+    { id: 'search', label: 'Search', icon: 'search', route: `/${V2_PATH}/${V2_ROUTES.SEARCH}` },
     { id: 'recents', label: 'Recents', icon: 'clock', route: `/${V2_PATH}/${V2_ROUTES.RECENTS}` },
     { id: 'personal', label: 'Personal', icon: 'folder', route: `/${V2_PATH}/${V2_ROUTES.PERSONAL}` },
     { id: 'spaces', label: 'Spaces', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.SPACES}` }
@@ -72,6 +73,7 @@ export class LeftNavComponent {
     { id: 'admin-groups', label: 'Groups', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.ADMIN_GROUPS}` }
   ]
 
+  protected readonly peopleRoute = `/${V2_PATH}/${V2_ROUTES.PEOPLE}`
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
   protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
   // Sidebar header (wordmark + transfers + bell) is desktop-only — mobile
