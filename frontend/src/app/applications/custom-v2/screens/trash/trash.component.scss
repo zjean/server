@@ -32,18 +32,21 @@
   }
 
   &__title {
-    font-size: 17px;
-    font-weight: 600;
+    // Stack page-title scale (see personal.component.scss).
+    font-size: 22px;
+    font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.3px;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
     font-family: var(--si-display);
   }
 
   &__subtitle {
-    font-size: 10.5px;
-    color: var(--si-fg-faint);
-    font-family: var(--si-mono);
-    margin-top: 1px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--si-fg-muted);
+    font-family: var(--si-sans);
+    margin-top: 2px;
   }
 
   &__divider {

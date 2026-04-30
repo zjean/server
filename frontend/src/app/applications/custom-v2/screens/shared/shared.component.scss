@@ -30,21 +30,23 @@
   }
 
   &__title-text {
+    // See personal.component.scss for rationale (Stack page-title scale).
     margin: 0;
-    font-size: 17px;
-    font-weight: 600;
+    font-size: 22px;
+    font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.3px;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
     font-family: var(--si-display);
   }
 
   &__title-meta {
-    font-size: 10.5px;
-    line-height: 14px;
-    min-height: 14px;
-    color: var(--si-fg-faint);
-    font-family: var(--si-mono);
-    margin-top: 1px;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 18px;
+    color: var(--si-fg-muted);
+    font-family: var(--si-sans);
+    margin-top: 2px;
   }
 
   &__divider {

@@ -30,20 +30,24 @@
   }
 
   &__title-text {
-    font-size: 17px;
-    font-weight: 600;
+    // Stack page-title scale: lift toward h1 (22px / 500 / -0.015em) so
+    // there's clearer hierarchy against the meta line and toolbar. The
+    // previous 17px / 600 read as a UI label rather than a page title.
+    font-size: 22px;
+    font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.3px;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
     font-family: var(--si-display);
   }
 
   &__title-meta {
-    font-size: 10.5px;
-    line-height: 14px;
-    min-height: 14px;
-    color: var(--si-fg-faint);
-    font-family: var(--si-mono);
-    margin-top: 1px;
+    font-size: 13px;
+    line-height: 1.4;
+    min-height: 18px;
+    color: var(--si-fg-muted);
+    font-family: var(--si-sans);
+    margin-top: 2px;
   }
 
   &__divider {
