@@ -14,14 +14,16 @@
   min-height: 0;
 
   &__toolbar {
-    // Stack page-header padding lifted to 32/28/22 so the 26px title
-    // has room above and the meta line clears the row of action chips
-    // beneath. Reads as a deliberate header band, not a strip.
-    padding: 32px 28px 22px;
+    // Stack two-row header. Row 1 is the title block + primary action
+    // chips; row 2 is the filter input + view toggle. Splitting these
+    // gives the title room to read at 26px without fighting the chips
+    // for horizontal space, and lets the filter expand wider than the
+    // 240px it had on the previous single-row layout.
+    padding: 28px 28px 18px;
     flex-shrink: 0;
     display: flex;
-    align-items: center;
-    gap: 4px;
+    flex-direction: column;
+    gap: 14px;
     background: var(--si-bg2);
     transition: background var(--dur-1, 120ms) ease;
 
@@ -32,18 +34,36 @@
     }
   }
 
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    // Title row: align baselines so the meta line sits flush with the
+    // chip text underneath. Title block stretches the gap to push
+    // actions to the right edge.
+    &--top {
+      align-items: flex-end;
+      gap: 8px;
+    }
+
+    &--bottom {
+      gap: 10px;
+    }
+  }
+
   &__title {
     display: flex;
     flex-direction: column;
-    margin-right: 18px;
-    min-width: 168px;
+    margin-right: auto;
+    min-width: 0;
   }
 
   &__title-text {
-    // Stack h1 scale (26px / 500 / -0.015em) — bigger than the previous
+    // Stack h1 scale (26px / 500 / -0.018em) — bigger than the previous
     // 22px so the title clearly outranks toolbar buttons in visual
-    // weight, matching Stack's kicker · title · meta triad while still
-    // staying compatible with the v2 single-row toolbar density.
+    // weight, matching Stack's kicker · title · meta triad.
     font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
@@ -59,13 +79,6 @@
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
     margin-top: 4px;
-  }
-
-  &__divider {
-    width: 1px;
-    height: 22px;
-    background: var(--si-line);
-    margin: 0 6px;
   }
 
   &__selection {
@@ -85,23 +98,17 @@
     white-space: nowrap;
   }
 
-  &__toolbar-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
   &__filter {
-    height: 30px;
+    height: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 0 11px;
+    padding: 0 12px;
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
-    width: 240px;
+    flex: 1 1 auto;
+    max-width: 360px;
 
     &:focus-within {
       border-color: var(--si-accent-line);
