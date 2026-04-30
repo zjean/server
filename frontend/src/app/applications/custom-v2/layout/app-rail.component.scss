@@ -35,24 +35,14 @@
 
     &--active,
     &--active:hover {
-      background: var(--si-bg4);
-      color: var(--si-fg);
+      background: var(--si-accent-soft);
+      color: var(--si-accent);
     }
 
     &:disabled {
       cursor: not-allowed;
       opacity: 0.45;
     }
-  }
-
-  &__indicator {
-    position: absolute;
-    left: -8px;
-    top: 8px;
-    bottom: 8px;
-    width: 2.5px;
-    background: var(--si-accent);
-    border-radius: 2px;
   }
 }
 

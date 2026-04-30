@@ -6,7 +6,6 @@
       routerLinkActive="left-nav__item--active"
       class="left-nav__item"
     >
-      <span class="left-nav__indicator"></span>
       <app-v2-icon [name]="it.icon" [size]="15" />
       <span class="left-nav__label">{{ it.label }}</span>
     </a>
@@ -31,7 +30,6 @@
         routerLinkActive="left-nav__item--active"
         class="left-nav__item left-nav__item--sub"
       >
-        <span class="left-nav__indicator"></span>
         <app-v2-icon [name]="it.icon" [size]="15" />
         <span class="left-nav__label">{{ it.label }}</span>
       </a>
@@ -58,7 +56,6 @@
           routerLinkActive="left-nav__item--active"
           class="left-nav__item left-nav__item--sub"
         >
-          <span class="left-nav__indicator"></span>
           <app-v2-icon [name]="it.icon" [size]="15" />
           <span class="left-nav__label">{{ it.label }}</span>
         </a>
@@ -69,7 +66,6 @@
   <div class="left-nav__fill"></div>
   <div class="left-nav__divider"></div>
   <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
-    <span class="left-nav__indicator"></span>
     <app-v2-icon name="trash" [size]="15" />
     <span class="left-nav__label">Trash</span>
   </a>
