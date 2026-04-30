@@ -107,9 +107,7 @@ describe('NcOnlyOfficeController', () => {
       })
 
       const out = await controller.config(fakeReq, '42')
-      expect((out as any).editorConfig.callbackUrl).toBe(
-        'https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx'
-      )
+      expect((out as any).editorConfig.callbackUrl).toBe('https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx')
     })
   })
 
