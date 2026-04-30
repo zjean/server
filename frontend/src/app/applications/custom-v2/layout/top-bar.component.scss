@@ -120,21 +120,27 @@
     min-width: 16px;
   }
 
-  // Search field — Stack pattern: 240px, soft surface, focus pulls accent
-  // border + lifts to bg3. Submitting routes to /v2/search?q=…; the actual
-  // results UI lives there.
+  // Search field — Stack pattern: 240px base, soft surface, focus pulls
+  // accent border + lifts to bg3. Submitting routes to /v2/search?q=…; the
+  // actual results UI lives there.
+  //
+  // The flex basis is 240 with a min-width of 36 so the field shrinks
+  // smoothly as the viewport narrows (the breadcrumb's `overflow: hidden`
+  // gives back its space first; once the spacer fully collapses, the search
+  // narrows toward icon-only). At ≤1024 a media query parks it at the
+  // 36px floor for a stable square-button look.
   &__search {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 240px;
+    flex: 0 1 240px;
+    min-width: 36px;
     height: 34px;
     padding: 0 10px 0 12px;
     background: var(--si-bg2);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     transition: border-color 120ms ease, background 120ms ease;
-    flex-shrink: 0;
 
     &:focus-within {
       border-color: var(--si-accent);

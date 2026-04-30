@@ -119,6 +119,16 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private urlSubscription: Subscription | null = null
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
+  @ViewChild('filterInput') private filterInput?: ElementRef<HTMLInputElement>
+
+  // Platform-aware label for the filter shortcut hint. The kbd badge next
+  // to the filter input promises ⌘F (or Ctrl-F on non-Mac); we deliver on
+  // it via the keydown handler below.
+  protected readonly filterShortcutLabel: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl F'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘F' : 'Ctrl F'
+  })()
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly FILE_OPERATION = FILE_OPERATION
@@ -301,6 +311,20 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   @HostListener('window:keydown', ['$event'])
   protected onWindowKeydown(event: KeyboardEvent): void {
+    // Cmd/Ctrl+F focuses the filter input, preempting the browser's
+    // built-in Find dialog. Honored from anywhere on the screen — even
+    // when focus is already in another input — because the kbd hint next
+    // to the filter promises this and a stuck-elsewhere focus would
+    // surprise the user.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+      const el = this.filterInput?.nativeElement
+      if (el) {
+        event.preventDefault()
+        el.focus()
+        el.select()
+        return
+      }
+    }
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
     if (event.key === 'Escape' && this.hasSelection()) {
       this.clearSelection()
