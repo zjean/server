@@ -65,10 +65,14 @@
 
           <div class="space-card__footer">
             <div class="space-card__stats">
-              <span class="space-card__stat">
-                <app-v2-icon name="person" [size]="12" />
-                {{ memberCount(s) }}
-              </span>
+              @if (managerAvatars(s).length > 0) {
+                <app-v2-avatar-stack [users]="managerAvatars(s)" [total]="memberCount(s)" [size]="22" [max]="3" />
+              } @else {
+                <span class="space-card__stat">
+                  <app-v2-icon name="person" [size]="12" />
+                  {{ memberCount(s) }}
+                </span>
+              }
               @if ((s.counts?.shares ?? 0) > 0) {
                 <span class="space-card__stat">
                   <app-v2-icon name="share" [size]="12" />
