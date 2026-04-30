@@ -86,4 +86,6 @@
   }
 </div>
 
+<app-v2-fab icon="plus" [ariaLabel]="'Create space' | translate: locale.language" (action)="createSpace()" />
+
 <app-v2-create-space-modal [open]="createOpen()" (closed)="onCreateClosed()" (created)="onSpaceCreated()" />

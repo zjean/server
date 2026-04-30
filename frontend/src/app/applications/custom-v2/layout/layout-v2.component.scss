@@ -47,12 +47,22 @@
 // ---------------------------------------------------------------------------
 
 .layout-v2--mobile {
+  // Reserve room for the bottom tab bar (60px + safe-area inset). The
+  // bar is fixed-positioned so it doesn't take flex space; padding-bottom
+  // on the scrollable content area keeps the last item from sitting
+  // under the bar.
+  .layout-v2__content {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
   // Dock-panel becomes a right-anchored slide-in sheet over content.
+  // bottom is offset by the tab-bar height so the sheet doesn't overlap
+  // the tab destinations.
   .layout-v2__dock-panel {
     position: fixed;
     top: 40px;
     right: 48px; // dock-rail width
-    bottom: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     width: 85vw;
     max-width: 360px;
     z-index: 40;
@@ -75,7 +85,7 @@
     top: 40px;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     z-index: 39;
     background: rgba(0, 0, 0, 0.32);
     animation: layout-v2-backdrop-in 160ms ease-out;

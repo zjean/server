@@ -7,6 +7,7 @@ import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
 import { ButtonComponent } from '../../components/button.component'
+import { FabComponent } from '../../components/fab.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -21,6 +22,7 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
   imports: [
     IconV2Component,
     ButtonComponent,
+    FabComponent,
     IconButtonComponent,
     ToBytesPipe,
     TimeAgoPipe,

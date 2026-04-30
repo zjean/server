@@ -252,4 +252,6 @@
     [anchor]="menu()"
     (closed)="closeMenu()"
   />
+
+  <app-v2-fab icon="plus" [ariaLabel]="'New folder' | translate: locale.language" (action)="newFolder()" />
 </div>

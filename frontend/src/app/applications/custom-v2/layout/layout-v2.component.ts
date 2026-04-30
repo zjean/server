@@ -10,6 +10,7 @@ import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { PreviewOverlayComponent } from '../preview/preview-overlay.component'
 import { setUiVersion } from '../ui-version'
 import { AppRailComponent } from './app-rail.component'
+import { BottomTabBarComponent } from './bottom-tab-bar.component'
 import { DockPanelComponent } from './dock-panel.component'
 import { DockRailComponent, DockTabId } from './dock-rail.component'
 import { LayoutV2Service } from './layout-v2.service'
@@ -45,7 +46,8 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
-    PreviewOverlayComponent
+    PreviewOverlayComponent,
+    BottomTabBarComponent
   ]
 })
 export class LayoutV2Component implements OnInit {
