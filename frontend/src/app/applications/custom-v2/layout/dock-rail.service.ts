@@ -9,6 +9,22 @@ export interface DockTab {
   label: string
 }
 
+// Minimal context for the dock panel's file-scoped tabs (Info / Comments /
+// Tree). Screens that browse files write this signal when their selection
+// is exactly one row, and clear it otherwise. Path is the backend-relative
+// shape consumed by /api/comments/spaces/{path} — same convention as
+// FileDetailComponent.currentPath.
+export interface DockSelectedFile {
+  id: number
+  name: string
+  path: string
+  mime: string
+  size: number
+  isDir: boolean
+  mtime?: number
+  ctime?: number
+}
+
 // Mirrors classic's right-rail model (sidebar.right.component.ts): screens
 // register their own tab set on mount and clear it on destroy. The rail
 // hides when no screen is registering anything (e.g. /search, /settings) so
@@ -17,6 +33,10 @@ export interface DockTab {
 @Injectable({ providedIn: 'root' })
 export class DockRailService {
   readonly tabs = signal<DockTab[]>([])
+  // Single-row selection from the active file-list screen. Drives the
+  // dock panel body: when null, panels render an empty state ("Select a
+  // file to see details") instead of breaking.
+  readonly currentSelected = signal<DockSelectedFile | null>(null)
 
   setTabs(tabs: DockTab[]): void {
     this.tabs.set(tabs)
@@ -24,6 +44,7 @@ export class DockRailService {
 
   clear(): void {
     this.tabs.set([])
+    this.currentSelected.set(null)
   }
 }
 

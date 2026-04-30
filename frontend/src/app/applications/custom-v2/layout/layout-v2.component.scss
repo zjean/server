@@ -28,28 +28,11 @@
 .layout-v2__dock-panel {
   width: 320px;
   flex-shrink: 0;
-  background: var(--si-bg2);
+  background: var(--si-bg1);
   border-left: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
-  padding: 18px 20px;
-
-  &-header {
-    font-family: var(--si-display);
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: -0.01em;
-    color: var(--si-fg);
-    text-transform: capitalize;
-    margin-bottom: 12px;
-  }
-
-  &-empty {
-    margin: 0;
-    font-family: var(--si-sans);
-    font-size: 13px;
-    color: var(--si-fg-muted);
-  }
+  min-width: 0;
 }
 
 .layout-v2__backdrop {

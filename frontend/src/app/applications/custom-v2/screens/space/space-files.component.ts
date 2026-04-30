@@ -220,6 +220,29 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       })
       if (changed) this.selection.set(next)
     })
+    // Push the single-row selection to the dock context (Info / Comments
+    // panels read from it). Multi-select clears the panel.
+    effect(() => {
+      const sel = this.selectedFiles()
+      const alias = this.currentAlias()
+      if (sel.length !== 1 || !alias) {
+        this.dockRail.currentSelected.set(null)
+        return
+      }
+      const f = sel[0]
+      const segs = this.pathSegments().map((s) => s.path)
+      const path = [SPACE_REPOSITORY.FILES, alias, ...segs, f.name].join('/')
+      this.dockRail.currentSelected.set({
+        id: f.id,
+        name: f.name,
+        path,
+        mime: f.mime,
+        size: f.size,
+        isDir: f.isDir,
+        mtime: f.mtime,
+        ctime: f.ctime
+      })
+    })
   }
 
   ngOnInit(): void {

@@ -221,6 +221,29 @@ export class PersonalComponent implements OnInit, OnDestroy {
       })
       if (changed) this.selection.set(next)
     })
+    // Push the single-row selection into the dock context so the right
+    // panel's Info / Comments tabs render against it. Multi-select or
+    // empty-select clears the panel back to its empty state.
+    effect(() => {
+      const sel = this.selectedFiles()
+      if (sel.length !== 1) {
+        this.dockRail.currentSelected.set(null)
+        return
+      }
+      const f = sel[0]
+      const segs = this.pathSegments().map((s) => s.path)
+      const path = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, f.name].join('/')
+      this.dockRail.currentSelected.set({
+        id: f.id,
+        name: f.name,
+        path,
+        mime: f.mime,
+        size: f.size,
+        isDir: f.isDir,
+        mtime: f.mtime,
+        ctime: f.ctime
+      })
+    })
   }
 
   ngOnInit(): void {

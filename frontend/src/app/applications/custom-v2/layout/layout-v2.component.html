@@ -7,13 +7,12 @@
   <main class="layout-v2__content">
     <router-outlet />
   </main>
-  @if (activeDockLabel()) {
+  @if (layoutV2.dockActive() !== null) {
     <aside
       class="layout-v2__dock-panel"
       [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null"
     >
-      <div class="layout-v2__dock-panel-header">{{ activeDockLabel() }}</div>
-      <p class="layout-v2__dock-panel-empty">Coming soon.</p>
+      <app-v2-dock-panel />
     </aside>
   }
   <app-v2-dock-rail [active]="layoutV2.dockActive()" (dockChange)="onDockChange($event)" />
