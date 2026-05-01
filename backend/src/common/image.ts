@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { Readable } from 'node:stream'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import TextToSVG from 'text-to-svg' // Sharp settings
