@@ -11,6 +11,17 @@ export interface ActionSheetItem {
   disabled?: boolean
 }
 
+export interface ActionSheetDivider {
+  id: string
+  kind: 'divider'
+}
+
+export type ActionSheetEntry = ActionSheetItem | ActionSheetDivider
+
+function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
+  return (e as ActionSheetDivider).kind === 'divider'
+}
+
 // Mobile-first bottom-anchored action sheet. Opens from below with a
 // list of primary actions, dismisses on backdrop tap or Escape. Used
 // behind the Personal FAB to avoid binding the FAB to a single primary
@@ -41,12 +52,16 @@ export interface ActionSheetItem {
         }
         <ul class="as__list" role="menu">
           @for (it of items; track it.id) {
-            <li>
-              <button type="button" class="as__item" [class.as__item--danger]="it.kind === 'danger'" [disabled]="it.disabled" (click)="onPick(it)">
-                <app-v2-icon [name]="it.icon" [size]="18" class="as__icon" />
-                <span class="as__label">{{ it.label | translate: locale.language }}</span>
-              </button>
-            </li>
+            @if (isDivider(it)) {
+              <li><div class="as__divider" role="separator" aria-orientation="horizontal"></div></li>
+            } @else {
+              <li>
+                <button type="button" class="as__item" [class.as__item--danger]="it.kind === 'danger'" [disabled]="it.disabled" (click)="onPick(it)">
+                  <app-v2-icon [name]="it.icon" [size]="18" class="as__icon" />
+                  <span class="as__label">{{ it.label | translate: locale.language }}</span>
+                </button>
+              </li>
+            }
           }
         </ul>
         <button type="button" class="as__cancel" (click)="onBackdrop()">
@@ -156,6 +171,11 @@ export interface ActionSheetItem {
         background: var(--si-bg3);
         color: var(--si-fg);
       }
+      .as__divider {
+        height: 1px;
+        margin: 6px 12px;
+        background: var(--si-line);
+      }
       @keyframes as-fade-in {
         from {
           opacity: 0;
@@ -185,9 +205,10 @@ export interface ActionSheetItem {
 })
 export class ActionSheetComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected readonly isDivider = isDivider
   @Input() open = false
   @Input() title = ''
-  @Input() items: readonly ActionSheetItem[] = []
+  @Input() items: readonly ActionSheetEntry[] = []
   @Output() readonly selected = new EventEmitter<string>()
   @Output() readonly closed = new EventEmitter<void>()
 
