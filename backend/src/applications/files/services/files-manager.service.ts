@@ -617,7 +617,7 @@ export class FilesManager {
     }
   }
 
-  async generateThumbnail(space: SpaceEnv, size: number): Promise<{ stream: Readable; contentType: string }> {
+  async generateThumbnail(space: SpaceEnv, size: number): Promise<{ stream: Readable; contentType: string; contentLength: number }> {
     if (!(await isPathExists(space.realPath))) {
       throw new FileError(HttpStatus.NOT_FOUND, 'Location not found')
     }
@@ -626,24 +626,33 @@ export class FilesManager {
       throw new FileError(HttpStatus.BAD_REQUEST, 'File is not an image')
     }
     try {
-      // `await` is load-bearing: generateThumbnail probes sharp's metadata()
-      // before returning the stream so format-decode failures reject here
-      // instead of leaking out as stream errors after response headers were
-      // sent (which would escape this catch and surface as a 500).
-      const stream = await generateThumbnail(space.realPath, size)
-      return { stream, contentType: webpMimeType }
+      // `await` is load-bearing: the underlying generateThumbnail awaits
+      // sharp.metadata() so format-decode failures reject here, not later
+      // as a stream error after headers were sent. We also buffer the
+      // sharp output to a Buffer (via .toBuffer() inside) so we can emit
+      // Content-Length — see the buffer-vs-stream rationale in
+      // common/image.ts. Without Content-Length, NC iOS' preview cache
+      // refuses to render the response in list cells.
+      const buf = await generateThumbnail(space.realPath, size)
+      return { stream: Readable.from(buf), contentType: webpMimeType, contentLength: buf.length }
     } catch (e) {
       // Sharp's prebuilt libvips can't decode some image formats (notably
       // JPEG XL — `ff 0a` magic — and HEIC without libheif). Rather than
       // 404'ing, stream the original bytes so the client (browser, NC iOS
       // 17+ which decodes JXL/HEIC/AVIF natively) can render the image at
       // its real resolution. Trades bandwidth for "thumbnail renders" on
-      // the long tail of formats sharp doesn't handle.
+      // the long tail of formats sharp doesn't handle. We stat the file
+      // for Content-Length — same NC-iOS-cache reason as the happy path.
       this.logger.warn({
         tag: this.generateThumbnail.name,
         msg: `sharp decode failed for ${space.realPath}, falling back to original: ${(e as Error).message}`
       })
-      return { stream: fs.createReadStream(space.realPath), contentType: mime.replace('-', '/') }
+      const stats = await fs.promises.stat(space.realPath)
+      return {
+        stream: fs.createReadStream(space.realPath),
+        contentType: mime.replace('-', '/'),
+        contentLength: stats.size
+      }
     }
   }
 

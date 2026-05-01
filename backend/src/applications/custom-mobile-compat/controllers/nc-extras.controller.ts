@@ -77,7 +77,14 @@ export class NcExtrasController {
   // us compatible with all of them.
   @Get(['index.php/core/preview', 'index.php/core/preview.png'])
   @UseGuards(NcBasicAuthGuard)
-  @Header('cache-control', 'private,max-age=3600')
+  // Mirror real Nextcloud's preview cache header — `public, max-age=86400`.
+  // The previous `private,max-age=3600` value passed semantically (the
+  // preview is per-user, but never going through a shared CDN here) but
+  // some iOS URLSession code paths in NC iOS treat `private` as a signal
+  // not to write the response into the app's preview cache, leaving list
+  // cells icon-only even after a 200 response. Public + 24-hour TTL is
+  // what real NC sends; iOS rendering paths are tested against that shape.
+  @Header('cache-control', 'public,max-age=86400')
   async preview(
     @Req() req: FastifyRequest & { user: UserModel },
     @Res({ passthrough: true }) res: FastifyReply,
@@ -114,9 +121,17 @@ export class NcExtrasController {
       // back to streaming the raw bytes (e.g. JPEG XL, HEIC). NC iOS 17+
       // decodes the long-tail formats natively, so the fallback still
       // renders — just without server-side downscaling.
-      const { stream, contentType } = await this.filesManager.generateThumbnail(space, size)
+      //
+      // Content-Length is mandatory for NC iOS' preview cache: without it
+      // (chunked transfer + unknown length), iOS receives the body but
+      // refuses to write it into the on-disk thumb cache, so list cells
+      // never render even after a 200 response. The service buffers sharp
+      // output to a Buffer and stat()s the file in the fallback path
+      // specifically so we can advertise it here.
+      const { stream, contentType, contentLength } = await this.filesManager.generateThumbnail(space, size)
       res.header('content-type', contentType)
-      return new StreamableFile(stream, { type: contentType })
+      res.header('content-length', contentLength)
+      return new StreamableFile(stream, { type: contentType, length: contentLength })
     } catch (e) {
       // FilesManager.generateThumbnail throws FileError, which exposes its
       // HTTP code as `httpCode` (see file-error.ts). The fallback path

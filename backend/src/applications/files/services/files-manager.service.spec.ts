@@ -465,16 +465,21 @@ describe(FilesManager.name, () => {
     )
   })
 
-  it('generateThumbnail should validate image and return webp stream from sharp', async () => {
+  it('generateThumbnail returns a webp stream + length on the sharp happy path', async () => {
     const space = makeSpace({ realPath: '/data/users/john/files/image.png' })
     ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
     ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('image-png')
-    const stream = Readable.from(['img'])
-    jest.spyOn(imageUtils, 'generateThumbnail').mockReturnValueOnce(stream as any)
+    const buf = Buffer.from('webp-bytes')
+    jest.spyOn(imageUtils, 'generateThumbnail').mockResolvedValueOnce(buf)
 
     const result = await service.generateThumbnail(space, 256)
 
-    expect(result).toEqual({ stream, contentType: 'image/webp' })
+    expect(result.contentType).toBe('image/webp')
+    expect(result.contentLength).toBe(buf.length)
+    // Stream wraps the buffer — drain to verify bytes match.
+    const chunks: Buffer[] = []
+    for await (const c of result.stream) chunks.push(c as Buffer)
+    expect(Buffer.concat(chunks).toString()).toBe('webp-bytes')
   })
 
   it('generateThumbnail rejects non-image mime with BAD_REQUEST', async () => {
@@ -485,22 +490,24 @@ describe(FilesManager.name, () => {
     await expect(service.generateThumbnail(space, 256)).rejects.toEqual(new FileError(HttpStatus.BAD_REQUEST, 'File is not an image'))
   })
 
-  it('generateThumbnail falls back to original bytes when sharp cannot decode', async () => {
+  it('generateThumbnail falls back to original bytes (with file length) when sharp cannot decode', async () => {
     // Real-world trigger: JPEG XL (.jpg with `ff 0a` magic) and HEIC files
-    // sharp's prebuilt libvips can't decode. Service should stream the raw
-    // file with the original mime instead of 404'ing — modern clients
-    // (browsers, NC iOS 17+) decode these natively.
+    // sharp's prebuilt libvips can't decode. Service streams the raw file
+    // with the original mime instead of 404'ing — modern clients (browsers,
+    // NC iOS 17+) decode these natively. We stat the file for Content-Length
+    // because NC iOS' preview cache rejects responses without one.
     const space = makeSpace({ realPath: '/data/users/john/files/jxl-as-jpg.jpg' })
     ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
     ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('image-jpeg')
     jest.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(new Error('Input file contains unsupported image format'))
     const fakeStream = new PassThrough()
     jest.spyOn(fs, 'createReadStream').mockReturnValueOnce(fakeStream as unknown as fs.ReadStream)
+    jest.spyOn(fs.promises, 'stat').mockResolvedValueOnce({ size: 12345 } as fs.Stats)
 
     const result = await service.generateThumbnail(space, 256)
 
     expect(fs.createReadStream).toHaveBeenCalledWith(space.realPath)
-    expect(result).toEqual({ stream: fakeStream, contentType: 'image/jpeg' })
+    expect(result).toEqual({ stream: fakeStream, contentType: 'image/jpeg', contentLength: 12345 })
   })
 
   it('lock should fail if resource does not exist', async () => {

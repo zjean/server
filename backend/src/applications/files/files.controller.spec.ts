@@ -139,7 +139,7 @@ describe(FilesController.name, () => {
 
     it('genThumbnail() should default size to 256 when not provided', async () => {
       const stream = {} as any
-      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp' })
+      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp', contentLength: 42 })
 
       // pass undefined to exercise controller default parameter
       const result = await filesController.genThumbnail(fakeSpace, undefined as unknown as number, fakeRes)
@@ -152,7 +152,7 @@ describe(FilesController.name, () => {
 
     it('genThumbnail() should pass provided size', async () => {
       const stream = {} as any
-      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp' })
+      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp', contentLength: 42 })
 
       const result = await filesController.genThumbnail(fakeSpace, 512, fakeRes)
 
@@ -164,7 +164,7 @@ describe(FilesController.name, () => {
 
     it('genThumbnail() should reduce size larger than 1024', async () => {
       const stream = {} as any
-      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp' })
+      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/webp', contentLength: 42 })
 
       const result = await filesController.genThumbnail(fakeSpace, 2048, fakeRes)
 
@@ -174,13 +174,14 @@ describe(FilesController.name, () => {
       expect(result).toBeUndefined()
     })
 
-    it('genThumbnail() forwards original mime when service falls back to raw bytes', async () => {
+    it('genThumbnail() forwards original mime + length when service falls back to raw bytes', async () => {
       const stream = {} as any
-      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/jpeg' })
+      filesMethodsMock.genThumbnail.mockResolvedValue({ stream, contentType: 'image/jpeg', contentLength: 12345 })
 
       await filesController.genThumbnail(fakeSpace, 256, fakeRes)
 
       expect(fakeRes.type).toHaveBeenCalledWith('image/jpeg')
+      expect(fakeRes.header).toHaveBeenCalledWith('content-length', 12345)
       expect(fakeRes.send).toHaveBeenCalledWith(stream)
     })
   })

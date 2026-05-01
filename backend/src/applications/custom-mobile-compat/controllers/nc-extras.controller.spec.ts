@@ -120,7 +120,7 @@ describe(NcExtrasController.name, () => {
       getUserFile.mockResolvedValueOnce({ id: 42, path: 'photos/a.png' })
       const fakeSpace = { realPath: '/tmp/img.png' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
-      generateThumbnail.mockResolvedValueOnce({ stream: Readable.from([Buffer.from('jpegdata')]), contentType: 'image/webp' })
+      generateThumbnail.mockResolvedValueOnce({ stream: Readable.from([Buffer.from('jpegdata')]), contentType: 'image/webp', contentLength: 8 })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -158,7 +158,7 @@ describe(NcExtrasController.name, () => {
       const fakeSpace = { realPath: '/tmp/img.png' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
       const stream = Readable.from([Buffer.from('webpdata')])
-      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/webp' })
+      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/webp', contentLength: 8 })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -172,6 +172,9 @@ describe(NcExtrasController.name, () => {
       // NC clients that dispatch decoders by MIME type (was the "black
       // square" bug).
       expect(res.header).toHaveBeenCalledWith('content-type', 'image/webp')
+      // Content-Length is mandatory for NC iOS' preview cache to write the
+      // download to disk — without it the list cell never renders.
+      expect(res.header).toHaveBeenCalledWith('content-length', 8)
     })
 
     it('forwards the service-supplied content-type on the original-bytes fallback', async () => {
@@ -182,13 +185,14 @@ describe(NcExtrasController.name, () => {
       const fakeSpace = { realPath: '/tmp/jxl.jpg' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
       const stream = Readable.from([Buffer.from('rawjpgxl')])
-      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/jpeg' })
+      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/jpeg', contentLength: 8 })
 
       const req = fakePreviewReq()
       const res = fakeRes()
       await controller.preview(req, res, 'jxl.jpg')
 
       expect(res.header).toHaveBeenCalledWith('content-type', 'image/jpeg')
+      expect(res.header).toHaveBeenCalledWith('content-length', 8)
     })
 
     it('registers both /preview and /preview.png so all NC client variants resolve', () => {
@@ -218,7 +222,7 @@ describe(NcExtrasController.name, () => {
     it('clamps out-of-range dimensions', async () => {
       const fakeSpace = { realPath: '/tmp/a.jpg' }
       spaceEnv.mockResolvedValue(fakeSpace)
-      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp' })
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp', contentLength: 1 })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -234,7 +238,7 @@ describe(NcExtrasController.name, () => {
     it('strips /remote.php/dav/files/{user}/ and /files/{user}/ prefixes from the path', async () => {
       const fakeSpace = { realPath: '/tmp/b.jpg' }
       spaceEnv.mockResolvedValue(fakeSpace)
-      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp' })
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp', contentLength: 1 })
 
       const req = fakePreviewReq('alice')
       const res = fakeRes()
