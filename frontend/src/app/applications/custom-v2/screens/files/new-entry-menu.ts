@@ -10,15 +10,15 @@ interface BuildOpts {
 
 // Builds the items for the desktop "+ New" dropdown. The OnlyOffice trio
 // is omitted entirely when the editor isn't enabled — no greyed-out rows.
-// Icons are placeholders (`pencil` is the closest existing IconV2Name to
-// a doc glyph); swap when the icon set grows.
+// Office types reuse the dedicated doc/sheet/deck glyphs from the file-row
+// icon set so each row is visually distinct.
 export function buildNewEntryMenu(opts: BuildOpts): ContextMenuEntry[] {
   const items: ContextMenuEntry[] = []
   if (opts.onlyOfficeEnabled) {
     items.push(
-      { id: 'new-docx', label: 'Document', icon: 'pencil', action: () => opts.onSelect('new-docx') },
-      { id: 'new-xlsx', label: 'Spreadsheet', icon: 'pencil', action: () => opts.onSelect('new-xlsx') },
-      { id: 'new-pptx', label: 'Presentation', icon: 'pencil', action: () => opts.onSelect('new-pptx') },
+      { id: 'new-docx', label: 'Document', icon: 'doc', action: () => opts.onSelect('new-docx') },
+      { id: 'new-xlsx', label: 'Spreadsheet', icon: 'sheet', action: () => opts.onSelect('new-xlsx') },
+      { id: 'new-pptx', label: 'Presentation', icon: 'deck', action: () => opts.onSelect('new-pptx') },
       { id: 'sep-office', kind: 'divider' }
     )
   }
@@ -35,12 +35,12 @@ export function buildNewEntrySheetItems(opts: { onlyOfficeEnabled: boolean }): A
   const items: ActionSheetEntry[] = []
   if (opts.onlyOfficeEnabled) {
     items.push(
-      { id: 'new-docx', label: 'Document', icon: 'pencil' },
-      { id: 'new-xlsx', label: 'Spreadsheet', icon: 'pencil' },
-      { id: 'new-pptx', label: 'Presentation', icon: 'pencil' },
+      { id: 'new-docx', label: 'Document', icon: 'doc' },
+      { id: 'new-xlsx', label: 'Spreadsheet', icon: 'sheet' },
+      { id: 'new-pptx', label: 'Presentation', icon: 'deck' },
       { id: 'sep-office', kind: 'divider' }
     )
   }
-  items.push({ id: 'new-folder', label: 'Folder', icon: 'plus' }, { id: 'new-text', label: 'Text file', icon: 'pencil' })
+  items.push({ id: 'new-folder', label: 'Folder', icon: 'folder' }, { id: 'new-text', label: 'Text file', icon: 'pencil' })
   return items
 }
