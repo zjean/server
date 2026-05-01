@@ -42,7 +42,14 @@ export function buildNcPropResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPerm
     'oc:size': ocSize,
     'oc:owner-id': String(owner.login ?? ''),
     'oc:owner-display-name': ownerDisplay,
-    'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
+    // Boolean DAV props in the oc/nc namespaces are emitted as integer
+    // strings ("1"/"0"), not "true"/"false" — owncloud's convention that
+    // NextcloudKit's parser depends on (`Int(text) == 1`). Sending "true"
+    // here makes NC iOS decide the file has no preview, which silently
+    // disables list-cell thumbnails (in-app preview still works because
+    // it requests /core/preview directly without consulting has-preview).
+    // `is-encrypted` below was already correct; this row drifted.
+    'nc:has-preview': ncHasPreview(f.mime) ? '1' : '0',
     'nc:is-encrypted': '0',
     'nc:mount-type': ''
   }
