@@ -465,7 +465,7 @@ describe(FilesManager.name, () => {
     )
   })
 
-  it('generateThumbnail should validate image and return generated stream', async () => {
+  it('generateThumbnail should validate image and return webp stream from sharp', async () => {
     const space = makeSpace({ realPath: '/data/users/john/files/image.png' })
     ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
     ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('image-png')
@@ -474,7 +474,33 @@ describe(FilesManager.name, () => {
 
     const result = await service.generateThumbnail(space, 256)
 
-    expect(result).toBe(stream)
+    expect(result).toEqual({ stream, contentType: 'image/webp' })
+  })
+
+  it('generateThumbnail rejects non-image mime with BAD_REQUEST', async () => {
+    const space = makeSpace({ realPath: '/data/users/john/files/notes.txt' })
+    ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
+    ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('text-plain')
+
+    await expect(service.generateThumbnail(space, 256)).rejects.toEqual(new FileError(HttpStatus.BAD_REQUEST, 'File is not an image'))
+  })
+
+  it('generateThumbnail falls back to original bytes when sharp cannot decode', async () => {
+    // Real-world trigger: JPEG XL (.jpg with `ff 0a` magic) and HEIC files
+    // sharp's prebuilt libvips can't decode. Service should stream the raw
+    // file with the original mime instead of 404'ing — modern clients
+    // (browsers, NC iOS 17+) decode these natively.
+    const space = makeSpace({ realPath: '/data/users/john/files/jxl-as-jpg.jpg' })
+    ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
+    ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('image-jpeg')
+    jest.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(new Error('Input file contains unsupported image format'))
+    const fakeStream = new PassThrough()
+    jest.spyOn(fs, 'createReadStream').mockReturnValueOnce(fakeStream as unknown as fs.ReadStream)
+
+    const result = await service.generateThumbnail(space, 256)
+
+    expect(fs.createReadStream).toHaveBeenCalledWith(space.realPath)
+    expect(result).toEqual({ stream: fakeStream, contentType: 'image/jpeg' })
   })
 
   it('lock should fail if resource does not exist', async () => {

@@ -109,41 +109,34 @@ export class NcExtrasController {
     diag.realPath = space.realPath
 
     try {
-      const stream = await this.filesManager.generateThumbnail(space, size)
-      // generateThumbnail emits WebP bytes (sharp `.webp(...)` in
-      // backend/src/common/image.ts). Labeling them as JPEG would break NC
-      // clients that dispatch decoders by Content-Type — the JPEG decoder
-      // hits a WebP RIFF header and the cell renders blank. NC iOS supports
-      // WebP since iOS 14 (current min target ≥ iOS 15) and the Android
-      // client decodes WebP natively; this matches real NC ≥ 25.
-      res.header('content-type', 'image/webp')
-      this.logger.debug({ tag: this.preview.name, msg: `ok: ${formatDiag(diag)} size=${size}` })
-      return new StreamableFile(stream, { type: 'image/webp' })
+      // Content-type comes from the service: webp on the sharp-resized happy
+      // path, the original mime when sharp can't decode the file and we fall
+      // back to streaming the raw bytes (e.g. JPEG XL, HEIC). NC iOS 17+
+      // decodes the long-tail formats natively, so the fallback still
+      // renders — just without server-side downscaling.
+      const { stream, contentType } = await this.filesManager.generateThumbnail(space, size)
+      res.header('content-type', contentType)
+      return new StreamableFile(stream, { type: contentType })
     } catch (e) {
       // FilesManager.generateThumbnail throws FileError, which exposes its
-      // HTTP code as `httpCode` (NOT `status` — see file-error.ts). Other
-      // errors (e.g. nested HttpException) use `status`. Read both so we
-      // don't fall through to a generic 500 just because the property name
-      // differs — the original "500: File is not an image" log line was
-      // exactly this bug.
-      const err = e as { httpCode?: number; status?: number; message?: string }
-      const code = err.httpCode ?? err.status
-      // Capture the file's first 16 bytes so the diagnostic log shows what
-      // format the file actually is. The user reported a .jpg that the v2
-      // web UI displays fine but sharp rejects with "unsupported image
-      // format" — the magic bytes will tell us whether it's HEIC labeled
-      // .jpg, JPEG-XL, AVIF, an empty file, etc. Read failure is non-fatal:
-      // we still emit the rest of the log line.
+      // HTTP code as `httpCode` (see file-error.ts). The fallback path
+      // means BAD_REQUEST now only fires for genuinely non-image files
+      // (PDFs, archives, etc.) — sharp decode failures are absorbed
+      // upstream.
+      const err = e as { httpCode?: number; message?: string }
+      // First 16 bytes as hex — useful when a non-image slips through and
+      // we want to know what format it really was without re-reading the
+      // file. Read failure is non-fatal: we still emit the rest of the log.
       const magic = await readMagic(space.realPath)
       this.logger.warn({
         tag: this.preview.name,
-        msg: `thumbnail failed: ${formatDiag(diag)} code=${code ?? '?'} magic=${magic ?? '?'} err=${err.message ?? '?'}`
+        msg: `thumbnail failed: ${formatDiag(diag)} code=${err.httpCode ?? '?'} magic=${magic ?? '?'} err=${err.message ?? '?'}`
       })
-      if (code === HttpStatus.BAD_REQUEST) {
+      if (err.httpCode === HttpStatus.BAD_REQUEST) {
         // Non-image file — NC client interprets 404 as "skip preview".
         throw new HttpException('no preview available for this mime type', HttpStatus.NOT_FOUND)
       }
-      if (code === HttpStatus.NOT_FOUND) {
+      if (err.httpCode === HttpStatus.NOT_FOUND) {
         throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
       }
       throw new HttpException(err.message ?? 'preview failed', HttpStatus.INTERNAL_SERVER_ERROR)

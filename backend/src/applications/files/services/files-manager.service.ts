@@ -6,7 +6,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { extract as extractTar } from 'tar'
 import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/auth-request.interface'
-import { generateThumbnail } from '../../../common/image'
+import { generateThumbnail, webpMimeType } from '../../../common/image'
 import { SERVER_NAME } from '../../../common/shared'
 import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
 import { HTTP_METHOD } from '../../applications.constants'
@@ -617,24 +617,33 @@ export class FilesManager {
     }
   }
 
-  async generateThumbnail(space: SpaceEnv, size: number): Promise<Readable> {
+  async generateThumbnail(space: SpaceEnv, size: number): Promise<{ stream: Readable; contentType: string }> {
     if (!(await isPathExists(space.realPath))) {
       throw new FileError(HttpStatus.NOT_FOUND, 'Location not found')
     }
-    if (getMimeType(space.realPath, false).indexOf('image') === -1) {
+    const mime = getMimeType(space.realPath, false)
+    if (mime.indexOf('image') === -1) {
       throw new FileError(HttpStatus.BAD_REQUEST, 'File is not an image')
     }
     try {
-      // `await` is load-bearing: generateThumbnail now probes sharp's
-      // metadata() before returning the stream so format-decode failures
-      // (e.g. files with a misleading extension, truncated uploads) reject
-      // here instead of leaking out as stream errors after the response
-      // headers were sent. Without the await the rejection escapes this
-      // catch and Nest's default handler turns it into a 500.
-      return await generateThumbnail(space.realPath, size)
+      // `await` is load-bearing: generateThumbnail probes sharp's metadata()
+      // before returning the stream so format-decode failures reject here
+      // instead of leaking out as stream errors after response headers were
+      // sent (which would escape this catch and surface as a 500).
+      const stream = await generateThumbnail(space.realPath, size)
+      return { stream, contentType: webpMimeType }
     } catch (e) {
-      this.logger.warn({ tag: this.generateThumbnail.name, msg: e })
-      throw new FileError(HttpStatus.BAD_REQUEST, 'File is not an image')
+      // Sharp's prebuilt libvips can't decode some image formats (notably
+      // JPEG XL — `ff 0a` magic — and HEIC without libheif). Rather than
+      // 404'ing, stream the original bytes so the client (browser, NC iOS
+      // 17+ which decodes JXL/HEIC/AVIF natively) can render the image at
+      // its real resolution. Trades bandwidth for "thumbnail renders" on
+      // the long tail of formats sharp doesn't handle.
+      this.logger.warn({
+        tag: this.generateThumbnail.name,
+        msg: `sharp decode failed for ${space.realPath}, falling back to original: ${(e as Error).message}`
+      })
+      return { stream: fs.createReadStream(space.realPath), contentType: mime.replace('-', '/') }
     }
   }
 
