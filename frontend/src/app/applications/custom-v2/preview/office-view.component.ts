@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, computed, effect, inject, input, output, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, computed, effect, inject, input, output, signal, untracked } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { FILE_MODE } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
@@ -86,37 +86,55 @@ export class OfficeViewComponent implements OnDestroy {
   constructor() {
     // (Re-)load whenever the path or file changes. Cancels in-flight HTTP
     // via takeUntilDestroyed; effect itself is signal-driven.
+    //
+    // The seed/HTTP block is wrapped in untracked() because releaseLock()
+    // reads this.config() and the success handler writes this.config.set(cfg).
+    // Without the wrap, the second-and-subsequent effect runs (when
+    // fileStub is no longer null on entry, so releaseLock proceeds past
+    // its early-return) would track config as a dependency, and then the
+    // HTTP success handler's config.set(cfg) would dirty the effect and
+    // re-run it — firing the same /settings/<path> GET in an infinite
+    // loop. Manifests as "OnlyOffice editor stuck on Loading…, lots of
+    // network calls" for any existing doc whose FileProps reference is
+    // refreshed by the parent after first mount (e.g. when the file list
+    // refreshes after an NC PROPFIND inserts a real DB row in place of
+    // the previously inode-derived placeholder id).
+    //
+    // See the project memory note "Angular effect signal writes need
+    // untracked()" for the same pattern.
     effect(() => {
       const p = this.path()
       const f = this.file()
       if (!p || !f) return
-      this.releaseLock()
-      this.fileStub = buildFileModelStub(f, p)
-      this.config.set(null)
-      this.error.set(null)
-      this.loading.set(true)
-      this.http
-        .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe({
-          next: (cfg) => {
-            this.loading.set(false)
-            if (!cfg) {
-              this.error.set('OnlyOffice settings are missing.')
+      untracked(() => {
+        this.releaseLock()
+        this.fileStub = buildFileModelStub(f, p)
+        this.config.set(null)
+        this.error.set(null)
+        this.loading.set(true)
+        this.http
+          .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: (cfg) => {
+              this.loading.set(false)
+              if (!cfg) {
+                this.error.set('OnlyOffice settings are missing.')
+                this.config.set(null)
+                return
+              }
+              this.applyOfficeLock(cfg)
+              this.config.set(cfg)
+            },
+            error: (e: HttpErrorResponse) => {
+              this.loading.set(false)
               this.config.set(null)
-              return
+              this.error.set(
+                e.status === 404 ? 'OnlyOffice is not available on this server.' : (e.error?.message ?? 'Failed to load OnlyOffice editor.')
+              )
             }
-            this.applyOfficeLock(cfg)
-            this.config.set(cfg)
-          },
-          error: (e: HttpErrorResponse) => {
-            this.loading.set(false)
-            this.config.set(null)
-            this.error.set(
-              e.status === 404 ? 'OnlyOffice is not available on this server.' : (e.error?.message ?? 'Failed to load OnlyOffice editor.')
-            )
-          }
-        })
+          })
+      })
     })
   }
 
