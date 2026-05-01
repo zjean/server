@@ -1,7 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core'
-import { FileModel } from '../../files/models/file.model'
+import { API_FILES_OPERATION_THUMBNAIL } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { isImageMime, mimeToGlyph } from '../utils/mime-to-glyph'
 import { FileGlyphComponent } from './file-glyph.component'
+
+// Minimal shape FileThumb consumes. Both classic FileModel and the v2 grid's
+// raw FileProps satisfy this — keeps the component callable from either
+// caller without forcing them to hydrate a full FileModel.
+export interface FileThumbInput {
+  name: string
+  path: string
+  mime: string
+  isDir: boolean
+}
 
 // Card thumbnail for grid + gallery views.
 //
@@ -51,7 +62,7 @@ import { FileGlyphComponent } from './file-glyph.component'
   ]
 })
 export class FileThumbComponent {
-  readonly file = input.required<FileModel>()
+  readonly file = input.required<FileThumbInput>()
   // Glyph dimensions used when the file is not an image, or when the image
   // request fails. The image-fill path ignores this.
   readonly glyphSize = input<number>(38)
@@ -68,7 +79,10 @@ export class FileThumbComponent {
     return !f.isDir && isImageMime(f.mime) && !this.errored()
   })
 
-  protected readonly src = computed(() => `${this.file().thumbnailUrl}?size=${this.imageRes()}`)
+  // Compose the URL inline from the path so callers can pass any
+  // FileProps-shaped object (the v2 personal grid binds raw FileProps,
+  // not a hydrated FileModel; both have `path` and `mime`).
+  protected readonly src = computed(() => `${API_FILES_OPERATION_THUMBNAIL}/${encodeUrl(this.file().path)}?size=${this.imageRes()}`)
 
   protected readonly glyphType = computed(() => {
     const f = this.file()
