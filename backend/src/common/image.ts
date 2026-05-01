@@ -20,6 +20,14 @@ const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
 let textToSvgCache: Promise<TextToSVG> | null = null
 
 export async function generateThumbnail(filePath: string, size: number): Promise<Readable> {
+  // Probe with metadata() before building the streaming pipeline. Format
+  // detection inside sharp happens during stream consumption — an
+  // "Input file contains unsupported image format" error therefore fires
+  // on the output Readable AFTER the caller has returned and the response
+  // headers have been written, escaping any try/catch around this call.
+  // Awaiting metadata() forces the format check to fail synchronously
+  // here so callers get a normal rejected promise they can map to a 4xx.
+  await sharp(filePath, { failOn: 'none' }).metadata()
   return sharp(filePath, {
     failOn: 'none',
     sequentialRead: true, // sequential read = more efficient I/O

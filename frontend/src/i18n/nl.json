@@ -713,7 +713,7 @@
   "Failed to load trash.": "Prullenmand laden mislukt.",
   "Favorite": "Favoriet",
   "Coming soon": "Binnenkort beschikbaar",
-  "Preview not available": "Geen voorvertoning beschikbaar",
+  "Preview not available": "Voorvertoning niet beschikbaar",
   "Download the file to view its contents.": "Download het bestand om de inhoud te bekijken.",
   "Properties": "Eigenschappen",
   "Inline comment threads will light up in a follow-up PR.": "Inline opmerkingen worden geactiveerd in een vervolg-PR.",
@@ -931,11 +931,5 @@
   "Close (Esc)": "Sluiten (Esc)",
   "Previous (←)": "Vorige (←)",
   "Next (→)": "Volgende (→)",
-  "Fullscreen": "Volledig scherm",
-  "Switch to PDF view": "Terug naar PDF-weergave",
-  "Edit in OnlyOffice": "Bewerken in OnlyOffice",
-  "Info": "Info",
-  "Preview not available": "Voorvertoning niet beschikbaar",
-  "Download the file to view its contents.": "Download het bestand om de inhoud te bekijken.",
-  "Download": "Downloaden"
+  "Switch to PDF view": "Terug naar PDF-weergave"
 }

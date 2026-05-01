@@ -625,7 +625,13 @@ export class FilesManager {
       throw new FileError(HttpStatus.BAD_REQUEST, 'File is not an image')
     }
     try {
-      return generateThumbnail(space.realPath, size)
+      // `await` is load-bearing: generateThumbnail now probes sharp's
+      // metadata() before returning the stream so format-decode failures
+      // (e.g. files with a misleading extension, truncated uploads) reject
+      // here instead of leaking out as stream errors after the response
+      // headers were sent. Without the await the rejection escapes this
+      // catch and Nest's default handler turns it into a 500.
+      return await generateThumbnail(space.realPath, size)
     } catch (e) {
       this.logger.warn({ tag: this.generateThumbnail.name, msg: e })
       throw new FileError(HttpStatus.BAD_REQUEST, 'File is not an image')
