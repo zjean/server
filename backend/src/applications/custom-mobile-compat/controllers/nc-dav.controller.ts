@@ -1,6 +1,7 @@
 import { All, Controller, HttpException, HttpStatus, Logger, Param, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
+import { decodeUrl } from '../../../common/shared'
 import { HTTP_METHOD } from '../../applications.constants'
 import { getProps } from '../../files/utils/files'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
@@ -145,8 +146,15 @@ export class NcDavController {
     // populate for our route tree, and it also requires USER_PERMISSION.WEBDAV
     // which we validate in the NC-minted-app-password path instead (see
     // NcBasicAuthGuard).
+    //
+    // url is stored *decoded* — same convention as WebDAVProtocolGuard
+    // (decodeUrl(req.originalUrl)) — so downstream WebDAVFile.encodeUrl
+    // encodes once, not twice. Storing the raw req.url instead would
+    // double-encode hrefs containing reserved chars (e.g. "My folder" →
+    // "My%2520folder"), which stock NC iOS/Android then displays as the
+    // literal "%20" and follows as a non-existent path.
     req.dav = {
-      url: (req.url ?? '').split('?')[0],
+      url: decodeUrl((req.url ?? '').split('?')[0]),
       depth: normalizeDepth(req.headers['depth'])
     }
     // PROPFIND / PROPPATCH / LOCK want body parsed into JSON-from-XML. We
