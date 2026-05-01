@@ -20,14 +20,14 @@ describe('generateThumbnail', () => {
     await fs.rm(tmpDir, { recursive: true, force: true })
   })
 
-  it('returns a stream for a valid image', async () => {
+  it('returns a webp Buffer with a known length for a valid image', async () => {
     const file = path.join(tmpDir, 'tiny.png')
     await fs.writeFile(file, tinyPng)
-    const stream = await generateThumbnail(file, 64)
-    expect(stream).toBeDefined()
-    // Drain the stream so sharp finishes cleanly — we don't assert the bytes,
-    // only that no error is emitted while encoding.
-    for await (const _ of stream) void _
+    const buf = await generateThumbnail(file, 64)
+    expect(Buffer.isBuffer(buf)).toBe(true)
+    expect(buf.length).toBeGreaterThan(0)
+    // First 4 bytes of any WebP file are the RIFF magic.
+    expect(buf.subarray(0, 4).toString('ascii')).toBe('RIFF')
   })
 
   it('rejects synchronously when sharp cannot decode the file', async () => {

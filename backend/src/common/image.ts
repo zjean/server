@@ -19,14 +19,19 @@ const fontPath = path.join(__dirname, 'fonts', 'avatar.ttf')
 const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
 let textToSvgCache: Promise<TextToSVG> | null = null
 
-export async function generateThumbnail(filePath: string, size: number): Promise<Readable> {
-  // Probe with metadata() before building the streaming pipeline. Format
-  // detection inside sharp happens during stream consumption — an
-  // "Input file contains unsupported image format" error therefore fires
-  // on the output Readable AFTER the caller has returned and the response
-  // headers have been written, escaping any try/catch around this call.
-  // Awaiting metadata() forces the format check to fail synchronously
-  // here so callers get a normal rejected promise they can map to a 4xx.
+export async function generateThumbnail(filePath: string, size: number): Promise<Buffer> {
+  // Probe with metadata() before doing the resize. Format detection inside
+  // sharp happens during pipeline execution; awaiting metadata() forces the
+  // format check to fail here so callers get a normal rejected promise they
+  // can map to a 4xx (instead of a stream error after headers were sent).
+  //
+  // Returning a Buffer (via toBuffer()) instead of a stream is load-bearing
+  // for HTTP delivery: a buffer has a known length, so the response can
+  // include Content-Length. NC iOS' preview cache rejects responses without
+  // Content-Length (it can't know the download is complete), which silently
+  // disables list-cell thumbnails. Same fix applies to v2's grid view — the
+  // stream-without-length path was a real bug, not just an optimization gap.
+  // The encoded bytes for a 1024-px webp are tens of KB; buffering is cheap.
   await sharp(filePath, { failOn: 'none' }).metadata()
   return sharp(filePath, {
     failOn: 'none',
@@ -43,6 +48,7 @@ export async function generateThumbnail(filePath: string, size: number): Promise
       fastShrinkOnLoad: true // true by default, added for clarity
     })
     .webp({ quality: 80, effort: 0, alphaQuality: 90 })
+    .toBuffer()
 }
 
 export async function generateAvatar(initials: string): Promise<NodeJS.ReadableStream> {

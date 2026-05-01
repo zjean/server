@@ -130,8 +130,9 @@ export class FilesController {
     @Res() res: FastifyReply
   ): Promise<StreamableFile> {
     if (size > 1024) size = 1024
-    const { stream, contentType } = await this.filesMethods.genThumbnail(space, size)
+    const { stream, contentType, contentLength } = await this.filesMethods.genThumbnail(space, size)
     res.type(contentType)
+    res.header('content-length', contentLength)
     return res.send(stream)
   }
 
