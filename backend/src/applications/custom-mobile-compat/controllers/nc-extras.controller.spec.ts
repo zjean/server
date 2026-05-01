@@ -193,6 +193,22 @@ describe(NcExtrasController.name, () => {
       })
     })
 
+    it('maps FileError (httpCode-shaped) "not an image" into a 404 too', async () => {
+      // FilesManager throws FileError, which exposes its code as `httpCode`,
+      // not `status`. Production logs surfaced exactly this gap: a real
+      // file-decode failure was rendered as a 500 because the catch only
+      // looked at err.status. This test locks both names in.
+      const fakeSpace = { realPath: '/tmp/elegoo/2.jpg' }
+      spaceEnv.mockResolvedValueOnce(fakeSpace)
+      generateThumbnail.mockRejectedValueOnce(Object.assign(new Error('File is not an image'), { httpCode: HttpStatus.BAD_REQUEST }))
+
+      const req = fakePreviewReq()
+      const res = fakeRes()
+      await expect(controller.preview(req, res, '2.jpg')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND
+      })
+    })
+
     it('clamps out-of-range dimensions', async () => {
       const fakeSpace = { realPath: '/tmp/a.jpg' }
       spaceEnv.mockResolvedValue(fakeSpace)

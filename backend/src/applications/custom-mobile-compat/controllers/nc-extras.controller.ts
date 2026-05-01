@@ -119,17 +119,23 @@ export class NcExtrasController {
       this.logger.debug({ tag: this.preview.name, msg: `ok: ${formatDiag(diag)} size=${size}` })
       return new StreamableFile(stream, { type: 'image/webp' })
     } catch (e) {
-      // FileError.status is HTTP_STATUS. Everything else: treat as no preview.
-      const err = e as { status?: number; message?: string }
+      // FilesManager.generateThumbnail throws FileError, which exposes its
+      // HTTP code as `httpCode` (NOT `status` — see file-error.ts). Other
+      // errors (e.g. nested HttpException) use `status`. Read both so we
+      // don't fall through to a generic 500 just because the property name
+      // differs — the original "500: File is not an image" log line was
+      // exactly this bug.
+      const err = e as { httpCode?: number; status?: number; message?: string }
+      const code = err.httpCode ?? err.status
       this.logger.warn({
         tag: this.preview.name,
-        msg: `thumbnail failed: ${formatDiag(diag)} status=${err.status ?? '?'} err=${err.message ?? '?'}`
+        msg: `thumbnail failed: ${formatDiag(diag)} code=${code ?? '?'} err=${err.message ?? '?'}`
       })
-      if (err.status === HttpStatus.BAD_REQUEST) {
+      if (code === HttpStatus.BAD_REQUEST) {
         // Non-image file — NC client interprets 404 as "skip preview".
         throw new HttpException('no preview available for this mime type', HttpStatus.NOT_FOUND)
       }
-      if (err.status === HttpStatus.NOT_FOUND) {
+      if (code === HttpStatus.NOT_FOUND) {
         throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
       }
       throw new HttpException(err.message ?? 'preview failed', HttpStatus.INTERNAL_SERVER_ERROR)
