@@ -46,6 +46,7 @@ import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuAnchor, ContextMenuComponent, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
+import { FileThumbComponent } from '../../components/file-thumb.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
 import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
@@ -83,6 +84,7 @@ function readStoredMode(): BrowserMode {
   imports: [
     IconV2Component,
     FileGlyphComponent,
+    FileThumbComponent,
     ButtonComponent,
     CheckboxComponent,
     IconButtonComponent,
