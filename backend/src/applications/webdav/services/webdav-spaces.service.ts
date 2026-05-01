@@ -155,7 +155,12 @@ export class WebDAVSpaces {
     }
 
     if (req.dav.depth === DEPTH.MEMBERS && (isDir === true || (await isPathIsDir(space.realPath)))) {
-      const { files } = await this.spacesBrowser.browse(req.user, space)
+      // Enrich with hasComments + lock state so the NC mobile prop builder
+      // can emit <nc:has-comments> and <nc:lock>… without an extra round-trip
+      // (mobile-compat consumes this generator). Both options are read-only
+      // additive DB joins — they don't change the file set, just attach
+      // optional fields that all WebDAV clients can use if they care.
+      const { files } = await this.spacesBrowser.browse(req.user, space, { withHasComments: true, withLocks: true })
       for (const f of files) {
         yield new WebDAVFile(f, req.dav.url)
       }

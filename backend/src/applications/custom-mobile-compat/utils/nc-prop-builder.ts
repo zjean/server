@@ -3,7 +3,13 @@
 // Extracted from NcPropfindService.buildResponse so both the PROPFIND verb
 // and the REPORT (sync-collection) verb emit byte-identical prop blocks.
 // Pure function — no `this` state, no DI; trivially testable in isolation.
+//
+// Boolean DAV props in the oc/nc namespaces are emitted as integer strings
+// ("1"/"0"), not "true"/"false" — that's the owncloud convention NC clients
+// depend on (NextcloudKit reads them with `Int(text) == 1`). Anything boolean
+// added here MUST follow the same shape; see #134 for the bug history.
 
+import type { FileLockProps, FileProps } from '../../files/interfaces/file-props.interface'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { buildOcId, ncFileId } from './nc-oc-id'
@@ -17,13 +23,32 @@ const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 // endpoints — see PR #87) so the user can't trash their own personal-space
 // root. Children always get full space.permissions so the trash action
 // renders normally on each child.
-export function buildNcPropResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPermissionsMode, isRoot: boolean): Record<string, unknown> {
+//
+// `ownerDisplayName` is the human-readable name shown to NC clients in
+// share-info / activity ("Shared by …"). Callers thread it from the
+// requesting UserModel for personal-space files (where owner == requester);
+// pass `''` to fall back to the owner login.
+export function buildNcPropResponse(
+  f: WebDAVFile,
+  space: SpaceEnv,
+  mode: NcPermissionsMode,
+  isRoot: boolean,
+  ownerDisplayName = ''
+): Record<string, unknown> {
   const href = f.href
   const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
   const { letters, shareMask } = toNcPermissions(sourcePerms, f.isDir, mode)
 
   const owner = space.root?.owner ?? { id: 0, login: '' }
-  const ownerDisplay = owner.login || ''
+  const ownerDisplay = ownerDisplayName || owner.login || ''
+
+  // hasComments / lock land on the WebDAVFile instance only when the
+  // browse layer was called with { withHasComments, withLocks } enabled
+  // (see WebDAVSpaces.listFiles). Cast through FileProps; absent fields
+  // fall through to the safe defaults.
+  const enriched = f as WebDAVFile & Partial<Pick<FileProps, 'hasComments' | 'lock'>>
+  const hasComments = enriched.hasComments === true
+  const lock = enriched.lock
 
   const resourcetype = f.isDir ? { 'd:collection': '' } : ''
   const contentLength = f.isDir ? undefined : String(f.size)
@@ -42,16 +67,19 @@ export function buildNcPropResponse(f: WebDAVFile, space: SpaceEnv, mode: NcPerm
     'oc:size': ocSize,
     'oc:owner-id': String(owner.login ?? ''),
     'oc:owner-display-name': ownerDisplay,
-    // Boolean DAV props in the oc/nc namespaces are emitted as integer
-    // strings ("1"/"0"), not "true"/"false" — owncloud's convention that
-    // NextcloudKit's parser depends on (`Int(text) == 1`). Sending "true"
-    // here makes NC iOS decide the file has no preview, which silently
-    // disables list-cell thumbnails (in-app preview still works because
-    // it requests /core/preview directly without consulting has-preview).
-    // `is-encrypted` below was already correct; this row drifted.
+    // <oc:share-types> contains zero or more <oc:share-type>N</oc:share-type>
+    // entries (0=user, 1=group, 3=link, 4=email). NC iOS uses the
+    // presence of any child to render the share badge on list cells.
+    // Sync-in's WebDAV browse doesn't surface share-type info onto
+    // WebDAVFile, so we emit an empty parent — same shape real NC
+    // emits for unshared files. Populating real entries is a follow-up
+    // wired through `withShares` on spacesBrowser.browse.
+    'oc:share-types': '',
     'nc:has-preview': ncHasPreview(f.mime) ? '1' : '0',
+    'nc:has-comments': hasComments ? '1' : '0',
     'nc:is-encrypted': '0',
-    'nc:mount-type': ''
+    'nc:mount-type': '',
+    ...buildLockProps(lock)
   }
 
   if (!f.isDir) {
@@ -98,4 +126,22 @@ function originalLocationFor(f: WebDAVFile, space: SpaceEnv): string {
   if (typeof fromOrigin === 'string' && fromOrigin.length > 0) return fromOrigin
   const alias = space.alias ?? ''
   return alias ? `${alias}/${f.name}` : f.name
+}
+
+// Render the lock-related nc: props NC iOS reads to draw the lock badge
+// + "locked by …" UI. nc:lock itself is the "is this file locked?"
+// boolean (1/0); the rest are descriptive and only emitted when locked.
+// Sync-in's FileLockProps doesn't carry a token / timestamp / timeout;
+// real NC's iOS client treats those as optional, so omitting them is fine.
+// lock-owner-type is always 0 (= user) — we don't have app/token-level
+// locks today.
+function buildLockProps(lock: FileLockProps | undefined): Record<string, string> {
+  if (!lock) return { 'nc:lock': '0' }
+  return {
+    'nc:lock': '1',
+    'nc:lock-owner-type': '0',
+    'nc:lock-owner': lock.owner.login,
+    'nc:lock-owner-displayname': lock.owner.fullName || lock.owner.login,
+    'nc:lock-owner-editor': lock.app
+  }
 }

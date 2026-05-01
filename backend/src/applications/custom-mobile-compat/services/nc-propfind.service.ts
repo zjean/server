@@ -53,6 +53,11 @@ export class NcPropfindService {
     const responses: unknown[] = []
     let isFirst = true
     const user = req.user as UserModel | undefined
+    // Owner display name for <oc:owner-display-name>. For mobile-compat's
+    // personal-space scope the file owner IS the requester, so we use the
+    // requester's fullName. When the resolved owner is someone else (future
+    // shared-space mode) we fall back to login inside the prop builder.
+    const ownerDisplayName = user && space.root?.owner?.id === user.id ? user.fullName : ''
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
@@ -70,7 +75,7 @@ export class NcPropfindService {
         // already real, when the entry is a directory, or when the request
         // targets the trash repository.
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
-        responses.push(buildNcPropResponse(f, space, mode, isFirst))
+        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName))
         isFirst = false
       }
     } catch (e) {

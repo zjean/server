@@ -121,7 +121,99 @@ describe('NcPropfindService', () => {
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
     expect(state.body).toContain('<oc:owner-id>alice</oc:owner-id>')
+    // No req.user attached → falls back to owner login.
     expect(state.body).toContain('<oc:owner-display-name>alice</oc:owner-display-name>')
+  })
+
+  it('uses requester.fullName for owner-display-name when owner is the requester (personal space)', async () => {
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string } }).user = { id: 1, login: 'alice', fullName: 'Alice Liddell' }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<oc:owner-display-name>Alice Liddell</oc:owner-display-name>')
+  })
+
+  it('emits oc:share-types as an empty parent element', async () => {
+    // Real NC always emits the element; absent → NC iOS skips share-badge
+    // logic entirely. Empty parent matches "no shares on this file".
+    const r = req()
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<oc:share-types></oc:share-types>')
+  })
+
+  it('emits nc:has-comments as "0" when the file has no comments (default)', async () => {
+    const r = req()
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<nc:has-comments>0</nc:has-comments>')
+  })
+
+  it('emits nc:has-comments as "1" when the WebDAVFile carries hasComments=true', async () => {
+    const folder = new WebDAVFile(
+      { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/alice/',
+      true
+    )
+    const child = new WebDAVFile(
+      { id: 100, name: 'pic.jpg', isDir: false, size: 1234, ctime: Date.now(), mtime: Date.now(), mime: 'image/jpeg', hasComments: true } as never,
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([folder, child]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    // Pull just the child block to avoid matching the folder's "0" entry.
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<nc:has-comments>1</nc:has-comments>')
+  })
+
+  it('emits nc:lock as "0" when the file is unlocked', async () => {
+    const r = req()
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<nc:lock>0</nc:lock>')
+    // No descriptive lock children when unlocked.
+    expect(state.body).not.toContain('<nc:lock-owner>')
+  })
+
+  it('emits nc:lock as "1" plus owner info when the file is locked', async () => {
+    const lockedFile = new WebDAVFile(
+      {
+        id: 100,
+        name: 'doc.txt',
+        isDir: false,
+        size: 12,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        mime: 'text/plain',
+        lock: { owner: { login: 'bob', fullName: 'Bob Borg', email: 'bob@example.com' }, app: 'files', isExclusive: true }
+      } as never,
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([lockedFile]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<nc:lock>1</nc:lock>')
+    expect(state.body).toContain('<nc:lock-owner-type>0</nc:lock-owner-type>')
+    expect(state.body).toContain('<nc:lock-owner>bob</nc:lock-owner>')
+    expect(state.body).toContain('<nc:lock-owner-displayname>Bob Borg</nc:lock-owner-displayname>')
+    expect(state.body).toContain('<nc:lock-owner-editor>files</nc:lock-owner-editor>')
   })
 
   it('children inherit space.permissions, not envPermissions — so trash/D survives the virtual-endpoint-protection strip on the root', async () => {
