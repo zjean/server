@@ -88,11 +88,13 @@ describe('NcPropfindService', () => {
     expect(state.body).toMatch(/<ocs:share-permissions>\d+<\/ocs:share-permissions>/)
   })
 
-  it('sets nc:has-preview true for an image child', async () => {
+  it('sets nc:has-preview to "1" for an image child (oc-namespace boolean convention)', async () => {
+    // NextcloudKit's PROPFIND parser reads nc:has-preview as Int(text) == 1.
+    // "true" parses to nil and silently disables list-cell thumbnails on iOS.
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:has-preview>true</nc:has-preview>')
+    expect(state.body).toContain('<nc:has-preview>1</nc:has-preview>')
   })
 
   it('status is 207 Multi-Status with xml content type', async () => {
