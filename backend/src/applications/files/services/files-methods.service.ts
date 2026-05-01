@@ -135,7 +135,7 @@ export class FilesMethods {
     }
   }
 
-  async genThumbnail(space: SpaceEnv, size: number): Promise<Readable> {
+  async genThumbnail(space: SpaceEnv, size: number): Promise<{ stream: Readable; contentType: string }> {
     try {
       return await this.filesManager.generateThumbnail(space, size)
     } catch (e) {

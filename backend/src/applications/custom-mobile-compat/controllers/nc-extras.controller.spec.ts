@@ -120,7 +120,7 @@ describe(NcExtrasController.name, () => {
       getUserFile.mockResolvedValueOnce({ id: 42, path: 'photos/a.png' })
       const fakeSpace = { realPath: '/tmp/img.png' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
-      generateThumbnail.mockResolvedValueOnce(Readable.from([Buffer.from('jpegdata')]))
+      generateThumbnail.mockResolvedValueOnce({ stream: Readable.from([Buffer.from('jpegdata')]), contentType: 'image/webp' })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -158,7 +158,7 @@ describe(NcExtrasController.name, () => {
       const fakeSpace = { realPath: '/tmp/img.png' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
       const stream = Readable.from([Buffer.from('webpdata')])
-      generateThumbnail.mockResolvedValueOnce(stream)
+      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/webp' })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -168,9 +168,27 @@ describe(NcExtrasController.name, () => {
       expect(generateThumbnail).toHaveBeenCalledWith(fakeSpace, 128)
       expect(result).toBeInstanceOf(StreamableFile)
       // Content-Type must match the actual bytes — generateThumbnail emits
-      // WebP via sharp, so labeling as image/jpeg breaks NC clients that
-      // dispatch decoders by MIME type (was the "black square" bug).
+      // WebP via sharp on the happy path, so labeling as image/jpeg breaks
+      // NC clients that dispatch decoders by MIME type (was the "black
+      // square" bug).
       expect(res.header).toHaveBeenCalledWith('content-type', 'image/webp')
+    })
+
+    it('forwards the service-supplied content-type on the original-bytes fallback', async () => {
+      // Sharp can't decode JPEG XL/HEIC; FilesManager.generateThumbnail
+      // falls back to streaming the raw file with the original mime. The
+      // controller must use that mime, not hardcode webp, so the client
+      // decoder dispatches correctly.
+      const fakeSpace = { realPath: '/tmp/jxl.jpg' }
+      spaceEnv.mockResolvedValueOnce(fakeSpace)
+      const stream = Readable.from([Buffer.from('rawjpgxl')])
+      generateThumbnail.mockResolvedValueOnce({ stream, contentType: 'image/jpeg' })
+
+      const req = fakePreviewReq()
+      const res = fakeRes()
+      await controller.preview(req, res, 'jxl.jpg')
+
+      expect(res.header).toHaveBeenCalledWith('content-type', 'image/jpeg')
     })
 
     it('registers both /preview and /preview.png so all NC client variants resolve', () => {
@@ -181,10 +199,14 @@ describe(NcExtrasController.name, () => {
       expect(list).toEqual(expect.arrayContaining(['index.php/core/preview', 'index.php/core/preview.png']))
     })
 
-    it('maps "not an image" into a 404 for the client', async () => {
+    it('maps FileError BAD_REQUEST (non-image file) into a 404 for the client', async () => {
+      // FilesManager throws FileError with `httpCode`. After the JXL
+      // fallback landed, BAD_REQUEST only fires for genuinely non-image
+      // mimes (PDFs, archives) — sharp decode failures get the original
+      // bytes, not a 400. Map either way to 404 so NC iOS shows the icon.
       const fakeSpace = { realPath: '/tmp/doc.pdf' }
       spaceEnv.mockResolvedValueOnce(fakeSpace)
-      generateThumbnail.mockRejectedValueOnce(Object.assign(new Error('File is not an image'), { status: HttpStatus.BAD_REQUEST }))
+      generateThumbnail.mockRejectedValueOnce(Object.assign(new Error('File is not an image'), { httpCode: HttpStatus.BAD_REQUEST }))
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -193,26 +215,10 @@ describe(NcExtrasController.name, () => {
       })
     })
 
-    it('maps FileError (httpCode-shaped) "not an image" into a 404 too', async () => {
-      // FilesManager throws FileError, which exposes its code as `httpCode`,
-      // not `status`. Production logs surfaced exactly this gap: a real
-      // file-decode failure was rendered as a 500 because the catch only
-      // looked at err.status. This test locks both names in.
-      const fakeSpace = { realPath: '/tmp/elegoo/2.jpg' }
-      spaceEnv.mockResolvedValueOnce(fakeSpace)
-      generateThumbnail.mockRejectedValueOnce(Object.assign(new Error('File is not an image'), { httpCode: HttpStatus.BAD_REQUEST }))
-
-      const req = fakePreviewReq()
-      const res = fakeRes()
-      await expect(controller.preview(req, res, '2.jpg')).rejects.toMatchObject({
-        status: HttpStatus.NOT_FOUND
-      })
-    })
-
     it('clamps out-of-range dimensions', async () => {
       const fakeSpace = { realPath: '/tmp/a.jpg' }
       spaceEnv.mockResolvedValue(fakeSpace)
-      generateThumbnail.mockResolvedValue(Readable.from([Buffer.from('x')]))
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp' })
 
       const req = fakePreviewReq()
       const res = fakeRes()
@@ -228,7 +234,7 @@ describe(NcExtrasController.name, () => {
     it('strips /remote.php/dav/files/{user}/ and /files/{user}/ prefixes from the path', async () => {
       const fakeSpace = { realPath: '/tmp/b.jpg' }
       spaceEnv.mockResolvedValue(fakeSpace)
-      generateThumbnail.mockResolvedValue(Readable.from([Buffer.from('x')]))
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp' })
 
       const req = fakePreviewReq('alice')
       const res = fakeRes()

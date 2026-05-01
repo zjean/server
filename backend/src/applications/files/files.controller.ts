@@ -23,7 +23,6 @@ import {
   UseInterceptors
 } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
-import { webpMimeType } from '../../common/image'
 import { ContextInterceptor } from '../../infrastructure/context/interceptors/context.interceptor'
 import { SkipSpaceGuard } from '../spaces/decorators/space-skip-guard.decorator'
 import { SkipSpacePermissionsCheck } from '../spaces/decorators/space-skip-permissions.decorator'
@@ -131,9 +130,9 @@ export class FilesController {
     @Res() res: FastifyReply
   ): Promise<StreamableFile> {
     if (size > 1024) size = 1024
-    const thumb = await this.filesMethods.genThumbnail(space, size)
-    res.type(webpMimeType)
-    return res.send(thumb)
+    const { stream, contentType } = await this.filesMethods.genThumbnail(space, size)
+    res.type(contentType)
+    return res.send(stream)
   }
 
   @Lock(`${FILES_ROUTE.OPERATION}/*`)
