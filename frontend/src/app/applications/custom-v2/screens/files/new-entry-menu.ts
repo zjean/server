@@ -41,9 +41,6 @@ export function buildNewEntrySheetItems(opts: { onlyOfficeEnabled: boolean }): A
       { id: 'sep-office', kind: 'divider' }
     )
   }
-  items.push(
-    { id: 'new-folder', label: 'Folder', icon: 'plus' },
-    { id: 'new-text', label: 'Text file', icon: 'pencil' }
-  )
+  items.push({ id: 'new-folder', label: 'Folder', icon: 'plus' }, { id: 'new-text', label: 'Text file', icon: 'pencil' })
   return items
 }

@@ -157,7 +157,7 @@ export class ContextMenuComponent {
     if (typeof window === 'undefined') return { x: a.x, y: a.y }
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const itemCount = this.items.filter(i => !isDivider(i)).length
+    const itemCount = this.items.filter((i) => !isDivider(i)).length
     const dividerCount = this.items.length - itemCount
     const menuHeight = Math.max(itemCount, 1) * MENU_ITEM_HEIGHT + dividerCount * 9 + MENU_PADDING
     let x = a.x
