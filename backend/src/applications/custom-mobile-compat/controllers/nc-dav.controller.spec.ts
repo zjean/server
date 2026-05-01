@@ -123,3 +123,77 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
     expect(spacesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 })
+
+// Regression: stock NC clients use the basename of <d:href> for display and
+// re-use the href verbatim as the URL of the next request. If our PROPFIND
+// emits double-encoded hrefs (e.g. "My%2520folder" for a folder named "My
+// folder"), the iOS/Android UI shows "My%20folder" with a literal %20, AND
+// follow-up navigation lands on a path whose decoded form is "My%20folder"
+// (with the encoding baked in), which doesn't exist on disk → empty listing.
+//
+// The double-encoding originates in NcDavController.attachSpace, which must
+// store req.dav.url *decoded* (mirroring upstream WebDAVProtocolGuard) so
+// that downstream WebDAVFile.encodeUrl encodes once, not twice.
+describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let spacesManager: { spaceEnv: jest.Mock }
+
+  beforeAll(async () => {
+    spacesManager = { spaceEnv: jest.fn() }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        // Real resolver — its decoding logic is part of what we're testing.
+        NcPathResolverService,
+        { provide: SpacesManager, useValue: spacesManager },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: {} },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+  })
+
+  it('decodes %20 in req.dav.url so PROPFIND hrefs are not double-encoded', async () => {
+    const req = {
+      url: '/remote.php/dav/files/john/My%20folder',
+      headers: {},
+      params: {},
+      user: { login: 'john', settings: null }
+    } as unknown as FastifyDAVRequest
+    await (controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files'; subpath: string }) => Promise<void> }).attachSpace(
+      req,
+      { mode: 'files', subpath: 'My%20folder' }
+    )
+    expect(req.dav.url).toBe('/remote.php/dav/files/john/My folder')
+  })
+
+  it('strips the query string from the decoded url', async () => {
+    const req = {
+      url: '/remote.php/dav/files/john/My%20folder?token=abc',
+      headers: {},
+      params: {},
+      user: { login: 'john', settings: null }
+    } as unknown as FastifyDAVRequest
+    await (controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files'; subpath: string }) => Promise<void> }).attachSpace(
+      req,
+      { mode: 'files', subpath: 'My%20folder' }
+    )
+    expect(req.dav.url).toBe('/remote.php/dav/files/john/My folder')
+  })
+})
