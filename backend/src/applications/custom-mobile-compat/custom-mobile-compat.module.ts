@@ -18,6 +18,7 @@ import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
+import { NcFileRowEnsurer } from './services/nc-file-row-ensurer.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcMobileOidcService } from './services/nc-mobile-oidc.service'
 import { NcOnlyOfficeFileResolver } from './services/nc-onlyoffice-file-resolver.service'
@@ -65,6 +66,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcPathResolverService,
     NcResponseService,
     NcChunkedUploadsService,
+    NcFileRowEnsurer,
     NcPropfindService,
     NcSyncLogService,
     NcSyncReportService,
