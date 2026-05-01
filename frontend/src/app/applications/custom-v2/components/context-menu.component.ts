@@ -12,6 +12,17 @@ export interface ContextMenuItem {
   action: () => void
 }
 
+export interface ContextMenuDivider {
+  id: string
+  kind: 'divider'
+}
+
+export type ContextMenuEntry = ContextMenuItem | ContextMenuDivider
+
+function isDivider(e: ContextMenuEntry): e is ContextMenuDivider {
+  return (e as ContextMenuDivider).kind === 'divider'
+}
+
 export interface ContextMenuAnchor {
   x: number
   y: number
@@ -37,22 +48,26 @@ const VIEWPORT_GUTTER = 8
         (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
       >
         @for (item of items; track item.id) {
-          <button
-            type="button"
-            role="menuitem"
-            class="ctx-menu__item"
-            [class.ctx-menu__item--danger]="item.kind === 'danger'"
-            [disabled]="item.disabled"
-            [attr.title]="item.disabled && item.disabledReason ? (item.disabledReason | translate: locale.language) : null"
-            (click)="onItemClick($event, item)"
-          >
-            @if (item.icon) {
-              <app-v2-icon [name]="item.icon" [size]="14" />
-            } @else {
-              <span class="ctx-menu__icon-spacer"></span>
-            }
-            <span class="ctx-menu__label">{{ item.label | translate: locale.language }}</span>
-          </button>
+          @if (isDivider(item)) {
+            <div class="ctx-menu__divider" role="separator" aria-orientation="horizontal"></div>
+          } @else {
+            <button
+              type="button"
+              role="menuitem"
+              class="ctx-menu__item"
+              [class.ctx-menu__item--danger]="item.kind === 'danger'"
+              [disabled]="item.disabled"
+              [attr.title]="item.disabled && item.disabledReason ? (item.disabledReason | translate: locale.language) : null"
+              (click)="onItemClick($event, item)"
+            >
+              @if (item.icon) {
+                <app-v2-icon [name]="item.icon" [size]="14" />
+              } @else {
+                <span class="ctx-menu__icon-spacer"></span>
+              }
+              <span class="ctx-menu__label">{{ item.label | translate: locale.language }}</span>
+            </button>
+          }
         }
       </div>
     }
@@ -116,6 +131,11 @@ const VIEWPORT_GUTTER = 8
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .ctx-menu__divider {
+        height: 1px;
+        margin: 4px 6px;
+        background: var(--si-line);
+      }
     `
   ]
 })
@@ -123,7 +143,9 @@ export class ContextMenuComponent {
   private readonly host = inject(ElementRef<HTMLElement>)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
-  @Input() items: ContextMenuItem[] = []
+  protected readonly isDivider = isDivider
+
+  @Input() items: ContextMenuEntry[] = []
   @Input() open = false
   @Input() anchor: ContextMenuAnchor | null = null
 
@@ -135,7 +157,9 @@ export class ContextMenuComponent {
     if (typeof window === 'undefined') return { x: a.x, y: a.y }
     const vw = window.innerWidth
     const vh = window.innerHeight
-    const menuHeight = Math.max(this.items.length, 1) * MENU_ITEM_HEIGHT + MENU_PADDING
+    const itemCount = this.items.filter((i) => !isDivider(i)).length
+    const dividerCount = this.items.length - itemCount
+    const menuHeight = Math.max(itemCount, 1) * MENU_ITEM_HEIGHT + dividerCount * 9 + MENU_PADDING
     let x = a.x
     let y = a.y
     if (x + MENU_WIDTH + VIEWPORT_GUTTER > vw) x = Math.max(VIEWPORT_GUTTER, vw - MENU_WIDTH - VIEWPORT_GUTTER)

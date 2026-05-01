@@ -34,8 +34,11 @@
           <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
         </div>
       } @else {
-        <app-v2-btn kind="primary" size="sm" icon="plus" (click)="newFolder()">{{ 'New folder' | translate: locale.language }}</app-v2-btn>
-        <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="newTextFile()">{{ 'New text file' | translate: locale.language }}</app-v2-btn>
+        <span #newBtnAnchor class="personal__new-anchor">
+          <app-v2-btn kind="primary" size="sm" icon="plus" (click)="onNewMenuClick(newBtnAnchor)">
+            {{ 'New' | translate: locale.language }}
+          </app-v2-btn>
+        </span>
         <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
         <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
         <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
@@ -254,11 +257,18 @@
     (closed)="closeMenu()"
   />
 
+  <app-v2-context-menu
+    [items]="newMenuItems()"
+    [open]="newMenuOpen()"
+    [anchor]="newMenuAnchor()"
+    (closed)="newMenuOpen.set(false)"
+  />
+
   <app-v2-fab icon="plus" [ariaLabel]="'Create' | translate: locale.language" (action)="fabSheetOpen.set(true)" />
   <app-v2-action-sheet
     [open]="fabSheetOpen()"
     title="Create"
-    [items]="fabSheetItems"
+    [items]="fabSheetItems()"
     (selected)="onFabSheetSelect($event)"
     (closed)="fabSheetOpen.set(false)"
   />

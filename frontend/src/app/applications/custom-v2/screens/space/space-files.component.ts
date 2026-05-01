@@ -43,7 +43,7 @@ import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
-import { ContextMenuComponent, ContextMenuItem } from '../../components/context-menu.component'
+import { ContextMenuAnchor, ContextMenuComponent, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
@@ -57,6 +57,7 @@ import { isPreviewable } from '../../utils/classify-file'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
+import { buildNewEntryMenu, NewEntryId } from '../files/new-entry-menu'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -126,6 +127,18 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected readonly filter = signal('')
   protected readonly mode = signal<BrowserMode>(readStoredMode())
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
+
+  // Desktop "+ New" dropdown — anchored under the primary toolbar button.
+  // Items come from buildNewEntryMenu so personal and space-files stay
+  // in lockstep; the OnlyOffice trio is omitted when the editor is off.
+  protected readonly newMenuOpen = signal(false)
+  protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
+  protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
+    buildNewEntryMenu({
+      onlyOfficeEnabled: this.store.server().fileEditors.onlyoffice,
+      onSelect: (id) => this.dispatchNewEntry(id)
+    })
+  )
 
   protected readonly selection = signal<Set<number>>(new Set())
   private selectionAnchorId: number | null = null
@@ -645,6 +658,88 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   private buildRenameStub(file: FileProps): FileModel {
     return this.buildFileStub(file)
+  }
+
+  protected onNewMenuClick(anchor: HTMLElement): void {
+    const r = anchor.getBoundingClientRect()
+    this.newMenuAnchor.set({ x: r.left, y: r.bottom + 4 })
+    this.newMenuOpen.set(true)
+  }
+
+  private dispatchNewEntry(id: NewEntryId): void {
+    this.newMenuOpen.set(false)
+    switch (id) {
+      case 'new-folder':
+        this.newFolder()
+        return
+      case 'new-text':
+        this.newTextFile()
+        return
+      case 'new-docx':
+        this.newOfficeFile('docx')
+        return
+      case 'new-xlsx':
+        this.newOfficeFile('xlsx')
+        return
+      case 'new-pptx':
+        this.newOfficeFile('pptx')
+        return
+    }
+  }
+
+  protected async newTextFile(): Promise<void> {
+    const name = await this.promptDialog.open({
+      title: 'New text file',
+      placeholder: 'File name',
+      submitLabel: 'Create',
+      initialValue: 'Untitled.txt',
+      selectionRange: 'stem',
+      validate: (v) => this.validateFolderName(v)
+    })
+    if (!name) return
+    const dirPath = this.currentUploadRoute()
+    this.filesService.make('file', name.trim(), dirPath, true).subscribe({
+      next: () => {
+        this.toast.success(`File "${name.trim()}" created`)
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'File creation failed')
+      }
+    })
+  }
+
+  // Auto-named office file. The backend's mkFile copies the matching
+  // sample template (assets/samples/sample.<ext>) when the extension is
+  // a known DOCUMENT_TYPE — so we get a valid, openable doc with one
+  // POST. After creation the file opens straight in the v2 OnlyOffice
+  // overlay; refresh runs in the background so the new row appears
+  // underneath when the user closes the editor.
+  private newOfficeFile(ext: 'docx' | 'xlsx' | 'pptx'): void {
+    const dirPath = this.currentUploadRoute()
+    const name = this.uniqueName('Untitled', ext)
+    const fullPath = `${dirPath}/${name}`
+    this.filesService.make('file', name, dirPath, true).subscribe({
+      next: () => {
+        this.toast.success(`"${name}" created`)
+        this.refresh()
+        this.previewOverlay.open(fullPath)
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'File creation failed')
+      }
+    })
+  }
+
+  private uniqueName(stem: string, ext: string): string {
+    const taken = new Set(this.files().map((f) => f.name.toLowerCase()))
+    const base = `${stem}.${ext}`
+    if (!taken.has(base.toLowerCase())) return base
+    for (let i = 2; i < 1000; i++) {
+      const candidate = `${stem} (${i}).${ext}`
+      if (!taken.has(candidate.toLowerCase())) return candidate
+    }
+    return `${stem}-${Date.now()}.${ext}`
   }
 
   protected async newFolder(): Promise<void> {

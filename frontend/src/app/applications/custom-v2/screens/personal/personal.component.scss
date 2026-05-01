@@ -13,6 +13,10 @@
   flex: 1 1 auto;
   min-height: 0;
 
+  &__new-anchor {
+    display: inline-flex;
+  }
+
   &__toolbar {
     // Stack two-row header. Row 1 is the title block + primary action
     // chips; row 2 is the filter input + view toggle. Splitting these
