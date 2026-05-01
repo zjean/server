@@ -242,7 +242,8 @@ interface PreviewDiagContext {
 // line — the goal is to identify the real format of files sharp rejected
 // (e.g. HEIC saved with .jpg extension shows magic `00000018 66747970 6865...`,
 // AVIF starts with `00000018 66747970 6176...`, JPEG XL is `ff0a` or
-// `0000000c 4a584c20`, classic JPEG is `ffd8ffe0/e1`, PNG is `89504e47`).
+// `0000000c 4a584c20`, classic JPEG is `ffd8ffe0/e1`, PNG is `89504e47`,
+// WebP/RIFF is `52494646`).
 async function readMagic(filePath: string | undefined): Promise<string | null> {
   if (!filePath) return null
   let fh: Awaited<ReturnType<typeof fsOpen>> | null = null
