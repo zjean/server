@@ -1,4 +1,4 @@
-import { Controller, Get, Header, HttpException, HttpStatus, Param, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
+import { Controller, Get, Header, HttpException, HttpStatus, Logger, Param, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
 import { createReadStream } from 'node:fs'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
@@ -17,6 +17,8 @@ import { NcPathResolverService } from '../services/nc-path-resolver.service'
 @Controller()
 @AuthTokenSkip()
 export class NcExtrasController {
+  private readonly logger = new Logger(NcExtrasController.name)
+
   constructor(
     private readonly usersManager: UsersManager,
     private readonly filesManager: FilesManager,
@@ -88,13 +90,22 @@ export class NcExtrasController {
     }
 
     const size = clampSize(x, y)
+    // Diagnostic context — captured for one structured log line per request
+    // so we can correlate iOS preview failures (broken thumbnails) with the
+    // server-side mapping (fileId → DB row → space.realPath). Set in the
+    // resolveFile{Id,Path} branches below.
+    const diag: PreviewDiagContext = { fileId, filePath, dbRow: null, urlSegments: null }
     let space: SpaceEnv | null = null
     if (filePath) {
-      space = await this.resolveFilePath(req.user, filePath)
+      space = await this.resolveFilePath(req.user, filePath, diag)
     } else if (fileId) {
-      space = await this.resolveFileId(req.user, fileId)
+      space = await this.resolveFileId(req.user, fileId, diag)
     }
-    if (!space) throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
+    if (!space) {
+      this.logger.warn({ tag: this.preview.name, msg: `not found: ${formatDiag(diag)}` })
+      throw new HttpException('preview target not found', HttpStatus.NOT_FOUND)
+    }
+    diag.realPath = space.realPath
 
     try {
       const stream = await this.filesManager.generateThumbnail(space, size)
@@ -105,10 +116,15 @@ export class NcExtrasController {
       // WebP since iOS 14 (current min target ≥ iOS 15) and the Android
       // client decodes WebP natively; this matches real NC ≥ 25.
       res.header('content-type', 'image/webp')
+      this.logger.debug({ tag: this.preview.name, msg: `ok: ${formatDiag(diag)} size=${size}` })
       return new StreamableFile(stream, { type: 'image/webp' })
     } catch (e) {
       // FileError.status is HTTP_STATUS. Everything else: treat as no preview.
       const err = e as { status?: number; message?: string }
+      this.logger.warn({
+        tag: this.preview.name,
+        msg: `thumbnail failed: ${formatDiag(diag)} status=${err.status ?? '?'} err=${err.message ?? '?'}`
+      })
       if (err.status === HttpStatus.BAD_REQUEST) {
         // Non-image file — NC client interprets 404 as "skip preview".
         throw new HttpException('no preview available for this mime type', HttpStatus.NOT_FOUND)
@@ -131,31 +147,44 @@ export class NcExtrasController {
   // targets personal-space-only (see NcPathResolverService). That's in line
   // with the module's design scope; a follow-up can extend this when mobile
   // users flip user.settings.mobileHome to a different space.
-  private async resolveFileId(user: UserModel, fileId: string): Promise<SpaceEnv | null> {
+  private async resolveFileId(user: UserModel, fileId: string, diag: PreviewDiagContext): Promise<SpaceEnv | null> {
     const id = Number.parseInt(fileId, 10)
-    if (!Number.isFinite(id) || id <= 0) return null
+    if (!Number.isFinite(id) || id <= 0) {
+      this.logger.debug({ tag: this.resolveFileId.name, msg: `non-positive id: raw=${fileId}` })
+      return null
+    }
     let row: { id: number; path: string } | null = null
     try {
       row = await this.filesQueries.getUserFile(user.id, id)
-    } catch {
+    } catch (e) {
+      this.logger.warn({ tag: this.resolveFileId.name, msg: `db lookup threw for id=${id}: ${(e as Error).message}` })
       return null
     }
-    if (!row?.path) return null
+    diag.dbRow = row
+    if (!row?.path) {
+      this.logger.debug({ tag: this.resolveFileId.name, msg: `no row (or empty path) for id=${id}` })
+      return null
+    }
     // filesQueries.getUserFile returns path as "<dir>/<name>" already joined.
     // Build the URL segments that SpacesManager.spaceEnv expects for personal
     // space: ['files', 'personal', ...pathSegments].
     const pathSegments = row.path.split('/').filter(Boolean)
     const urlSegments = ['files', 'personal', ...pathSegments]
+    diag.urlSegments = urlSegments
     try {
       return await this.spacesManager.spaceEnv(user, urlSegments)
-    } catch {
+    } catch (e) {
+      this.logger.warn({
+        tag: this.resolveFileId.name,
+        msg: `spaceEnv failed for id=${id} dbPath=${row.path} segments=${JSON.stringify(urlSegments)}: ${(e as Error).message}`
+      })
       return null
     }
   }
 
   // Resolve an NC-style path (with or without the /remote.php/dav/files/{user}/
   // prefix) into a Sync-in SpaceEnv.
-  private async resolveFilePath(user: UserModel, filePath: string) {
+  private async resolveFilePath(user: UserModel, filePath: string, diag: PreviewDiagContext) {
     let subpath = filePath.trim()
     // Strip common prefixes NC clients send in the ?file= query.
     for (const prefix of [`/remote.php/dav/files/${user.login}/`, `/files/${user.login}/`, '/']) {
@@ -169,12 +198,39 @@ export class NcExtrasController {
     const urlSegments: string[] = [resolved.repository, resolved.spaceAlias]
     if (resolved.rootAlias) urlSegments.push(resolved.rootAlias)
     if (resolved.relativePath) urlSegments.push(...resolved.relativePath.split('/').filter(Boolean))
+    diag.urlSegments = urlSegments
     try {
       return await this.spacesManager.spaceEnv(user, urlSegments)
-    } catch {
+    } catch (e) {
+      this.logger.warn({
+        tag: this.resolveFilePath.name,
+        msg: `spaceEnv failed for filePath=${filePath} segments=${JSON.stringify(urlSegments)}: ${(e as Error).message}`
+      })
       return null
     }
   }
+}
+
+// Diagnostic context shared between resolveFile{Id,Path} and the preview
+// handler so we can emit one structured log line per request showing the
+// full mapping iOS → server-side resolution → realPath. Used for tracing
+// preview failures in production; consumed by formatDiag().
+interface PreviewDiagContext {
+  fileId?: string
+  filePath?: string
+  dbRow: { id: number; path: string } | null
+  urlSegments: string[] | null
+  realPath?: string
+}
+
+function formatDiag(d: PreviewDiagContext): string {
+  const parts: string[] = []
+  if (d.fileId !== undefined) parts.push(`fileId=${d.fileId}`)
+  if (d.filePath !== undefined) parts.push(`filePath=${d.filePath}`)
+  if (d.dbRow) parts.push(`dbRow={id:${d.dbRow.id},path:${JSON.stringify(d.dbRow.path)}}`)
+  if (d.urlSegments) parts.push(`segments=${JSON.stringify(d.urlSegments)}`)
+  if (d.realPath !== undefined) parts.push(`realPath=${d.realPath}`)
+  return parts.join(' ')
 }
 
 // Clamp requested preview dimensions to a safe range. NC clients ask for
