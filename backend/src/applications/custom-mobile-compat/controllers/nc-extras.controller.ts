@@ -1,5 +1,6 @@
 import { Controller, Get, Header, HttpException, HttpStatus, Logger, Param, Query, Req, Res, StreamableFile, UseGuards } from '@nestjs/common'
 import { createReadStream } from 'node:fs'
+import { open as fsOpen } from 'node:fs/promises'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesManager } from '../../files/services/files-manager.service'
@@ -127,9 +128,16 @@ export class NcExtrasController {
       // exactly this bug.
       const err = e as { httpCode?: number; status?: number; message?: string }
       const code = err.httpCode ?? err.status
+      // Capture the file's first 16 bytes so the diagnostic log shows what
+      // format the file actually is. The user reported a .jpg that the v2
+      // web UI displays fine but sharp rejects with "unsupported image
+      // format" — the magic bytes will tell us whether it's HEIC labeled
+      // .jpg, JPEG-XL, AVIF, an empty file, etc. Read failure is non-fatal:
+      // we still emit the rest of the log line.
+      const magic = await readMagic(space.realPath)
       this.logger.warn({
         tag: this.preview.name,
-        msg: `thumbnail failed: ${formatDiag(diag)} code=${code ?? '?'} err=${err.message ?? '?'}`
+        msg: `thumbnail failed: ${formatDiag(diag)} code=${code ?? '?'} magic=${magic ?? '?'} err=${err.message ?? '?'}`
       })
       if (code === HttpStatus.BAD_REQUEST) {
         // Non-image file — NC client interprets 404 as "skip preview".
@@ -227,6 +235,27 @@ interface PreviewDiagContext {
   dbRow: { id: number; path: string } | null
   urlSegments: string[] | null
   realPath?: string
+}
+
+// Read the first 16 bytes of a file as lowercase hex, returning null if the
+// read fails. Used purely as a diagnostic hint in the preview-failure log
+// line — the goal is to identify the real format of files sharp rejected
+// (e.g. HEIC saved with .jpg extension shows magic `00000018 66747970 6865...`,
+// AVIF starts with `00000018 66747970 6176...`, JPEG XL is `ff0a` or
+// `0000000c 4a584c20`, classic JPEG is `ffd8ffe0/e1`, PNG is `89504e47`).
+async function readMagic(filePath: string | undefined): Promise<string | null> {
+  if (!filePath) return null
+  let fh: Awaited<ReturnType<typeof fsOpen>> | null = null
+  try {
+    fh = await fsOpen(filePath, 'r')
+    const buf = Buffer.alloc(16)
+    const { bytesRead } = await fh.read(buf, 0, 16, 0)
+    return buf.subarray(0, bytesRead).toString('hex')
+  } catch {
+    return null
+  } finally {
+    await fh?.close().catch(() => undefined)
+  }
 }
 
 function formatDiag(d: PreviewDiagContext): string {
