@@ -2,11 +2,13 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
 import { XMLBuilder } from 'fast-xml-parser'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
+import { UserModel } from '../../users/models/user.model'
 import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { type NcPermissionsMode } from '../utils/nc-permissions'
+import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 
 // Nextcloud clients expect four namespaces on every <d:multistatus>:
 //   d   — DAV:                                        (lowercase prefix, NC convention)
@@ -36,7 +38,10 @@ export class NcPropfindService {
     suppressEmptyNode: false
   })
 
-  constructor(private readonly webdavSpaces: WebDAVSpaces) {}
+  constructor(
+    private readonly webdavSpaces: WebDAVSpaces,
+    private readonly fileRowEnsurer: NcFileRowEnsurer
+  ) {}
 
   async respond(req: FastifyDAVRequest, res: FastifyReply, mode: NcPermissionsMode): Promise<FastifyReply> {
     const space = req.space
@@ -47,6 +52,7 @@ export class NcPropfindService {
 
     const responses: unknown[] = []
     let isFirst = true
+    const user = req.user as UserModel | undefined
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
@@ -57,6 +63,13 @@ export class NcPropfindService {
         // child files, otherwise NC iOS hides the trash action for every
         // file. Pass envPermissions for the root, full permissions for the
         // children.
+        //
+        // Promote FS-only file ids (negative inode placeholders) to real DB
+        // ids so NC iOS can resolve subsequent fileId-keyed calls (preview,
+        // favorites, comments). The ensurer is a no-op when the id is
+        // already real, when the entry is a directory, or when the request
+        // targets the trash repository.
+        f.id = await this.fileRowEnsurer.ensure(f, space, user)
         responses.push(buildNcPropResponse(f, space, mode, isFirst))
         isFirst = false
       }

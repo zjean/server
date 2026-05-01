@@ -4,6 +4,7 @@ import { SPACE_ALIAS, SPACE_ALL_OPERATIONS, SPACE_REPOSITORY } from '../../space
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
+import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcPropfindService } from './nc-propfind.service'
 
 function fakeReply() {
@@ -32,11 +33,15 @@ async function* makeGen(items: WebDAVFile[]) {
 describe('NcPropfindService', () => {
   let service: NcPropfindService
   let webdavSpaces: { propfind: jest.Mock }
+  let fileRowEnsurer: { ensure: jest.Mock }
 
   beforeEach(async () => {
     webdavSpaces = { propfind: jest.fn() }
+    // Default: pass the file id through unchanged. Tests that exercise the
+    // negative-id → real-id promotion override this on a per-call basis.
+    fileRowEnsurer = { ensure: jest.fn(async (f: WebDAVFile) => f.id) }
     const module = await Test.createTestingModule({
-      providers: [NcPropfindService, { provide: WebDAVSpaces, useValue: webdavSpaces }]
+      providers: [NcPropfindService, { provide: WebDAVSpaces, useValue: webdavSpaces }, { provide: NcFileRowEnsurer, useValue: fileRowEnsurer }]
     }).compile()
     service = module.get(NcPropfindService)
   })
@@ -180,5 +185,35 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:id>00000000000000987654syncin</oc:id>')
     expect(state.body).not.toContain('<oc:fileid>0</oc:fileid>')
     expect(state.body).not.toContain('<oc:fileid>-987654</oc:fileid>')
+  })
+
+  it('promotes a placeholder fileid to the real DB id returned by the ensurer', async () => {
+    // The whole point of NcFileRowEnsurer: when an FS-only file shows up in
+    // a PROPFIND, look up (or create) its DB row and emit the real id so
+    // NC iOS' subsequent /index.php/core/preview?fileId=… calls resolve.
+    const fresh = new WebDAVFile(
+      { id: -987654, name: 'cat.jpg', isDir: false, size: 1234, ctime: Date.now(), mtime: Date.now(), mime: 'image/jpeg' },
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([fresh]))
+    // Ensurer reports the file's real DB id is 4242 — different from the
+    // inode-derived placeholder. The response must use 4242.
+    fileRowEnsurer.ensure.mockResolvedValueOnce(4242)
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+
+    expect(fileRowEnsurer.ensure).toHaveBeenCalled()
+    expect(state.body).toContain('<oc:fileid>4242</oc:fileid>')
+    expect(state.body).toContain('<oc:id>00000000000000004242syncin</oc:id>')
+    // The placeholder must be gone — otherwise NC iOS caches the wrong key.
+    expect(state.body).not.toContain('<oc:fileid>987654</oc:fileid>')
   })
 })
