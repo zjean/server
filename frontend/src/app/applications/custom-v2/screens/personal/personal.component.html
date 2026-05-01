@@ -174,7 +174,7 @@
                   <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
                 </span>
                 <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
-                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="38" [rounded]="8" />
+                  <app-v2-file-thumb [file]="f" [glyphSize]="38" [rounded]="8" [imageRes]="256" />
                   @if (f.hasComments) {
                     <span class="file-card__pill">
                       <app-v2-pill color="green" [size]="10">
@@ -218,7 +218,7 @@
                   [style.--fc-bg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-bg)'"
                   [style.--fc-fg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-fg)'"
                 >
-                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="48" [rounded]="10" />
+                  <app-v2-file-thumb [file]="f" [glyphSize]="48" [rounded]="10" [imageRes]="512" />
                   <div class="gallery-card__tags">
                     <app-v2-pill color="gray" [size]="10">
                       {{ f.isDir ? 'FOLDER' : mimeToGlyph(f.mime).toUpperCase() }}
