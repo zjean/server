@@ -40,7 +40,7 @@ import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
-import { ActionSheetComponent } from '../../components/action-sheet.component'
+import { ActionSheetComponent, ActionSheetEntry } from '../../components/action-sheet.component'
 import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuAnchor, ContextMenuComponent, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
@@ -59,7 +59,7 @@ import { mimeToGlyph } from '../../utils/mime-to-glyph'
 import { openPreviewInNewTab } from '../../preview/open-preview'
 import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
-import { buildNewEntryMenu, NewEntryId } from '../files/new-entry-menu'
+import { buildNewEntryMenu, buildNewEntrySheetItems, NewEntryId } from '../files/new-entry-menu'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -143,12 +143,15 @@ export class PersonalComponent implements OnInit, OnDestroy {
   // options (the same ones available in the desktop toolbar) and
   // dispatches by id when picked.
   protected readonly fabSheetOpen = signal(false)
-  protected readonly fabSheetItems: readonly { id: string; label: string; icon: IconV2Name }[] = [
-    { id: 'new-folder', label: 'New folder', icon: 'plus' },
-    { id: 'new-text', label: 'New text file', icon: 'pencil' },
+  // Mirrors the desktop "+ New" menu (Folder/Text + the OnlyOffice trio
+  // when enabled), then tacks on the FAB-only Download from URL and
+  // Upload primitives.
+  protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
+    ...buildNewEntrySheetItems({ onlyOfficeEnabled: this.store.server().fileEditors.onlyoffice }),
+    { id: 'sep-fab', kind: 'divider' },
     { id: 'download-url', label: 'Download from URL', icon: 'globe' },
     { id: 'upload', label: 'Upload', icon: 'upload' }
-  ]
+  ])
 
   // Desktop "+ New" dropdown — anchored under the primary toolbar button.
   // Items come from buildNewEntryMenu so personal and space-files stay
@@ -821,6 +824,15 @@ export class PersonalComponent implements OnInit, OnDestroy {
         return
       case 'new-text':
         this.newTextFile()
+        return
+      case 'new-docx':
+        this.newOfficeFile('docx')
+        return
+      case 'new-xlsx':
+        this.newOfficeFile('xlsx')
+        return
+      case 'new-pptx':
+        this.newOfficeFile('pptx')
         return
       case 'download-url':
         this.downloadFromUrl()

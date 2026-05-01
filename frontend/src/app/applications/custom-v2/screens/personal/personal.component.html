@@ -268,7 +268,7 @@
   <app-v2-action-sheet
     [open]="fabSheetOpen()"
     title="Create"
-    [items]="fabSheetItems"
+    [items]="fabSheetItems()"
     (selected)="onFabSheetSelect($event)"
     (closed)="fabSheetOpen.set(false)"
   />
