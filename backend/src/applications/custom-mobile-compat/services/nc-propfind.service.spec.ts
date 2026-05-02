@@ -88,13 +88,19 @@ describe('NcPropfindService', () => {
     expect(state.body).toMatch(/<ocs:share-permissions>\d+<\/ocs:share-permissions>/)
   })
 
-  it('sets nc:has-preview to "1" for an image child (oc-namespace boolean convention)', async () => {
-    // NextcloudKit's PROPFIND parser reads nc:has-preview as Int(text) == 1.
-    // "true" parses to nil and silently disables list-cell thumbnails on iOS.
+  it('sets nc:has-preview to "true" for an image child and "false" for a non-previewable folder', async () => {
+    // Cross-client format: NextcloudKit's NSString.boolValue accepts "true"
+    // and "1" both. Android's WebdavEntry parses with Boolean.valueOf which
+    // ONLY recognizes the literal "true"/"false" strings — "1" parses to
+    // false there, which is what made Android Files render no thumbnails
+    // for any image. Word-form is the cross-client lingua franca.
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:has-preview>1</nc:has-preview>')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<nc:has-preview>true</nc:has-preview>')
+    const folderBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(folderBlock).toContain('<nc:has-preview>false</nc:has-preview>')
   })
 
   it('status is 207 Multi-Status with xml content type', async () => {
