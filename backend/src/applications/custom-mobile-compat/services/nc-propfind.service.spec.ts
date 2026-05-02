@@ -287,6 +287,63 @@ describe('NcPropfindService', () => {
     expect(state.body).not.toContain('<oc:fileid>-987654</oc:fileid>')
   })
 
+  it('emits d:quota-used-bytes and d:quota-available-bytes on the root response only', async () => {
+    // iOS Files app reads these on the user-home root PROPFIND to render the
+    // quota bar. Without them the bar reads "0 GB used of 0 GB". Children
+    // must NOT carry quota props — they're per-collection only.
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 1_073_741_824,
+      storageQuota: 5_368_709_120
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const rootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(rootBlock).toContain('<d:quota-used-bytes>1073741824</d:quota-used-bytes>')
+    expect(rootBlock).toContain('<d:quota-available-bytes>4294967296</d:quota-available-bytes>')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).not.toContain('<d:quota-used-bytes>')
+    expect(childBlock).not.toContain('<d:quota-available-bytes>')
+  })
+
+  it('emits -3 for d:quota-available-bytes when the user has no quota cap (ownCloud "unlimited" sentinel)', async () => {
+    // Sync-in models "no quota" as storageQuota <= 0. The ownCloud convention
+    // (which NC clients implement) is to send -3 (unlimited/unknown) so iOS
+    // renders an open-ended quota bar instead of "0 of 0".
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 4096,
+      storageQuota: 0
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const rootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(rootBlock).toContain('<d:quota-used-bytes>4096</d:quota-used-bytes>')
+    expect(rootBlock).toContain('<d:quota-available-bytes>-3</d:quota-available-bytes>')
+  })
+
+  it('does not emit quota props on the trashbin root', async () => {
+    // Trashbin doesn't have its own quota in NC; the bar lives under files/.
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 4096,
+      storageQuota: 1_000_000
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'trashbin')
+    expect(state.body).not.toContain('<d:quota-used-bytes>')
+    expect(state.body).not.toContain('<d:quota-available-bytes>')
+  })
+
   it('promotes a placeholder fileid to the real DB id returned by the ensurer', async () => {
     // The whole point of NcFileRowEnsurer: when an FS-only file shows up in
     // a PROPFIND, look up (or create) its DB row and emit the real id so

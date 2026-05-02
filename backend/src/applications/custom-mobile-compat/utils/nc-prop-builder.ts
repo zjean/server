@@ -36,12 +36,24 @@ const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 // share-info / activity ("Shared by …"). Callers thread it from the
 // requesting UserModel for personal-space files (where owner == requester);
 // pass `''` to fall back to the owner login.
+// Optional quota figures threaded onto the user-home root response in
+// `files` mode so iOS can render the quota bar at the home view. Sync-in
+// models "no quota" as storageQuota <= 0; we translate that to the ownCloud
+// sentinel value -3 ("unlimited / unknown") for d:quota-available-bytes,
+// which iOS recognizes as "show an open-ended bar".
+export interface NcRootQuota {
+  used: number
+  // Optional cap. Pass undefined / <= 0 to signal "no quota".
+  total?: number
+}
+
 export function buildNcPropResponse(
   f: WebDAVFile,
   space: SpaceEnv,
   mode: NcPermissionsMode,
   isRoot: boolean,
-  ownerDisplayName = ''
+  ownerDisplayName = '',
+  rootQuota?: NcRootQuota
 ): Record<string, unknown> {
   const href = f.href
   const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
@@ -93,6 +105,14 @@ export function buildNcPropResponse(
   if (!f.isDir) {
     props['d:getcontenttype'] = f.getcontenttype
     if (contentLength !== undefined) props['d:getcontentlength'] = contentLength
+  }
+
+  if (isRoot && mode === 'files' && rootQuota) {
+    const used = Math.max(0, Math.floor(rootQuota.used))
+    const total = rootQuota.total ?? 0
+    const available = total > 0 ? Math.max(0, total - used) : -3
+    props['d:quota-used-bytes'] = String(used)
+    props['d:quota-available-bytes'] = String(available)
   }
 
   if (mode === 'trashbin') {
