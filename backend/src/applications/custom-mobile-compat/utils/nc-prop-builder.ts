@@ -96,7 +96,13 @@ export function buildNcPropResponse(
     // wired through `withShares` on spacesBrowser.browse.
     'oc:share-types': '',
     'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
-    'nc:has-comments': hasComments ? '1' : '0',
+    // oc:comments-unread (oc namespace, not nc:has-comments) is what NC iOS
+    // and Android actually parse for the comment badge — see
+    // NKDataFileXML.swift:436 (NSString.boolValue) and the matching Android
+    // path in WebdavEntry. Sync-in only carries a boolean today; the iOS
+    // parser treats any non-zero string as truthy so "1"/"0" works as a
+    // stand-in for "unread > 0" / "unread == 0".
+    'oc:comments-unread': hasComments ? '1' : '0',
     'nc:is-encrypted': '0',
     'nc:mount-type': '',
     ...buildLockProps(lock)

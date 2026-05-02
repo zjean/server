@@ -148,14 +148,19 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:share-types></oc:share-types>')
   })
 
-  it('emits nc:has-comments as "0" when the file has no comments (default)', async () => {
+  it('emits oc:comments-unread as "0" when the file has no unread comments (default)', async () => {
+    // NC iOS reads oc:comments-unread (oc-namespace, not nc:has-comments) at
+    // NKDataFileXML.swift:436 via NSString.boolValue. Emitting under the
+    // wrong namespace + element name (the previous nc:has-comments) means
+    // the comment badge never lights up regardless of state.
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:has-comments>0</nc:has-comments>')
+    expect(state.body).toContain('<oc:comments-unread>0</oc:comments-unread>')
+    expect(state.body).not.toContain('<nc:has-comments>')
   })
 
-  it('emits nc:has-comments as "1" when the WebDAVFile carries hasComments=true', async () => {
+  it('emits oc:comments-unread as "1" when the WebDAVFile carries hasComments=true', async () => {
     const folder = new WebDAVFile(
       { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
       '/remote.php/dav/files/alice/',
@@ -178,7 +183,7 @@ describe('NcPropfindService', () => {
     await service.respond(r, res, 'files')
     // Pull just the child block to avoid matching the folder's "0" entry.
     const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
-    expect(childBlock).toContain('<nc:has-comments>1</nc:has-comments>')
+    expect(childBlock).toContain('<oc:comments-unread>1</oc:comments-unread>')
   })
 
   it('emits nc:lock as "0" when the file is unlocked', async () => {
