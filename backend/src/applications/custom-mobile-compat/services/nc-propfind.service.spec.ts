@@ -103,6 +103,25 @@ describe('NcPropfindService', () => {
     expect(folderBlock).toContain('<nc:has-preview>false</nc:has-preview>')
   })
 
+  it('emits d:getetag as a strong ETag (no W/ prefix), even when the source file carries a weak one', async () => {
+    // Sync-in's genEtag defaults to weakPrefix=true and produces W/"...".
+    // Real Nextcloud (sabre/dav) emits strong ETags. NextcloudKit's parser
+    // strips quotes only -- it does NOT strip the W/ prefix -- so a weak
+    // ETag lands in iOS's metadata.etag with a literal slash mid-string.
+    // iOS then uses that etag as a path component for thumbnail storage:
+    //   <docStorage>/<ocId>/<etag><ext> -> "<...>/<ocId>/W/<rest>.preview.ico"
+    // The W/ becomes a (nonexistent) intermediate directory and the thumbnail
+    // pipeline silently fails -- no preview GET fires from the cell willDisplay
+    // gate, list cells stay empty even though hasPreview is true. Strong
+    // ETags avoid the slash entirely.
+    const r = req()
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    // Quotes preserved (NC clients strip them); the W/ prefix removed.
+    expect(state.body).toMatch(/<d:getetag>&quot;[a-f0-9-]+&quot;<\/d:getetag>/)
+    expect(state.body).not.toContain('<d:getetag>W/')
+  })
+
   it('status is 207 Multi-Status with xml content type', async () => {
     const r = req()
     const { res, state } = fakeReply()
