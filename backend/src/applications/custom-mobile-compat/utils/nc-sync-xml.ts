@@ -121,7 +121,10 @@ export function detectReportBodyType(raw: string | Buffer | null | undefined): R
   const text = typeof raw === 'string' ? raw : raw.toString('utf8')
   if (text.trim().length === 0) return 'unknown'
   // Skip leading <?xml ...?> and <!DOCTYPE ...> if present.
-  const stripped = text.replace(/^\s*<\?xml[^?]*\?>/, '').replace(/^\s*<!DOCTYPE[^>]*>/, '').trimStart()
+  const stripped = text
+    .replace(/^\s*<\?xml[^?]*\?>/, '')
+    .replace(/^\s*<!DOCTYPE[^>]*>/, '')
+    .trimStart()
   if (/^<(?:[A-Za-z_][\w.-]*:)?sync-collection[\s/>]/.test(stripped)) return 'sync-collection'
   if (/^<(?:[A-Za-z_][\w.-]*:)?filter-files[\s/>]/.test(stripped)) return 'filter-files'
   return 'unknown'
