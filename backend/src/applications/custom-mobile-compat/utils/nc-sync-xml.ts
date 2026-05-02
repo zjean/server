@@ -99,3 +99,30 @@ function parseSyncToken(value: string): number {
 export function formatSyncToken(seq: number): string {
   return `${SYNC_TOKEN_URN_PREFIX}${seq}`
 }
+
+export type ReportBodyType = 'sync-collection' | 'filter-files' | 'unknown'
+
+// Cheap content sniffer for the WebDAV REPORT body. NC clients send two
+// distinct REPORT shapes against the same URL:
+//   - <d:sync-collection> for RFC 6578 incremental sync (default refresh)
+//   - <oc:filter-files>   for the Favorites tab (NextcloudKit's NKDataFileXML
+//     getRequestBodyFavorite)
+// The router needs to pick a handler before either parser sees the body —
+// otherwise routing through the sync-collection parser 400s on a filter-files
+// request and iOS spins forever on the Favorites tab.
+//
+// We do a regex-only sniff: the goal is to pick a route, not to validate
+// the XML. The full structural parse happens downstream once the right
+// handler is chosen. Tolerates leading XML decl + doctype, either
+// namespace-prefixed or bare root element, and case-sensitive matching
+// (REPORT body root names are always lowercase per spec).
+export function detectReportBodyType(raw: string | Buffer | null | undefined): ReportBodyType {
+  if (!raw) return 'unknown'
+  const text = typeof raw === 'string' ? raw : raw.toString('utf8')
+  if (text.trim().length === 0) return 'unknown'
+  // Skip leading <?xml ...?> and <!DOCTYPE ...> if present.
+  const stripped = text.replace(/^\s*<\?xml[^?]*\?>/, '').replace(/^\s*<!DOCTYPE[^>]*>/, '').trimStart()
+  if (/^<(?:[A-Za-z_][\w.-]*:)?sync-collection[\s/>]/.test(stripped)) return 'sync-collection'
+  if (/^<(?:[A-Za-z_][\w.-]*:)?filter-files[\s/>]/.test(stripped)) return 'filter-files'
+  return 'unknown'
+}
