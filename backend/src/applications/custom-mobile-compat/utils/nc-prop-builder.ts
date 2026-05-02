@@ -104,7 +104,19 @@ export function buildNcPropResponse(
   const props: Record<string, unknown> = {
     'd:displayname': f.displayname,
     'd:getlastmodified': f.getlastmodified,
-    'd:getetag': f.getetag !== undefined ? f.getetag : `"${String(positiveId)}-${String(f.mtime)}"`,
+    // Sync-in's genEtag defaults to weakPrefix=true and produces W/"...".
+    // Real Nextcloud (sabre/dav) emits strong ETags. NextcloudKit's parser
+    // strips quotes when reading <d:getetag> but does NOT strip the W/
+    // prefix, so a weak ETag lands in iOS metadata.etag with a literal
+    // slash mid-string. iOS then uses that etag verbatim as a path
+    // component for the on-disk thumbnail location:
+    //   <docStorage>/<ocId>/<etag><ext> -> ".../<ocId>/W/<rest>.preview.ico"
+    // The W/ becomes a missing intermediate directory and the thumbnail
+    // pipeline silently fails -- list cells stay empty for image files
+    // even when nc:has-preview is true. Real NC works because its strong
+    // ETags have no slash. Strip the W/ prefix here so the wire format
+    // matches what NC mobile clients are tested against.
+    'd:getetag': stripWeakPrefix(f.getetag) ?? `"${String(positiveId)}-${String(f.mtime)}"`,
     'd:resourcetype': resourcetype,
     'oc:id': buildOcId(f.id),
     'oc:fileid': String(positiveId),
@@ -171,6 +183,14 @@ export function buildNcDeletedResponse(href: string): Record<string, unknown> {
     'd:href': href,
     'd:status': 'HTTP/1.1 404 Not Found'
   }
+}
+
+// Drop the leading W/ (case-insensitive) from a weak ETag. Returns the
+// original string when no prefix is present, and undefined when input is
+// undefined — so callers can chain into a default.
+function stripWeakPrefix(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined
+  return raw.replace(/^W\//i, '')
 }
 
 // Some DAV servers add a ".d<unix-ts>" suffix to trashed files. Sync-in
