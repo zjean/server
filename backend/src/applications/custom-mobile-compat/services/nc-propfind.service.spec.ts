@@ -88,13 +88,19 @@ describe('NcPropfindService', () => {
     expect(state.body).toMatch(/<ocs:share-permissions>\d+<\/ocs:share-permissions>/)
   })
 
-  it('sets nc:has-preview to "1" for an image child (oc-namespace boolean convention)', async () => {
-    // NextcloudKit's PROPFIND parser reads nc:has-preview as Int(text) == 1.
-    // "true" parses to nil and silently disables list-cell thumbnails on iOS.
+  it('sets nc:has-preview to "true" for an image child and "false" for a non-previewable folder', async () => {
+    // Cross-client format: NextcloudKit's NSString.boolValue accepts "true"
+    // and "1" both. Android's WebdavEntry parses with Boolean.valueOf which
+    // ONLY recognizes the literal "true"/"false" strings — "1" parses to
+    // false there, which is what made Android Files render no thumbnails
+    // for any image. Word-form is the cross-client lingua franca.
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:has-preview>1</nc:has-preview>')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<nc:has-preview>true</nc:has-preview>')
+    const folderBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(folderBlock).toContain('<nc:has-preview>false</nc:has-preview>')
   })
 
   it('status is 207 Multi-Status with xml content type', async () => {
@@ -142,14 +148,19 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:share-types></oc:share-types>')
   })
 
-  it('emits nc:has-comments as "0" when the file has no comments (default)', async () => {
+  it('emits oc:comments-unread as "0" when the file has no unread comments (default)', async () => {
+    // NC iOS reads oc:comments-unread (oc-namespace, not nc:has-comments) at
+    // NKDataFileXML.swift:436 via NSString.boolValue. Emitting under the
+    // wrong namespace + element name (the previous nc:has-comments) means
+    // the comment badge never lights up regardless of state.
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:has-comments>0</nc:has-comments>')
+    expect(state.body).toContain('<oc:comments-unread>0</oc:comments-unread>')
+    expect(state.body).not.toContain('<nc:has-comments>')
   })
 
-  it('emits nc:has-comments as "1" when the WebDAVFile carries hasComments=true', async () => {
+  it('emits oc:comments-unread as "1" when the WebDAVFile carries hasComments=true', async () => {
     const folder = new WebDAVFile(
       { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
       '/remote.php/dav/files/alice/',
@@ -172,7 +183,7 @@ describe('NcPropfindService', () => {
     await service.respond(r, res, 'files')
     // Pull just the child block to avoid matching the folder's "0" entry.
     const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
-    expect(childBlock).toContain('<nc:has-comments>1</nc:has-comments>')
+    expect(childBlock).toContain('<oc:comments-unread>1</oc:comments-unread>')
   })
 
   it('emits nc:lock as "0" when the file is unlocked', async () => {
@@ -279,6 +290,63 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:id>00000000000000987654syncin</oc:id>')
     expect(state.body).not.toContain('<oc:fileid>0</oc:fileid>')
     expect(state.body).not.toContain('<oc:fileid>-987654</oc:fileid>')
+  })
+
+  it('emits d:quota-used-bytes and d:quota-available-bytes on the root response only', async () => {
+    // iOS Files app reads these on the user-home root PROPFIND to render the
+    // quota bar. Without them the bar reads "0 GB used of 0 GB". Children
+    // must NOT carry quota props — they're per-collection only.
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 1_073_741_824,
+      storageQuota: 5_368_709_120
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const rootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(rootBlock).toContain('<d:quota-used-bytes>1073741824</d:quota-used-bytes>')
+    expect(rootBlock).toContain('<d:quota-available-bytes>4294967296</d:quota-available-bytes>')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).not.toContain('<d:quota-used-bytes>')
+    expect(childBlock).not.toContain('<d:quota-available-bytes>')
+  })
+
+  it('emits -3 for d:quota-available-bytes when the user has no quota cap (ownCloud "unlimited" sentinel)', async () => {
+    // Sync-in models "no quota" as storageQuota <= 0. The ownCloud convention
+    // (which NC clients implement) is to send -3 (unlimited/unknown) so iOS
+    // renders an open-ended quota bar instead of "0 of 0".
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 4096,
+      storageQuota: 0
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const rootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(rootBlock).toContain('<d:quota-used-bytes>4096</d:quota-used-bytes>')
+    expect(rootBlock).toContain('<d:quota-available-bytes>-3</d:quota-available-bytes>')
+  })
+
+  it('does not emit quota props on the trashbin root', async () => {
+    // Trashbin doesn't have its own quota in NC; the bar lives under files/.
+    const r = req()
+    ;(r as unknown as { user: { id: number; login: string; fullName: string; storageUsage: number; storageQuota: number } }).user = {
+      id: 1,
+      login: 'alice',
+      fullName: 'Alice Liddell',
+      storageUsage: 4096,
+      storageQuota: 1_000_000
+    }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'trashbin')
+    expect(state.body).not.toContain('<d:quota-used-bytes>')
+    expect(state.body).not.toContain('<d:quota-available-bytes>')
   })
 
   it('promotes a placeholder fileid to the real DB id returned by the ensurer', async () => {

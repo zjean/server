@@ -58,6 +58,13 @@ export class NcPropfindService {
     // requester's fullName. When the resolved owner is someone else (future
     // shared-space mode) we fall back to login inside the prop builder.
     const ownerDisplayName = user && space.root?.owner?.id === user.id ? user.fullName : ''
+    // Quota figures attached to the root response only (and only in files
+    // mode) so iOS renders the quota bar at the user-home view. Sync-in's
+    // UserModel exposes storageUsage / storageQuota as numbers; the prop
+    // builder translates `total <= 0` to the ownCloud "-3 unlimited" sentinel.
+    const rootQuota = user
+      ? { used: user.storageUsage ?? 0, total: user.storageQuota && user.storageQuota > 0 ? user.storageQuota : undefined }
+      : undefined
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
@@ -75,7 +82,7 @@ export class NcPropfindService {
         // already real, when the entry is a directory, or when the request
         // targets the trash repository.
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
-        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName))
+        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined))
         isFirst = false
       }
     } catch (e) {

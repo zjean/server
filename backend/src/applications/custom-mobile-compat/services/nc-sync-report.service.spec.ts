@@ -219,6 +219,40 @@ describe(NcSyncReportService.name, () => {
     expect(log.since).toHaveBeenCalledWith(expect.objectContaining({ limit: 500 }))
   })
 
+  // ──────────── oc:filter-files (Favorites tab) ────────────
+  // NC iOS sends a REPORT with body <oc:filter-files> + <oc:filter-rules>
+  // <oc:favorite>1</oc:favorite> when the user opens the Favorites tab —
+  // a different shape from <d:sync-collection>. Sync-in's `files` table
+  // doesn't yet carry a favorite column (DB schema follow-up), so we
+  // accept the request and return a well-formed empty multistatus rather
+  // than 5xx-ing into an iOS spinner.
+  describe('respondFilterFiles', () => {
+    it('returns a 207 multistatus with no <d:response> entries and all four namespaces', async () => {
+      const { reply, captured } = fakeReply()
+      const body = `<oc:filter-files xmlns:oc="http://owncloud.org/ns" xmlns:d="DAV:"><d:prop><d:displayname/></d:prop><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>`
+      await service.respondFilterFiles(buildReq(body) as never, reply)
+
+      expect(captured.status).toBe(HttpStatus.MULTI_STATUS)
+      expect(captured.type).toContain('xml')
+      expect(captured.body).toContain('xmlns:d="DAV:"')
+      expect(captured.body).toContain('xmlns:oc="http://owncloud.org/ns"')
+      expect(captured.body).toContain('xmlns:nc="http://nextcloud.org/ns"')
+      expect(captured.body).toContain('xmlns:ocs="http://open-collaboration-services.org/ns"')
+      // Empty result set → the multistatus carries no <d:response> children.
+      expect(captured.body).not.toContain('<d:response>')
+      // Filter-files responses carry no <d:sync-token> — that's sync-collection-only.
+      expect(captured.body).not.toContain('<d:sync-token>')
+    })
+
+    it('does not consult the sync log (filter-files is not a delta query)', async () => {
+      const { reply } = fakeReply()
+      const body = `<oc:filter-files xmlns:oc="http://owncloud.org/ns"><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>`
+      await service.respondFilterFiles(buildReq(body) as never, reply)
+      expect(log.since).not.toHaveBeenCalled()
+      expect(log.minKeptToken).not.toHaveBeenCalled()
+    })
+  })
+
   it('URL-encodes path segments containing special characters', async () => {
     log.since.mockResolvedValueOnce([
       { id: 1, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'my docs/résumé.pdf', type: 'delete', ts: 1 }

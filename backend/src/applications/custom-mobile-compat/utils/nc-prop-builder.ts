@@ -4,10 +4,18 @@
 // and the REPORT (sync-collection) verb emit byte-identical prop blocks.
 // Pure function — no `this` state, no DI; trivially testable in isolation.
 //
-// Boolean DAV props in the oc/nc namespaces are emitted as integer strings
-// ("1"/"0"), not "true"/"false" — that's the owncloud convention NC clients
-// depend on (NextcloudKit reads them with `Int(text) == 1`). Anything boolean
-// added here MUST follow the same shape; see #134 for the bug history.
+// Boolean DAV props are emitted as the literal strings "true"/"false" rather
+// than "1"/"0". Cross-client reasoning:
+//   - iOS NextcloudKit parses with NSString.boolValue, which accepts both
+//     "1"/"0" and "true"/"false".
+//   - Android WebdavEntry parses nc:has-preview with Boolean.valueOf, which
+//     ONLY recognizes the literal word forms — "1" silently parses to false
+//     and Android Files renders no thumbnails on any image (root cause of
+//     the audit-1 finding that prompted this change).
+// Word-form is the cross-client lingua franca. PR #134 had switched the
+// other way for iOS-only reasons; that fix held but broke Android.
+// nc:lock is the deliberate exception: Android requires the exact literal
+// "1" (and treats "true" as false), so buildLockProps below stays on "1"/"0".
 
 import type { FileLockProps, FileProps } from '../../files/interfaces/file-props.interface'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
@@ -28,12 +36,24 @@ const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 // share-info / activity ("Shared by …"). Callers thread it from the
 // requesting UserModel for personal-space files (where owner == requester);
 // pass `''` to fall back to the owner login.
+// Optional quota figures threaded onto the user-home root response in
+// `files` mode so iOS can render the quota bar at the home view. Sync-in
+// models "no quota" as storageQuota <= 0; we translate that to the ownCloud
+// sentinel value -3 ("unlimited / unknown") for d:quota-available-bytes,
+// which iOS recognizes as "show an open-ended bar".
+export interface NcRootQuota {
+  used: number
+  // Optional cap. Pass undefined / <= 0 to signal "no quota".
+  total?: number
+}
+
 export function buildNcPropResponse(
   f: WebDAVFile,
   space: SpaceEnv,
   mode: NcPermissionsMode,
   isRoot: boolean,
-  ownerDisplayName = ''
+  ownerDisplayName = '',
+  rootQuota?: NcRootQuota
 ): Record<string, unknown> {
   const href = f.href
   const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
@@ -75,8 +95,14 @@ export function buildNcPropResponse(
     // emits for unshared files. Populating real entries is a follow-up
     // wired through `withShares` on spacesBrowser.browse.
     'oc:share-types': '',
-    'nc:has-preview': ncHasPreview(f.mime) ? '1' : '0',
-    'nc:has-comments': hasComments ? '1' : '0',
+    'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
+    // oc:comments-unread (oc namespace, not nc:has-comments) is what NC iOS
+    // and Android actually parse for the comment badge — see
+    // NKDataFileXML.swift:436 (NSString.boolValue) and the matching Android
+    // path in WebdavEntry. Sync-in only carries a boolean today; the iOS
+    // parser treats any non-zero string as truthy so "1"/"0" works as a
+    // stand-in for "unread > 0" / "unread == 0".
+    'oc:comments-unread': hasComments ? '1' : '0',
     'nc:is-encrypted': '0',
     'nc:mount-type': '',
     ...buildLockProps(lock)
@@ -85,6 +111,14 @@ export function buildNcPropResponse(
   if (!f.isDir) {
     props['d:getcontenttype'] = f.getcontenttype
     if (contentLength !== undefined) props['d:getcontentlength'] = contentLength
+  }
+
+  if (isRoot && mode === 'files' && rootQuota) {
+    const used = Math.max(0, Math.floor(rootQuota.used))
+    const total = rootQuota.total ?? 0
+    const available = total > 0 ? Math.max(0, total - used) : -3
+    props['d:quota-used-bytes'] = String(used)
+    props['d:quota-available-bytes'] = String(available)
   }
 
   if (mode === 'trashbin') {

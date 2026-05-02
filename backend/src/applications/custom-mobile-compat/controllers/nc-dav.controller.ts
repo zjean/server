@@ -16,6 +16,7 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
+import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
 
 // NcDavController — WebDAV, trashbin, legacy redirect.
@@ -281,15 +282,25 @@ export class NcDavController {
         return this.webdav.lock(req, res)
       case HTTP_METHOD.UNLOCK:
         return this.webdav.unlock(req, res)
-      case HTTP_METHOD.REPORT:
-        // RFC 6578 sync-collection. Only meaningful for the files
-        // repository — NC iOS doesn't issue REPORT against the trashbin
-        // URL, and our sync log only carries files/trash events keyed to
-        // the user's spaces.
+      case HTTP_METHOD.REPORT: {
+        // NC iOS sends two REPORT body shapes against the same URL:
+        //   - <d:sync-collection> (RFC 6578 incremental sync) — default refresh
+        //   - <oc:filter-files>   — Favorites tab
+        // Both are routed here. Sniff the body root element first so the
+        // wrong parser doesn't 400 a perfectly valid filter-files request
+        // (which is what made the iOS Favorites tab spin previously).
+        // Trashbin doesn't support either shape — sync log carries no
+        // trash events and there's no favorites concept inside trash.
         if (mode !== 'files') {
           throw new HttpException(`REPORT not supported on ${mode}`, HttpStatus.METHOD_NOT_ALLOWED)
         }
+        const reportType = detectReportBodyType(req.body as string | Buffer | null | undefined)
+        if (reportType === 'filter-files') return this.syncReport.respondFilterFiles(req, res)
+        // 'sync-collection' OR 'unknown' (empty body): defer to the
+        // sync-collection handler. It already treats empty bodies as
+        // "first sync" and surfaces 400 on truly malformed XML.
         return this.syncReport.respond(req, res)
+      }
       default:
         throw new HttpException(`Method ${method} not supported`, HttpStatus.METHOD_NOT_ALLOWED)
     }

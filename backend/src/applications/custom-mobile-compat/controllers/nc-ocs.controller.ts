@@ -69,6 +69,28 @@ export class NcOcsController {
     return this.doUserProvisioning(userid, req, res, 2)
   }
 
+  // /ocs/v2.php/apps/files/api/v1/directEditing — NC iOS (NextcloudKit's
+  // NCText helper) calls this the first time it considers showing the
+  // "Edit" button on a file. A 404 here causes the client to surface a
+  // "Direct editing unavailable" toast on every editable-file tap.
+  //
+  // We don't expose iOS-native direct editing — OnlyOffice has its own
+  // connector at /index.php/apps/onlyoffice/config and Sync-in's text/code
+  // editors aren't NC-protocol-compatible. Returning an empty editors +
+  // creators map tells iOS "no native editors here" without raising the
+  // toast: NextcloudKit caches the empty map into capabilities, the Edit
+  // button falls back to its PROPFIND-only path, OnlyOffice files still
+  // route through their dedicated mobile flow.
+  @Get('ocs/v2.php/apps/files/api/v1/directEditing')
+  @UseGuards(NcBasicAuthGuard)
+  directEditing(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): OcsEnvelope<{ editors: Record<string, never>; creators: Record<string, never> }> {
+    this.response.requireJson(req)
+    return this.response.json(res, { editors: {}, creators: {} })
+  }
+
   // DELETE apppassword — clients call this on explicit logout to invalidate
   // their minted credentials. Steps:
   //   1. Identify which app-password row in user.secrets.appPasswords[] the
