@@ -333,6 +333,39 @@ describe('NcPropfindService', () => {
     expect(rootBlock).toContain('<d:quota-available-bytes>-3</d:quota-available-bytes>')
   })
 
+  it('falls back to the requesting user for owner-id and owner-display-name when the personal-space root carries no explicit owner', async () => {
+    // Production reality: SpaceEnv's constructor builds a synthetic
+    // unanchored root for personal spaces without populating owner
+    // (space-env.model.ts:71). PROPFINDs against /remote.php/dav/files/<u>/
+    // therefore landed with empty <oc:owner-id> and <oc:owner-display-name>.
+    // Several NC Android versions gate "can write here" on
+    // owner-id == loggedInUser, so empty owner-id was misread as "read-only".
+    // Personal-space ownership IS the requesting user by definition; emit
+    // them as the owner when no explicit one is set.
+    const folder = new WebDAVFile(
+      { id: 1, name: 'janwiebe', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/janwiebe/',
+      true
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([folder]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      inPersonalSpace: true,
+      // Mirrors what SpaceEnv constructor sets when no anchored root exists:
+      // id=0, no owner field at all.
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    ;(r as unknown as { user: { id: number; login: string; fullName: string } }).user = { id: 7, login: 'janwiebe', fullName: 'Jan Wiebe' }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toContain('<oc:owner-id>janwiebe</oc:owner-id>')
+    expect(state.body).toContain('<oc:owner-display-name>Jan Wiebe</oc:owner-display-name>')
+  })
+
   it('does not emit quota props on the trashbin root', async () => {
     // Trashbin doesn't have its own quota in NC; the bar lives under files/.
     const r = req()
