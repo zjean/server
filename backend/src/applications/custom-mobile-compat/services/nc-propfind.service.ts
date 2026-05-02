@@ -65,6 +65,13 @@ export class NcPropfindService {
     const rootQuota = user
       ? { used: user.storageUsage ?? 0, total: user.storageQuota && user.storageQuota > 0 ? user.storageQuota : undefined }
       : undefined
+    // Owner fallback: personal-space SpaceEnvs lack space.root.owner (see
+    // space-env.model.ts:71 synthetic root construction). The requester IS
+    // the owner of their own personal-space files, so we pass them through
+    // as a fallback for <oc:owner-id> / <oc:owner-display-name>. Empty
+    // owner-id was the root cause of NC Android's "no permissions to create
+    // files/folders here" message after a successful login.
+    const requesterFallback = user ? { login: user.login, displayName: user.fullName || user.login } : undefined
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
@@ -82,7 +89,7 @@ export class NcPropfindService {
         // already real, when the entry is a directory, or when the request
         // targets the trash repository.
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
-        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined))
+        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined, requesterFallback))
         isFirst = false
       }
     } catch (e) {

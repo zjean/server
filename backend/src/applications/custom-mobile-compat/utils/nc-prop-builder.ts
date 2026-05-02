@@ -47,20 +47,46 @@ export interface NcRootQuota {
   total?: number
 }
 
+// Fallback owner identity for personal-space PROPFINDs where SpaceEnv's
+// constructor doesn't populate space.root.owner (see space-env.model.ts:71
+// — the synthetic unanchored root has no owner field). Without it, NC
+// Android sees an empty <oc:owner-id> and refuses write operations on the
+// folder ("no permissions to create files/folders here") because several
+// Android versions gate canCreate on owner-id matching the logged-in user.
+// Personal-space ownership IS the requester by definition, so we plumb
+// the requesting user's login + display name through.
+export interface NcRequesterFallback {
+  login: string
+  displayName: string
+}
+
 export function buildNcPropResponse(
   f: WebDAVFile,
   space: SpaceEnv,
   mode: NcPermissionsMode,
   isRoot: boolean,
   ownerDisplayName = '',
-  rootQuota?: NcRootQuota
+  rootQuota?: NcRootQuota,
+  requesterFallback?: NcRequesterFallback
 ): Record<string, unknown> {
   const href = f.href
   const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
   const { letters, shareMask } = toNcPermissions(sourcePerms, f.isDir, mode)
 
-  const owner = space.root?.owner ?? { id: 0, login: '' }
-  const ownerDisplay = ownerDisplayName || owner.login || ''
+  // Personal-space SpaceEnvs synthesize an unanchored root without an owner
+  // field; fall back to the requester so <oc:owner-id> / <oc:owner-display-name>
+  // are never empty (Android gates canCreate on owner == self). For shared
+  // and external spaces the explicit space.root.owner takes precedence —
+  // the fallback only fires when nothing else identifies an owner.
+  const explicitOwner = space.root?.owner
+  const owner = explicitOwner?.login ? explicitOwner : requesterFallback ? { id: 0, login: requesterFallback.login } : { id: 0, login: '' }
+  // Display-name resolution order (first non-empty wins):
+  //   1. caller-supplied ownerDisplayName (used when requester == file owner)
+  //   2. requester fallback (personal-space synthetic root case — the
+  //      requester's fullName beats their bare login)
+  //   3. explicit space owner's login (shared/external space case)
+  //   4. empty string (nothing else known)
+  const ownerDisplay = ownerDisplayName || (!explicitOwner?.login && requesterFallback?.displayName) || owner.login || ''
 
   // hasComments / lock land on the WebDAVFile instance only when the
   // browse layer was called with { withHasComments, withLocks } enabled
