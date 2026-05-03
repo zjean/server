@@ -1,25 +1,29 @@
 import type { FileRecent } from '../../files/schemas/file-recent.interface'
 import { ncHasPreview } from './nc-preview-predicate'
 
-// Shape consumed by NC iOS for the "Recommended files" carousel on the Files
-// tab. Must mirror what upstream NC's `RecommendedFilesController` produces:
-//   { id, timestamp, name, directory, extension, mimeType, hasPreview, reason }
-// Field semantics (from upstream):
-//   - timestamp: Unix seconds, mtime of the file
-//   - directory: parent directory relative to the user's NC home (i.e. what
-//     the iOS user sees as their root). Root-level files use "/".
-//   - extension: characters after the last "." in `name`, or "" when none.
-//     NC convention is the last segment only — `archive.tar.gz` → "gz".
-//   - mimeType: standard form like `image/jpeg` (slash-separated).
-//   - reason: one of "recent", "favorite", "shared". We only have recents.
+// Shape consumed by NC iOS's NextcloudKit for the "Recommended files"
+// carousel. Must mirror what upstream's `OCA\Recommendations\Service\
+// RecommendedFile::jsonSerialize` produces — the carousel is fetched as XML
+// (NextcloudKit sends Accept: application/xml) and parsed via SwiftyXMLParser
+// at path `ocs → data → recommendations → element`.
+//
+// Field types are dictated by the iOS parser:
+//   - id: STRING. Upstream serializes it as `(string)$node->getId()`. NK's
+//     `NKRecommendation.id` is `String`.
+//   - timestamp: Unix seconds (NK converts `Double > 0` to Date).
+//   - hasPreview: stringified "1" / "0" — NK does literal `text == "1"`.
+//   - extension: last segment after final ".", or "" when none.
+//     Upstream uses NC's `Node::getExtension` which returns the last segment.
+//   - mimeType: standard slash form like `image/jpeg`.
+//   - reason: free-form string ("recent" / "favorite" / "shared" upstream).
 export interface NcRecommendationEntry {
-  id: number
+  id: string
   timestamp: number
   name: string
   directory: string
   extension: string
   mimeType: string
-  hasPreview: boolean
+  hasPreview: '1' | '0'
   reason: 'recent'
 }
 
@@ -36,13 +40,13 @@ export function toRecommendationEntry(rec: FileRecent, homePrefix: string): NcRe
   const directory = computeDirectory(rec.path, homePrefix)
   if (directory === null) return null
   return {
-    id: rec.id,
+    id: String(rec.id),
     timestamp: Math.floor((rec.mtime ?? 0) / 1000),
     name: rec.name,
     directory,
     extension: extractExtension(rec.name),
     mimeType: ncMimeType(rec.mime),
-    hasPreview: ncHasPreview(rec.mime),
+    hasPreview: ncHasPreview(rec.mime) ? '1' : '0',
     reason: 'recent'
   }
 }

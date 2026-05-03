@@ -122,6 +122,16 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         AccountPropertyScopesVersion: 2,
         AccountPropertyScopesFederatedEnabled: true,
         AccountPropertyScopesPublishedEnabled: true
+      },
+      // The Recommendations app (https://github.com/nextcloud/recommendations)
+      // advertises this block from its Capabilities.php; NC iOS uses it to
+      // gate showing the Files-tab "Recommended files" carousel and only
+      // calls /ocs/v2.php/apps/recommendations/api/v1/recommendations when
+      // `enabled` is truthy. We always emit `enabled: true` because there's
+      // no per-user opt-out in this fork — server-side, an empty result set
+      // produces an empty (but rendered) carousel container.
+      recommendations: {
+        enabled: true
       }
       // Deliberately NOT advertising `notifications` or `activity` — an empty
       // ocs-endpoints array still prompts the iOS client to probe
