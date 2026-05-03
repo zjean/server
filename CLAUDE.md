@@ -114,6 +114,38 @@ These details aren't guessable from the DTO types — the backend has runtime co
 
 **When implementing a new v2/v3 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2/v3 version. Do not trust the DTO types alone.
 
+## NC mobile compat: always read upstream NC source first
+
+The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS/Android clients. Its endpoints are pinned to upstream contracts that **cannot be guessed from server-side conventions** — especially the wire format, field types, and capability gates. Real precedents: an early recommendations PR shipped JSON instead of XML and used a wrong endpoint path; the carousel rendered empty until the next PR fixed both. Both mistakes would have been avoided by reading the upstream source first.
+
+**Before designing any new NC compat endpoint or "this isn't lighting up in iOS" debug, fetch the relevant upstream source — don't infer from REST conventions.** Authoritative repos:
+
+- [`nextcloud/server`](https://github.com/nextcloud/server) — core OCS endpoints, capabilities, DAV. Look in `apps/<app>/lib/Controller/`, `apps/<app>/lib/Capabilities.php`, `apps/<app>/appinfo/routes.php`.
+- [`nextcloud/recommendations`](https://github.com/nextcloud/recommendations) — separate app, not in core. Recommendations carousel + capability live here.
+- [`nextcloud/notifications`](https://github.com/nextcloud/notifications) — separate app.
+- [`nextcloud/activity`](https://github.com/nextcloud/activity) — separate app.
+- [`nextcloud/NextcloudKit`](https://github.com/nextcloud/NextcloudKit) — the Swift networking library both iOS and macOS clients use. **The wire format authority for iOS.** `Sources/NextcloudKit/NextcloudKit+<Feature>.swift` shows the exact endpoint path, `Accept` header, and HTTP method; `Sources/NextcloudKit/Models/NK<Feature>.swift` shows the parser (XML vs JSON, field names, type coercions like `text == "1"`).
+- [`nextcloud/ios`](https://github.com/nextcloud/ios) — the iOS app. `iOSClient/Networking/NCNetworking+<Feature>.swift` shows when/how the call is made (gating, refresh cadence, home-server checks). `iOSClient/Main/.../<Feature>Cell.swift` for UI gating.
+- [Nextcloud Developer Manual — OCS APIs](https://docs.nextcloud.com/server/latest/developer_manual/client_apis/OCS/index.html) — high-level overview; useful for endpoint discovery, but always cross-check the source for response shape.
+
+**Investigation recipe** (use `gh api repos/<org>/<repo>/contents/<path>` — `gh` is fastest, no rate limit on small files):
+
+1. Find the OCS route — `appinfo/routes.php` in the relevant `nextcloud/<app>` repo.
+2. Find the controller body — what JSON keys does the PHP emit? Look at `lib/Controller/*.php` and any `ResponseDefinitions.php`.
+3. Find the iOS network call — `gh api search/code -f q='repo:nextcloud/NextcloudKit <Feature>'` to locate `NextcloudKit+<Feature>.swift`. Confirm the `Accept` header (XML vs JSON), endpoint string, and method.
+4. Find the iOS parser — `Models/NK<Feature>.swift`. Note exact field names, types, and any text-vs-int quirks (`hasPreview` is `text == "1"`, not a JSON boolean; `id` is often `String` even when the server sends an int).
+5. Find the iOS gating — `iOSClient/Networking/NCNetworking+<Feature>.swift`. Note any capability-flag checks, server-version checks, or scope gates (e.g., "only at home server").
+6. Find the capability advertisement — `lib/Capabilities.php` in the upstream app. If iOS gates on it, our `custom-mobile-compat/constants/capabilities.ts` must mirror the shape.
+
+**Sync-in storage quirks to translate** when emitting to NC clients:
+
+- Mime: stored as `image-jpeg` (first `/` replaced by `-`); NC clients want `image/jpeg`.
+- Mtime: stored in **milliseconds**; most NC fields want **seconds** — divide by 1000.
+- File ids: emit real DB ids (PR #126); negative ids confuse NC clients.
+- ETag: use **strong** ETags; `W/` prefix breaks iOS thumbnail paths (PR #140 / commit `00c3fa7`).
+
+The classic-UI-as-ground-truth rule above governs Sync-in's internal v2/v3 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
+
 ## Tooling note: `rtk` wrapper
 
 The user runs git/gh via the `rtk` proxy (token savings). A few commands don't pass through cleanly and need `rtk proxy` to bypass:
