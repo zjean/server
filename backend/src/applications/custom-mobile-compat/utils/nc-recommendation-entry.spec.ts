@@ -18,15 +18,19 @@ function recent(overrides: Partial<FileRecent> = {}): FileRecent {
 }
 
 describe('toRecommendationEntry', () => {
-  it('maps a recent under the home prefix to an NC entry', () => {
+  it('maps a recent under the home prefix to an NC entry (NK wire shape)', () => {
+    // Field types are dictated by NextcloudKit's XML parser:
+    //   - id is String (upstream serializes (string)$node->getId())
+    //   - hasPreview is text "1"/"0" (NK does literal text == "1")
+    //   - timestamp is Unix seconds (NK converts Double>0 to Date)
     expect(toRecommendationEntry(recent(), homePrefix)).toEqual({
-      id: 42,
+      id: '42',
       timestamp: 1714742400,
       name: 'report.docx',
       directory: '/Documents',
       extension: 'docx',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      hasPreview: false,
+      hasPreview: '0',
       reason: 'recent'
     })
   })
@@ -68,11 +72,15 @@ describe('toRecommendationEntry', () => {
     expect(toRecommendationEntry(recent({ mime: '' }), homePrefix)?.mimeType).toBe('application/octet-stream')
   })
 
-  it('marks hasPreview true only for images (matches PROPFIND nc:has-preview)', () => {
-    expect(toRecommendationEntry(recent({ mime: 'image-jpeg' }), homePrefix)?.hasPreview).toBe(true)
-    expect(toRecommendationEntry(recent({ mime: 'image/png' }), homePrefix)?.hasPreview).toBe(true)
-    expect(toRecommendationEntry(recent({ mime: 'application-pdf' }), homePrefix)?.hasPreview).toBe(false)
-    expect(toRecommendationEntry(recent({ mime: 'video-mp4' }), homePrefix)?.hasPreview).toBe(false)
+  it('emits hasPreview as text "1"/"0" so NextcloudKit\'s text == "1" check works', () => {
+    expect(toRecommendationEntry(recent({ mime: 'image-jpeg' }), homePrefix)?.hasPreview).toBe('1')
+    expect(toRecommendationEntry(recent({ mime: 'image/png' }), homePrefix)?.hasPreview).toBe('1')
+    expect(toRecommendationEntry(recent({ mime: 'application-pdf' }), homePrefix)?.hasPreview).toBe('0')
+    expect(toRecommendationEntry(recent({ mime: 'video-mp4' }), homePrefix)?.hasPreview).toBe('0')
+  })
+
+  it('stringifies id (NK NKRecommendation.id is String, upstream serializes (string)$node->getId())', () => {
+    expect(toRecommendationEntry(recent({ id: 999 }), homePrefix)?.id).toBe('999')
   })
 
   it('converts mtime from milliseconds to seconds', () => {
