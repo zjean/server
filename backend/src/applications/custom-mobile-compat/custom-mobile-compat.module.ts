@@ -14,7 +14,9 @@ import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
+import { NcSearchController } from './controllers/nc-search.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
+import { NcSearchService } from './services/nc-search.service'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from './services/nc-app-password.service'
@@ -56,6 +58,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcDavController,
     NcExtrasController,
     NcRecommendationsController,
+    NcSearchController,
     NcThemingController,
     NcUploadsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
@@ -70,6 +73,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcChunkedUploadsService,
     NcFileRowEnsurer,
     NcPropfindService,
+    NcSearchService,
     NcSyncLogService,
     NcSyncReportService,
     ...(oidcEnabled ? [NcMobileOidcService] : []),
