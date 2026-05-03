@@ -55,6 +55,14 @@ describe('ncCapabilities', () => {
     expect(block.api_enabled).toBe(false)
   })
 
+  it('advertises files.comments=true so NC iOS shows the per-file Comments tab', () => {
+    // Backed by NcCommentsController on /remote.php/dav/comments/files/{fileId}.
+    // Flipping this to false silently hides the Comments tab in the file detail
+    // view even when the endpoints work — iOS gates UI presence on this flag.
+    const block = (caps.capabilities as Record<string, Record<string, unknown>>).files
+    expect(block.comments).toBe(true)
+  })
+
   it('advertises dav.sync-token so NC iOS uses REPORT instead of PROPFIND-polling', () => {
     // RFC 6578 sync-collection support. Implemented in NcSyncReportService
     // (PR #94). Removing this flag silently regresses mobile auto-refresh

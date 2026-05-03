@@ -5,6 +5,7 @@ import { CommentsQueries } from './services/comments-queries.service'
 
 @Module({
   controllers: [CommentsController],
-  providers: [CommentsManager, CommentsQueries]
+  providers: [CommentsManager, CommentsQueries],
+  exports: [CommentsQueries]
 })
 export class CommentsModule {}

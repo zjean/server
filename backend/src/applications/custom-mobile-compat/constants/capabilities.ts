@@ -60,7 +60,14 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         bigfilechunking: true,
         blacklisted_files: [],
         directEditing: { url: '', etag: '' },
-        comments: false,
+        // NC iOS gates the per-file Comments tab on this flag. We back it with
+        // /remote.php/dav/comments/files/{fileId} (PROPFIND/POST/PROPPATCH/DELETE)
+        // mapped onto Sync-in's existing comments app — see
+        // controllers/nc-comments.controller.ts. MVP: personal-space files only
+        // (FilesQueries.getUserFile is owner-scoped, mirroring the OnlyOffice
+        // resolver constraint), no per-user unread tracking (isUnread is always
+        // false; the readMarker PROPPATCH is accepted as a no-op).
+        comments: true,
         undelete: true,
         versioning: false,
         // Preview available for image mimes via /index.php/core/preview?file=<path>.

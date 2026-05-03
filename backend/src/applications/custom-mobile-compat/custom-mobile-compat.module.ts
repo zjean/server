@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common'
 import { AUTH_PROVIDER } from '../../authentication/providers/auth-providers.constants'
 import { AuthProviderOIDCModule } from '../../authentication/providers/oidc/auth-provider-oidc.module'
+import { CommentsModule } from '../comments/comments.module'
 import { configuration } from '../../configuration/config.environment'
 import { FilesModule } from '../files/files.module'
 import { SpacesModule } from '../spaces/spaces.module'
 import { UsersModule } from '../users/users.module'
 import { WebDAVModule } from '../webdav/webdav.module'
+import { NcCommentsController } from './controllers/nc-comments.controller'
 import { NcDavController } from './controllers/nc-dav.controller'
 import { NcDiscoveryController } from './controllers/nc-discovery.controller'
 import { NcExtrasController } from './controllers/nc-extras.controller'
@@ -50,13 +52,17 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
   // FilesModule exports FilesQueries (used by NcSyncReportService for DB id
   // resolution); SpacesModule provides spaces-aware helpers used elsewhere
   // in this module.
-  imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
+  // CommentsModule re-exports CommentsQueries for the NC iOS Comments tab —
+  // mapped onto the existing comments storage by NcCommentsController, no
+  // schema or domain changes.
+  imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, CommentsModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
   controllers: [
     NcDiscoveryController,
     NcLoginV2Controller,
     NcOcsController,
     NcDavController,
     NcExtrasController,
+    NcCommentsController,
     NcRecommendationsController,
     NcSearchController,
     NcThemingController,
