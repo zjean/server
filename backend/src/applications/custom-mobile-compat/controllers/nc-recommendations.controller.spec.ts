@@ -87,7 +87,9 @@ describe(NcRecommendationsController.name, () => {
     expect(r.headers['Content-Type']).toBe('application/xml; charset=utf-8')
     expect(r.body).toContain('<?xml')
     // Path navigated by NK: ocs → data → recommendations → element
-    expect(r.body).toMatch(/<ocs>[\s\S]*<data>[\s\S]*<recommendations>[\s\S]*<element>[\s\S]*<\/element>[\s\S]*<\/recommendations>[\s\S]*<\/data>[\s\S]*<\/ocs>/)
+    expect(r.body).toMatch(
+      /<ocs>[\s\S]*<data>[\s\S]*<recommendations>[\s\S]*<element>[\s\S]*<\/element>[\s\S]*<\/recommendations>[\s\S]*<\/data>[\s\S]*<\/ocs>/
+    )
   })
 
   it('emits enabled=1 sibling of recommendations (matches upstream RecommendationController->index)', async () => {

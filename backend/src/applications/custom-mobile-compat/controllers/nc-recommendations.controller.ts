@@ -54,9 +54,7 @@ export class NcRecommendationsController {
     // outside that scope would 404 on tap, so we filter by home prefix.
     const homePrefix = this.pathResolver.toInternalPath(this.pathResolver.resolve(req.user, { mode: 'files', subpath: '' }))
     const recents = await this.filesRecents.getRecents(req.user, limit)
-    const entries = recents
-      .map((rec) => toRecommendationEntry(rec, homePrefix))
-      .filter((entry): entry is NcRecommendationEntry => entry !== null)
+    const entries = recents.map((rec) => toRecommendationEntry(rec, homePrefix)).filter((entry): entry is NcRecommendationEntry => entry !== null)
 
     return res.header('Content-Type', 'application/xml; charset=utf-8').send(this.renderXml(entries))
   }
