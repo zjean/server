@@ -13,6 +13,7 @@ import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
+import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
@@ -54,6 +55,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcOcsController,
     NcDavController,
     NcExtrasController,
+    NcRecommendationsController,
     NcThemingController,
     NcUploadsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
