@@ -1,4 +1,5 @@
 import { configuration } from '../../../configuration/config.environment'
+import { ncDirectEditingCatalogEtag } from '../services/nc-direct-editing.service'
 
 // Static capabilities payload returned from /ocs/v{1,2}.php/cloud/capabilities.
 // Values are tuned to tell stock NC mobile clients which features are available.
@@ -59,7 +60,20 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
       files: {
         bigfilechunking: true,
         blacklisted_files: [],
-        directEditing: { url: '', etag: '' },
+        // NC iOS gates the per-file "Edit" affordance on this block being
+        // present AND the editor list at `url` advertising an editor named
+        // (lowercased) "nextcloud text" or "onlyoffice" with a mimetype that
+        // matches the file. Backed by NcDirectEditingController serving a
+        // catalog of plain-text/source-code mimetypes; the editor URL it
+        // returns from /open points at our in-app text editor (CodeMirror
+        // wrapped in a token-protected page). `supportsFileId: true` tells
+        // iOS to send `fileId` on /open — we use it as the canonical id and
+        // never trust `path`.
+        directEditing: {
+          url: `${serverUrl}/ocs/v2.php/apps/files/api/v1/directEditing`,
+          etag: ncDirectEditingCatalogEtag(),
+          supportsFileId: true
+        },
         // NC iOS gates the per-file Comments tab on this flag. We back it with
         // /remote.php/dav/comments/files/{fileId} (PROPFIND/POST/PROPPATCH/DELETE)
         // mapped onto Sync-in's existing comments app — see

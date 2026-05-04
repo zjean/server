@@ -55,6 +55,34 @@ describe('ncCapabilities', () => {
     expect(block.api_enabled).toBe(false)
   })
 
+  describe('files.directEditing block', () => {
+    // NC iOS gates the in-app Edit button for plain-text/source files on the
+    // shape of this block. Without `url`, iOS skips the catalog fetch and
+    // never lights up the button. Without `supportsFileId`, iOS may omit
+    // `fileId` from /open calls — but we depend on it as the canonical id.
+    it('points the catalog url at our /info endpoint on the same server', () => {
+      const block = ((caps.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).directEditing as {
+        url: string
+        etag: string
+        supportsFileId: boolean
+      }
+      expect(block.url).toBe('https://sync-in.example.test/ocs/v2.php/apps/files/api/v1/directEditing')
+    })
+
+    it('advertises supportsFileId=true so iOS always sends fileId to /open', () => {
+      const block = ((caps.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).directEditing as {
+        supportsFileId: boolean
+      }
+      expect(block.supportsFileId).toBe(true)
+    })
+
+    it('exposes a non-empty catalog etag so iOS invalidates its cached editor list when we change mimetypes', () => {
+      const block = ((caps.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).directEditing as { etag: string }
+      // 16-hex-char SHA-256 prefix per ncDirectEditingCatalogEtag().
+      expect(block.etag).toMatch(/^[a-f0-9]{16}$/)
+    })
+  })
+
   it('advertises files.comments=true so NC iOS shows the per-file Comments tab', () => {
     // Backed by NcCommentsController on /remote.php/dav/comments/files/{fileId}.
     // Flipping this to false silently hides the Comments tab in the file detail
