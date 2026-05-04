@@ -73,21 +73,50 @@
     </div>
     @if (infoOpen() && file(); as f) {
       <aside class="preview__info">
-        <div class="preview__info-head">{{ 'Info' | translate: locale.language }}</div>
-        <dl class="preview__kv">
-          <dt>{{ 'Name' | translate: locale.language }}</dt>
-          <dd class="preview__kv-val preview__kv-val--mono">{{ f.name }}</dd>
-          <dt>{{ 'Type' | translate: locale.language }}</dt>
-          <dd class="preview__kv-val">{{ f.mime }}</dd>
-          <dt>{{ 'Size' | translate: locale.language }}</dt>
-          <dd class="preview__kv-val preview__kv-val--mono">{{ f.size | toBytes: 2 : true }}</dd>
-          @if (resolution()) {
-            <dt>{{ 'Dimensions' | translate: locale.language }}</dt>
-            <dd class="preview__kv-val preview__kv-val--mono">{{ resolution() }}</dd>
+        <div class="preview__tabs" role="tablist">
+          <button
+            type="button"
+            class="preview__tab"
+            role="tab"
+            [class.preview__tab--active]="infoTab() === 'info'"
+            [attr.aria-selected]="infoTab() === 'info'"
+            (click)="setInfoTab('info')"
+          >
+            {{ 'Info' | translate: locale.language }}
+          </button>
+          @if (commentsAvailable()) {
+            <button
+              type="button"
+              class="preview__tab"
+              role="tab"
+              [class.preview__tab--active]="infoTab() === 'comments'"
+              [attr.aria-selected]="infoTab() === 'comments'"
+              (click)="setInfoTab('comments')"
+            >
+              {{ 'Comments' | translate: locale.language }}
+            </button>
           }
-          <dt>{{ 'Modified' | translate: locale.language }}</dt>
-          <dd class="preview__kv-val">{{ f.mtime | amTimeAgo }}</dd>
-        </dl>
+        </div>
+        @if (infoTab() === 'info') {
+          <dl class="preview__kv">
+            <dt>{{ 'Name' | translate: locale.language }}</dt>
+            <dd class="preview__kv-val preview__kv-val--mono">{{ f.name }}</dd>
+            <dt>{{ 'Type' | translate: locale.language }}</dt>
+            <dd class="preview__kv-val">{{ f.mime }}</dd>
+            <dt>{{ 'Size' | translate: locale.language }}</dt>
+            <dd class="preview__kv-val preview__kv-val--mono">{{ f.size | toBytes: 2 : true }}</dd>
+            @if (resolution()) {
+              <dt>{{ 'Dimensions' | translate: locale.language }}</dt>
+              <dd class="preview__kv-val preview__kv-val--mono">{{ resolution() }}</dd>
+            }
+            <dt>{{ 'Modified' | translate: locale.language }}</dt>
+            <dd class="preview__kv-val">{{ f.mtime | amTimeAgo }}</dd>
+          </dl>
+        } @else if (infoTab() === 'comments' && commentsAvailable()) {
+          <div class="preview__comments-host">
+            <app-v2-comments-panel [filePath]="path()" [fileId]="f.id" />
+          </div>
+        }
       </aside>
     }
   </div>

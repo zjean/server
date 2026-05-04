@@ -23,6 +23,7 @@ import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/inte
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
+import { CommentsPanelComponent } from '../components/comments-panel.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { assetsUrl } from '../../files/files.constants'
 import { IconV2Component } from '../icons/icon-v2.component'
@@ -69,7 +70,16 @@ function sameClassPredicate(current: FileProps | undefined): (f: FileProps) => b
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './preview.component.html',
   styleUrl: './preview.component.scss',
-  imports: [IconV2Component, IconButtonComponent, OfficeViewComponent, TextCodeViewComponent, ToBytesPipe, TimeAgoPipe, L10nTranslatePipe]
+  imports: [
+    IconV2Component,
+    IconButtonComponent,
+    OfficeViewComponent,
+    TextCodeViewComponent,
+    CommentsPanelComponent,
+    ToBytesPipe,
+    TimeAgoPipe,
+    L10nTranslatePipe
+  ]
 })
 export class PreviewComponent {
   private readonly http = inject(HttpClient)
@@ -97,6 +107,9 @@ export class PreviewComponent {
   protected readonly resolution = signal<string>('')
   protected readonly loadError = signal<string | null>(null)
   protected readonly infoOpen = signal(false)
+  // Which sub-tab the info aside is showing. 'comments' is auto-disabled for
+  // folders (the panel itself shows an empty state, but we never reach there).
+  protected readonly infoTab = signal<'info' | 'comments'>('info')
 
   // For PDFs only: 'pdf' (default, pdf.js iframe) or 'office' (OnlyOffice
   // editor for editable PDFs). Office files always render as office; this
@@ -131,7 +144,16 @@ export class PreviewComponent {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
-  protected readonly isOffice = computed(() => isOfficeExtension(this.file()?.name))
+  // PDFs are also in ONLY_OFFICE_EXTENSIONS (OnlyOffice can edit them), but
+  // for preview routing we want them to take the dedicated pdf.js branch by
+  // default. The toolbar's pencil button (canToggleToOffice + pdfStage) is
+  // the explicit opt-in to swap to OnlyOffice. Without this exclusion,
+  // showOfficeEmbed() short-circuits the pdfSafeUrl branch and the user
+  // never sees pdf.js even though the iframe URL is correctly built.
+  protected readonly isOffice = computed(() => {
+    const f = this.file()
+    return !!f && !isPdfMime(f.mime) && isOfficeExtension(f.name)
+  })
   protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
   protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
   // True for plain-text / source-code files we can open in CodeMirror.
@@ -152,19 +174,32 @@ export class PreviewComponent {
   // server has no document server configured, so we don't pre-check here.)
   protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
 
+  // Comments tab is only meaningful for actual files. Folders use the
+  // standard file detail screen for comments anyway; in the preview, we
+  // hide the tab rather than show a "comments are file-only" empty state.
+  protected readonly commentsAvailable = computed(() => {
+    const f = this.file()
+    return !!f && !f.isDir
+  })
+
   constructor() {
     // Re-load whenever the input path changes. Covers in-overlay sibling
     // navigation (path mutates without component remounting) AND the
-    // initial mount. Reset pdfStage on every navigation so a previous
-    // PDF's "edit" toggle doesn't leak into the next file.
+    // initial mount. Reset pdfStage and the info-tab on every navigation
+    // so a previous file's editor toggle / comments tab doesn't leak in.
     effect(() => {
       const p = this.path()
       if (!p) return
       this.resolution.set('')
       this.loadError.set(null)
       this.pdfStage.set('pdf')
+      this.infoTab.set('info')
       this.loadFile(p)
     })
+  }
+
+  protected setInfoTab(tab: 'info' | 'comments'): void {
+    this.infoTab.set(tab)
   }
 
   @HostListener('window:keydown', ['$event'])
