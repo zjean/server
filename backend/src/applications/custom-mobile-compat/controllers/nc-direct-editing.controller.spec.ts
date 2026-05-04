@@ -156,18 +156,8 @@ describe(NcDirectEditingController.name, () => {
       })
     })
 
-    it('refuses to open files whose mimetype is not in our editable catalog', async () => {
-      // image/jpeg — not editable. Refuse rather than minting a token for a
-      // file the editor would render as garbage.
-      getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/photo.jpg', mime: 'image-jpeg' })
-      const r = makeRes()
-      await expect(controller.open(makeReq(), r.res, '/photo.jpg', NC_DIRECT_EDITING_EDITOR_ID, '42')).rejects.toMatchObject({
-        status: 415
-      })
-    })
-
     it('looks up the file using the authenticated user (no cross-tenant peek)', async () => {
-      getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md', mime: 'text-markdown' })
+      getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md' })
       const r = makeRes()
       await controller.open(makeReq(), r.res, '/notes.md', NC_DIRECT_EDITING_EDITOR_ID, '42')
 

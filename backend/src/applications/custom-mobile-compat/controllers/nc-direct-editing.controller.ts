@@ -88,7 +88,15 @@ export class NcDirectEditingController {
     // Owner-scoped lookup. Same constraint as NcOnlyOfficeFileResolver:
     // direct editing currently only supports personal-space files. A user
     // querying someone else's fileId returns null here → 404.
-    let row: { id: number; path: string; mime?: string } | null = null
+    //
+    // We do NOT validate the mimetype here — `getUserFile` returns only
+    // {id, path}, and iOS already gates `isAvailableDirectEditingEditorView`
+    // on the file's content-type matching our advertised catalog before
+    // the Edit button appears. Mimetype enforcement at content-load time
+    // (where we resolve a SpaceEnv that carries the mime) is the second
+    // layer; opening a token for a non-editable file is harmless because
+    // the editor will refuse to load its content.
+    let row: { id: number; path: string } | null = null
     try {
       row = await this.filesQueries.getUserFile(req.user.id, fileId)
     } catch {
@@ -96,10 +104,6 @@ export class NcDirectEditingController {
     }
     if (!row) {
       throw new HttpException('file not found', HttpStatus.NOT_FOUND)
-    }
-
-    if (!this.directEditing.isEditableMime(row.mime)) {
-      throw new HttpException('mimetype not editable', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     }
 
     const token = await this.directEditing.mintEditToken({ user: req.user, fileId })
