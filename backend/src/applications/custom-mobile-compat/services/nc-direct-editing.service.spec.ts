@@ -1,6 +1,22 @@
 import { JwtModule, JwtService } from '@nestjs/jwt'
 import { Test, type TestingModule } from '@nestjs/testing'
+import { UserModel } from '../../users/models/user.model'
 import { NcDirectEditingService, NC_DIRECT_EDITING_EDITOR_ID, NC_DIRECT_EDITING_EDITOR_NAME, NC_DIRECT_EDITING_TOKEN_TTL_SEC } from './nc-direct-editing.service'
+
+function makeUser(overrides: Partial<UserModel> = {}): UserModel {
+  return new UserModel({
+    id: 7,
+    login: 'alice',
+    email: 'alice@example.test',
+    firstName: 'Alice',
+    lastName: 'Example',
+    language: 'en',
+    role: 1,
+    permissions: '',
+    applications: [],
+    ...overrides
+  } as Partial<UserModel>)
+}
 
 // Token signing secret for the test JwtModule. Production uses
 // configuration.auth.token.access.secret — see service implementation.
@@ -83,17 +99,19 @@ describe(NcDirectEditingService.name, () => {
   })
 
   describe('mintEditToken / verifyEditToken', () => {
-    it('round-trips userId + fileId through a signed JWT', async () => {
-      const token = await svc.mintEditToken({ userId: 7, fileId: 42 })
+    it('round-trips identity + fileId through a signed JWT', async () => {
+      const user = makeUser({ id: 7, login: 'alice', email: 'alice@example.test' })
+      const token = await svc.mintEditToken({ user, fileId: 42 })
       expect(typeof token).toBe('string')
       expect(token.split('.').length).toBe(3) // header.payload.signature
 
       const claims = await svc.verifyEditToken(token)
-      expect(claims).toEqual({ userId: 7, fileId: 42 })
+      expect(claims.fileId).toBe(42)
+      expect(claims.identity).toMatchObject({ id: 7, login: 'alice', email: 'alice@example.test' })
     })
 
     it('issues tokens with the documented short TTL (so leaked URLs expire fast)', async () => {
-      const token = await svc.mintEditToken({ userId: 1, fileId: 1 })
+      const token = await svc.mintEditToken({ user: makeUser(), fileId: 1 })
       const decoded = jwt.decode(token) as { iat: number; exp: number; scope: string }
       expect(decoded.exp - decoded.iat).toBe(NC_DIRECT_EDITING_TOKEN_TTL_SEC)
       // Scope claim narrows the token's blast radius if the access secret
@@ -101,20 +119,48 @@ describe(NcDirectEditingService.name, () => {
       expect(decoded.scope).toBe('nc-direct-editing:edit')
     })
 
+    it('reconstructs only the safe identity fields — no password, no secrets', async () => {
+      // Defense in depth: even if someone passes a UserModel that still
+      // carries password/secrets, the token must not leak them. Confirms
+      // identityFromUser whitelists fields rather than spreading.
+      const user = makeUser({ id: 7, login: 'alice' })
+      ;(user as unknown as Record<string, unknown>).password = 'should-not-leak'
+      ;(user as unknown as Record<string, unknown>).secrets = { totpSecret: 'never' }
+
+      const token = await svc.mintEditToken({ user, fileId: 1 })
+      const decoded = jwt.decode(token) as { identity: Record<string, unknown> }
+      expect(decoded.identity.password).toBeUndefined()
+      expect(decoded.identity.secrets).toBeUndefined()
+    })
+
     it('rejects tokens signed with a different secret', async () => {
       // Sign a payload with a DIFFERENT secret — verify must reject.
-      const wrong = await jwt.signAsync({ userId: 7, fileId: 42, scope: 'nc-direct-editing:edit' }, { secret: 'different-secret', expiresIn: 60 })
+      const wrong = await jwt.signAsync(
+        { identity: { id: 7, login: 'alice' }, fileId: 42, scope: 'nc-direct-editing:edit' },
+        { secret: 'different-secret', expiresIn: 60 }
+      )
       await expect(svc.verifyEditToken(wrong)).rejects.toBeDefined()
     })
 
     it('rejects tokens with the wrong scope (defense in depth if secret is reused)', async () => {
-      const wrongScope = await jwt.signAsync({ userId: 7, fileId: 42, scope: 'something-else' }, { secret: TEST_SECRET, expiresIn: 60 })
+      const wrongScope = await jwt.signAsync(
+        { identity: { id: 7, login: 'alice' }, fileId: 42, scope: 'something-else' },
+        { secret: TEST_SECRET, expiresIn: 60 }
+      )
       await expect(svc.verifyEditToken(wrongScope)).rejects.toBeDefined()
+    })
+
+    it('rejects tokens missing the identity claim entirely', async () => {
+      const noIdentity = await jwt.signAsync({ fileId: 42, scope: 'nc-direct-editing:edit' }, { secret: TEST_SECRET, expiresIn: 60 })
+      await expect(svc.verifyEditToken(noIdentity)).rejects.toBeDefined()
     })
 
     it('rejects expired tokens', async () => {
       // Sign with a negative expiry → already expired at issue time.
-      const expired = await jwt.signAsync({ userId: 7, fileId: 42, scope: 'nc-direct-editing:edit' }, { secret: TEST_SECRET, expiresIn: -1 })
+      const expired = await jwt.signAsync(
+        { identity: { id: 7, login: 'alice' }, fileId: 42, scope: 'nc-direct-editing:edit' },
+        { secret: TEST_SECRET, expiresIn: -1 }
+      )
       await expect(svc.verifyEditToken(expired)).rejects.toBeDefined()
     })
 

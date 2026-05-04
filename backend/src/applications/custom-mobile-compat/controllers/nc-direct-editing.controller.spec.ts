@@ -114,8 +114,9 @@ describe(NcDirectEditingController.name, () => {
       const match = out.ocs.data.url.match(/[?&]token=([^&]+)/)
       expect(match).not.toBeNull()
       const token = decodeURIComponent(match![1])
-      const decoded = jwt.decode(token) as { userId: number; fileId: number; scope: string }
-      expect(decoded.userId).toBe(7)
+      const decoded = jwt.decode(token) as { identity: { id: number; login: string }; fileId: number; scope: string }
+      expect(decoded.identity.id).toBe(7)
+      expect(decoded.identity.login).toBe('alice')
       expect(decoded.fileId).toBe(42)
       expect(decoded.scope).toBe('nc-direct-editing:edit')
     })

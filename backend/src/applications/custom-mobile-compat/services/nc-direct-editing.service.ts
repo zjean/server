@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
+import { JwtIdentityPayload } from '../../../authentication/interfaces/jwt-payload.interface'
 import { configuration } from '../../../configuration/config.environment'
+import type { UserModel } from '../../users/models/user.model'
 
 // NC iOS gates the Edit affordance on the editor *name* (lowercased) being
 // one of `"nextcloud text"` or `"onlyoffice"` — see
@@ -69,12 +71,16 @@ export interface NcDirectCreator {
 }
 
 export interface NcDirectEditClaims {
-  userId: number
+  // Full identity payload — same shape carried by Sync-in's normal access
+  // tokens. Embedding it here lets the editor controller reconstruct a
+  // UserModel via `new UserModel(identity)` without a DB hit per request,
+  // mirroring what OnlyOfficeStrategy does on its query-token surface.
+  identity: JwtIdentityPayload
   fileId: number
 }
 
 interface InternalEditTokenPayload {
-  userId: number
+  identity: JwtIdentityPayload
   fileId: number
   scope: string
 }
@@ -121,8 +127,9 @@ export class NcDirectEditingService {
     return NC_DIRECT_EDITING_MIMETYPES.includes(normalized)
   }
 
-  async mintEditToken(claims: NcDirectEditClaims): Promise<string> {
-    const payload: InternalEditTokenPayload = { userId: claims.userId, fileId: claims.fileId, scope: TOKEN_SCOPE }
+  async mintEditToken(args: { user: UserModel; fileId: number }): Promise<string> {
+    const identity = identityFromUser(args.user)
+    const payload: InternalEditTokenPayload = { identity, fileId: args.fileId, scope: TOKEN_SCOPE }
     return this.jwt.signAsync(payload, {
       secret: configuration.auth.token.access.secret,
       expiresIn: NC_DIRECT_EDITING_TOKEN_TTL_SEC
@@ -133,10 +140,33 @@ export class NcDirectEditingService {
     const decoded = await this.jwt.verifyAsync<InternalEditTokenPayload>(token, {
       secret: configuration.auth.token.access.secret
     })
-    if (!decoded || decoded.scope !== TOKEN_SCOPE || typeof decoded.userId !== 'number' || typeof decoded.fileId !== 'number') {
+    if (
+      !decoded ||
+      decoded.scope !== TOKEN_SCOPE ||
+      !decoded.identity ||
+      typeof decoded.identity.id !== 'number' ||
+      typeof decoded.identity.login !== 'string' ||
+      typeof decoded.fileId !== 'number'
+    ) {
       throw new Error('invalid direct-editing token')
     }
-    return { userId: decoded.userId, fileId: decoded.fileId }
+    return { identity: decoded.identity, fileId: decoded.fileId }
+  }
+}
+
+// Build a JwtIdentityPayload from a UserModel. UserModel carries everything
+// needed; we just whittle it down to the fields the access-token strategy
+// stores. Anything extra (paths, secrets, etc.) is intentionally dropped.
+function identityFromUser(user: UserModel): JwtIdentityPayload {
+  return {
+    id: user.id,
+    login: user.login,
+    email: user.email,
+    fullName: user.fullName,
+    language: user.language,
+    role: user.role,
+    applications: user.applications ?? [],
+    clientId: user.clientId
   }
 }
 

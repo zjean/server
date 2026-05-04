@@ -102,7 +102,7 @@ export class NcDirectEditingController {
       throw new HttpException('mimetype not editable', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     }
 
-    const token = await this.directEditing.mintEditToken({ userId: req.user.id, fileId })
+    const token = await this.directEditing.mintEditToken({ user: req.user, fileId })
     const url = `${this.response.baseUrl(req)}${NC_DIRECT_EDITING_EDITOR_PATH}?token=${encodeURIComponent(token)}`
 
     return this.response.json(res, { url })
