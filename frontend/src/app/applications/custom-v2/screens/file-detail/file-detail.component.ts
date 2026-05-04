@@ -146,7 +146,7 @@ export class FileDetailComponent implements OnInit {
   }
 
   private goTo(path: string): void {
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path } }).catch(console.error)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path }, replaceUrl: true }).catch(console.error)
   }
 
   private loadFile(path: string, tabRequested: boolean): void {

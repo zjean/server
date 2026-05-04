@@ -621,7 +621,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     if (!alias) return
     const segs = this.pathSegments().map((s) => s.path)
     const fullPath = [SPACE_REPOSITORY.FILES, alias, ...segs, file.name].join('/')
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath, tab: 'comment' } }).catch(console.error)
+    this.previewOverlay.open(fullPath, file, { initialTab: 'comments' })
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {
