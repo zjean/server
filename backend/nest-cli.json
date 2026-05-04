@@ -12,6 +12,9 @@
         "include": "./applications/files/assets"
       },
       {
+        "include": "./applications/custom-mobile-compat/assets"
+      },
+      {
         "include": "./common/fonts"
       }
     ]
