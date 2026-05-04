@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync, statSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { JwtModule } from '@nestjs/jwt'
@@ -16,7 +16,13 @@ import { NcTextEditorController } from './nc-text-editor.controller'
 const TEST_SECRET = 'test-secret-for-text-editor-controller'
 
 function makeRes(): { res: FastifyReply; headers: Record<string, string>; status: number; body?: unknown; sent: boolean } {
-  const state = { res: undefined as unknown as FastifyReply, headers: {} as Record<string, string>, status: 200, body: undefined as unknown, sent: false }
+  const state = {
+    res: undefined as unknown as FastifyReply,
+    headers: {} as Record<string, string>,
+    status: 200,
+    body: undefined as unknown,
+    sent: false
+  }
   const res = {
     header: (k: string, v: string) => {
       state.headers[k] = v
@@ -111,7 +117,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'notes.md')
       writeFileSync(realPath, '# Hello\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/notes.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'notes.md', path: '/personal', mime: 'text/markdown', size: 8 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'notes.md', path: '/personal', mime: 'text/markdown', size: 8 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -170,7 +178,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'photo.jpg')
       writeFileSync(realPath, 'fake-jpeg')
       getUserFile.mockResolvedValue({ id: 42, path: '/photo.jpg' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'photo.jpg', path: '/personal', mime: 'image-jpeg', size: 9 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'photo.jpg', path: '/personal', mime: 'image-jpeg', size: 9 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -185,7 +195,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'notes2.md')
       writeFileSync(realPath, '# Notes\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/notes2.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'notes2.md', path: '/personal', mime: 'text-markdown', size: 9 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'notes2.md', path: '/personal', mime: 'text-markdown', size: 9 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -211,7 +223,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'photo2.jpg')
       writeFileSync(realPath, 'fake')
       getUserFile.mockResolvedValue({ id: 42, path: '/photo2.jpg' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'photo2.jpg', path: '/personal', mime: 'image-jpeg', size: 4 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'photo2.jpg', path: '/personal', mime: 'image-jpeg', size: 4 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -223,7 +237,9 @@ describe(NcTextEditorController.name, () => {
       // 6 MB > 5 MB cap.
       writeFileSync(realPath, Buffer.alloc(6 * 1024 * 1024, 'a'))
       getUserFile.mockResolvedValue({ id: 42, path: '/big2.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'big2.md', path: '/personal', mime: 'text/markdown', size: 6 * 1024 * 1024 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'big2.md', path: '/personal', mime: 'text/markdown', size: 6 * 1024 * 1024 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -236,7 +252,9 @@ describe(NcTextEditorController.name, () => {
       return {
         method: 'PUT',
         headers: { 'content-type': 'text/plain', 'content-length': '7', ...extraHeaders },
-        raw: { /* would be a Readable in production */ } as never
+        raw: {
+          /* would be a Readable in production */
+        } as never
       } as unknown as FastifyRequest
     }
 
@@ -244,7 +262,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'put1.md')
       writeFileSync(realPath, '# v1\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/put1.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'put1.md', path: '/personal', mime: 'text-markdown', size: 5 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put1.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
       saveStream.mockImplementation(async () => {
         // Simulate the underlying write — mtime/size change so ETag updates.
         writeFileSync(realPath, 'NEW v2\n')
@@ -266,7 +286,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'put2.md')
       writeFileSync(realPath, '# v1\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/put2.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'put2.md', path: '/personal', mime: 'text-markdown', size: 5 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put2.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -278,7 +300,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'put3.md')
       writeFileSync(realPath, '# v1\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/put3.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'put3.md', path: '/personal', mime: 'text-markdown', size: 5 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put3.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
       saveStream.mockResolvedValue(true)
       const currentEtag = genEtag(null, realPath, false)
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
@@ -294,7 +318,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'put4.md')
       writeFileSync(realPath, '# v1\n')
       getUserFile.mockResolvedValue({ id: 42, path: '/put4.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'put4.md', path: '/personal', mime: 'text-markdown', size: 5 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put4.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
       const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
 
       const r = makeRes()
@@ -316,7 +342,9 @@ describe(NcTextEditorController.name, () => {
       const realPath = join(workDir, 'put5.md')
       writeFileSync(realPath, 'hi')
       getUserFile.mockResolvedValue({ id: 42, path: '/put5.md' })
-      spaceEnv.mockResolvedValue(makeSpace(realPath, { dbFile: { id: 42, name: 'put5.md', path: '/personal', mime: 'text-markdown', size: 2 } as any }))
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put5.md', path: '/personal', mime: 'text-markdown', size: 2 } as any })
+      )
       saveStream.mockResolvedValue(true)
       const token = await directEditing.mintEditToken({ user: makeUser({ id: 7, login: 'alice' }), fileId: 42 })
 
@@ -342,6 +370,3 @@ describe(NcTextEditorController.name, () => {
     })
   })
 })
-
-// Silence unused-import warning if fs.statSync is reachable but not called above.
-void statSync

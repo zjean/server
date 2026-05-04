@@ -23,15 +23,31 @@ const MAX_EDITABLE_BYTES = 5 * 1024 * 1024
 function inferLanguage(fileName: string, mime: string | undefined): string {
   const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : ''
   const byExt: Record<string, string> = {
-    md: 'markdown', markdown: 'markdown', mdown: 'markdown',
-    js: 'javascript', mjs: 'javascript', cjs: 'javascript',
-    ts: 'typescript', tsx: 'typescript', jsx: 'javascript',
-    json: 'json', json5: 'json',
-    html: 'html', htm: 'html',
-    css: 'css', scss: 'css', less: 'css',
-    xml: 'xml', svg: 'xml', plist: 'xml',
-    yml: 'yaml', yaml: 'yaml',
-    py: 'python', sh: 'shell', bash: 'shell', zsh: 'shell'
+    md: 'markdown',
+    markdown: 'markdown',
+    mdown: 'markdown',
+    js: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    ts: 'typescript',
+    tsx: 'typescript',
+    jsx: 'javascript',
+    json: 'json',
+    json5: 'json',
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'css',
+    less: 'css',
+    xml: 'xml',
+    svg: 'xml',
+    plist: 'xml',
+    yml: 'yaml',
+    yaml: 'yaml',
+    py: 'python',
+    sh: 'shell',
+    bash: 'shell',
+    zsh: 'shell'
   }
   if (byExt[ext]) return byExt[ext]
   if (mime?.startsWith('text-markdown') || mime?.startsWith('text/markdown')) return 'markdown'
@@ -76,21 +92,28 @@ export class NcTextEditorController {
     }
 
     const oversized = (space.dbFile.size ?? 0) > MAX_EDITABLE_BYTES
-    return res
-      .header('Content-Type', 'text/html; charset=utf-8')
-      // Defense in depth — the page itself renders a token in HTML, but its
-      // attack surface is small. CSP keeps inline scripts intentional.
-      .header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'")
-      .header('X-Frame-Options', 'DENY')
-      .send(
-        renderTextEditorPage({
-          token: token ?? '',
-          fileName,
-          language: inferLanguage(fileName, mime),
-          readOnly: oversized,
-          readOnlyReason: oversized ? `This file is larger than ${Math.round(MAX_EDITABLE_BYTES / 1024 / 1024)} MB and is read-only here.` : undefined
-        })
-      )
+    return (
+      res
+        .header('Content-Type', 'text/html; charset=utf-8')
+        // Defense in depth — the page itself renders a token in HTML, but its
+        // attack surface is small. CSP keeps inline scripts intentional.
+        .header(
+          'Content-Security-Policy',
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"
+        )
+        .header('X-Frame-Options', 'DENY')
+        .send(
+          renderTextEditorPage({
+            token: token ?? '',
+            fileName,
+            language: inferLanguage(fileName, mime),
+            readOnly: oversized,
+            readOnlyReason: oversized
+              ? `This file is larger than ${Math.round(MAX_EDITABLE_BYTES / 1024 / 1024)} MB and is read-only here.`
+              : undefined
+          })
+        )
+    )
   }
 
   // GET /custom-mobile-compat/text-editor/content?token=…

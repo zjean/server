@@ -77,7 +77,9 @@ describe('ncCapabilities', () => {
     })
 
     it('exposes a non-empty catalog etag so iOS invalidates its cached editor list when we change mimetypes', () => {
-      const block = ((caps.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).directEditing as { etag: string }
+      const block = ((caps.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).directEditing as {
+        etag: string
+      }
       // 16-hex-char SHA-256 prefix per ncDirectEditingCatalogEtag().
       expect(block.etag).toMatch(/^[a-f0-9]{16}$/)
     })

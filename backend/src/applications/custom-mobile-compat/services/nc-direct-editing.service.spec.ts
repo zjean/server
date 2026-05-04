@@ -1,7 +1,12 @@
 import { JwtModule, JwtService } from '@nestjs/jwt'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { UserModel } from '../../users/models/user.model'
-import { NcDirectEditingService, NC_DIRECT_EDITING_EDITOR_ID, NC_DIRECT_EDITING_EDITOR_NAME, NC_DIRECT_EDITING_TOKEN_TTL_SEC } from './nc-direct-editing.service'
+import {
+  NcDirectEditingService,
+  NC_DIRECT_EDITING_EDITOR_ID,
+  NC_DIRECT_EDITING_EDITOR_NAME,
+  NC_DIRECT_EDITING_TOKEN_TTL_SEC
+} from './nc-direct-editing.service'
 
 function makeUser(overrides: Partial<UserModel> = {}): UserModel {
   return new UserModel({

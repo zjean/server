@@ -48,7 +48,10 @@ export class NcDirectEditingController {
   ) {}
 
   @Get('ocs/v2.php/apps/files/api/v1/directEditing')
-  async info(@Req() req: FastifyRequest & { user: UserModel }, @Res({ passthrough: true }) res: FastifyReply): Promise<OcsEnvelope<InfoResponseData>> {
+  async info(
+    @Req() req: FastifyRequest & { user: UserModel },
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<OcsEnvelope<InfoResponseData>> {
     this.response.requireJson(req)
     return this.response.json(res, {
       editors: this.directEditing.listEditors(),
