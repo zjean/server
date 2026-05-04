@@ -12,6 +12,10 @@ export interface PreviewTarget {
   file: FileProps | null
 }
 
+export interface PreviewOpenOptions {
+  initialTab?: 'info' | 'comments'
+}
+
 // Sole owner of "is the preview overlay open and on what file?".
 //
 // Opening pushes a synthetic URL via Location.go (NOT router navigation) so
@@ -32,6 +36,14 @@ export class PreviewOverlayService {
 
   readonly current = signal<PreviewTarget | null>(null)
   readonly isOpen = computed(() => this.current() !== null)
+
+  // Tab to activate when the overlay opens. Consumed once by PreviewComponent
+  // via the initialTab getter; reset to 'info' after each open() call so
+  // sibling navigation within an already-open overlay doesn't re-apply it.
+  private _initialTab: 'info' | 'comments' = 'info'
+  get initialTab(): 'info' | 'comments' {
+    return this._initialTab
+  }
 
   // Optional close-guard registered by the active sub-view (e.g. text/code
   // editor) so unsaved-changes confirmation can run before the overlay
@@ -67,9 +79,10 @@ export class PreviewOverlayService {
   // Open the overlay over the current route. The route doesn't change; only
   // the query string gains `?preview=<path>`. If the same path is already
   // open, this is a no-op so we don't stack history entries.
-  open(path: string, file: FileProps | null = null): void {
+  open(path: string, file: FileProps | null = null, opts?: PreviewOpenOptions): void {
     if (!path) return
     if (this.current()?.path === path) return
+    this._initialTab = opts?.initialTab ?? 'info'
     this.current.set({ path, file })
     this.location.go(this.urlWithPreview(path))
   }

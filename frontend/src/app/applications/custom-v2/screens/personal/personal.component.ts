@@ -631,9 +631,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   protected openComments(file: FileProps): void {
     if (file.isDir) return
-    const segs = this.pathSegments().map((s) => s.path)
-    const fullPath = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
-    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath, tab: 'comment' } }).catch(console.error)
+    const fullPath = this.buildFullPath(file)
+    this.previewOverlay.open(fullPath, file, { initialTab: 'comments' })
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {

@@ -185,15 +185,19 @@ export class PreviewComponent {
   constructor() {
     // Re-load whenever the input path changes. Covers in-overlay sibling
     // navigation (path mutates without component remounting) AND the
-    // initial mount. Reset pdfStage and the info-tab on every navigation
-    // so a previous file's editor toggle / comments tab doesn't leak in.
+    // initial mount. Reset pdfStage and apply the requested initial tab
+    // (overlay.initialTab is a plain getter, not a signal, so reading it
+    // here creates no reactive dependency — it's consumed once per open).
     effect(() => {
       const p = this.path()
       if (!p) return
       this.resolution.set('')
       this.loadError.set(null)
       this.pdfStage.set('pdf')
-      this.infoTab.set('info')
+      const initTab = this.mode() === 'overlay' ? this.overlay.initialTab : 'info'
+      this.infoTab.set(initTab)
+      if (initTab === 'comments') this.infoOpen.set(true)
+      else this.infoOpen.set(false)
       this.loadFile(p)
     })
   }
