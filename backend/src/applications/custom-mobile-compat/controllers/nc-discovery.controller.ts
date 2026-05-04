@@ -66,10 +66,7 @@ export class NcDiscoveryController {
   // the convention already in nc-comments / nc-dav controllers.
   @All('remote.php/dav')
   @All('remote.php/dav/')
-  async davRoot(
-    @Req() req: FastifyRequest & { user?: UserModel; body?: unknown },
-    @Res() res: FastifyReply
-  ): Promise<FastifyReply | void> {
+  async davRoot(@Req() req: FastifyRequest & { user?: UserModel; body?: unknown }, @Res() res: FastifyReply): Promise<FastifyReply | void> {
     res.header('WWW-Authenticate', `Basic realm="${NC_AUTH_REALM}"`)
     res.header('DAV', '1, 2, 3')
 
