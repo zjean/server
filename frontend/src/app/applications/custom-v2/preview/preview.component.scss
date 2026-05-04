@@ -28,12 +28,12 @@
   }
 
   &__header {
-    height: 32px;
-    padding: 0 10px;
+    height: 44px;
+    padding: 0 14px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     background: var(--si-chrome-bg);
     color: rgba(255, 255, 255, 0.95);
   }
@@ -43,7 +43,7 @@
   }
 
   &__header-name {
-    font-size: 12px;
+    font-size: 13px;
     font-family: var(--si-mono);
     letter-spacing: -0.05px;
     overflow: hidden;
@@ -56,17 +56,17 @@
   &__header-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     margin-left: auto;
   }
 
   &__toolbar {
-    height: 40px;
-    padding: 0 10px;
+    height: 52px;
+    padding: 0 14px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     background: var(--si-bg1);
     border-bottom: 1px solid var(--si-line);
   }
@@ -74,7 +74,7 @@
   &__counter {
     flex: 1;
     text-align: center;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
   }
@@ -197,51 +197,83 @@
   }
 
   &__info {
-    width: 280px;
+    width: 320px;
     flex-shrink: 0;
     background: var(--si-bg2);
     border-left: 1px solid var(--si-line);
     display: flex;
     flex-direction: column;
-    overflow: auto;
+    min-height: 0;
+    overflow: hidden; // child scroll containers handle overflow themselves
   }
 
-  &__info-head {
-    padding: 14px;
+  // Tab strip at the top of the info aside. Replaces the old static
+  // "Info" caption — now switches between properties and the comments
+  // panel.
+  &__tabs {
+    flex: 0 0 auto;
+    display: flex;
     border-bottom: 1px solid var(--si-line);
-    font-size: 11.5px;
-    color: var(--si-fg-faint);
-    font-weight: 500;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
+    background: var(--si-bg2);
+  }
+
+  &__tab {
+    flex: 1 1 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 14px 12px 12px;
     font-family: var(--si-display);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--si-fg-faint);
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+
+    &:hover {
+      color: var(--si-fg);
+      background: var(--si-bg3);
+    }
+
+    &--active {
+      color: var(--si-fg);
+      border-bottom-color: var(--si-nav, var(--si-fg));
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--si-nav, var(--si-fg));
+      outline-offset: -2px;
+    }
   }
 
   &__kv {
     margin: 0;
-    padding: 14px;
+    padding: 18px;
     display: grid;
-    grid-template-columns: 88px 1fr;
-    gap: 8px;
-    font-size: 12px;
-    align-items: center;
+    grid-template-columns: 96px 1fr;
+    gap: 12px;
+    font-size: 13px;
+    align-items: baseline;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
 
     dt {
       color: var(--si-fg-faint);
       font-family: var(--si-sans);
-      padding: 5px 0;
+      padding: 7px 0;
     }
 
     dd {
       margin: 0;
-      padding: 5px 0;
+      padding: 7px 0;
     }
   }
 
   &__kv-val {
     color: var(--si-fg);
     font-family: var(--si-sans);
-    font-size: 12px;
+    font-size: 13px;
     letter-spacing: -0.05px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -249,7 +281,18 @@
 
     &--mono {
       font-family: var(--si-mono);
-      font-size: 11.5px;
+      font-size: 12.5px;
     }
+  }
+
+  // Wrapper around <app-v2-comments-panel>. The panel manages its own
+  // padding; we just give it a scrollable host so long threads don't
+  // push the tab strip out of view.
+  &__comments-host {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
   }
 }
