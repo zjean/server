@@ -16,7 +16,6 @@ import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
-import { NcSearchController } from './controllers/nc-search.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcSearchService } from './services/nc-search.service'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
@@ -64,7 +63,6 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcExtrasController,
     NcCommentsController,
     NcRecommendationsController,
-    NcSearchController,
     NcThemingController,
     NcUploadsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
