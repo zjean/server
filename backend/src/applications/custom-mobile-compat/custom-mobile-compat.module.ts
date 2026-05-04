@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module'
 import { WebDAVModule } from '../webdav/webdav.module'
 import { NcCommentsController } from './controllers/nc-comments.controller'
 import { NcDavController } from './controllers/nc-dav.controller'
+import { NcDirectEditingController } from './controllers/nc-direct-editing.controller'
 import { NcDiscoveryController } from './controllers/nc-discovery.controller'
 import { NcExtrasController } from './controllers/nc-extras.controller'
 import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
@@ -16,12 +17,14 @@ import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
+import { NcTextEditorController } from './controllers/nc-text-editor.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcSearchService } from './services/nc-search.service'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
+import { NcDirectEditingService } from './services/nc-direct-editing.service'
 import { NcFileRowEnsurer } from './services/nc-file-row-ensurer.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcMobileOidcService } from './services/nc-mobile-oidc.service'
@@ -62,7 +65,9 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcDavController,
     NcExtrasController,
     NcCommentsController,
+    NcDirectEditingController,
     NcRecommendationsController,
+    NcTextEditorController,
     NcThemingController,
     NcUploadsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
@@ -75,6 +80,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcPathResolverService,
     NcResponseService,
     NcChunkedUploadsService,
+    NcDirectEditingService,
     NcFileRowEnsurer,
     NcPropfindService,
     NcSearchService,
