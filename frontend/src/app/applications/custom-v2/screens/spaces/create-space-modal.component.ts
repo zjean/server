@@ -16,7 +16,6 @@ import {
 import { Subject, Subscription } from 'rxjs'
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
-import { USER_ROLE } from '@sync-in-server/backend/src/applications/users/constants/user'
 import type { CreateOrUpdateSpaceDto, SpaceMemberDto } from '@sync-in-server/backend/src/applications/spaces/dto/create-or-update-space.dto'
 import { AdminService } from '../../../admin/admin.service'
 import { SpacesService } from '../../../spaces/services/spaces.service'
@@ -51,7 +50,7 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
   private readonly userService = inject(UserService)
   private readonly adminService = inject(AdminService)
   private readonly store = inject(StoreService)
-  private readonly isAdmin: boolean = this.store.user.getValue()?.role === USER_ROLE.ADMINISTRATOR
+  private readonly isAdmin: boolean = this.store.user.getValue()?.isAdmin ?? false
 
   protected readonly tab = signal<Tab>('settings')
   protected readonly name = signal('')

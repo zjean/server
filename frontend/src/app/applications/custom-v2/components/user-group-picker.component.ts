@@ -1,11 +1,12 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, ElementRef, EventEmitter, inject, Input, Output, signal, ViewChild } from '@angular/core'
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, EventEmitter, inject, Input, Output, signal, ViewChild } from '@angular/core'
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { API_ADMIN_MEMBERS, USERS_ROUTE } from '@sync-in-server/backend/src/applications/users/constants/routes'
 import type { Member } from '@sync-in-server/backend/src/applications/users/interfaces/member.interface'
 import type { SearchMembersDto } from '@sync-in-server/backend/src/applications/users/dto/search-members.dto'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
-import { debounceTime, Subject, switchMap, takeUntil } from 'rxjs'
+import { debounceTime, Subject, switchMap } from 'rxjs'
 import { userAvatarUrl } from '../../users/user.functions'
 
 export interface PickedMember {
@@ -155,6 +156,7 @@ export interface PickedMember {
 })
 export class UserGroupPickerComponent {
   private readonly http = inject(HttpClient)
+  private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   @Input() placeholder = 'Search people or groups'
@@ -174,7 +176,6 @@ export class UserGroupPickerComponent {
   protected readonly showResults = signal(false)
 
   private readonly input$ = new Subject<string>()
-  private readonly destroy$ = new Subject<void>()
 
   constructor() {
     this.input$
@@ -197,7 +198,7 @@ export class UserGroupPickerComponent {
           const url = this.adminScope ? API_ADMIN_MEMBERS : USERS_ROUTE.BASE
           return this.http.request<Member[]>('search', url, { body })
         }),
-        takeUntil(this.destroy$)
+        takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
         next: (members) => {

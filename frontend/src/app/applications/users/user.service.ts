@@ -202,11 +202,8 @@ export class UserService {
     return this.http.delete<void>(`${API_USERS_MY_GUESTS}/${guestId}`)
   }
 
-  genAvatar() {
-    this.http.patch(API_USERS_MY_AVATAR, null).subscribe({
-      next: () => this.refreshAvatar(),
-      error: (e) => this.layout.sendNotification('error', 'Configuration', 'Avatar', e)
-    })
+  genAvatar(): Observable<void> {
+    return this.http.patch<void>(API_USERS_MY_AVATAR, null).pipe(tap(() => this.refreshAvatar()))
   }
 
   uploadAvatar(file: File): Observable<void> {

@@ -54,19 +54,21 @@ async function patchForBrowserCompat() {
     const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
     const html = await fs.readFile(viewerHtml, 'utf8')
     if (!html.includes('getOrInsertComputed')) {
-      await fs.writeFile(
-        viewerHtml,
-        html.replace(
-          '<!-- This snippet is used in production',
-          `<script>${COMPAT_POLYFILL.trim()}</script>\n<!-- This snippet is used in production`
-        )
+      const patched = html.replace(
+        '<!-- This snippet is used in production',
+        `<script>${COMPAT_POLYFILL.trim()}</script>\n<!-- This snippet is used in production`
       )
-      console.log('pdfjs - patched viewer.html (Map.getOrInsertComputed polyfill)')
+      if (patched === html) {
+        console.warn('pdfjs - viewer.html anchor comment not found; polyfill NOT injected (PDF.js layout may have changed)')
+      } else {
+        await fs.writeFile(viewerHtml, patched)
+        console.log('pdfjs - patched viewer.html (Map.getOrInsertComputed polyfill)')
+      }
     }
 
     const workerMjs = path.join(pdfjsAssetsDirectory, 'build', 'pdf.worker.mjs')
     const worker = await fs.readFile(workerMjs, 'utf8')
-    if (!worker.startsWith('if(!Map')) {
+    if (!worker.includes('getOrInsertComputed')) {
       await fs.writeFile(workerMjs, COMPAT_POLYFILL + worker)
       console.log('pdfjs - patched pdf.worker.mjs (Map.getOrInsertComputed polyfill)')
     }
