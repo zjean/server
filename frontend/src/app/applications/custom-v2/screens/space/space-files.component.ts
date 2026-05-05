@@ -54,10 +54,7 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isPreviewable } from '../../utils/classify-file'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPreviewInNewTab } from '../../preview/open-preview'
-import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 import { buildNewEntryMenu, NewEntryId } from '../files/new-entry-menu'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
@@ -110,7 +107,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly promptDialog = inject(PromptDialogService)
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
-  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly dockRail = inject(DockRailService)
@@ -494,23 +490,20 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       return
     }
     const fullPath = this.buildFullPath(alias, file)
-    if (isPreviewable(file)) {
-      this.previewOverlay.open(fullPath, file)
-      return
-    }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
-  // Middle-click on a previewable file row → new tab with the chromeless
-  // preview route. button === 1 is the middle-button code; auxclick fires
-  // for non-primary buttons in modern browsers.
+  // Middle-click on a file row → new tab with file-detail.
+  // button === 1 is the middle-button code; auxclick fires for non-primary
+  // buttons in modern browsers.
   protected onRowAuxClick(event: MouseEvent, file: FileProps): void {
     if (event.button !== 1 || file.isDir) return
     const alias = this.currentAlias()
     if (!alias) return
-    if (!isPreviewable(file)) return
     event.preventDefault()
-    openPreviewInNewTab(this.buildFullPath(alias, file))
+    if (typeof window !== 'undefined') {
+      window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(this.buildFullPath(alias, file))}`, '_blank', 'noopener')
+    }
   }
 
   private buildFullPath(alias: string, file: FileProps): string {
@@ -619,9 +612,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     if (file.isDir) return
     const alias = this.currentAlias()
     if (!alias) return
-    const segs = this.pathSegments().map((s) => s.path)
-    const fullPath = [SPACE_REPOSITORY.FILES, alias, ...segs, file.name].join('/')
-    this.previewOverlay.open(fullPath, file, { initialTab: 'comments' })
+    const fullPath = this.buildFullPath(alias, file)
+    this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath, tab: 'comment' } }).catch(console.error)
   }
 
   protected async renameEntry(file: FileProps): Promise<void> {
@@ -725,7 +717,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       next: () => {
         this.toast.success(`"${name}" created`)
         this.refresh()
-        this.previewOverlay.open(fullPath)
+        this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
       },
       error: (e: HttpErrorResponse) => {
         this.toast.error(e.error?.message ?? 'File creation failed')

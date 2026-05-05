@@ -9,10 +9,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isPreviewable } from '../../utils/classify-file'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPreviewInNewTab } from '../../preview/open-preview'
-import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 const MIN_QUERY = 2
 const LIMIT = 100
@@ -28,7 +25,6 @@ export class SearchComponent implements OnInit {
   private readonly filesService = inject(FilesService)
   private readonly router = inject(Router)
   private readonly route = inject(ActivatedRoute)
-  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
@@ -97,21 +93,16 @@ export class SearchComponent implements OnInit {
 
   protected openResult(r: FileContentModel): void {
     // Backend FileContent.path is the parent directory; the filename lives in `name`.
-    // Compose the full path the viewer/file-detail screens expect.
     const fullPath = `${r.path}/${r.name}`
-    if (isPreviewable({ name: r.name, mime: r.mime })) {
-      this.previewOverlay.open(fullPath)
-      return
-    }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
-  // Middle-click on a search result → new tab with the chromeless preview
-  // route.
+  // Middle-click on a search result → new tab with file-detail.
   protected onResultAuxClick(event: MouseEvent, r: FileContentModel): void {
     if (event.button !== 1) return
-    if (!isPreviewable({ name: r.name, mime: r.mime })) return
     event.preventDefault()
-    openPreviewInNewTab(`${r.path}/${r.name}`)
+    if (typeof window !== 'undefined') {
+      window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(`${r.path}/${r.name}`)}`, '_blank', 'noopener')
+    }
   }
 }

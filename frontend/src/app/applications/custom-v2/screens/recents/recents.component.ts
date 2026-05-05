@@ -11,10 +11,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isPreviewable } from '../../utils/classify-file'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
-import { openPreviewInNewTab } from '../../preview/open-preview'
-import { PreviewOverlayService } from '../../preview/preview-overlay.service'
 
 const RECENT_LIMIT = 20
 const PINNED_FILE_COUNT = 4
@@ -38,7 +35,6 @@ export class RecentsComponent implements OnInit {
   private readonly commentsService = inject(CommentsService)
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
-  private readonly previewOverlay = inject(PreviewOverlayService)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
 
   private readonly files = computed(() => this.store.filesRecents().slice(0, RECENT_LIMIT))
@@ -102,22 +98,18 @@ export class RecentsComponent implements OnInit {
     this.commentsService.loadRecents(RECENT_LIMIT)
   }
 
-  protected openFile(parentPath: string, fileName: string, mime: string | null | undefined): void {
+  protected openFile(parentPath: string, fileName: string): void {
     const fullPath = `${parentPath}/${fileName}`
-    if (isPreviewable({ name: fileName, mime })) {
-      this.previewOverlay.open(fullPath)
-      return
-    }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
   }
 
-  // Middle-click on a recents row → new tab with the chromeless preview
-  // route.
-  protected onRowAuxClick(event: MouseEvent, parentPath: string, fileName: string, mime: string | null | undefined): void {
+  // Middle-click on a recents row → new tab with file-detail.
+  protected onRowAuxClick(event: MouseEvent, parentPath: string, fileName: string): void {
     if (event.button !== 1) return
-    if (!isPreviewable({ name: fileName, mime })) return
     event.preventDefault()
-    openPreviewInNewTab(`${parentPath}/${fileName}`)
+    if (typeof window !== 'undefined') {
+      window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(`${parentPath}/${fileName}`)}`, '_blank', 'noopener')
+    }
   }
 
   // AvatarUser projection for a comment author. Funnels into the same shared

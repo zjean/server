@@ -7,7 +7,6 @@ import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
-import { PreviewOverlayComponent } from '../preview/preview-overlay.component'
 import { setUiVersion } from '../ui-version'
 import { BottomTabBarComponent } from './bottom-tab-bar.component'
 import { DockPanelComponent } from './dock-panel.component'
@@ -46,7 +45,6 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
-    PreviewOverlayComponent,
     BottomTabBarComponent
   ]
 })

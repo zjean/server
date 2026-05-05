@@ -1,7 +1,8 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, HostListener, inject, OnInit, signal, viewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
@@ -17,8 +18,13 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isPreviewable } from '../../utils/classify-file'
-import { isImageMime, isPdfMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isTextEditable } from '../../utils/classify-file'
+import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isOfficeExtension } from '../../utils/office'
+import { assetsUrl } from '../../../files/files.constants'
+import { OfficeViewComponent } from '../../preview/office-view.component'
+import { TextCodeViewComponent } from '../../preview/text-code-view.component'
+import { CloseGuardService } from '../../preview/close-guard.service'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -39,6 +45,8 @@ interface TabDef {
     FileGlyphComponent,
     ButtonComponent,
     CommentsPanelComponent,
+    OfficeViewComponent,
+    TextCodeViewComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -49,9 +57,13 @@ export class FileDetailComponent implements OnInit {
   private readonly http = inject(HttpClient)
   private readonly route = inject(ActivatedRoute)
   private readonly router = inject(Router)
+  private readonly sanitizer = inject(DomSanitizer)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly closeGuard = inject(CloseGuardService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
+  private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
@@ -60,7 +72,11 @@ export class FileDetailComponent implements OnInit {
   protected readonly siblings = signal<FileProps[]>([])
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
+  protected readonly loadError = signal<string | null>(null)
+  protected readonly resolution = signal<string>('')
   protected readonly tab = signal<InspectorTab>('info')
+  protected readonly infoOpen = signal(false)
+  protected readonly pdfStage = signal<'pdf' | 'office'>('pdf')
 
   protected readonly tabs: TabDef[] = [
     { id: 'info', label: 'Info', icon: 'info' },
@@ -80,6 +96,12 @@ export class FileDetailComponent implements OnInit {
     return p ? `${API_FILES_OPERATION}/${encodeUrl(p)}` : ''
   })
 
+  protected readonly pdfSafeUrl = computed<SafeResourceUrl | null>(() => {
+    const p = this.currentPath()
+    if (!p || !this.isPdf()) return null
+    return this.sanitizer.bypassSecurityTrustResourceUrl(`${this.pdfjsViewerUrl}${API_FILES_OPERATION}/${encodeUrl(p)}`)
+  })
+
   protected readonly currentIndex = computed(() => {
     const p = this.currentPath()
     const prefix = this.parentPath()
@@ -90,6 +112,36 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
+  protected readonly isOffice = computed(() => {
+    const f = this.file()
+    return !!f && !isPdfMime(f.mime) && isOfficeExtension(f.name)
+  })
+  protected readonly isText = computed(() => {
+    const f = this.file()
+    return !!f && isTextViewerMime(f.mime) && isTextEditable(f)
+  })
+  protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
+  protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
+  protected readonly showOfficeEmbed = computed(() => this.isOffice() || (this.isPdf() && this.pdfStage() === 'office'))
+  protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
+  protected readonly commentsAvailable = computed(() => {
+    const f = this.file()
+    return !!f && !f.isDir
+  })
+
+  @HostListener('window:keydown', ['$event'])
+  onKey(ev: KeyboardEvent): void {
+    if (ev.key === 'ArrowRight') {
+      this.next()
+      ev.preventDefault()
+    } else if (ev.key === 'ArrowLeft') {
+      this.previous()
+      ev.preventDefault()
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault()
+      void this.close()
+    }
+  }
 
   ngOnInit(): void {
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
@@ -100,9 +152,11 @@ export class FileDetailComponent implements OnInit {
         return
       }
       const tab = params.get('tab') as InspectorTab | null
-      const tabRequested = !!(tab && this.tabs.some((t) => t.id === tab))
-      if (tabRequested) this.tab.set(tab)
-      this.loadFile(path, tabRequested)
+      if (tab && this.tabs.some((t) => t.id === tab)) {
+        this.tab.set(tab)
+        this.infoOpen.set(true)
+      }
+      this.loadFile(path)
     })
   }
 
@@ -110,11 +164,33 @@ export class FileDetailComponent implements OnInit {
     this.tab.set(t)
   }
 
+  protected toggleInfo(): void {
+    this.infoOpen.update((v) => !v)
+  }
+
+  protected toggleToOffice(): void {
+    this.pdfStage.update((s) => (s === 'pdf' ? 'office' : 'pdf'))
+  }
+
+  protected fullscreen(): void {
+    this.imageEl()?.nativeElement.requestFullscreen().catch(console.error)
+  }
+
   protected onHasCommentsChange(has: boolean): void {
     const f = this.file()
     if (!f) return
     if (!!f.hasComments === has) return
     this.file.set({ ...f, hasComments: has })
+  }
+
+  protected onImageLoad(): void {
+    const img = this.imageEl()?.nativeElement
+    if (img) this.resolution.set(`${img.naturalWidth} × ${img.naturalHeight}`)
+    this.loadError.set(null)
+  }
+
+  protected onImageError(): void {
+    this.loadError.set('Failed to load image.')
   }
 
   protected next(): void {
@@ -131,7 +207,9 @@ export class FileDetailComponent implements OnInit {
     this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
   }
 
-  protected close(): void {
+  protected async close(): Promise<void> {
+    const ok = await this.closeGuard.canClose()
+    if (!ok) return
     if (window.history.length > 1) {
       window.history.back()
     } else {
@@ -139,19 +217,25 @@ export class FileDetailComponent implements OnInit {
     }
   }
 
-  protected downloadClassic(): void {
+  protected download(): void {
     const p = this.currentPath()
-    if (!p) return
-    window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_blank')
+    if (!p || typeof window === 'undefined') return
+    window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_self')
   }
 
   private goTo(path: string): void {
+    this.pdfStage.set('pdf')
+    this.resolution.set('')
+    this.loadError.set(null)
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path }, replaceUrl: true }).catch(console.error)
   }
 
-  private loadFile(path: string, tabRequested: boolean): void {
+  private loadFile(path: string): void {
     this.loading.set(true)
     this.errorMessage.set(null)
+    this.pdfStage.set('pdf')
+    this.resolution.set('')
+    this.loadError.set(null)
     this.currentPath.set(path)
 
     const parts = path.split('/').filter(Boolean)
@@ -174,16 +258,6 @@ export class FileDetailComponent implements OnInit {
             this.errorMessage.set('File not found in parent folder.')
             this.file.set(null)
             this.loading.set(false)
-            return
-          }
-          // If the user landed on /v2/file?path=foo without an explicit
-          // tab and the file is renderable in the unified preview, send
-          // them to the overlay instead. The page would otherwise just
-          // show a no-preview / one-of-two-supported-types fallback,
-          // which is silly when a richer surface exists. Comment / share /
-          // activity links continue to land here because they pin a tab.
-          if (!tabRequested && isPreviewable(match)) {
-            this.router.navigate(['/', V2_PATH, V2_ROUTES.RECENTS], { queryParams: { preview: path }, replaceUrl: true }).catch(console.error)
             return
           }
           this.file.set(match)

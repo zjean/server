@@ -22,36 +22,70 @@
       </div>
       <span class="detail__divider"></span>
       <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Share' | translate: locale.language }}</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="downloadClassic()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
       <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Favorite' | translate: locale.language }}</app-v2-btn>
+      <span class="detail__divider"></span>
+      @if (isImage()) {
+        <app-v2-icon-btn iconName="box" [title]="'Fullscreen' | translate: locale.language" (click)="fullscreen()" />
+      }
+      @if (canToggleToOffice()) {
+        <app-v2-icon-btn
+          iconName="pencil"
+          [active]="pdfStage() === 'office'"
+          [title]="(pdfStage() === 'office' ? 'Switch to PDF view' : 'Edit in OnlyOffice') | translate: locale.language"
+          (click)="toggleToOffice()"
+        />
+      }
       <div class="detail__nav">
-        <app-v2-icon-btn iconName="chevLeft" [title]="'Previous' | translate: locale.language" (click)="previous()" />
+        <app-v2-icon-btn iconName="chevLeft" [title]="'Previous (←)' | translate: locale.language" (click)="previous()" />
         @if (siblings().length > 0) {
           <span class="detail__counter">{{ currentIndex() + 1 }} / {{ siblings().length }}</span>
         }
-        <app-v2-icon-btn iconName="chevRight" [title]="'Next' | translate: locale.language" (click)="next()" />
+        <app-v2-icon-btn iconName="chevRight" [title]="'Next (→)' | translate: locale.language" (click)="next()" />
         <span class="detail__divider detail__divider--small"></span>
+        <app-v2-icon-btn iconName="info" [title]="'Info' | translate: locale.language" [active]="infoOpen()" (click)="toggleInfo()" />
         <app-v2-icon-btn iconName="x" [title]="'Close' | translate: locale.language" (click)="close()" />
       </div>
     </header>
 
     <div class="detail__body">
-      <div class="detail__stage">
-        @if (isImage()) {
-          <img class="detail__image" [src]="previewUrl()" [alt]="f.name" />
-        } @else if (isPdf()) {
-          <iframe class="detail__iframe" [src]="previewUrl()" [title]="f.name"></iframe>
+      <div class="detail__stage" [class.detail__stage--bare]="isPdf() || showOfficeEmbed() || isText()">
+        @if (loadError(); as err) {
+          <div class="detail__load-error">{{ err }}</div>
+        } @else if (showOfficeEmbed()) {
+          <app-v2-preview-office-view [path]="currentPath()" [file]="f" />
+        } @else if (isText()) {
+          <app-v2-preview-text-code-view [path]="currentPath()" [file]="f" />
+        } @else if (isImage() && previewUrl()) {
+          <img
+            #imageEl
+            class="detail__image"
+            [src]="previewUrl()"
+            [alt]="f.name"
+            (load)="onImageLoad()"
+            (error)="onImageError()"
+          />
+        } @else if (isPdf() && pdfSafeUrl(); as url) {
+          <iframe class="detail__iframe" [src]="url" [title]="f.name"></iframe>
+        } @else if (isVideo() && previewUrl()) {
+          <video class="detail__video" [src]="previewUrl()" controls playsinline preload="metadata"></video>
+        } @else if (isAudio() && previewUrl()) {
+          <div class="detail__audio-wrap">
+            <app-v2-icon name="audio" [size]="72" class="detail__audio-glyph" />
+            <div class="detail__audio-name">{{ f.name }}</div>
+            <audio class="detail__audio" [src]="previewUrl()" controls preload="metadata"></audio>
+          </div>
         } @else {
           <div class="detail__no-preview">
             <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
             <div class="detail__no-preview-title" l10nTranslate>Preview not available</div>
             <div class="detail__no-preview-lede" l10nTranslate>Download the file to view its contents.</div>
-            <app-v2-btn kind="outline" size="sm" icon="download" (click)="downloadClassic()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+            <app-v2-btn kind="outline" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
           </div>
         }
       </div>
 
-      <aside class="detail__inspector">
+      <aside class="detail__inspector" [class.detail__inspector--open]="infoOpen()">
         <div class="detail__inspector-head">
           <app-v2-file-glyph [type]="glyphType()" [size]="36" [rounded]="8" />
           <div class="detail__inspector-head-text">
@@ -90,6 +124,12 @@
                   <div class="kv-row">
                     <span l10nTranslate>Size</span>
                     <span class="kv-row__mono">{{ f.size | toBytes: 2 : true }}</span>
+                  </div>
+                }
+                @if (resolution()) {
+                  <div class="kv-row">
+                    <span l10nTranslate>Dimensions</span>
+                    <span class="kv-row__mono">{{ resolution() }}</span>
                   </div>
                 }
                 <div class="kv-row">
