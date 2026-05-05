@@ -370,7 +370,7 @@ export class CommentsPanelComponent implements OnChanges {
   protected saveEdit(r: CommentRow): void {
     const content = r.draft.trim()
     if (!content || content === r.content) return
-    const dto: CreateOrUpdateCommentDto = { fileId: this.fileId, content, commentId: r.id }
+    const dto: CreateOrUpdateCommentDto = { fileId: r.fileId, content, commentId: r.id }
     this.http.patch<Comment>(`${API_COMMENTS_FROM_SPACE}/${this.filePath}`, dto).subscribe({
       next: (updated) => {
         this.rows.update((list) => list.map((row) => (row.id === r.id ? this.buildRow(updated) : row)))
@@ -389,7 +389,7 @@ export class CommentsPanelComponent implements OnChanges {
       kind: 'danger'
     })
     if (!ok) return
-    const dto: DeleteCommentDto = { fileId: this.fileId, commentId: r.id }
+    const dto: DeleteCommentDto = { fileId: r.fileId, commentId: r.id }
     this.http.request<void>('delete', `${API_COMMENTS_FROM_SPACE}/${this.filePath}`, { body: dto }).subscribe({
       next: () => {
         const remaining = this.rows().filter((row) => row.id !== r.id)
