@@ -102,6 +102,8 @@
     flex: 1 1 auto;
     display: flex;
     min-height: 0;
+    position: relative;
+    overflow: hidden;
   }
 
   &__stage {
@@ -114,6 +116,19 @@
     min-height: 0;
     min-width: 0;
     position: relative;
+
+    // PDF / office / text sub-views fill the whole stage with zero padding so
+    // the embedded viewer's chrome (page nav, search, scrollbar) gets every
+    // available pixel.
+    &--bare {
+      padding: 0;
+      background: var(--si-bg0);
+    }
+  }
+
+  &__load-error {
+    font-size: 13px;
+    color: var(--si-fg-muted);
   }
 
   &__image {
@@ -129,7 +144,40 @@
     height: 100%;
     border: none;
     background: #fff;
-    border-radius: 4px;
+    display: block;
+  }
+
+  &__video {
+    max-width: 100%;
+    max-height: 100%;
+    background: #000;
+  }
+
+  &__audio-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+
+  &__audio-glyph {
+    color: var(--si-fg-muted);
+    opacity: 0.6;
+  }
+
+  &__audio-name {
+    font-size: 13px;
+    font-family: var(--si-mono);
+    color: var(--si-fg);
+    max-width: 480px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__audio {
+    width: 420px;
+    max-width: 100%;
   }
 
   &__no-preview {
@@ -155,14 +203,26 @@
     margin-bottom: 6px;
   }
 
+  // Inspector slides in from the right as an overlay — stage always takes
+  // the full body width so pdf.js / video / code never get squeezed.
   &__inspector {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: 320px;
-    flex-shrink: 0;
     background: var(--si-bg2);
     border-left: 1px solid var(--si-line);
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transform: translateX(100%);
+    transition: transform 220ms ease;
+    z-index: 20;
+
+    &--open {
+      transform: translateX(0);
+    }
   }
 
   &__inspector-head {
@@ -171,6 +231,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-shrink: 0;
   }
 
   &__inspector-head-text {
@@ -204,6 +265,7 @@
     gap: 4px;
     border-bottom: 1px solid var(--si-line);
     background: var(--si-bg1);
+    flex-shrink: 0;
   }
 
   &__tab {

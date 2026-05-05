@@ -32,7 +32,7 @@ import { ConfirmDialogService } from '../components/confirm-dialog.service'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { ToastService } from '../components/toast.service'
 import { buildFileModelStub } from '../utils/file-model-stub'
-import { PreviewOverlayService } from './preview-overlay.service'
+import { CloseGuardService } from './close-guard.service'
 
 type EditorTheme = 'light' | 'dark'
 
@@ -43,9 +43,9 @@ type EditorTheme = 'light' | 'dark'
 // release on destroy), the dirty-tracking, save, theme, and CodeMirror
 // search/wrap toggles.
 //
-// Registers a close-guard with PreviewOverlayService so the shell's
+// Registers a close-guard with CloseGuardService so the file-detail
 // close() / Esc paths surface the unsaved-changes confirm dialog before
-// dropping the editor. Browser-back is uncancellable; ngOnDestroy still
+// navigating away. Browser-back is uncancellable; ngOnDestroy still
 // releases the lock there but the in-memory edits are lost.
 @Component({
   selector: 'app-v2-preview-text-code-view',
@@ -176,7 +176,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly toast = inject(ToastService)
   private readonly layoutService = inject(LayoutService)
-  private readonly overlay = inject(PreviewOverlayService)
+  private readonly closeGuard = inject(CloseGuardService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly editor = viewChild<CodeEditor>('editor')
@@ -230,11 +230,11 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.overlay.setCloseGuard(() => this.canClose())
+    this.closeGuard.setCloseGuard(() => this.canClose())
   }
 
   ngOnDestroy(): void {
-    this.overlay.setCloseGuard(null)
+    this.closeGuard.setCloseGuard(null)
     // Release lock if we hold one. Best-effort — server-side ignores if we
     // never had the lock, and we don't want to block destroy on the request.
     if (this.stub?.lock) {
@@ -335,7 +335,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
     })
   }
 
-  // Close-guard hook called by PreviewOverlayService.close(). Returns true
+  // Close-guard hook called by CloseGuardService.canClose(). Returns true
   // to allow close, false to cancel.
   private async canClose(): Promise<boolean> {
     if (!this.isModified()) return true
