@@ -6,6 +6,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
+import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
@@ -149,6 +150,23 @@ export class FileDetailComponent implements OnInit {
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path }, replaceUrl: true }).catch(console.error)
   }
 
+  // Derive the best background screen for the preview overlay redirect from
+  // the file path. Format is always files/<alias>/<segments>/<name>.
+  // personal → /v2/personal/<segments>
+  // shares   → /v2/shared
+  // trash    → /v2/trash
+  // <alias>  → /v2/spaces/<alias>/<segments>
+  private resolveBackgroundRoute(path: string): string[] {
+    const parts = path.split('/').filter(Boolean)
+    // parts: [repository, alias, ...segments, name]
+    const alias = parts[1] ?? ''
+    const segments = parts.slice(2, -1)
+    if (alias === SPACE_ALIAS.PERSONAL) return [V2_PATH, V2_ROUTES.PERSONAL, ...segments]
+    if (alias === SPACE_ALIAS.SHARES) return [V2_PATH, V2_ROUTES.SHARED]
+    if (alias === SPACE_ALIAS.TRASH) return [V2_PATH, V2_ROUTES.TRASH]
+    return [V2_PATH, V2_ROUTES.SPACES, alias, ...segments]
+  }
+
   private loadFile(path: string, tabRequested: boolean): void {
     this.loading.set(true)
     this.errorMessage.set(null)
@@ -183,7 +201,9 @@ export class FileDetailComponent implements OnInit {
           // which is silly when a richer surface exists. Comment / share /
           // activity links continue to land here because they pin a tab.
           if (!tabRequested && isPreviewable(match)) {
-            this.router.navigate(['/', V2_PATH, V2_ROUTES.RECENTS], { queryParams: { preview: path }, replaceUrl: true }).catch(console.error)
+            this.router
+              .navigate(['/', ...this.resolveBackgroundRoute(path)], { queryParams: { preview: path }, replaceUrl: true })
+              .catch(console.error)
             return
           }
           this.file.set(match)
