@@ -50,8 +50,8 @@
           <button
             type="button"
             class="comment-card"
-            (click)="openFile(c.file.path, c.file.name, c.file.mime)"
-            (auxclick)="onRowAuxClick($event, c.file.path, c.file.name, c.file.mime)"
+            (click)="openFile(c.file.path, c.file.name)"
+            (auxclick)="onRowAuxClick($event, c.file.path, c.file.name)"
           >
             <div class="comment-card__file">
               <app-v2-file-glyph [type]="mimeToGlyph(c.file.mime)" [size]="20" [rounded]="5" />
