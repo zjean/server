@@ -111,8 +111,10 @@ export class SettingsComponent implements OnInit {
   protected onAvatarPicked(event: Event): void {
     const file = (event.target as HTMLInputElement).files?.[0]
     if (!file) return
-    this.userService.uploadAvatar(file)
-    this.toast.success('Avatar uploaded')
+    this.userService.uploadAvatar(file).subscribe({
+      next: () => this.toast.success('Avatar uploaded'),
+      error: (e: HttpErrorResponse) => this.toast.error(e.error?.message ?? 'Unable to upload avatar')
+    })
   }
 
   protected regenerateAvatar(): void {
