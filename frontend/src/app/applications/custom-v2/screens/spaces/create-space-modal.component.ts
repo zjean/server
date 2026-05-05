@@ -16,9 +16,12 @@ import {
 import { Subject, Subscription } from 'rxjs'
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
+import { USER_ROLE } from '@sync-in-server/backend/src/applications/users/constants/user'
 import type { CreateOrUpdateSpaceDto, SpaceMemberDto } from '@sync-in-server/backend/src/applications/spaces/dto/create-or-update-space.dto'
+import { AdminService } from '../../../admin/admin.service'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
+import { StoreService } from '../../../../store/store.service'
 import { UserService } from '../../../users/user.service'
 import { MemberModel } from '../../../users/models/member.model'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -46,6 +49,9 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
 
   private readonly spacesService = inject(SpacesService)
   private readonly userService = inject(UserService)
+  private readonly adminService = inject(AdminService)
+  private readonly store = inject(StoreService)
+  private readonly isAdmin: boolean = this.store.user.getValue()?.role === USER_ROLE.ADMINISTRATOR
 
   protected readonly tab = signal<Tab>('settings')
   protected readonly name = signal('')
@@ -81,7 +87,8 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
             }
             this.managerSearching.set(true)
             const ignoreUserIds = this.managers().map((m) => m.id)
-            return this.userService.searchMembers({ search: trimmed, onlyUsers: true, ignoreUserIds })
+            const svc = this.isAdmin ? this.adminService : this.userService
+            return svc.searchMembers({ search: trimmed, onlyUsers: true, ignoreUserIds })
           })
         )
         .subscribe({

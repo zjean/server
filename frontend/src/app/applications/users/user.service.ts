@@ -54,7 +54,7 @@ import type {
 } from '@sync-in-server/backend/src/authentication/providers/two-fa/auth-two-fa.interfaces'
 import { BsModalRef } from 'ngx-bootstrap/modal'
 import { Socket } from 'ngx-socket-io'
-import { catchError, map, Observable, of } from 'rxjs'
+import { catchError, map, Observable, of, tap } from 'rxjs'
 import { AppMenu } from '../../layout/layout.interfaces'
 import { LayoutService } from '../../layout/layout.service'
 import { StoreService } from '../../store/store.service'
@@ -209,13 +209,10 @@ export class UserService {
     })
   }
 
-  uploadAvatar(file: File) {
-    const formData: FormData = new FormData()
+  uploadAvatar(file: File): Observable<void> {
+    const formData = new FormData()
     formData.append('file', file)
-    this.http.put(API_USERS_MY_AVATAR, formData).subscribe({
-      next: () => this.refreshAvatar(),
-      error: (e) => this.layout.sendNotification('error', 'Configuration', 'Avatar', e)
-    })
+    return this.http.put<void>(API_USERS_MY_AVATAR, formData).pipe(tap(() => this.refreshAvatar()))
   }
 
   changePassword(userPasswordDto: UserUpdatePasswordDto, twoFaHeaders: HttpHeaders): Observable<any> {
