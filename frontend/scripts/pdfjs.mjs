@@ -43,6 +43,38 @@ async function updatePdfjs() {
   console.log('pdfjs - assets update is done')
 }
 
+// Map.prototype.getOrInsertComputed (TC39 proposal) is used by PDF.js 5.x but is
+// only available in Chrome 136+. Polyfill both the viewer (main thread) and the
+// worker (separate global scope) so PDFs open in Firefox and Safari too.
+const COMPAT_POLYFILL =
+  'if(!Map.prototype.getOrInsertComputed){Map.prototype.getOrInsertComputed=function(k,f){if(!this.has(k))this.set(k,f(k));return this.get(k);}}\n'
+
+async function patchForBrowserCompat() {
+  try {
+    const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
+    const html = await fs.readFile(viewerHtml, 'utf8')
+    if (!html.includes('getOrInsertComputed')) {
+      await fs.writeFile(
+        viewerHtml,
+        html.replace(
+          '<!-- This snippet is used in production',
+          `<script>${COMPAT_POLYFILL.trim()}</script>\n<!-- This snippet is used in production`
+        )
+      )
+      console.log('pdfjs - patched viewer.html (Map.getOrInsertComputed polyfill)')
+    }
+
+    const workerMjs = path.join(pdfjsAssetsDirectory, 'build', 'pdf.worker.mjs')
+    const worker = await fs.readFile(workerMjs, 'utf8')
+    if (!worker.startsWith('if(!Map')) {
+      await fs.writeFile(workerMjs, COMPAT_POLYFILL + worker)
+      console.log('pdfjs - patched pdf.worker.mjs (Map.getOrInsertComputed polyfill)')
+    }
+  } catch (e) {
+    console.warn('pdfjs - browser-compat patch failed:', e.message)
+  }
+}
+
 export async function checkPdfjs() {
   let response
   try {
@@ -66,8 +98,10 @@ export async function checkPdfjs() {
     console.log('pdfjs - current version:', currentVersion)
     if (currentVersion === latestVersion) {
       console.log('pdfjs - is up to date')
+      await patchForBrowserCompat()
       return
     }
   }
   await updatePdfjs()
+  await patchForBrowserCompat()
 }
