@@ -7,6 +7,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
+import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
@@ -16,7 +17,7 @@ import { CommentsPanelComponent } from '../../components/comments-panel.componen
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
-import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable } from '../../utils/classify-file'
 import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
@@ -230,6 +231,18 @@ export class FileDetailComponent implements OnInit {
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path }, replaceUrl: true }).catch(console.error)
   }
 
+  // Derive the correct root breadcrumb from the file path so the trail reads
+  // "Personal → file.txt" for personal files and "myspace → file.txt" for
+  // space files, instead of always showing "Personal".
+  private rootBreadcrumb(path: string): BreadcrumbSegment[] {
+    const alias = path.split('/').filter(Boolean)[1] ?? ''
+    if (alias === SPACE_ALIAS.PERSONAL) return [{ label: 'Personal', icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.PERSONAL] }]
+    if (alias === SPACE_ALIAS.TRASH) return [{ label: 'Trash', route: ['/', V2_PATH, V2_ROUTES.TRASH] }]
+    if (alias === SPACE_ALIAS.SHARES) return [{ label: 'Shared', route: ['/', V2_PATH, V2_ROUTES.SHARED] }]
+    if (alias) return [{ label: alias, icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.SPACES, alias] }]
+    return []
+  }
+
   private loadFile(path: string): void {
     this.loading.set(true)
     this.errorMessage.set(null)
@@ -263,7 +276,7 @@ export class FileDetailComponent implements OnInit {
           this.file.set(match)
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
-          this.breadcrumbs.setBreadcrumbs([{ label: 'Personal', icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.PERSONAL] }, { label: match.name }])
+          this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), { label: match.name }])
         },
         error: (e: HttpErrorResponse) => {
           this.errorMessage.set(e.status === 403 ? 'You do not have access to this file.' : 'Failed to load file.')
