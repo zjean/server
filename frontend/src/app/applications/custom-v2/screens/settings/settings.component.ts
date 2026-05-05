@@ -118,8 +118,10 @@ export class SettingsComponent implements OnInit {
   }
 
   protected regenerateAvatar(): void {
-    this.userService.genAvatar()
-    this.toast.success('Avatar regenerated')
+    this.userService.genAvatar().subscribe({
+      next: () => this.toast.success('Avatar regenerated'),
+      error: (e: HttpErrorResponse) => this.toast.error(e.error?.message ?? 'Unable to regenerate avatar')
+    })
   }
 
   protected savePassword(): void {

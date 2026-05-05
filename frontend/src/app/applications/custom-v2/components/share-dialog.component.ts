@@ -2,7 +2,6 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
 import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
-import { USER_ROLE } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { userAvatarUrl } from '../../users/user.functions'
 import { StoreService } from '../../../store/store.service'
@@ -264,7 +263,7 @@ export class ShareDialogComponent {
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
-  protected readonly isAdmin: boolean = this.store.user.getValue()?.role === USER_ROLE.ADMINISTRATOR
+  protected readonly isAdmin: boolean = this.store.user.getValue()?.isAdmin ?? false
 
   protected readonly pending = this.service.pending
 
