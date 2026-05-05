@@ -7,7 +7,8 @@ import { HttpStatus } from '@nestjs/common'
 import { FileTaskEvent } from '../events/file-events'
 import { FILE_OPERATION } from '../constants/operations'
 import { writeFromStream } from './files'
-import { DownloadFileDto } from '../dto/file-operations.dto'
+import type { DownloadFileDto } from '../dto/file-operations.dto'
+import type { DownloadFileContentInfo, DownloadFileOptions } from '../interfaces/download-file.interface'
 
 const parts = [
   // IPv4 loopback (127.0.0.0/8)
@@ -35,7 +36,24 @@ const parts = [
 const regExpPrivateIP = new RegExp(`^(?:${parts.join('|')})$`, 'i')
 const errorRegexpPrivateIP = 'Access to internal IP addresses is forbidden'
 
-export async function downloadFile(http: HttpService, downloadDto: DownloadFileDto, dstPath: string, space?: SpaceEnv) {
+export async function downloadFile(
+  http: HttpService,
+  downloadDto: DownloadFileDto,
+  dstPath: string,
+  options: { space?: SpaceEnv; getContentInfo: true }
+): Promise<DownloadFileContentInfo>
+export async function downloadFile(
+  http: HttpService,
+  downloadDto: DownloadFileDto,
+  dstPath: string,
+  options?: { space?: SpaceEnv; getContentInfo?: false | undefined }
+): Promise<void>
+export async function downloadFile(
+  http: HttpService,
+  downloadDto: DownloadFileDto,
+  dstPath: string,
+  options?: DownloadFileOptions
+): Promise<void | DownloadFileContentInfo> {
   // dto must be validated by the caller
   const headRes: AxiosResponse = await http.axiosRef({ method: HTTP_METHOD.HEAD, url: downloadDto.url, maxRedirects: 1 })
   if (regExpPrivateIP.test(headRes.request.socket.remoteAddress)) {
@@ -45,18 +63,26 @@ export async function downloadFile(http: HttpService, downloadDto: DownloadFileD
 
   // attempt to retrieve the Content-Length header
   const contentLength = 'content-length' in headRes.headers ? Number(headRes.headers['content-length']) || null : null
+  if (options?.getContentInfo) {
+    return {
+      contentLength: contentLength,
+      contentType: `${headRes.headers['content-type']}`,
+      lastModified: headRes.headers['last-modified'] as string | undefined
+    } satisfies DownloadFileContentInfo
+  }
+
   if (!contentLength) {
     throw new FileError(HttpStatus.BAD_REQUEST, 'Missing "content-length" header')
   }
 
-  if (space) {
-    if (space.willExceedQuota(contentLength)) {
+  if (options?.space) {
+    if (options.space.willExceedQuota(contentLength)) {
       throw new FileError(HttpStatus.INSUFFICIENT_STORAGE, 'Storage quota will be exceeded')
     }
     // tasking
-    if (space.task.cacheKey) {
-      space.task.props.totalSize = contentLength
-      FileTaskEvent.emit('startWatch', space, FILE_OPERATION.DOWNLOAD, dstPath)
+    if (options.space.task?.cacheKey) {
+      options.space.task.props.totalSize = contentLength
+      FileTaskEvent.emit('startWatch', options.space, FILE_OPERATION.DOWNLOAD, dstPath)
     }
   }
 

@@ -11,10 +11,10 @@ import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/
 import { JwtIdentityPayload } from '../../../authentication/interfaces/jwt-payload.interface'
 import { ACTION } from '../../../common/constants'
 import { comparePassword, hashPassword } from '../../../common/functions'
-import { generateAvatar, pngMimeType, svgMimeType } from '../../../common/image'
+import { convertTempImageToPng, generateAvatar, imgMimeTypePrefix, pngMimeType, svgMimeType } from '../../../common/image'
 import { createLightSlug, genPassword } from '../../../common/shared'
 import { configuration, serverConfig } from '../../../configuration/config.environment'
-import { isPathExists, moveFiles, sanitizeName } from '../../files/utils/files'
+import { isPathExists, removeFiles, sanitizeName } from '../../files/utils/files'
 import { NOTIFICATION_APP, NOTIFICATION_APP_EVENT } from '../../notifications/constants/notifications'
 import { NotificationsManager } from '../../notifications/services/notifications-manager.service'
 import { GROUP_TYPE } from '../constants/group'
@@ -40,7 +40,7 @@ import { UserModel } from '../models/user.model'
 import type { Group } from '../schemas/group.interface'
 import type { UserGroup } from '../schemas/user-group.interface'
 import type { User } from '../schemas/user.interface'
-import { USER_AVATAR_FILE_NAME, USER_AVATAR_MAX_UPLOAD_SIZE, USER_DEFAULT_AVATAR_FILE_PATH } from '../utils/avatar'
+import { saveAvatarMetadata, USER_AVATAR_FILE_NAME, USER_AVATAR_MAX_UPLOAD_SIZE, USER_DEFAULT_AVATAR_FILE_PATH } from '../utils/avatar'
 import { AdminUsersManager } from './admin-users-manager.service'
 import { UsersQueries } from './users-queries.service'
 
@@ -144,25 +144,30 @@ export class UsersManager {
 
   async updateAvatar(req: FastifyAuthenticatedRequest) {
     const part: MultipartFile = await req.file({ limits: { fileSize: USER_AVATAR_MAX_UPLOAD_SIZE } })
-    if (!part.mimetype.startsWith('image/')) {
+    if (!part.mimetype.startsWith(imgMimeTypePrefix)) {
       throw new HttpException('Unsupported file type', HttpStatus.BAD_REQUEST)
     }
-    const dstPath = path.join(req.user.tmpPath, USER_AVATAR_FILE_NAME)
+    const tmpPath = path.join(req.user.tmpPath, USER_AVATAR_FILE_NAME)
     try {
-      await pipeline(part.file, createWriteStream(dstPath))
+      await pipeline(part.file, createWriteStream(tmpPath))
     } catch (e) {
+      void removeFiles(tmpPath)
       this.logger.error({ tag: this.updateAvatar.name, msg: `${e}` })
       throw new HttpException('Unable to upload avatar', HttpStatus.INTERNAL_SERVER_ERROR)
     }
     if (part.file.truncated) {
+      void removeFiles(tmpPath)
       this.logger.warn({ tag: this.updateAvatar.name, msg: `image is too large` })
-      throw new HttpException('Image is too large (5MB max)', HttpStatus.PAYLOAD_TOO_LARGE)
+      throw new HttpException('Image is too large', HttpStatus.PAYLOAD_TOO_LARGE)
     }
+    const avatarPath = path.join(req.user.homePath, USER_AVATAR_FILE_NAME)
     try {
-      await moveFiles(dstPath, path.join(req.user.homePath, USER_AVATAR_FILE_NAME), true)
+      await convertTempImageToPng(tmpPath, avatarPath)
+      void saveAvatarMetadata(req.user.login, 'user')
     } catch (e) {
+      void removeFiles(tmpPath)
       this.logger.error({ tag: this.updateAvatar.name, msg: `${e}` })
-      throw new HttpException('Unable to create avatar', HttpStatus.INTERNAL_SERVER_ERROR)
+      throw new HttpException('Unable to convert or create avatar', HttpStatus.BAD_REQUEST)
     }
   }
 
@@ -214,6 +219,7 @@ export class UsersManager {
     const avatarStream: NodeJS.ReadableStream = await generateAvatar(user.getInitials())
     try {
       await pipeline(avatarStream, avatarFile)
+      void saveAvatarMetadata(user.login, 'local')
     } catch (e) {
       this.logger.error({ tag: this.getAvatar.name, msg: `${e}` })
       throw new HttpException('Unable to create avatar', HttpStatus.INTERNAL_SERVER_ERROR)
