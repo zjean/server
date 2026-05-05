@@ -3,17 +3,19 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
-import TextToSVG from 'text-to-svg' // Sharp settings
+import TextToSVG from 'text-to-svg'
+import { moveFiles } from '../applications/files/utils/files'
 
 // Sharp settings
 sharp.cache(false)
 sharp.concurrency(Math.min(2, os.cpus()?.length || 1))
 
 // Constants
+export const imgMimeTypePrefix = 'image/'
 export const pngMimeType = 'image/png'
 export const svgMimeType = 'image/svg+xml'
 export const webpMimeType = 'image/webp'
-const avatarSize = 256
+const avatarSize = 512
 const fontPath = path.join(__dirname, 'fonts', 'avatar.ttf')
 const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
 let textToSvgCache: Promise<TextToSVG> | null = null
@@ -53,7 +55,7 @@ export async function generateThumbnail(filePath: string, size: number): Promise
 export async function generateAvatar(initials: string): Promise<NodeJS.ReadableStream> {
   const tts = await getTextToSvg()
   const { backgroundColor, foregroundColor } = randomColor()
-  const fontSize = fitFontSize(tts, initials, avatarSize * 0.8, 170)
+  const fontSize = fitFontSize(tts, initials, avatarSize * 0.67)
 
   const d = tts.getD(initials, {
     x: avatarSize / 2,
@@ -77,6 +79,14 @@ export async function convertImageToBase64(imgPath: string) {
   return `data:image/png;base64,${base64String}`
 }
 
+export async function convertTempImageToPng(temporaryImagePath: string, outputPngPath: string, size?: number): Promise<void> {
+  size ??= avatarSize
+  const srcBuffer = await fs.readFile(temporaryImagePath)
+  const pngBuffer = await sharp(srcBuffer).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer()
+  await fs.writeFile(temporaryImagePath, pngBuffer)
+  await moveFiles(temporaryImagePath, outputPngPath, true)
+}
+
 function randomColor() {
   let color = ''
   while (color.length < 6) {
@@ -97,9 +107,9 @@ function randomColor() {
   }
 }
 
-function fitFontSize(tts: TextToSVG, text: string, box: number, start = 170): number {
-  // Heuristic to make the text occupy ~80% of the available width
-  let size = start
+function fitFontSize(tts: TextToSVG, text: string, box: number, start = box): number {
+  // Heuristic for fitting text to the available width
+  let size = Math.max(20, Math.floor(start))
   // Lower bound to prevent infinite loops when the font renders very small
   while (size > 20) {
     const m = tts.getMetrics(text, { fontSize: size, anchor: 'center middle' })

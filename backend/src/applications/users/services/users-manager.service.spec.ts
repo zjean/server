@@ -1,14 +1,17 @@
+import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import bcrypt from 'bcryptjs'
+import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { AuthManager } from '../../../authentication/auth.service'
 import { comparePassword } from '../../../common/functions'
 import * as imageModule from '../../../common/image'
 import { pngMimeType, svgMimeType } from '../../../common/image'
+import { configuration } from '../../../configuration/config.environment'
 import { Cache } from '../../../infrastructure/cache/services/cache.service'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
-import * as filesUtilsModule from '../../files/utils/files'
 import { fileName, isPathExists } from '../../files/utils/files'
 import { NotificationsManager } from '../../notifications/services/notifications-manager.service'
 import { GROUP_TYPE } from '../constants/group'
@@ -33,7 +36,8 @@ jest.mock('../../../common/image', () => {
   const actual = jest.requireActual('../../../common/image')
   return {
     ...actual,
-    generateAvatar: jest.fn(() => Readable.from([Buffer.from('PNGDATA')]))
+    generateAvatar: jest.fn(() => Readable.from([Buffer.from('PNGDATA')])),
+    convertTempImageToPng: jest.fn(() => Promise.resolve())
   }
 })
 
@@ -44,6 +48,13 @@ describe(UsersManager.name, () => {
   let usersQueriesService: UsersQueries
   let userTest: UserModel
   let deleteUserDto: DeleteUserDto
+  let testDataPath: string
+  const initialFilesPaths = {
+    dataPath: configuration.applications.files.dataPath,
+    usersPath: configuration.applications.files.usersPath,
+    spacesPath: configuration.applications.files.spacesPath,
+    tmpPath: configuration.applications.files.tmpPath
+  }
   const flush = () => new Promise<void>((r) => setImmediate(r))
   const okStream = (d = 'OK') => {
     const s: any = Readable.from([Buffer.from(d)])
@@ -71,6 +82,12 @@ describe(UsersManager.name, () => {
   }
 
   beforeAll(async () => {
+    testDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'sync-in-users-manager-spec-'))
+    configuration.applications.files.dataPath = testDataPath
+    configuration.applications.files.usersPath = path.join(testDataPath, 'users')
+    configuration.applications.files.spacesPath = path.join(testDataPath, 'spaces')
+    configuration.applications.files.tmpPath = path.join(testDataPath, 'tmp')
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminUsersManager,
@@ -100,6 +117,11 @@ describe(UsersManager.name, () => {
 
   afterAll(async () => {
     await expect(adminUsersManager.deleteUserSpace(userTest.login)).resolves.not.toThrow()
+    configuration.applications.files.dataPath = initialFilesPaths.dataPath
+    configuration.applications.files.usersPath = initialFilesPaths.usersPath
+    configuration.applications.files.spacesPath = initialFilesPaths.spacesPath
+    configuration.applications.files.tmpPath = initialFilesPaths.tmpPath
+    await fs.rm(testDataPath, { recursive: true, force: true })
   })
 
   it('instances + findUser/me/fromUserId + impersonation', async () => {
@@ -271,7 +293,7 @@ describe(UsersManager.name, () => {
 
   it('avatars advanced: generateIsNotExists, failure branches, base64 fallback', async () => {
     await ensurePaths()
-    usersManager.findUser = jest.fn().mockResolvedValue({ getInitials: () => 'UT' } as unknown as UserModel)
+    usersManager.findUser = jest.fn().mockResolvedValue({ login: userTest.login, getInitials: () => 'UT' } as unknown as UserModel)
     const [p, m] = (await usersManager.getAvatar(userTest.login, false, true)) as [string, string]
     expect(fileName(p)).toBe('avatar.png')
     expect(m).toBe(pngMimeType)
@@ -281,25 +303,37 @@ describe(UsersManager.name, () => {
     await expect(usersManager.getAvatar(userTest.login, true)).rejects.toThrow('avatar not found')
   })
 
-  it('updateAvatar branches: mime error, stream error, truncated, move fail, success', async () => {
+  it('updateAvatar branches: mime error, stream error, truncated, invalid image, convert fail, success', async () => {
     await ensurePaths()
-    await expect(usersManager.updateAvatar(mkReq('text/plain', okStream('X')) as any)).rejects.toThrow('Unsupported file type')
-    await expect(usersManager.updateAvatar(mkReq('image/png', errStream('stream error')) as any)).rejects.toThrow('Unable to upload avatar')
+    const convertTempImageToPngMock = imageModule.convertTempImageToPng as jest.MockedFunction<typeof imageModule.convertTempImageToPng>
+    await expect(usersManager.updateAvatar(mkReq('text/plain', okStream('X')) as any)).rejects.toMatchObject({
+      message: 'Unsupported file type',
+      status: HttpStatus.BAD_REQUEST
+    })
+    await expect(usersManager.updateAvatar(mkReq('image/png', errStream('stream error')) as any)).rejects.toMatchObject({
+      message: 'Unable to upload avatar',
+      status: HttpStatus.INTERNAL_SERVER_ERROR
+    })
 
     const t = okStream('OK')
     t.truncated = true
-    const mvSpy = jest.spyOn(filesUtilsModule, 'moveFiles').mockResolvedValue(undefined)
-    await expect(usersManager.updateAvatar(mkReq('image/png', t) as any)).rejects.toThrow('Image is too large (5MB max)')
-    expect(mvSpy).not.toHaveBeenCalled()
+    await expect(usersManager.updateAvatar(mkReq('image/png', t) as any)).rejects.toMatchObject({
+      message: 'Image is too large',
+      status: HttpStatus.PAYLOAD_TOO_LARGE
+    })
+    expect(convertTempImageToPngMock).not.toHaveBeenCalled()
 
-    jest.spyOn(filesUtilsModule, 'moveFiles').mockRejectedValue(new Error('mv fail'))
-    await expect(usersManager.updateAvatar(mkReq('image/png', okStream()) as any)).rejects.toThrow('Unable to create avatar')
+    convertTempImageToPngMock.mockRejectedValueOnce(new Error('Input buffer contains unsupported image format'))
+    await expect(usersManager.updateAvatar(mkReq('image/png', okStream()) as any)).rejects.toMatchObject({
+      message: 'Unable to convert or create avatar',
+      status: HttpStatus.BAD_REQUEST
+    })
 
-    const mvSpy2 = jest.spyOn(filesUtilsModule, 'moveFiles').mockResolvedValue(undefined)
+    convertTempImageToPngMock.mockResolvedValueOnce(undefined)
     await expect(usersManager.updateAvatar(mkReq('image/png', okStream()) as any)).resolves.toBeUndefined()
     const expectedSrc = path.join(userTest.tmpPath, 'avatar.png')
     const expectedDst = path.join(userTest.homePath, 'avatar.png')
-    expect(mvSpy2).toHaveBeenCalledWith(expectedSrc, expectedDst, true)
+    expect(convertTempImageToPngMock).toHaveBeenLastCalledWith(expectedSrc, expectedDst)
   })
 
   it('setOnlineStatus + browseGroups + getGroup', async () => {
