@@ -139,12 +139,20 @@ const fallback = $('fallback')
 const cmHost = $('cm-host')
 
 // iOS spinner fix: webView.load() is called in viewDidLoad but
-// NCActivityIndicator.start() is called in viewDidAppear, which fires ~300ms
-// later (end of push animation). Our page loads in <50ms so didFinish
-// navigation fires before viewDidAppear — stop() is a no-op and the spinner
-// never clears. Fix: trigger a hash navigation at +400ms so a second
-// didFinish navigation fires after viewDidAppear has started the spinner.
-setTimeout(() => { window.location.hash = 'ready' }, 400)
+// NCActivityIndicator.start() is called in viewDidAppear, which fires when
+// the push animation ends (~350ms, but up to ~700ms on slow/loaded devices).
+// Our page loads in <50ms so the first didFinishNavigation fires before
+// viewDidAppear — stop() is a no-op and the spinner never clears.
+// Fix: trigger hash navigations at increasing delays so at least one fires
+// after viewDidAppear has started the spinner. NCActivityIndicator.stop()
+// is safe to call multiple times; extra calls after the first effective one
+// are no-ops. Each attempt uses a distinct hash so WKWebView treats each
+// as a new same-document navigation (which fires webView:didFinishNavigation:).
+let _sn = 0
+const _stopSpinner = () => { try { window.location.hash = 'r' + (++_sn) } catch {} }
+setTimeout(_stopSpinner, 400)
+setTimeout(_stopSpinner, 850)
+setTimeout(_stopSpinner, 1400)
 
 // On iOS, the WKWebView frame shrinks when the keyboard appears but the
 // CSS viewport may lag. visualViewport.height gives the actual visible
@@ -204,16 +212,25 @@ async function loadContent() {
 
 async function save() {
   if (saving || !dirty || readOnly) return
+  const content = editor.value
+  // Guard: refuse to overwrite a previously-loaded file with empty content
+  // without explicit confirmation. etag being set means we successfully
+  // loaded content at least once. This catches silent WKWebView fetch-body
+  // loss bugs before they reach the server.
+  if (!content && etag && !confirm('Save empty file? This will erase all content.')) return
   saving = true
   saveBtn.disabled = true
   setStatus('Saving…')
   try {
-    const headers = { 'Content-Type': 'text/plain; charset=utf-8' }
-    if (etag) headers['If-Match'] = etag
+    // Use Blob body so WKWebView sends a proper Content-Length header.
+    // Passing a plain string can silently drop the body on some iOS/WebKit
+    // versions when the WKWebView uses a non-persistent data store.
+    const blob = new Blob([content], { type: 'text/plain; charset=utf-8' })
+    const headers = etag ? { 'If-Match': etag } : {}
     const r = await fetch(\`/custom-mobile-compat/text-editor/content?token=\${encodeURIComponent(token)}\`, {
       method: 'PUT',
       headers,
-      body: editor.value
+      body: blob
     })
     if (r.status === 412) {
       setStatus('File changed on server — reload to merge', 'err')
