@@ -9,8 +9,9 @@ import type { UserModel } from '../../users/models/user.model'
 // one of `"nextcloud text"` or `"onlyoffice"` — see
 // `iOSClient/Data/NCManageDatabase+Metadata.swift::isAvailableDirectEditingEditorView`.
 // Anything else and the button never appears, no matter what mimetypes we
-// advertise. The id is opaque to iOS (passed back to /open as ?editorId=).
-export const NC_DIRECT_EDITING_EDITOR_ID = 'sync-in-text'
+// advertise. When the name matches "nextcloud text", NCViewer.swift hardcodes
+// `editor = "text"` regardless of the advertised id — so the id MUST be "text".
+export const NC_DIRECT_EDITING_EDITOR_ID = 'text'
 export const NC_DIRECT_EDITING_EDITOR_NAME = 'Nextcloud Text'
 
 // Token TTL. Short enough that a leaked editor URL stops working quickly,
