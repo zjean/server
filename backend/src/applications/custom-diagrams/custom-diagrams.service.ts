@@ -44,9 +44,8 @@ export class CustomDiagramsService {
     const current = genEtag(null, space.realPath, false)
     if (current !== dto.etag) throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     await writeFile(space.realPath, dto.xml, 'utf-8')
-    const newEtag = genEtag(null, space.realPath, false)
     const stat = await getProps(space.realPath)
-    return { etag: newEtag, mtime: stat.mtime }
+    return { etag: genEtag(stat, undefined, false), mtime: stat.mtime }
   }
 
   async createNew(user: UserModel, dto: NewDiagramDto): Promise<{ path: string }> {

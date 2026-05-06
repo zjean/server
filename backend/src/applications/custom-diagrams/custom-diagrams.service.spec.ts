@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common'
 import { existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
 import { CustomDiagramsService } from './custom-diagrams.service'
 
 // Mock heavy transitive deps before any service code is evaluated.
@@ -56,13 +57,21 @@ describe('CustomDiagramsService', () => {
       filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
       spacesManager.spaceEnv.mockResolvedValue(mockSpace)
       ;(existsSync as jest.Mock).mockReturnValue(true)
-      const { readFile } = await import('node:fs/promises')
-      ;(readFile as jest.Mock).mockResolvedValue('<mxfile/>')
+      jest.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
 
       const result = await service.load(mockUser, 42)
       expect(result.xml).toBe('<mxfile/>')
       expect(result.etag).toBe('abc123')
       expect(result.editorUrl).toBe('https://app.diagrams.net')
+    })
+
+    it('throws 413 when file exceeds size limit', async () => {
+      const { getProps } = await import('../files/utils/files')
+      ;(getProps as jest.Mock).mockResolvedValueOnce({ name: 'big.drawio', mtime: 1000, size: 11 * 1024 * 1024, isDir: false, path: '', id: -1 })
+      filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'big.drawio' })
+      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+      ;(existsSync as jest.Mock).mockReturnValue(true)
+      await expect(service.load(mockUser, 42)).rejects.toMatchObject({ status: 413 })
     })
   })
 
@@ -78,15 +87,18 @@ describe('CustomDiagramsService', () => {
     })
 
     it('writes and returns new etag on success', async () => {
+      const { genEtag } = await import('../files/utils/files')
+      ;(genEtag as jest.Mock)
+        .mockReturnValueOnce('abc123')   // first call: current etag (matches dto.etag)
+        .mockReturnValueOnce('new-etag') // second call: post-write etag
       filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
       spacesManager.spaceEnv.mockResolvedValue(mockSpace)
       ;(existsSync as jest.Mock).mockReturnValue(true)
-      const { writeFile } = await import('node:fs/promises')
-      ;(writeFile as jest.Mock).mockResolvedValue(undefined)
+      jest.mocked(writeFile).mockResolvedValue(undefined)
 
       const result = await service.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'abc123' })
       expect(writeFile).toHaveBeenCalledWith('/data/test.drawio', '<mxfile/>', 'utf-8')
-      expect(result.etag).toBe('abc123')
+      expect(result.etag).toBe('new-etag')
     })
   })
 
@@ -94,8 +106,7 @@ describe('CustomDiagramsService', () => {
     it('creates file and returns path', async () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpace)
       filesManager.mkFile.mockResolvedValue(undefined)
-      const { writeFile } = await import('node:fs/promises')
-      ;(writeFile as jest.Mock).mockResolvedValue(undefined)
+      jest.mocked(writeFile).mockResolvedValue(undefined)
 
       const result = await service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })
       expect(filesManager.mkFile).toHaveBeenCalled()
