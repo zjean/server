@@ -1,7 +1,7 @@
 import type { ActionSheetEntry } from '../../components/action-sheet.component'
 import type { ContextMenuEntry } from '../../components/context-menu.component'
 
-export type NewEntryId = 'new-docx' | 'new-xlsx' | 'new-pptx' | 'new-folder' | 'new-text'
+export type NewEntryId = 'new-docx' | 'new-xlsx' | 'new-pptx' | 'new-folder' | 'new-text' | 'new-diagram'
 
 interface BuildOpts {
   onlyOfficeEnabled: boolean
@@ -24,7 +24,8 @@ export function buildNewEntryMenu(opts: BuildOpts): ContextMenuEntry[] {
   }
   items.push(
     { id: 'new-folder', label: 'Folder', icon: 'folder', action: () => opts.onSelect('new-folder') },
-    { id: 'new-text', label: 'Text file', icon: 'pencil', action: () => opts.onSelect('new-text') }
+    { id: 'new-text', label: 'Text file', icon: 'pencil', action: () => opts.onSelect('new-text') },
+    { id: 'new-diagram', label: 'Diagram', icon: 'sparkle', action: () => opts.onSelect('new-diagram') }
   )
   return items
 }
@@ -41,6 +42,10 @@ export function buildNewEntrySheetItems(opts: { onlyOfficeEnabled: boolean }): A
       { id: 'sep-office', kind: 'divider' }
     )
   }
-  items.push({ id: 'new-folder', label: 'Folder', icon: 'folder' }, { id: 'new-text', label: 'Text file', icon: 'pencil' })
+  items.push(
+    { id: 'new-folder', label: 'Folder', icon: 'folder' },
+    { id: 'new-text', label: 'Text file', icon: 'pencil' },
+    { id: 'new-diagram', label: 'Diagram', icon: 'sparkle' }
+  )
   return items
 }
