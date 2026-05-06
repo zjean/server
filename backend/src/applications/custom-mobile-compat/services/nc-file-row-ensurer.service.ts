@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { and, eq } from 'drizzle-orm'
+import path from 'node:path'
 import { FileProps } from '../../files/interfaces/file-props.interface'
 import { files } from '../../files/schemas/files.schema'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -51,21 +52,32 @@ export class NcFileRowEnsurer {
     if (space.inTrashRepository) return f.id
 
     const fileProps = f as unknown as FileProps
+    // webdavSpaces.listFiles yields the isCurrent=true root entry via
+    // getProps(space.realPath, req.dav.url). req.dav.url is the full NC WebDAV
+    // path (/remote.php/dav/files/{user}/Folder/file.txt), so dirName gives the
+    // URL prefix (/remote.php/dav/files/{user}/Folder) rather than the in-space
+    // relative path (Folder). A leading '/' signals this case; correct it by
+    // deriving the path from space.relativeUrl instead.
+    const correctedPath = fileProps.path?.startsWith('/') ? path.dirname(space.relativeUrl) : fileProps.path
+    const lookupProps = correctedPath !== fileProps.path ? { ...fileProps, path: correctedPath } : fileProps
     try {
       if (space.inPersonalSpace) {
-        const existing = await this.findUserFileByPath(user.id, fileProps)
+        const existing = await this.findUserFileByPath(user.id, lookupProps)
         if (existing > 0) return existing
-        return await this.filesQueries.getOrCreateUserFile(user.id, { ...fileProps, id: 0 })
+        return await this.filesQueries.getOrCreateUserFile(user.id, { ...lookupProps, id: 0 })
       }
       // Shared / external space: getSpaceFileId already does the path-keyed
       // lookup against (spaceId|spaceExternalRootId|shareExternalId, path,
       // name); fall through to the upsert helper only on miss.
       const dbFile = dbFileFromSpace(user.id, space)
-      const existing = await this.filesQueries.getSpaceFileId(fileProps, dbFile)
+      const existing = await this.filesQueries.getSpaceFileId(lookupProps, dbFile)
       if (existing > 0) return existing
-      return await this.filesQueries.getOrCreateSpaceFile(0, fileProps, dbFile)
+      return await this.filesQueries.getOrCreateSpaceFile(0, lookupProps, dbFile)
     } catch (e) {
-      this.logger.warn({ tag: this.ensure.name, msg: `failed to ensure file row for ${fileProps.path}/${fileProps.name}: ${(e as Error).message}` })
+      this.logger.warn({
+        tag: this.ensure.name,
+        msg: `failed to ensure file row for ${lookupProps.path}/${lookupProps.name}: ${(e as Error).message}`
+      })
       return f.id
     }
   }

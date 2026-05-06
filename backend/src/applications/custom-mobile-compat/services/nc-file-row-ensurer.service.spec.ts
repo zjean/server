@@ -153,6 +153,39 @@ describe('NcFileRowEnsurer', () => {
     expect(filesQueries.getOrCreateSpaceFile).toHaveBeenCalledTimes(1)
   })
 
+  // URL-path normalization — depth-0 file PROPFIND bug.
+  // webdavSpaces.listFiles calls getProps(realPath, req.dav.url) for the root
+  // entry; req.dav.url is the full NC path so dirName gives a URL-prefixed
+  // path like /remote.php/dav/files/alice/Photos instead of Photos.
+
+  it('personal: corrects URL-prefixed path to in-space path via space.relativeUrl', async () => {
+    db.select.mockReturnValue(fakeSelect([{ id: 555 }]))
+    const space = { inPersonalSpace: true, inTrashRepository: false, relativeUrl: 'Photos/cat.jpg' } as unknown as SpaceEnv
+    const f = fsFile({ id: -987654, path: '/remote.php/dav/files/alice/Photos', name: 'cat.jpg' })
+    const result = await service.ensure(f, space, user)
+    expect(result).toBe(555)
+    expect(db.select).toHaveBeenCalledTimes(1)
+    expect(filesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
+  })
+
+  it('personal: inserts with in-space path (not URL-prefixed) on miss', async () => {
+    db.select.mockReturnValue(fakeSelect([]))
+    filesQueries.getOrCreateUserFile.mockResolvedValue(999)
+    const space = { inPersonalSpace: true, inTrashRepository: false, relativeUrl: 'Photos/cat.jpg' } as unknown as SpaceEnv
+    const f = fsFile({ id: -987654, path: '/remote.php/dav/files/alice/Photos', name: 'cat.jpg' })
+    await service.ensure(f, space, user)
+    const [, props] = filesQueries.getOrCreateUserFile.mock.calls[0]
+    expect(props.path).toBe('Photos')
+  })
+
+  it('personal: corrects root-level file (relativeUrl has no dir component → path becomes .)', async () => {
+    db.select.mockReturnValue(fakeSelect([{ id: 42 }]))
+    const space = { inPersonalSpace: true, inTrashRepository: false, relativeUrl: 'cat.jpg' } as unknown as SpaceEnv
+    const f = fsFile({ id: -987654, path: '/remote.php/dav/files/alice', name: 'cat.jpg' })
+    const result = await service.ensure(f, space, user)
+    expect(result).toBe(42)
+  })
+
   // Failure mode — graceful degrade.
 
   it('falls back to f.id when the DB lookup throws (PROPFIND must not fail)', async () => {
