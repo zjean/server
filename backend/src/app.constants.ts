@@ -4,7 +4,11 @@ export const VERSION = loadVersion()
 export const USER_AGENT = `sync-in-server/${VERSION}`
 const DRAWIO_ORIGIN = (() => {
   const url = process.env['DRAWIO_URL'] ?? 'https://app.diagrams.net'
-  try { return new URL(url).origin } catch { return url }
+  try {
+    return new URL(url).origin
+  } catch {
+    return url
+  }
 })()
 
 export const CONTENT_SECURITY_POLICY = (onlyOfficeServer: string, collaboraServer: string) => ({

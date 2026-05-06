@@ -29,7 +29,14 @@ describe('CustomDiagramsController', () => {
   })
 
   it('load delegates to service', async () => {
-    mockService.load.mockResolvedValue({ xml: '<mxfile/>', etag: 'abc', mtime: 0, name: 'f.drawio', isWritable: true, editorUrl: 'https://app.diagrams.net' })
+    mockService.load.mockResolvedValue({
+      xml: '<mxfile/>',
+      etag: 'abc',
+      mtime: 0,
+      name: 'f.drawio',
+      isWritable: true,
+      editorUrl: 'https://app.diagrams.net'
+    })
     const result = await controller.load(mockUser, 42)
     expect(mockService.load).toHaveBeenCalledWith(mockUser, 42)
     expect(result.xml).toBe('<mxfile/>')

@@ -40,11 +40,7 @@ describe('CustomDiagramsService', () => {
     spacesManager = { spaceEnv: jest.fn() }
     filesManager = { mkFile: jest.fn() }
 
-    service = new CustomDiagramsService(
-      filesQueries as any,
-      spacesManager as any,
-      filesManager as any
-    )
+    service = new CustomDiagramsService(filesQueries as any, spacesManager as any, filesManager as any)
   })
 
   describe('load', () => {
@@ -81,15 +77,13 @@ describe('CustomDiagramsService', () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpace)
       ;(existsSync as jest.Mock).mockReturnValue(true)
 
-      await expect(
-        service.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'stale' })
-      ).rejects.toMatchObject({ status: HttpStatus.CONFLICT })
+      await expect(service.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({ status: HttpStatus.CONFLICT })
     })
 
     it('writes and returns new etag on success', async () => {
       const { genEtag } = await import('../files/utils/files')
       ;(genEtag as jest.Mock)
-        .mockReturnValueOnce('abc123')   // first call: current etag (matches dto.etag)
+        .mockReturnValueOnce('abc123') // first call: current etag (matches dto.etag)
         .mockReturnValueOnce('new-etag') // second call: post-write etag
       filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
       spacesManager.spaceEnv.mockResolvedValue(mockSpace)

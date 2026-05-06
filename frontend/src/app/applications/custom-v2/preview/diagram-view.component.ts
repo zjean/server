@@ -1,16 +1,5 @@
 import { HttpClient } from '@angular/common/http'
-import {
-  ChangeDetectionStrategy,
-  Component,
-  DestroyRef,
-  ElementRef,
-  HostListener,
-  inject,
-  Input,
-  OnInit,
-  signal,
-  viewChild
-} from '@angular/core'
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, inject, Input, OnInit, signal, viewChild } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 
