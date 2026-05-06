@@ -138,6 +138,14 @@ const nameEl = $('name')
 const fallback = $('fallback')
 const cmHost = $('cm-host')
 
+// iOS spinner fix: webView.load() is called in viewDidLoad but
+// NCActivityIndicator.start() is called in viewDidAppear, which fires ~300ms
+// later (end of push animation). Our page loads in <50ms so didFinish
+// navigation fires before viewDidAppear — stop() is a no-op and the spinner
+// never clears. Fix: trigger a hash navigation at +400ms so a second
+// didFinish navigation fires after viewDidAppear has started the spinner.
+setTimeout(() => { window.location.hash = 'ready' }, 400)
+
 // On iOS, the WKWebView frame shrinks when the keyboard appears but the
 // CSS viewport may lag. visualViewport.height gives the actual visible
 // height (keyboard excluded) and fires resize during the animation,
