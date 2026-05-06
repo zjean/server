@@ -33,7 +33,7 @@ export class FilesRecents {
     const timestamp = currentTimeStamp(null, true) - convertHumanTimeToMs(this.keepTime)
     const location = this.getLocation(user, space, files)
     // only store files, ignore dirs
-    const fsRecents = files.filter((f) => !f.isDir && f.size > 0 && f.mtime > timestamp)
+    const fsRecents = files.filter((f) => !f.isDir && f.size > 0 && f.mtime > timestamp && f.id > 0)
     const dbRecents = await this.filesQueries.getRecentsFromLocation(location)
     if (!fsRecents.length && !dbRecents.length) {
       return
