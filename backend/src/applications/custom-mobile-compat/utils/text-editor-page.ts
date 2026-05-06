@@ -110,8 +110,10 @@ export function renderTextEditorPage(opts: TextEditorPageOptions): string {
     <div class="cm-host" id="cm-host" hidden></div>
     <textarea class="fallback" id="fallback" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"></textarea>
   </div>
-<script type="module">
+<script>
+(async () => {
 ${INLINE_BOOTSTRAP_JS}
+})()
 </script>
 </body>
 </html>`
@@ -215,9 +217,10 @@ editor.onChange(() => setDirty(true))
 saveBtn.addEventListener('click', save)
 closeBtn.addEventListener('click', () => {
   if (dirty && !confirm('Discard unsaved changes?')) return
-  // NC iOS injects a JS bridge for "close"; if absent, just go back.
-  if (window.webkit?.messageHandlers?.closeViewer) {
-    try { window.webkit.messageHandlers.closeViewer.postMessage({}) } catch {}
+  // NCViewerNextcloudText registers "DirectEditingMobileInterface" as the
+  // WKScriptMessageHandler and expects the string "close" to dismiss.
+  if (window.webkit?.messageHandlers?.DirectEditingMobileInterface) {
+    try { window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage('close') } catch {}
   } else if (history.length > 1) {
     history.back()
   } else {
@@ -250,6 +253,6 @@ async function upgradeToCodeMirror() {
 }
 
 await loadContent()
-await upgradeToCodeMirror()
+upgradeToCodeMirror() // fire-and-forget: don't block window load / iOS spinner
 editor.focus()
 `
