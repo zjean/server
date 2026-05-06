@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
+import { CustomDiagramsModule } from '../custom-diagrams/custom-diagrams.module'
 
 @Module({
-  imports: []
+  imports: [CustomDiagramsModule]
 })
 export class CustomFeaturesModule {}
