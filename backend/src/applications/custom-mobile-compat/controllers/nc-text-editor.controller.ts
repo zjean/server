@@ -5,7 +5,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesManager } from '../../files/services/files-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
-import { genEtag } from '../../files/utils/files'
+import type { FileProps } from '../../files/interfaces/file-props.interface'
+import { genEtag, getProps } from '../../files/utils/files'
 import type { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
@@ -84,14 +85,14 @@ export class NcTextEditorController {
     const ctx = await this.resolveContext(token).catch(() => null)
     if (!ctx) return renderError(res, 'This editor link is invalid or has expired. Open the file again from the app.')
 
-    const { space } = ctx
-    const fileName = space.dbFile.name ?? 'untitled'
-    const mime = (space.dbFile as unknown as { mime?: string }).mime
+    const { fileProps } = ctx
+    const fileName = fileProps.name
+    const mime = fileProps.mime
     if (!this.directEditing.isEditableMime(mime)) {
       return renderError(res, `This file type (${mime ?? 'unknown'}) cannot be edited as text.`)
     }
 
-    const oversized = (space.dbFile.size ?? 0) > MAX_EDITABLE_BYTES
+    const oversized = fileProps.size > MAX_EDITABLE_BYTES
     return (
       res
         .header('Content-Type', 'text/html; charset=utf-8')
@@ -122,8 +123,8 @@ export class NcTextEditorController {
   // the file is over the size cap.
   @Get('custom-mobile-compat/text-editor/content')
   async getContent(@Query('token') token: string | undefined, @Res() res: FastifyReply): Promise<FastifyReply> {
-    const { space } = await this.resolveContextOrThrow(token)
-    const mime = (space.dbFile as unknown as { mime?: string }).mime
+    const { space, fileProps } = await this.resolveContextOrThrow(token)
+    const mime = fileProps.mime
     if (!this.directEditing.isEditableMime(mime)) {
       throw new HttpException('mimetype not editable', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     }
@@ -148,8 +149,8 @@ export class NcTextEditorController {
   // locks, range, and FileEvent emission match the WebDAV PUT path.
   @Put('custom-mobile-compat/text-editor/content')
   async putContent(@Req() req: FastifyRequest, @Query('token') token: string | undefined, @Res() res: FastifyReply): Promise<FastifyReply> {
-    const { user, space } = await this.resolveContextOrThrow(token)
-    const mime = (space.dbFile as unknown as { mime?: string }).mime
+    const { user, space, fileProps } = await this.resolveContextOrThrow(token)
+    const mime = fileProps.mime
     if (!this.directEditing.isEditableMime(mime)) {
       throw new HttpException('mimetype not editable', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     }
@@ -204,13 +205,13 @@ export class NcTextEditorController {
       .send(createReadStream(bundlePath))
   }
 
-  private async resolveContextOrThrow(token: string | undefined): Promise<{ user: UserModel; space: SpaceEnv }> {
+  private async resolveContextOrThrow(token: string | undefined): Promise<{ user: UserModel; space: SpaceEnv; fileProps: FileProps }> {
     const ctx = await this.resolveContext(token).catch(() => null)
     if (!ctx) throw new HttpException('invalid or expired token', HttpStatus.UNAUTHORIZED)
     return ctx
   }
 
-  private async resolveContext(token: string | undefined): Promise<{ user: UserModel; space: SpaceEnv } | null> {
+  private async resolveContext(token: string | undefined): Promise<{ user: UserModel; space: SpaceEnv; fileProps: FileProps } | null> {
     if (!token) return null
     let claims: NcDirectEditClaims
     try {
@@ -239,7 +240,15 @@ export class NcTextEditorController {
     } catch {
       return null
     }
-    return { user, space }
+    // Stat the actual file so callers can read mime, name, and size without
+    // trying to cast FileDBProps (which carries no such fields) to FileProps.
+    let fileProps: FileProps
+    try {
+      fileProps = await getProps(space.realPath, space.relativeUrl)
+    } catch {
+      return null
+    }
+    return { user, space, fileProps }
   }
 }
 

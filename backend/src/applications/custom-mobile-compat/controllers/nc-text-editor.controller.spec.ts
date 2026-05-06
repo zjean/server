@@ -158,7 +158,8 @@ describe(NcTextEditorController.name, () => {
 
     it('switches to read-only mode (with banner) when the file exceeds the size cap', async () => {
       const realPath = join(workDir, 'big.md')
-      writeFileSync(realPath, 'x')
+      // Must be > 5 MB cap so getProps().size triggers the oversized branch.
+      writeFileSync(realPath, Buffer.alloc(6 * 1024 * 1024))
       getUserFile.mockResolvedValue({ id: 42, path: '/big.md' })
       spaceEnv.mockResolvedValue(
         makeSpace(realPath, {
