@@ -50,9 +50,11 @@ export class DiagramViewComponent implements OnInit {
   protected readonly iframeSrc = signal<SafeResourceUrl | null>(null)
 
   private etag = ''
-  private editorOrigin = ''
+  private editorOrigin = '__unset__'
   private isWritable = false
   private pendingXml = ''
+  private saving = false
+  private queuedXml: string | null = null
 
   ngOnInit(): void {
     this.http
@@ -60,9 +62,17 @@ export class DiagramViewComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
+          try {
+            const url = new URL(res.editorUrl)
+            if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid scheme')
+            this.editorOrigin = url.origin
+          } catch {
+            this.errorMessage.set('Failed to load diagram.')
+            this.loading.set(false)
+            return
+          }
           this.etag = res.etag
           this.isWritable = res.isWritable
-          this.editorOrigin = new URL(res.editorUrl).origin
           this.pendingXml = res.xml
           const src = `${res.editorUrl}?embed=1&spin=1&proto=json`
           this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
@@ -105,15 +115,32 @@ export class DiagramViewComponent implements OnInit {
 
   private saveXml(xml: string): void {
     if (!this.isWritable) return
+    if (this.saving) {
+      this.queuedXml = xml
+      return
+    }
+    this.doSave(xml)
+  }
+
+  private doSave(xml: string): void {
+    this.saving = true
     this.http
       .put<{ etag: string; mtime: number }>('/diagrams/save', { path: this.path, xml, etag: this.etag })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
           this.etag = res.etag
+          this.saving = false
           this.postToEditor({ action: 'status', message: '' })
+          if (this.queuedXml !== null) {
+            const queued = this.queuedXml
+            this.queuedXml = null
+            this.doSave(queued)
+          }
         },
         error: (e) => {
+          this.saving = false
+          this.queuedXml = null
           const msg = e?.status === 409 ? 'File was modified by someone else — reload to continue.' : 'Save failed.'
           this.postToEditor({ action: 'status', message: msg })
         }

@@ -19,7 +19,7 @@ export const CONTENT_SECURITY_POLICY = (onlyOfficeServer: string, collaboraServe
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", 'data:'],
     fontSrc: ["'self'"],
-    frameSrc: ["'self'", DRAWIO_ORIGIN, onlyOfficeServer || '', collaboraServer || '']
+    frameSrc: ["'self'", DRAWIO_ORIGIN, onlyOfficeServer, collaboraServer].filter(Boolean)
   }
 })
 
