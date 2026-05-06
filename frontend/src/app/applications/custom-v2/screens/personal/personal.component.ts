@@ -837,6 +837,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
       case 'new-text':
         this.newTextFile()
         return
+      case 'new-diagram':
+        this.newDiagramFile()
+        return
       case 'new-docx':
         this.newOfficeFile('docx')
         return
