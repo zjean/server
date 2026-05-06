@@ -33,17 +33,19 @@ describe(NcDirectEditingController.name, () => {
   let moduleRef: TestingModule
   let controller: NcDirectEditingController
   let getUserFile: jest.Mock
+  let getUserFileByPath: jest.Mock
   let jwt: JwtService
 
   beforeAll(async () => {
     getUserFile = jest.fn()
+    getUserFileByPath = jest.fn()
     moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: TEST_SECRET })],
       controllers: [NcDirectEditingController],
       providers: [
         NcDirectEditingService,
         NcResponseService,
-        { provide: FilesQueries, useValue: { getUserFile } },
+        { provide: FilesQueries, useValue: { getUserFile, getUserFileByPath } },
         { provide: NcBasicAuthGuard, useValue: { canActivate: () => true } }
       ]
     })
@@ -61,6 +63,7 @@ describe(NcDirectEditingController.name, () => {
 
   beforeEach(() => {
     getUserFile.mockReset()
+    getUserFileByPath.mockReset()
     // Production code reads configuration.auth.token.access.secret. Override
     // in tests so JWT round-trips work without a real config file.
     jest.resetModules()
@@ -130,13 +133,35 @@ describe(NcDirectEditingController.name, () => {
       expect(out.ocs.data.url).toContain('/custom-mobile-compat/text-editor')
     })
 
-    it('rejects when fileId is missing or non-numeric (NC iOS always sends one)', async () => {
+    it('rejects 400 when both fileId and path are absent', async () => {
       const r = makeRes()
-      await expect(controller.open(makeReq(), r.res, '/notes.md', NC_DIRECT_EDITING_EDITOR_ID, undefined)).rejects.toMatchObject({
+      await expect(controller.open(makeReq(), r.res, undefined, NC_DIRECT_EDITING_EDITOR_ID, undefined)).rejects.toMatchObject({
         status: 400
       })
-      await expect(controller.open(makeReq(), r.res, '/notes.md', NC_DIRECT_EDITING_EDITOR_ID, 'abc')).rejects.toMatchObject({
-        status: 400
+    })
+
+    it('falls back to path lookup when fileId is absent (NCViewer never sends fileId)', async () => {
+      getUserFileByPath.mockResolvedValue(42)
+      getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md' })
+      const r = makeRes()
+      const out = await controller.open(makeReq(), r.res, '/notes.md', NC_DIRECT_EDITING_EDITOR_ID, undefined)
+      expect(out.ocs.meta.status).toBe('ok')
+      expect(getUserFileByPath).toHaveBeenCalledWith(7, '.', 'notes.md')
+    })
+
+    it('path lookup: parses sub-folder path correctly', async () => {
+      getUserFileByPath.mockResolvedValue(55)
+      getUserFile.mockResolvedValue({ id: 55, path: 'files/personal/Docs/notes.md' })
+      const r = makeRes()
+      await controller.open(makeReq(), r.res, '/Docs/notes.md', NC_DIRECT_EDITING_EDITOR_ID, undefined)
+      expect(getUserFileByPath).toHaveBeenCalledWith(7, 'Docs', 'notes.md')
+    })
+
+    it('returns 404 when path lookup finds no file', async () => {
+      getUserFileByPath.mockResolvedValue(null)
+      const r = makeRes()
+      await expect(controller.open(makeReq(), r.res, '/missing.md', NC_DIRECT_EDITING_EDITOR_ID, undefined)).rejects.toMatchObject({
+        status: 404
       })
     })
 

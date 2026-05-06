@@ -97,6 +97,15 @@ export class FilesQueries {
     return null
   }
 
+  async getUserFileByPath(userId: number, dirPath: string, name: string): Promise<number | null> {
+    const [row] = await this.db
+      .select({ id: files.id })
+      .from(files)
+      .where(and(eq(files.ownerId, userId), eq(files.path, dirPath), eq(files.name, name), eq(files.isDir, false)))
+      .limit(1)
+    return row?.id ?? null
+  }
+
   async getOrCreateUserFile(userId: number, file: FileProps): Promise<number> {
     if (file.id && file.id > 0) {
       const [searchFileInDB] = await this.db
