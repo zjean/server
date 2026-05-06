@@ -41,6 +41,9 @@ export class CustomDiagramsService {
   async save(user: UserModel, dto: SaveDiagramDto): Promise<{ etag: string; mtime: number }> {
     const space = await this.resolveSpace(user, dto.fileId)
     if (!existsSync(space.realPath)) throw new HttpException('file not found on disk', HttpStatus.NOT_FOUND)
+    if (Buffer.byteLength(dto.xml, 'utf-8') > MAX_DIAGRAM_BYTES) {
+      throw new HttpException('xml payload too large', HttpStatus.PAYLOAD_TOO_LARGE)
+    }
     const current = genEtag(null, space.realPath, false)
     if (current !== dto.etag) throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     await writeFile(space.realPath, dto.xml, 'utf-8')

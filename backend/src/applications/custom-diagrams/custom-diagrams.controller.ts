@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Query } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, HttpStatus, ParseIntPipe, Post, Put, Query } from '@nestjs/common'
 import { GetUser } from '../users/decorators/user.decorator'
 import { UserModel } from '../users/models/user.model'
 import { CustomDiagramsService } from './custom-diagrams.service'
@@ -11,8 +11,8 @@ export class CustomDiagramsController {
   constructor(private readonly service: CustomDiagramsService) {}
 
   @Get('load')
-  load(@GetUser() user: UserModel, @Query('fileId') fileId: number): Promise<LoadDiagramResponse> {
-    return this.service.load(user, Number(fileId))
+  load(@GetUser() user: UserModel, @Query('fileId', ParseIntPipe) fileId: number): Promise<LoadDiagramResponse> {
+    return this.service.load(user, fileId)
   }
 
   @Put('save')
