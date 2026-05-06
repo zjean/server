@@ -110,8 +110,10 @@ export function renderTextEditorPage(opts: TextEditorPageOptions): string {
     <div class="cm-host" id="cm-host" hidden></div>
     <textarea class="fallback" id="fallback" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"></textarea>
   </div>
-<script type="module">
+<script>
+(async () => {
 ${INLINE_BOOTSTRAP_JS}
+})()
 </script>
 </body>
 </html>`
@@ -135,6 +137,16 @@ const closeBtn = $('close-btn')
 const nameEl = $('name')
 const fallback = $('fallback')
 const cmHost = $('cm-host')
+
+// On iOS, the WKWebView frame shrinks when the keyboard appears but the
+// CSS viewport may lag. visualViewport.height gives the actual visible
+// height (keyboard excluded) and fires resize during the animation,
+// keeping layout above the keyboard without waiting for UIKit.
+function syncViewport() {
+  document.documentElement.style.height = (window.visualViewport?.height ?? window.innerHeight) + 'px'
+}
+if (window.visualViewport) window.visualViewport.addEventListener('resize', syncViewport)
+syncViewport()
 
 // State shared across loaders. The active editor's read/write API is unified
 // through this object so save logic doesn't care whether CodeMirror loaded.
@@ -215,9 +227,10 @@ editor.onChange(() => setDirty(true))
 saveBtn.addEventListener('click', save)
 closeBtn.addEventListener('click', () => {
   if (dirty && !confirm('Discard unsaved changes?')) return
-  // NC iOS injects a JS bridge for "close"; if absent, just go back.
-  if (window.webkit?.messageHandlers?.closeViewer) {
-    try { window.webkit.messageHandlers.closeViewer.postMessage({}) } catch {}
+  // NCViewerNextcloudText registers "DirectEditingMobileInterface" as the
+  // WKScriptMessageHandler and expects the string "close" to dismiss.
+  if (window.webkit?.messageHandlers?.DirectEditingMobileInterface) {
+    try { window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage('close') } catch {}
   } else if (history.length > 1) {
     history.back()
   } else {
@@ -250,6 +263,6 @@ async function upgradeToCodeMirror() {
 }
 
 await loadContent()
-await upgradeToCodeMirror()
+upgradeToCodeMirror() // fire-and-forget: don't block window load / iOS spinner
 editor.focus()
 `
