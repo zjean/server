@@ -1,5 +1,6 @@
 import { existsSync, statSync, createReadStream } from 'node:fs'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
 import { Controller, Get, HttpException, HttpStatus, Put, Query, Req, Res } from '@nestjs/common'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
@@ -177,6 +178,19 @@ export class NcTextEditorController {
     // Attach the token-derived user to the request so saveStream's downstream
     // logging/event-emit treats this as the user's own write.
     ;(req as unknown as { user: UserModel }).user = user
+
+    // Fastify's built-in text/plain content-type parser runs before any route
+    // handler and reads the body into req.body as a string, draining req.raw.
+    // saveStream reads from req.raw, so it would pipe an empty stream and
+    // truncate the file to 0 bytes. Reconstruct req.raw from req.body so
+    // saveStream gets the actual content.
+    const bodyText = typeof req.body === 'string' ? req.body : ''
+    // Fastify's req.headers and req.method are getters that read from req.raw.
+    // Preserve them on the replacement stream so saveStream can still access
+    // req.headers['content-range'] and req.method without a TypeError.
+    const { headers: rawHeaders, method: rawMethod } = req.raw
+    const newRaw = Object.assign(Readable.from([Buffer.from(bodyText, 'utf-8')]), { headers: rawHeaders, method: rawMethod })
+    ;(req as unknown as { raw: Readable }).raw = newRaw
 
     try {
       await this.filesManager.saveStream(user, space, req as Parameters<FilesManager['saveStream']>[2], {})
