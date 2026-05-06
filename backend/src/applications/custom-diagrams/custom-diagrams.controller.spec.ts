@@ -35,17 +35,17 @@ describe('CustomDiagramsController', () => {
       mtime: 0,
       name: 'f.drawio',
       isWritable: true,
-      editorUrl: 'https://app.diagrams.net'
+      editorUrl: 'https://app.diagrams.net',
     })
-    const result = await controller.load(mockUser, 42)
-    expect(mockService.load).toHaveBeenCalledWith(mockUser, 42)
+    const result = await controller.load(mockUser, 'files/personal/f.drawio')
+    expect(mockService.load).toHaveBeenCalledWith(mockUser, 'files/personal/f.drawio')
     expect(result.xml).toBe('<mxfile/>')
   })
 
   it('save delegates to service', async () => {
     mockService.save.mockResolvedValue({ etag: 'new', mtime: 1 })
-    const result = await controller.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'abc' })
-    expect(mockService.save).toHaveBeenCalledWith(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'abc' })
+    const result = await controller.save(mockUser, { path: 'files/personal/f.drawio', xml: '<mxfile/>', etag: 'abc' })
+    expect(mockService.save).toHaveBeenCalledWith(mockUser, { path: 'files/personal/f.drawio', xml: '<mxfile/>', etag: 'abc' })
     expect(result.etag).toBe('new')
   })
 

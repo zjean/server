@@ -9,9 +9,6 @@ import { CustomDiagramsService } from './custom-diagrams.service'
 jest.mock('../files/services/files-manager.service', () => ({
   FilesManager: class FilesManager {}
 }))
-jest.mock('../files/services/files-queries.service', () => ({
-  FilesQueries: class FilesQueries {}
-}))
 jest.mock('../spaces/services/spaces-manager.service', () => ({
   SpacesManager: class SpacesManager {}
 }))
@@ -27,70 +24,90 @@ jest.mock('../files/utils/files', () => ({
 }))
 
 const mockUser = { id: 7 } as any
-const mockSpace = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio' } as any
+// envPermissions 'amd' = ADD + MODIFY + DELETE → writable
+const mockSpaceRw = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: 'amd' } as any
+// envPermissions '' → read-only
+const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: '' } as any
+
+const FILE_PATH = 'files/personal/test.drawio'
 
 describe('CustomDiagramsService', () => {
   let service: CustomDiagramsService
-  let filesQueries: { getUserFile: jest.Mock }
   let spacesManager: { spaceEnv: jest.Mock }
   let filesManager: { mkFile: jest.Mock }
 
   beforeEach(() => {
-    filesQueries = { getUserFile: jest.fn() }
     spacesManager = { spaceEnv: jest.fn() }
     filesManager = { mkFile: jest.fn() }
-
-    service = new CustomDiagramsService(filesQueries as any, spacesManager as any, filesManager as any)
+    service = new CustomDiagramsService(spacesManager as any, filesManager as any)
   })
 
   describe('load', () => {
-    it('throws 404 when getUserFile returns null', async () => {
-      filesQueries.getUserFile.mockResolvedValue(null)
-      await expect(service.load(mockUser, 42)).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
-    })
-
-    it('returns xml, etag and editorUrl on success', async () => {
-      filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
-      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+    it('returns xml, etag, editorUrl and isWritable=true for writable space', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as jest.Mock).mockReturnValue(true)
       jest.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
 
-      const result = await service.load(mockUser, 42)
+      const result = await service.load(mockUser, FILE_PATH)
+      expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'test.drawio'])
       expect(result.xml).toBe('<mxfile/>')
       expect(result.etag).toBe('abc123')
       expect(result.editorUrl).toBe('https://app.diagrams.net')
+      expect(result.isWritable).toBe(true)
+    })
+
+    it('returns isWritable=false for read-only space', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRo)
+      ;(existsSync as jest.Mock).mockReturnValue(true)
+      jest.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+
+      const result = await service.load(mockUser, FILE_PATH)
+      expect(result.isWritable).toBe(false)
     })
 
     it('throws 413 when file exceeds size limit', async () => {
       const { getProps } = await import('../files/utils/files')
-      ;(getProps as jest.Mock).mockResolvedValueOnce({ name: 'big.drawio', mtime: 1000, size: 11 * 1024 * 1024, isDir: false, path: '', id: -1 })
-      filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'big.drawio' })
-      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+      ;(getProps as jest.Mock).mockResolvedValueOnce({
+        name: 'big.drawio',
+        mtime: 1000,
+        size: 11 * 1024 * 1024,
+        isDir: false,
+        path: '',
+        id: -1
+      })
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as jest.Mock).mockReturnValue(true)
-      await expect(service.load(mockUser, 42)).rejects.toMatchObject({ status: 413 })
+      await expect(service.load(mockUser, FILE_PATH)).rejects.toMatchObject({ status: 413 })
     })
   })
 
   describe('save', () => {
-    it('throws 409 when etag mismatches', async () => {
-      filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
-      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+    it('throws 403 when space is read-only', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRo)
       ;(existsSync as jest.Mock).mockReturnValue(true)
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'abc123' })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+    })
 
-      await expect(service.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({ status: HttpStatus.CONFLICT })
+    it('throws 409 when etag mismatches', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as jest.Mock).mockReturnValue(true)
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT
+      })
     })
 
     it('writes and returns new etag on success', async () => {
       const { genEtag } = await import('../files/utils/files')
       ;(genEtag as jest.Mock)
-        .mockReturnValueOnce('abc123') // first call: current etag (matches dto.etag)
-        .mockReturnValueOnce('new-etag') // second call: post-write etag
-      filesQueries.getUserFile.mockResolvedValue({ id: 42, path: 'diagram.drawio' })
-      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+        .mockReturnValueOnce('abc123') // current etag check
+        .mockReturnValueOnce('new-etag') // post-write etag
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as jest.Mock).mockReturnValue(true)
       jest.mocked(writeFile).mockResolvedValue(undefined)
 
-      const result = await service.save(mockUser, { fileId: 42, xml: '<mxfile/>', etag: 'abc123' })
+      const result = await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'abc123' })
       expect(writeFile).toHaveBeenCalledWith('/data/test.drawio', '<mxfile/>', 'utf-8')
       expect(result.etag).toBe('new-etag')
     })
@@ -98,7 +115,7 @@ describe('CustomDiagramsService', () => {
 
   describe('createNew', () => {
     it('creates file and returns path', async () => {
-      spacesManager.spaceEnv.mockResolvedValue(mockSpace)
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       filesManager.mkFile.mockResolvedValue(undefined)
       jest.mocked(writeFile).mockResolvedValue(undefined)
 

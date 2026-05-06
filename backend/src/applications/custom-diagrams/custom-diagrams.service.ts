@@ -2,9 +2,10 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { FilesManager } from '../files/services/files-manager.service'
-import { FilesQueries } from '../files/services/files-queries.service'
 import { genEtag, getProps } from '../files/utils/files'
+import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
+import { haveSpaceEnvPermissions } from '../spaces/utils/permissions'
 import { UserModel } from '../users/models/user.model'
 import type { LoadDiagramResponse } from './dto/load-diagram-response.dto'
 import type { NewDiagramDto } from './dto/new-diagram.dto'
@@ -16,13 +17,12 @@ const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://app.diagrams.net'
 @Injectable()
 export class CustomDiagramsService {
   constructor(
-    private readonly filesQueries: FilesQueries,
     private readonly spacesManager: SpacesManager,
     private readonly filesManager: FilesManager
   ) {}
 
-  async load(user: UserModel, fileId: number): Promise<LoadDiagramResponse> {
-    const space = await this.resolveSpace(user, fileId)
+  async load(user: UserModel, path: string): Promise<LoadDiagramResponse> {
+    const space = await this.resolveSpace(user, path)
     if (!existsSync(space.realPath)) throw new HttpException('file not found on disk', HttpStatus.NOT_FOUND)
     const stat = await getProps(space.realPath)
     if (stat.size > MAX_DIAGRAM_BYTES) throw new HttpException('file too large', HttpStatus.PAYLOAD_TOO_LARGE)
@@ -33,14 +33,17 @@ export class CustomDiagramsService {
       etag,
       mtime: stat.mtime,
       name: stat.name,
-      isWritable: true,
+      isWritable: haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY),
       editorUrl: EDITOR_URL
     }
   }
 
   async save(user: UserModel, dto: SaveDiagramDto): Promise<{ etag: string; mtime: number }> {
-    const space = await this.resolveSpace(user, dto.fileId)
+    const space = await this.resolveSpace(user, dto.path)
     if (!existsSync(space.realPath)) throw new HttpException('file not found on disk', HttpStatus.NOT_FOUND)
+    if (!haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY)) {
+      throw new HttpException('no write permission', HttpStatus.FORBIDDEN)
+    }
     if (Buffer.byteLength(dto.xml, 'utf-8') > MAX_DIAGRAM_BYTES) {
       throw new HttpException('xml payload too large', HttpStatus.PAYLOAD_TOO_LARGE)
     }
@@ -59,11 +62,7 @@ export class CustomDiagramsService {
     return { path: segments.join('/') }
   }
 
-  private async resolveSpace(user: UserModel, fileId: number) {
-    const row = await this.filesQueries.getUserFile(user.id, fileId)
-    if (!row?.path) throw new HttpException('file not found', HttpStatus.NOT_FOUND)
-    const pathSegments = row.path.split('/').filter(Boolean)
-    const space = await this.spacesManager.spaceEnv(user, ['files', 'personal', ...pathSegments])
-    return space
+  private resolveSpace(user: UserModel, path: string) {
+    return this.spacesManager.spaceEnv(user, path.split('/').filter(Boolean))
   }
 }

@@ -24,7 +24,7 @@ interface LoadResponse {
   styleUrl: './diagram-view.component.scss'
 })
 export class DiagramViewComponent implements OnInit {
-  @Input({ required: true }) fileId!: number
+  @Input({ required: true }) path!: string
 
   private readonly http = inject(HttpClient)
   private readonly sanitizer = inject(DomSanitizer)
@@ -42,7 +42,7 @@ export class DiagramViewComponent implements OnInit {
 
   ngOnInit(): void {
     this.http
-      .get<LoadResponse>(`/diagrams/load?fileId=${this.fileId}`)
+      .get<LoadResponse>(`/diagrams/load?path=${encodeURIComponent(this.path)}`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
@@ -89,7 +89,7 @@ export class DiagramViewComponent implements OnInit {
   private saveXml(xml: string): void {
     if (!this.isWritable) return
     this.http
-      .put<{ etag: string; mtime: number }>('/diagrams/save', { fileId: this.fileId, xml, etag: this.etag })
+      .put<{ etag: string; mtime: number }>('/diagrams/save', { path: this.path, xml, etag: this.etag })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {

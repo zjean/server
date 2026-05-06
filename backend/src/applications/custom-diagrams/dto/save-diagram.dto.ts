@@ -1,8 +1,8 @@
-import { IsInt, IsString } from 'class-validator'
+import { IsString } from 'class-validator'
 
 export class SaveDiagramDto {
-  @IsInt()
-  fileId: number
+  @IsString()
+  path: string
 
   @IsString()
   xml: string

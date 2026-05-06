@@ -130,7 +130,7 @@ export class FileDetailComponent implements OnInit {
     return !!f && !f.isDir && isDiagramExt(f.name)
   })
 
-  protected readonly diagramFileId = computed(() => this.file()?.id ?? 0)
+  protected readonly diagramPath = computed(() => this.currentPath())
   protected readonly showOfficeEmbed = computed(() => this.isOffice() || (this.isPdf() && this.pdfStage() === 'office'))
   protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
   protected readonly commentsAvailable = computed(() => {
