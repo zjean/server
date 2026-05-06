@@ -185,7 +185,12 @@ export class NcTextEditorController {
     // truncate the file to 0 bytes. Reconstruct req.raw from req.body so
     // saveStream gets the actual content.
     const bodyText = typeof req.body === 'string' ? req.body : ''
-    ;(req as unknown as { raw: Readable }).raw = Readable.from([Buffer.from(bodyText, 'utf-8')])
+    // Fastify's req.headers and req.method are getters that read from req.raw.
+    // Preserve them on the replacement stream so saveStream can still access
+    // req.headers['content-range'] and req.method without a TypeError.
+    const { headers: rawHeaders, method: rawMethod } = req.raw
+    const newRaw = Object.assign(Readable.from([Buffer.from(bodyText, 'utf-8')]), { headers: rawHeaders, method: rawMethod })
+    ;(req as unknown as { raw: Readable }).raw = newRaw
 
     try {
       await this.filesManager.saveStream(user, space, req as Parameters<FilesManager['saveStream']>[2], {})
