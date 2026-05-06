@@ -165,6 +165,16 @@ describe(NcDirectEditingController.name, () => {
       })
     })
 
+    it('Android: accepts path+editorId from JSON body (no query params)', async () => {
+      getUserFileByPath.mockResolvedValue(42)
+      getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md' })
+      const r = makeRes()
+      // Android sends empty query params; path+editorId arrive as body fields
+      const out = await controller.open(makeReq(), r.res, undefined, undefined, undefined, '/notes.md', NC_DIRECT_EDITING_EDITOR_ID)
+      expect(out.ocs.meta.status).toBe('ok')
+      expect(getUserFileByPath).toHaveBeenCalledWith(7, '.', 'notes.md')
+    })
+
     it('rejects unknown editorId (catalog drift / spoofed iOS)', async () => {
       getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md', mime: 'text-markdown' })
       const r = makeRes()

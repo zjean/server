@@ -1,4 +1,4 @@
-import { Controller, Get, HttpException, HttpStatus, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpException, HttpStatus, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -59,19 +59,23 @@ export class NcDirectEditingController {
     })
   }
 
-  // POST per upstream — but parameters arrive in the *query string*, not the
-  // body. NextcloudKit's `directEditingOpen` builds the URL as
-  // `/directEditing/open?path=/<file>&fileId=<id>&editorId=<id>` and POSTs
-  // an empty body. Mirroring that exactly.
+  // POST per upstream. iOS (NextcloudKit) sends parameters in the query string
+  // with an empty body; Android (android-library) sends them in a JSON body
+  // (?format=json only in the URL). We accept both: query params take
+  // precedence, JSON body fields are the fallback.
   @Post('ocs/v2.php/apps/files/api/v1/directEditing/open')
   async open(
     @Req() req: FastifyRequest & { user: UserModel },
     @Res({ passthrough: true }) res: FastifyReply,
-    @Query('path') _path: string | undefined,
-    @Query('editorId') editorId: string | undefined,
-    @Query('fileId') fileIdRaw: string | undefined
+    @Query('path') queryPath: string | undefined,
+    @Query('editorId') queryEditorId: string | undefined,
+    @Query('fileId') fileIdRaw: string | undefined,
+    @Body('path') bodyPath: string | undefined = undefined,
+    @Body('editorId') bodyEditorId: string | undefined = undefined
   ): Promise<OcsEnvelope<OpenResponseData>> {
     this.response.requireJson(req)
+    const _path = queryPath ?? bodyPath
+    const editorId = queryEditorId ?? bodyEditorId
 
     // fileId is preferred but optional: NextcloudKit's textOpenFile only
     // appends it when the caller passes one, and NCViewer never does — iOS
