@@ -146,6 +146,17 @@ The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS
 
 The classic-UI-as-ground-truth rule above governs Sync-in's internal v2/v3 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
 
+## Database migrations
+
+Migrations are managed by Drizzle Kit. **Never create migration files manually.** Always generate them with the tooling:
+
+```bash
+npm run -w backend db:generate   # generates a new SQL migration + updates meta/_journal.json
+npm run -w backend db:migrate    # applies pending migrations to the database
+```
+
+Creating the SQL file without running `db:generate` leaves `meta/_journal.json` out of sync. `drizzle-kit migrate` reads the journal to decide what to apply — a file not listed there is silently skipped, the table never gets created, and runtime inserts fail with an opaque "Failed query" error.
+
 ## Tooling note: `rtk` wrapper
 
 The user runs git/gh via the `rtk` proxy (token savings). A few commands don't pass through cleanly and need `rtk proxy` to bypass:
