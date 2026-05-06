@@ -1,5 +1,18 @@
 import { HttpClient } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, inject, Input, OnInit, signal, viewChild } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  EventEmitter,
+  HostListener,
+  inject,
+  Input,
+  OnInit,
+  Output,
+  signal,
+  viewChild
+} from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 
@@ -25,6 +38,7 @@ interface LoadResponse {
 })
 export class DiagramViewComponent implements OnInit {
   @Input({ required: true }) path!: string
+  @Output() readonly closeRequested = new EventEmitter<void>()
 
   private readonly http = inject(HttpClient)
   private readonly sanitizer = inject(DomSanitizer)
@@ -77,6 +91,9 @@ export class DiagramViewComponent implements OnInit {
       case 'save':
       case 'autosave':
         if (data.xml != null) this.saveXml(data.xml)
+        break
+      case 'exit':
+        this.closeRequested.emit()
         break
     }
   }
