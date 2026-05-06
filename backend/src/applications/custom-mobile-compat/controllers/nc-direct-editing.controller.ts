@@ -73,12 +73,25 @@ export class NcDirectEditingController {
   ): Promise<OcsEnvelope<OpenResponseData>> {
     this.response.requireJson(req)
 
-    // fileId is the canonical identifier — `supportsFileId: true` in our
-    // capability tells iOS to always send it. `path` is sanity-only (we
-    // could fall back to it, but every observed iOS request includes both).
-    const fileId = Number.parseInt(fileIdRaw ?? '', 10)
+    // fileId is preferred but optional: NextcloudKit's textOpenFile only
+    // appends it when the caller passes one, and NCViewer never does — iOS
+    // calls with path+editorId only. Fall back to a path-keyed lookup when
+    // fileId is absent. Strip the leading '/' NC prepends, then split on the
+    // last '/' to get the in-space (dirPath, name) pair the DB stores.
+    let fileId = Number.parseInt(fileIdRaw ?? '', 10)
     if (!Number.isFinite(fileId) || fileId <= 0) {
-      throw new HttpException('fileId required', HttpStatus.BAD_REQUEST)
+      if (!_path) {
+        throw new HttpException('fileId or path required', HttpStatus.BAD_REQUEST)
+      }
+      const stripped = _path.replace(/^\/+/, '')
+      const slash = stripped.lastIndexOf('/')
+      const dirPath = slash >= 0 ? stripped.slice(0, slash) : '.'
+      const name = slash >= 0 ? stripped.slice(slash + 1) : stripped
+      const resolved = await this.filesQueries.getUserFileByPath(req.user.id, dirPath, name)
+      if (!resolved) {
+        throw new HttpException('file not found', HttpStatus.NOT_FOUND)
+      }
+      fileId = resolved
     }
 
     if (editorId !== NC_DIRECT_EDITING_EDITOR_ID) {
