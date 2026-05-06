@@ -138,6 +138,16 @@ const nameEl = $('name')
 const fallback = $('fallback')
 const cmHost = $('cm-host')
 
+// On iOS, the WKWebView frame shrinks when the keyboard appears but the
+// CSS viewport may lag. visualViewport.height gives the actual visible
+// height (keyboard excluded) and fires resize during the animation,
+// keeping layout above the keyboard without waiting for UIKit.
+function syncViewport() {
+  document.documentElement.style.height = (window.visualViewport?.height ?? window.innerHeight) + 'px'
+}
+if (window.visualViewport) window.visualViewport.addEventListener('resize', syncViewport)
+syncViewport()
+
 // State shared across loaders. The active editor's read/write API is unified
 // through this object so save logic doesn't care whether CodeMirror loaded.
 const editor = {
