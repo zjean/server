@@ -30,3 +30,9 @@ function getExtension(name: string): string {
   if (dot < 0 || dot === name.length - 1) return ''
   return name.slice(dot + 1)
 }
+
+const DIAGRAM_EXTENSIONS = new Set(['drawio', 'dwb'])
+
+export function isDiagramExt(name: string): boolean {
+  return DIAGRAM_EXTENSIONS.has(getExtension(name).toLowerCase())
+}

@@ -681,6 +681,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
       case 'new-text':
         this.newTextFile()
         return
+      case 'new-diagram':
+        this.newDiagramFile()
+        return
       case 'new-docx':
         this.newOfficeFile('docx')
         return
@@ -691,6 +694,21 @@ export class PersonalComponent implements OnInit, OnDestroy {
         this.newOfficeFile('pptx')
         return
     }
+  }
+
+  private newDiagramFile(): void {
+    const dirPath = this.currentUploadRoute()
+    const name = this.uniqueName('Untitled diagram', 'drawio')
+    this.http.post<{ path: string }>('/diagrams/new', { dirPath, name }).subscribe({
+      next: (res) => {
+        this.toast.success(`"${name}" created`)
+        this.refresh()
+        this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: res.path } }).catch(console.error)
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'Diagram creation failed')
+      }
+    })
   }
 
   // Auto-named office file. The backend's mkFile copies the matching
@@ -818,6 +836,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
         return
       case 'new-text':
         this.newTextFile()
+        return
+      case 'new-diagram':
+        this.newDiagramFile()
         return
       case 'new-docx':
         this.newOfficeFile('docx')

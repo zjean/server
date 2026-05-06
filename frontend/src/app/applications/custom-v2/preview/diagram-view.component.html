@@ -1,0 +1,13 @@
+@if (loading()) {
+  <div class="diagram-view__state">Loading diagram…</div>
+} @else if (errorMessage()) {
+  <div class="diagram-view__state diagram-view__state--error">{{ errorMessage() }}</div>
+} @else if (iframeSrc()) {
+  <iframe
+    #editorFrame
+    class="diagram-view__frame"
+    [src]="iframeSrc()"
+    title="Diagram editor"
+    sandbox="allow-scripts allow-popups allow-forms allow-downloads"
+  ></iframe>
+}

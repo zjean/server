@@ -19,12 +19,13 @@ import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { isTextEditable } from '../../utils/classify-file'
+import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
 import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
 import { OfficeViewComponent } from '../../preview/office-view.component'
 import { TextCodeViewComponent } from '../../preview/text-code-view.component'
+import { DiagramViewComponent } from '../../preview/diagram-view.component'
 import { CloseGuardService } from '../../preview/close-guard.service'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
@@ -48,6 +49,7 @@ interface TabDef {
     CommentsPanelComponent,
     OfficeViewComponent,
     TextCodeViewComponent,
+    DiagramViewComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -123,6 +125,12 @@ export class FileDetailComponent implements OnInit {
   })
   protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
   protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))
+  protected readonly isDiagram = computed(() => {
+    const f = this.file()
+    return !!f && !f.isDir && isDiagramExt(f.name)
+  })
+
+  protected readonly diagramPath = computed(() => this.currentPath())
   protected readonly showOfficeEmbed = computed(() => this.isOffice() || (this.isPdf() && this.pdfStage() === 'office'))
   protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
   protected readonly commentsAvailable = computed(() => {

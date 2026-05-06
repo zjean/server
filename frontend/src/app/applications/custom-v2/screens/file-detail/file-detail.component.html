@@ -49,7 +49,7 @@
     </header>
 
     <div class="detail__body">
-      <div class="detail__stage" [class.detail__stage--bare]="isPdf() || showOfficeEmbed() || isText()">
+      <div class="detail__stage" [class.detail__stage--bare]="isPdf() || showOfficeEmbed() || isText() || isDiagram()">
         @if (loadError(); as err) {
           <div class="detail__load-error">{{ err }}</div>
         } @else if (showOfficeEmbed()) {
@@ -75,6 +75,8 @@
             <div class="detail__audio-name">{{ f.name }}</div>
             <audio class="detail__audio" [src]="previewUrl()" controls preload="metadata"></audio>
           </div>
+        } @else if (isDiagram() && diagramPath()) {
+          <app-v2-preview-diagram-view [path]="diagramPath()" (closeRequested)="close()" />
         } @else {
           <div class="detail__no-preview">
             <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
