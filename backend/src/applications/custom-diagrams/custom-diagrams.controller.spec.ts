@@ -35,7 +35,7 @@ describe('CustomDiagramsController', () => {
       mtime: 0,
       name: 'f.drawio',
       isWritable: true,
-      editorUrl: 'https://app.diagrams.net'
+      editorUrl: 'https://embed.diagrams.net'
     })
     const result = await controller.load(mockUser, 'files/personal/f.drawio')
     expect(mockService.load).toHaveBeenCalledWith(mockUser, 'files/personal/f.drawio')
