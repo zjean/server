@@ -14,7 +14,7 @@ import type { NewDiagramDto } from './dto/new-diagram.dto'
 import type { SaveDiagramDto } from './dto/save-diagram.dto'
 
 const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
-const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://app.diagrams.net'
+const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
 
 @Injectable()
 export class CustomDiagramsService {

@@ -52,7 +52,7 @@ describe('CustomDiagramsService', () => {
       expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'test.drawio'])
       expect(result.xml).toBe('<mxfile/>')
       expect(result.etag).toBe('abc123')
-      expect(result.editorUrl).toBe('https://app.diagrams.net')
+      expect(result.editorUrl).toBe('https://embed.diagrams.net')
       expect(result.isWritable).toBe(true)
     })
 
