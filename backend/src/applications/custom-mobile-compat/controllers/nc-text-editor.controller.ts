@@ -94,6 +94,14 @@ export class NcTextEditorController {
     }
 
     const oversized = fileProps.size > MAX_EDITABLE_BYTES
+
+    // NCViewerNextcloudText starts NCActivityIndicator in viewDidAppear (after
+    // the push animation, ~350–700 ms) and stops it in webView:didFinishNavigation:.
+    // Our page loads in <50 ms on LAN, so didFinish fires before viewDidAppear —
+    // stop() is a no-op and the spinner hangs forever. Delaying the response
+    // guarantees didFinish fires after viewDidAppear without any JS tricks.
+    await new Promise<void>((resolve) => setTimeout(resolve, 700))
+
     return (
       res
         .header('Content-Type', 'text/html; charset=utf-8')
