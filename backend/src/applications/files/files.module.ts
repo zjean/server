@@ -12,6 +12,7 @@ import { FilesManager } from './services/files-manager.service'
 import { FilesMethods } from './services/files-methods.service'
 import { FilesContentParser } from './services/files-content-parser.service'
 import { FilesQueries } from './services/files-queries.service'
+import { FilesFavorites } from './services/files-favorites.service'
 import { FilesRecents } from './services/files-recents.service'
 import { FilesScheduler } from './services/files-scheduler.service'
 import { FilesSearchManager } from './services/files-search-manager.service'
@@ -35,6 +36,7 @@ import { FilesTrashRetention } from './services/files-trash-retention.service'
     FilesScheduler,
     FilesRecents,
     FilesContentParser,
+    FilesFavorites,
     FilesContentIndexer,
     { provide: FilesContentStore, useClass: FilesContentStoreMySQL },
     FilesSearchManager,
@@ -49,6 +51,7 @@ import { FilesTrashRetention } from './services/files-trash-retention.service'
     FilesQuotaManager,
     FilesMethods,
     FilesRecents,
+    FilesFavorites,
     // Re-export OnlyOfficeModule so consumers of FilesModule (currently the
     // custom-mobile-compat NC OnlyOffice connector) get DI access to the
     // manager + guard exported above.
