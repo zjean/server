@@ -3,7 +3,7 @@ import { loadVersion } from './app.functions'
 export const VERSION = loadVersion()
 export const USER_AGENT = `sync-in-server/${VERSION}`
 const DRAWIO_ORIGIN = (() => {
-  const url = process.env['DRAWIO_URL'] ?? 'https://app.diagrams.net'
+  const url = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
   try {
     return new URL(url).origin
   } catch {
