@@ -138,21 +138,16 @@ const nameEl = $('name')
 const fallback = $('fallback')
 const cmHost = $('cm-host')
 
-// iOS spinner fix: webView.load() is called in viewDidLoad but
-// NCActivityIndicator.start() is called in viewDidAppear, which fires when
-// the push animation ends (~350ms, but up to ~700ms on slow/loaded devices).
-// Our page loads in <50ms so the first didFinishNavigation fires before
-// viewDidAppear — stop() is a no-op and the spinner never clears.
-// Fix: trigger hash navigations at increasing delays so at least one fires
-// after viewDidAppear has started the spinner. NCActivityIndicator.stop()
-// is safe to call multiple times; extra calls after the first effective one
-// are no-ops. Each attempt uses a distinct hash so WKWebView treats each
-// as a new same-document navigation (which fires webView:didFinishNavigation:).
-let _sn = 0
-const _stopSpinner = () => { try { window.location.hash = 'r' + (++_sn) } catch {} }
-setTimeout(_stopSpinner, 400)
-setTimeout(_stopSpinner, 850)
-setTimeout(_stopSpinner, 1400)
+// Belt-and-suspenders: on very slow/loaded devices viewDidAppear can fire
+// after the 700 ms server delay, meaning the initial didFinishNavigation fires
+// before the spinner starts. history.pushState triggers a same-document
+// didFinishNavigation on modern WKWebView (more reliably than hash assignment)
+// and gives NCActivityIndicator.stop() a second chance. Two attempts cover a
+// wide timing range without being intrusive to normal users.
+let _psn = 0
+const _ps = () => { try { history.pushState(null, '', location.pathname + location.search + '#_s' + (++_psn)) } catch {} }
+setTimeout(_ps, 1200)
+setTimeout(_ps, 2200)
 
 // On iOS, the WKWebView frame shrinks when the keyboard appears but the
 // CSS viewport may lag. visualViewport.height gives the actual visible
