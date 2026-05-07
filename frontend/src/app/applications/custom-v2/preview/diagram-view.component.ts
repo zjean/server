@@ -58,7 +58,7 @@ export class DiagramViewComponent implements OnInit {
 
   ngOnInit(): void {
     this.http
-      .get<LoadResponse>(`/diagrams/load?path=${encodeURIComponent(this.path)}`)
+      .get<LoadResponse>('/diagrams/load', { params: { path: this.path } })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
