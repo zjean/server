@@ -1,7 +1,7 @@
 import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { PinoLogger } from 'nestjs-pino'
-import { Cache } from '../../../infrastructure/cache/services/cache.service'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcBasicAuthGuard, parseBasicAuth } from './nc-basic-auth.guard'

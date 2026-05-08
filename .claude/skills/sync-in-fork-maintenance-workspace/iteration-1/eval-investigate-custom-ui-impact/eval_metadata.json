@@ -1,0 +1,27 @@
+{
+  "eval_id": 3,
+  "eval_name": "investigate-custom-ui-impact",
+  "prompt": "An upstream sync just merged into main. It touched some backend/src/applications/files/ code. Do we need to update anything in our custom v2/v3 UI, and if so what exactly?",
+  "assertions": [
+    {
+      "text": "Identifies the specific upstream commit (`a2f86e1`) that touched `backend/src/applications/files/`",
+      "rationale": "Foundational — investigation should start with the right commits"
+    },
+    {
+      "text": "Correctly classifies the change as an internal refactor with wire contract unchanged (DTO shape, HTTP endpoint, body)",
+      "rationale": "The biggest pitfall is misreading a signature change as a breaking change"
+    },
+    {
+      "text": "Verifies frontend callers — specifically mentions the classic `FilesService.downloadFromUrl` wrapper AND the custom-v2 `PersonalComponent.downloadFromUrl` caller",
+      "rationale": "Custom-v2 usually calls classic services; correct analysis must trace through"
+    },
+    {
+      "text": "Concludes no custom-UI code patches are required, with concrete reasoning",
+      "rationale": "The right answer given the wire contract is unchanged — the model must not invent patches"
+    },
+    {
+      "text": "Flags the new runtime behaviour changes (Content-Length now required, pre-download quota check) as things to verify, with a concrete suggestion (e.g. add i18n key for the new error string)",
+      "rationale": "Wire-compatible but not semantically identical — this is the actual value of the investigation"
+    }
+  ]
+}

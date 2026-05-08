@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Identifies that `upstream-main` is workflow-writable only and cannot be pushed to directly",
+      "passed": true,
+      "evidence": "Section 1: 'The only writer allowed is the upstream-sync.yml workflow... Human pushes to it are blocked by branch protection.'"
+    },
+    {
+      "text": "Closes the CONFLICTING PR (#99) and opens a replacement, rather than trying to fix in place",
+      "passed": true,
+      "evidence": "Section 2 step 1: `gh pr close 99 --repo zjean/server --comment 'Superseded...'`; step 6 opens new PR"
+    },
+    {
+      "text": "Cuts a resolution branch off `main` (e.g. `sync/upstream-YYYY-MM-DD`) and merges `origin/upstream-main` into it with `--no-ff`",
+      "passed": true,
+      "evidence": "Section 2 step 2: `BRANCH=sync/upstream-${DATE}; git checkout -b \"${BRANCH}\" origin/main; git merge origin/upstream-main --no-ff --no-edit`"
+    },
+    {
+      "text": "Calls out i18n JSON (`frontend/src/i18n/*.json`) as the common/typical conflict pattern",
+      "passed": true,
+      "evidence": "Section 3 has full i18n conflict guidance with example conflict marker block and resolution rules"
+    },
+    {
+      "text": "Uses `--repo zjean/server` on `gh pr create` for the replacement PR",
+      "passed": true,
+      "evidence": "Section 4: `gh pr create --repo zjean/server --base main --head \"sync/upstream-${DATE}\"`"
+    },
+    {
+      "text": "Explicitly reminds the user to use **merge commit** (not squash) when merging the replacement PR",
+      "passed": true,
+      "evidence": "Section 5 is entirely about this: 'Use \"Create a merge commit\" \u2014 not \"Squash and merge\".' with explanation of why dropdown defaults to squash"
+    }
+  ],
+  "summary": {
+    "pass_rate": 1.0,
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

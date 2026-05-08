@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { FILE_MODE } from '../../files/constants/operations'
-import type { OnlyOfficeReqDto } from '../../files/modules/only-office/only-office.dtos'
+import type { OnlyOfficeReqDto } from '../../files/editors/only-office/only-office.dtos'
 
 // NC OnlyOffice connector envelope. Shape mirrors what NC's OnlyOffice plugin
 // emits at /index.php/apps/onlyoffice/config — what stock NC mobile + the

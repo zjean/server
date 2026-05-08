@@ -1,4 +1,4 @@
-import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.constants'
+import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
 
 // Returns true if the file's extension is one OnlyOffice knows how to open.
 // The backend ships the authoritative map; we just use it.

@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Proposes `gh workflow run \"Upstream Sync\"` (or equivalent) with `--repo zjean/server`",
+      "passed": true,
+      "evidence": "Section 2: `gh workflow run upstream-sync.yml --repo zjean/server --ref main`"
+    },
+    {
+      "text": "Describes monitoring the workflow run (`gh run watch` / `gh run list`) before moving on",
+      "passed": true,
+      "evidence": "Section 2: `gh run list --repo zjean/server --workflow=upstream-sync.yml --limit 1` then `gh run watch <run-id>`"
+    },
+    {
+      "text": "Checks for a resulting PR with `gh pr list --base main --head upstream-main`",
+      "passed": true,
+      "evidence": "Section 3 table: 'Open PRs on zjean/server: None' (checked via gh pr list)"
+    },
+    {
+      "text": "Correctly identifies current state (sync already caught up, main contains everything upstream-main has)",
+      "passed": true,
+      "evidence": "Section 3 table: `git rev-list --count origin/main..origin/upstream-main: 0 - main already contains every upstream commit`"
+    },
+    {
+      "text": "Mentions 'Create a merge commit' strategy (not squash) for when an upstream-sync PR is actually merged",
+      "passed": true,
+      "evidence": "Section 2: `per CLAUDE.md, upstream-sync PRs use merge commit, not squash; the upstream-main branch must survive`"
+    },
+    {
+      "text": "Does NOT silently target Sync-in/server (upstream) for any command",
+      "passed": true,
+      "evidence": "All gh commands use --repo zjean/server; baseline also explicitly notes 'PRs must target zjean/server' from CLAUDE.md"
+    }
+  ],
+  "summary": {
+    "pass_rate": 1.0,
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

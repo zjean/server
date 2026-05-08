@@ -20,7 +20,7 @@ const { configuration: mockConfig } = require('../../../configuration/config.env
 import { Test, TestingModule } from '@nestjs/testing'
 import { HttpService } from '@nestjs/axios'
 import { JwtService } from '@nestjs/jwt'
-import { Cache } from '../../../infrastructure/cache/services/cache.service'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { NcOnlyOfficeForceSaveService } from './nc-onlyoffice-force-save.service'
 
 describe('NcOnlyOfficeForceSaveService', () => {

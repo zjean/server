@@ -2,7 +2,7 @@ import { createMock, DeepMocked } from '@golevelup/ts-jest'
 import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { intersectPermissions } from '../../../common/shared'
-import { Cache } from '../../../infrastructure/cache/services/cache.service'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -375,6 +375,26 @@ describe(SpaceGuard.name, () => {
       params: { '*': 'files/personal' }
     })
     expect(await spacesGuard.canActivate(context)).toBe(true)
+  })
+
+  it('should fail for add and modify operations in trash repository', async () => {
+    userTest.role = USER_ROLE.USER
+    spacesManager.spaceEnv = jest.fn().mockReturnValue({
+      enabled: true,
+      inTrashRepository: true,
+      envPermissions: SPACE_ALL_OPERATIONS
+    } as Partial<SpaceEnv>)
+    for (const method of ['POST', 'PATCH']) {
+      context.switchToHttp().getRequest.mockReturnValueOnce({
+        method,
+        user: userTest,
+        params: { '*': 'trash/personal' }
+      })
+      await expect(spacesGuard.canActivate(context)).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN,
+        message: 'The trash is read-only'
+      })
+    }
   })
 
   it('should fail with space disabled', async () => {

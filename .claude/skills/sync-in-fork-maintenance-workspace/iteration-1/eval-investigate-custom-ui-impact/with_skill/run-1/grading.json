@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "Identifies the specific upstream commit (`a2f86e1`) that touched `backend/src/applications/files/`",
+      "passed": true,
+      "evidence": "Section 1: 'a2f86e1 refactor(backend:files): extract downloadFile and centralize SSRF, content-length, and quota checks'"
+    },
+    {
+      "text": "Correctly classifies the change as an internal refactor with wire contract unchanged (DTO shape, HTTP endpoint, body)",
+      "passed": true,
+      "evidence": "Section 2: 'Wire-contract changes: None. The HTTP surface is unchanged... DTO file was not modified.'"
+    },
+    {
+      "text": "Verifies frontend callers \u2014 specifically mentions the classic `FilesService.downloadFromUrl` wrapper AND the custom-v2 `PersonalComponent.downloadFromUrl` caller",
+      "passed": true,
+      "evidence": "Section 2 cites `files.service.ts:189-197` AND `personal.component.ts:620-641` with exact line numbers"
+    },
+    {
+      "text": "Concludes no custom-UI code patches are required, with concrete reasoning",
+      "passed": true,
+      "evidence": "Section 5: 'No frontend code changes needed. The classic FilesService.downloadFromUrl and the custom-v2 PersonalComponent.downloadFromUrl are wire-contract-compatible'"
+    },
+    {
+      "text": "Flags the new runtime behaviour changes (Content-Length now required, pre-download quota check) as things to verify, with a concrete suggestion (e.g. add i18n key for the new error string)",
+      "passed": true,
+      "evidence": "Section 4a explains new Content-Length requirement in detail; 4b covers pre-download quota check; Section 5 recommends adding i18n key 'Missing \"content-length\" header' to en.json + nl.json"
+    }
+  ],
+  "summary": {
+    "pass_rate": 1.0,
+    "passed": 5,
+    "failed": 0,
+    "total": 5
+  }
+}

@@ -7,7 +7,7 @@ import { genHash } from '../../files/utils/files'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
-import { Cache } from '../../../infrastructure/cache/services/cache.service'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { NC_AUTH_REALM } from '../constants/routes'
 
 // NcBasicAuthGuard
