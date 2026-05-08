@@ -1,5 +1,5 @@
-import { COLLABORA_ONLINE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/modules/collabora-online/collabora-online.constants'
-import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/modules/only-office/only-office.constants'
+import { COLLABORA_ONLINE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/editors/collabora-online/collabora-online.constants'
+import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
 import { MAX_TEXT_FILE_SIZE, UNSUPPORTED_VIEW_EXTENSIONS } from '../../files/files.constants'
 import { isAudioMime, isImageMime, isPdfMime, isVideoMime } from './mime-to-glyph'
 

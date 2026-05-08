@@ -1,0 +1,343 @@
+{
+  "metadata": {
+    "skill_name": "sync-in-fork-maintenance",
+    "skill_path": "<path/to/skill>",
+    "executor_model": "<model-name>",
+    "analyzer_model": "<model-name>",
+    "timestamp": "2026-04-24T18:53:54Z",
+    "evals_run": [
+      1,
+      2,
+      3
+    ],
+    "runs_per_configuration": 3
+  },
+  "runs": [
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 191.9,
+        "tokens": 48426,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies that `upstream-main` is workflow-writable only and cannot be pushed to directly",
+          "passed": true,
+          "evidence": "Section 1: 'The only writer allowed is the upstream-sync.yml workflow... Human pushes to it are blocked by branch protection.'"
+        },
+        {
+          "text": "Closes the CONFLICTING PR (#99) and opens a replacement, rather than trying to fix in place",
+          "passed": true,
+          "evidence": "Section 2 step 1: `gh pr close 99 --repo zjean/server --comment 'Superseded...'`; step 6 opens new PR"
+        },
+        {
+          "text": "Cuts a resolution branch off `main` (e.g. `sync/upstream-YYYY-MM-DD`) and merges `origin/upstream-main` into it with `--no-ff`",
+          "passed": true,
+          "evidence": "Section 2 step 2: `BRANCH=sync/upstream-${DATE}; git checkout -b \"${BRANCH}\" origin/main; git merge origin/upstream-main --no-ff --no-edit`"
+        },
+        {
+          "text": "Calls out i18n JSON (`frontend/src/i18n/*.json`) as the common/typical conflict pattern",
+          "passed": true,
+          "evidence": "Section 3 has full i18n conflict guidance with example conflict marker block and resolution rules"
+        },
+        {
+          "text": "Uses `--repo zjean/server` on `gh pr create` for the replacement PR",
+          "passed": true,
+          "evidence": "Section 4: `gh pr create --repo zjean/server --base main --head \"sync/upstream-${DATE}\"`"
+        },
+        {
+          "text": "Explicitly reminds the user to use **merge commit** (not squash) when merging the replacement PR",
+          "passed": true,
+          "evidence": "Section 5 is entirely about this: 'Use \"Create a merge commit\" \u2014 not \"Squash and merge\".' with explanation of why dropdown defaults to squash"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 104.1,
+        "tokens": 44282,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Proposes `gh workflow run \"Upstream Sync\"` (or equivalent) with `--repo zjean/server`",
+          "passed": true,
+          "evidence": "Section 2, line 2: `gh workflow run \"Upstream Sync\" --repo zjean/server`"
+        },
+        {
+          "text": "Describes monitoring the workflow run (`gh run watch` / `gh run list`) before moving on",
+          "passed": true,
+          "evidence": "Section 2: `gh run list ... --workflow \"Upstream Sync\" --limit 1` followed by `gh run watch <RUN_ID>`"
+        },
+        {
+          "text": "Checks for a resulting PR with `gh pr list --base main --head upstream-main`",
+          "passed": true,
+          "evidence": "Section 2 step 4: `gh pr list --repo zjean/server --base main --head upstream-main --state open`"
+        },
+        {
+          "text": "Correctly identifies current state (sync already caught up, main contains everything upstream-main has)",
+          "passed": true,
+          "evidence": "Section 3 table shows `origin/main vs origin/upstream-main: 0 commits behind`; Section 4 explicitly says 'No. Everything upstream has is already on main.'"
+        },
+        {
+          "text": "Mentions 'Create a merge commit' strategy (not squash) for when an upstream-sync PR is actually merged",
+          "passed": true,
+          "evidence": "Section 2 step 6a: `user merges with 'Create a merge commit' (NOT squash)`"
+        },
+        {
+          "text": "Does NOT silently target Sync-in/server (upstream) for any command",
+          "passed": true,
+          "evidence": "Every gh command uses `--repo zjean/server`"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "total": 5,
+        "time_seconds": 275.0,
+        "tokens": 63078,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies the specific upstream commit (`a2f86e1`) that touched `backend/src/applications/files/`",
+          "passed": true,
+          "evidence": "Section 1: 'a2f86e1 refactor(backend:files): extract downloadFile and centralize SSRF, content-length, and quota checks'"
+        },
+        {
+          "text": "Correctly classifies the change as an internal refactor with wire contract unchanged (DTO shape, HTTP endpoint, body)",
+          "passed": true,
+          "evidence": "Section 2: 'Wire-contract changes: None. The HTTP surface is unchanged... DTO file was not modified.'"
+        },
+        {
+          "text": "Verifies frontend callers \u2014 specifically mentions the classic `FilesService.downloadFromUrl` wrapper AND the custom-v2 `PersonalComponent.downloadFromUrl` caller",
+          "passed": true,
+          "evidence": "Section 2 cites `files.service.ts:189-197` AND `personal.component.ts:620-641` with exact line numbers"
+        },
+        {
+          "text": "Concludes no custom-UI code patches are required, with concrete reasoning",
+          "passed": true,
+          "evidence": "Section 5: 'No frontend code changes needed. The classic FilesService.downloadFromUrl and the custom-v2 PersonalComponent.downloadFromUrl are wire-contract-compatible'"
+        },
+        {
+          "text": "Flags the new runtime behaviour changes (Content-Length now required, pre-download quota check) as things to verify, with a concrete suggestion (e.g. add i18n key for the new error string)",
+          "passed": true,
+          "evidence": "Section 4a explains new Content-Length requirement in detail; 4b covers pre-download quota check; Section 5 recommends adding i18n key 'Missing \"content-length\" header' to en.json + nl.json"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 152.3,
+        "tokens": 44864,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies that `upstream-main` is workflow-writable only and cannot be pushed to directly",
+          "passed": true,
+          "evidence": "'The branch upstream-main is a pure mirror \u2014 direct pushes are blocked; only the sync workflow writes to it.'"
+        },
+        {
+          "text": "Closes the CONFLICTING PR (#99) and opens a replacement, rather than trying to fix in place",
+          "passed": true,
+          "evidence": "Step 7: `gh pr close 99 --repo zjean/server --comment 'Superseded by #$NEW...'`"
+        },
+        {
+          "text": "Cuts a resolution branch off `main` (e.g. `sync/upstream-YYYY-MM-DD`) and merges `origin/upstream-main` into it with `--no-ff`",
+          "passed": true,
+          "evidence": "Step 2: `git checkout -b 'sync/upstream-$DATE'`; Step 3: `git merge --no-ff origin/upstream-main`"
+        },
+        {
+          "text": "Calls out i18n JSON (`frontend/src/i18n/*.json`) as the common/typical conflict pattern",
+          "passed": true,
+          "evidence": "Section 4e 'i18n files (en.json, nl.json) \u2014 Merge by union'; also covers LICENSE/package.json/workflows/custom-* which the with-skill version does not"
+        },
+        {
+          "text": "Uses `--repo zjean/server` on `gh pr create` for the replacement PR",
+          "passed": true,
+          "evidence": "Step 6: `gh pr create --repo zjean/server --base main --head 'sync/upstream-$DATE'`"
+        },
+        {
+          "text": "Explicitly reminds the user to use **merge commit** (not squash) when merging the replacement PR",
+          "passed": true,
+          "evidence": "'Merging the replacement PR' section: 'Merge-method dropdown set to \"Create a merge commit\" \u2014 not squash.' Plus `gh pr merge --merge   # NB: --merge, not --squash`"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 131.0,
+        "tokens": 36115,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Proposes `gh workflow run \"Upstream Sync\"` (or equivalent) with `--repo zjean/server`",
+          "passed": true,
+          "evidence": "Section 2: `gh workflow run upstream-sync.yml --repo zjean/server --ref main`"
+        },
+        {
+          "text": "Describes monitoring the workflow run (`gh run watch` / `gh run list`) before moving on",
+          "passed": true,
+          "evidence": "Section 2: `gh run list --repo zjean/server --workflow=upstream-sync.yml --limit 1` then `gh run watch <run-id>`"
+        },
+        {
+          "text": "Checks for a resulting PR with `gh pr list --base main --head upstream-main`",
+          "passed": true,
+          "evidence": "Section 3 table: 'Open PRs on zjean/server: None' (checked via gh pr list)"
+        },
+        {
+          "text": "Correctly identifies current state (sync already caught up, main contains everything upstream-main has)",
+          "passed": true,
+          "evidence": "Section 3 table: `git rev-list --count origin/main..origin/upstream-main: 0 - main already contains every upstream commit`"
+        },
+        {
+          "text": "Mentions 'Create a merge commit' strategy (not squash) for when an upstream-sync PR is actually merged",
+          "passed": true,
+          "evidence": "Section 2: `per CLAUDE.md, upstream-sync PRs use merge commit, not squash; the upstream-main branch must survive`"
+        },
+        {
+          "text": "Does NOT silently target Sync-in/server (upstream) for any command",
+          "passed": true,
+          "evidence": "All gh commands use --repo zjean/server; baseline also explicitly notes 'PRs must target zjean/server' from CLAUDE.md"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "total": 5,
+        "time_seconds": 267.1,
+        "tokens": 46780,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "Identifies the specific upstream commit (`a2f86e1`) that touched `backend/src/applications/files/`",
+          "passed": true,
+          "evidence": "'Upstream commit merged into backend/src/applications/files/: a2f86e1 \u2014 refactor(backend:files)'"
+        },
+        {
+          "text": "Correctly classifies the change as an internal refactor with wire contract unchanged (DTO shape, HTTP endpoint, body)",
+          "passed": true,
+          "evidence": "'Wire format / HTTP contract: unchanged.' Lists endpoint, body shape explicitly"
+        },
+        {
+          "text": "Verifies frontend callers \u2014 specifically mentions the classic `FilesService.downloadFromUrl` wrapper AND the custom-v2 `PersonalComponent.downloadFromUrl` caller",
+          "passed": true,
+          "evidence": "'Classic service files.service.ts:189-197...' and 'Custom v2 ... personal.component.ts:620-640... delegates to that classic service path'"
+        },
+        {
+          "text": "Concludes no custom-UI code patches are required, with concrete reasoning",
+          "passed": true,
+          "evidence": "'Verdict: Zero custom v2/v3 UI changes required.'"
+        },
+        {
+          "text": "Flags the new runtime behaviour changes (Content-Length now required, pre-download quota check) as things to verify, with a concrete suggestion (e.g. add i18n key for the new error string)",
+          "passed": false,
+          "evidence": "Baseline says 'Behavioural policy is unchanged' which is WRONG \u2014 it misses the new Content-Length requirement and pre-download quota check. Only flags the stricter DTO URL scheme validation (underscore/trailing-dot). The two new runtime error paths are the most consequential outcome of the refactor and baseline missed them."
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 190.3333,
+        "stddev": 85.4608,
+        "min": 104.1,
+        "max": 275.0
+      },
+      "tokens": {
+        "mean": 51928.6667,
+        "stddev": 9875.4195,
+        "min": 44282,
+        "max": 63078
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.9333,
+        "stddev": 0.1155,
+        "min": 0.8,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 183.4667,
+        "stddev": 73.2074,
+        "min": 131.0,
+        "max": 267.1
+      },
+      "tokens": {
+        "mean": 42586.3333,
+        "stddev": 5685.6293,
+        "min": 36115,
+        "max": 46780
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.07",
+      "time_seconds": "+6.9",
+      "tokens": "+9342"
+    }
+  },
+  "notes": []
+}

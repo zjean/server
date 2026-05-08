@@ -1,0 +1,35 @@
+{
+  "expectations": [
+    {
+      "text": "Identifies the specific upstream commit (`a2f86e1`) that touched `backend/src/applications/files/`",
+      "passed": true,
+      "evidence": "'Upstream commit merged into backend/src/applications/files/: a2f86e1 \u2014 refactor(backend:files)'"
+    },
+    {
+      "text": "Correctly classifies the change as an internal refactor with wire contract unchanged (DTO shape, HTTP endpoint, body)",
+      "passed": true,
+      "evidence": "'Wire format / HTTP contract: unchanged.' Lists endpoint, body shape explicitly"
+    },
+    {
+      "text": "Verifies frontend callers \u2014 specifically mentions the classic `FilesService.downloadFromUrl` wrapper AND the custom-v2 `PersonalComponent.downloadFromUrl` caller",
+      "passed": true,
+      "evidence": "'Classic service files.service.ts:189-197...' and 'Custom v2 ... personal.component.ts:620-640... delegates to that classic service path'"
+    },
+    {
+      "text": "Concludes no custom-UI code patches are required, with concrete reasoning",
+      "passed": true,
+      "evidence": "'Verdict: Zero custom v2/v3 UI changes required.'"
+    },
+    {
+      "text": "Flags the new runtime behaviour changes (Content-Length now required, pre-download quota check) as things to verify, with a concrete suggestion (e.g. add i18n key for the new error string)",
+      "passed": false,
+      "evidence": "Baseline says 'Behavioural policy is unchanged' which is WRONG \u2014 it misses the new Content-Length requirement and pre-download quota check. Only flags the stricter DTO URL scheme validation (underscore/trailing-dot). The two new runtime error paths are the most consequential outcome of the refactor and baseline missed them."
+    }
+  ],
+  "summary": {
+    "pass_rate": 0.8,
+    "passed": 4,
+    "failed": 1,
+    "total": 5
+  }
+}

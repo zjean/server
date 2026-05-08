@@ -1,0 +1,31 @@
+{
+  "eval_id": 1,
+  "eval_name": "happy-path-sync",
+  "prompt": "Can you run the upstream sync and see if anything new came in? If there's a PR, tell me what's in it and whether it's ready to merge.",
+  "assertions": [
+    {
+      "text": "Proposes `gh workflow run \"Upstream Sync\"` (or equivalent) with `--repo zjean/server`",
+      "rationale": "Core to task 1; easy to get wrong if model defaults the repo to upstream"
+    },
+    {
+      "text": "Describes monitoring the workflow run (`gh run watch` / `gh run list`) before moving on",
+      "rationale": "Must not blindly assume success"
+    },
+    {
+      "text": "Checks for a resulting PR with `gh pr list --base main --head upstream-main`",
+      "rationale": "The workflow only opens a PR if upstream has new commits"
+    },
+    {
+      "text": "Correctly identifies current state (sync already caught up, main contains everything upstream-main has)",
+      "rationale": "The model should ground its answer in real repo state, not just describe the generic flow"
+    },
+    {
+      "text": "Mentions 'Create a merge commit' strategy (not squash) for when an upstream-sync PR is actually merged",
+      "rationale": "Repo-specific rule that differs from default feat/fix behaviour"
+    },
+    {
+      "text": "Does NOT silently target Sync-in/server (upstream) for any command",
+      "rationale": "Common model failure mode when `upstream` remote is configured"
+    }
+  ]
+}

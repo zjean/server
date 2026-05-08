@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt'
 import { Test, TestingModule } from '@nestjs/testing'
 import { AxiosResponse } from 'axios'
 import { Readable } from 'stream'
-import { Cache } from '../../../../infrastructure/cache/services/cache.service'
+import { Cache } from '../../../../infrastructure/cache/cache.service'
 import { ContextManager } from '../../../../infrastructure/context/services/context-manager.service'
 import type { SpaceEnv } from '../../../spaces/models/space-env.model'
 import type { UserModel } from '../../../users/models/user.model'
@@ -193,6 +193,19 @@ describe(OnlyOfficeManager.name, () => {
 
       expect(result.config.editorConfig.mode).toBe(FILE_MODE.VIEW)
       expect(result.config.document.permissions.edit).toBe(false)
+    })
+
+    it('should set mode to VIEW when document is in trash repository', async () => {
+      const trashSpaceEnv = {
+        ...mockSpaceEnv,
+        inTrashRepository: true
+      } as unknown as SpaceEnv
+
+      const result = await service.getSettings(mockUser, trashSpaceEnv, mockRequest)
+
+      expect(result.config.editorConfig.mode).toBe(FILE_MODE.VIEW)
+      expect(result.config.document.permissions.edit).toBe(false)
+      expect(filesLockManager.checkConflicts).not.toHaveBeenCalled()
     })
 
     it('should detect mobile user agent', async () => {

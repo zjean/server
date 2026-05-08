@@ -1,0 +1,40 @@
+{
+  "expectations": [
+    {
+      "text": "Proposes `gh workflow run \"Upstream Sync\"` (or equivalent) with `--repo zjean/server`",
+      "passed": true,
+      "evidence": "Section 2, line 2: `gh workflow run \"Upstream Sync\" --repo zjean/server`"
+    },
+    {
+      "text": "Describes monitoring the workflow run (`gh run watch` / `gh run list`) before moving on",
+      "passed": true,
+      "evidence": "Section 2: `gh run list ... --workflow \"Upstream Sync\" --limit 1` followed by `gh run watch <RUN_ID>`"
+    },
+    {
+      "text": "Checks for a resulting PR with `gh pr list --base main --head upstream-main`",
+      "passed": true,
+      "evidence": "Section 2 step 4: `gh pr list --repo zjean/server --base main --head upstream-main --state open`"
+    },
+    {
+      "text": "Correctly identifies current state (sync already caught up, main contains everything upstream-main has)",
+      "passed": true,
+      "evidence": "Section 3 table shows `origin/main vs origin/upstream-main: 0 commits behind`; Section 4 explicitly says 'No. Everything upstream has is already on main.'"
+    },
+    {
+      "text": "Mentions 'Create a merge commit' strategy (not squash) for when an upstream-sync PR is actually merged",
+      "passed": true,
+      "evidence": "Section 2 step 6a: `user merges with 'Create a merge commit' (NOT squash)`"
+    },
+    {
+      "text": "Does NOT silently target Sync-in/server (upstream) for any command",
+      "passed": true,
+      "evidence": "Every gh command uses `--repo zjean/server`"
+    }
+  ],
+  "summary": {
+    "pass_rate": 1.0,
+    "passed": 6,
+    "failed": 0,
+    "total": 6
+  }
+}

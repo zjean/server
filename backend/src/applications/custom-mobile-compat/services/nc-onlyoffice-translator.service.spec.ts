@@ -1,5 +1,5 @@
 import { FILE_MODE } from '../../files/constants/operations'
-import type { OnlyOfficeReqDto } from '../../files/modules/only-office/only-office.dtos'
+import type { OnlyOfficeReqDto } from '../../files/editors/only-office/only-office.dtos'
 import { NcOnlyOfficeTranslatorService } from './nc-onlyoffice-translator.service'
 
 // Reshapes Sync-in's internal OnlyOfficeReqDto (designed for the v2 web SPA's

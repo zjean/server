@@ -1,0 +1,31 @@
+{
+  "eval_id": 2,
+  "eval_name": "conflict-resolution",
+  "prompt": "The upstream-sync workflow just opened PR #99 on zjean/server and it's CONFLICTING. Get it merged.",
+  "assertions": [
+    {
+      "text": "Identifies that `upstream-main` is workflow-writable only and cannot be pushed to directly",
+      "rationale": "Core insight that motivates the whole procedure"
+    },
+    {
+      "text": "Closes the CONFLICTING PR (#99) and opens a replacement, rather than trying to fix in place",
+      "rationale": "In-place fix is impossible and the model shouldn't attempt it"
+    },
+    {
+      "text": "Cuts a resolution branch off `main` (e.g. `sync/upstream-YYYY-MM-DD`) and merges `origin/upstream-main` into it with `--no-ff`",
+      "rationale": "The specific branching/merge pattern that preserves upstream lineage"
+    },
+    {
+      "text": "Calls out i18n JSON (`frontend/src/i18n/*.json`) as the common/typical conflict pattern",
+      "rationale": "Practical guidance grounded in how syncs actually conflict on this repo"
+    },
+    {
+      "text": "Uses `--repo zjean/server` on `gh pr create` for the replacement PR",
+      "rationale": "Must not silently target Sync-in/server"
+    },
+    {
+      "text": "Explicitly reminds the user to use **merge commit** (not squash) when merging the replacement PR",
+      "rationale": "GitHub remembers last-used strategy; this is the most common silent failure"
+    }
+  ]
+}
