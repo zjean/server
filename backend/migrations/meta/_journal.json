@@ -36,6 +36,13 @@
       "when": 1777161600000,
       "tag": "0004_nc_sync_events",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1778270789316,
+      "tag": "0005_faithful_namora",
+      "breakpoints": true
     }
   ]
 }
