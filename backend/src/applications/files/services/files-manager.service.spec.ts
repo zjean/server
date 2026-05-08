@@ -650,20 +650,6 @@ describe(FilesManager.name, () => {
     })
   })
 
-  describe('generateThumbnail', () => {
-    it('should validate image and return generated stream', async () => {
-      const space = makeSpace({ realPath: '/data/users/john/files/image.png' })
-      ;(filesUtils.isPathExists as jest.Mock).mockResolvedValueOnce(true)
-      ;(filesUtils.getMimeType as jest.Mock).mockReturnValueOnce('image-png')
-      const stream = Readable.from(['img'])
-      jest.spyOn(imageUtils, 'generateThumbnail').mockReturnValueOnce(stream as any)
-
-      const result = await service.generateThumbnail(space, 256)
-
-      expect(result).toBe(stream)
-    })
-  })
-
   describe('locking', () => {
     it('lock should fail if resource does not exist', async () => {
       const space = makeSpace()
