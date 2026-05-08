@@ -699,7 +699,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private newDiagramFile(): void {
     const dirPath = this.currentUploadRoute()
     const name = this.uniqueName('Untitled diagram', 'drawio')
-    this.http.post<{ path: string }>('/diagrams/new', { dirPath, name }).subscribe({
+    this.http.post<{ path: string }>('/api/diagrams/new', { dirPath, name }).subscribe({
       next: (res) => {
         this.toast.success(`"${name}" created`)
         this.refresh()

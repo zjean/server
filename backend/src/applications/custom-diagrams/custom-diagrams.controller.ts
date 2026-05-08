@@ -6,7 +6,7 @@ import type { LoadDiagramResponse } from './dto/load-diagram-response.dto'
 import { NewDiagramDto } from './dto/new-diagram.dto'
 import { SaveDiagramDto } from './dto/save-diagram.dto'
 
-@Controller('diagrams')
+@Controller('api/diagrams')
 export class CustomDiagramsController {
   constructor(private readonly service: CustomDiagramsService) {}
 
