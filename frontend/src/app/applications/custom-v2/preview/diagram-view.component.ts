@@ -58,7 +58,7 @@ export class DiagramViewComponent implements OnInit {
 
   ngOnInit(): void {
     this.http
-      .get<LoadResponse>('/diagrams/load', { params: { path: this.path } })
+      .get<LoadResponse>('/api/diagrams/load', { params: { path: this.path } })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
@@ -125,7 +125,7 @@ export class DiagramViewComponent implements OnInit {
   private doSave(xml: string): void {
     this.saving = true
     this.http
-      .put<{ etag: string; mtime: number }>('/diagrams/save', { path: this.path, xml, etag: this.etag })
+      .put<{ etag: string; mtime: number }>('/api/diagrams/save', { path: this.path, xml, etag: this.etag })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (res) => {
