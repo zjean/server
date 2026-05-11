@@ -140,6 +140,8 @@ export class FileDetailComponent implements OnInit {
 
   @HostListener('window:keydown', ['$event'])
   onKey(ev: KeyboardEvent): void {
+    const target = ev.target as HTMLElement
+    if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || target.isContentEditable) return
     if (ev.key === 'ArrowRight') {
       this.next()
       ev.preventDefault()

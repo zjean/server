@@ -148,6 +148,7 @@ export class OfficeViewComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.releaseLock()
+    this.loadedKey = ''
   }
 
   protected onSave(): void {

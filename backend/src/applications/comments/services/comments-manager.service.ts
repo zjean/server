@@ -84,7 +84,7 @@ export class CommentsManager {
     }
   }
 
-  private async getFileId(space: SpaceEnv, fileId?: number): Promise<number> {
+  private async getFileId(space: SpaceEnv, fileId?: number): Promise<number | undefined> {
     if (!(await isPathExists(space.realPath))) {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }
