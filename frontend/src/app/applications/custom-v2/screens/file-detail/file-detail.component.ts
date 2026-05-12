@@ -18,6 +18,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
 import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
@@ -64,6 +65,7 @@ export class FileDetailComponent implements OnInit {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly closeGuard = inject(CloseGuardService)
   private readonly destroyRef = inject(DestroyRef)
+  private readonly layoutV2 = inject(LayoutV2Service)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
@@ -155,6 +157,7 @@ export class FileDetailComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.layoutV2.setDock(null)
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const path = params.get('path')
       if (!path) {
