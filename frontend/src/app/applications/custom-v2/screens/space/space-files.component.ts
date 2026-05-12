@@ -133,7 +133,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onlyOfficeEnabled: this.store.server().fileEditors.onlyoffice,
+      onlyOfficeEnabled: this.store.server().files.editors.onlyoffice,
       onSelect: (id) => this.dispatchNewEntry(id)
     })
   )

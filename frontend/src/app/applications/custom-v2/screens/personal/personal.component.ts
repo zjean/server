@@ -145,7 +145,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   // when enabled), then tacks on the FAB-only Download from URL and
   // Upload primitives.
   protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
-    ...buildNewEntrySheetItems({ onlyOfficeEnabled: this.store.server().fileEditors.onlyoffice }),
+    ...buildNewEntrySheetItems({ onlyOfficeEnabled: this.store.server().files.editors.onlyoffice }),
     { id: 'sep-fab', kind: 'divider' },
     { id: 'download-url', label: 'Download from URL', icon: 'globe' },
     { id: 'upload', label: 'Upload', icon: 'upload' }
@@ -158,7 +158,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onlyOfficeEnabled: this.store.server().fileEditors.onlyoffice,
+      onlyOfficeEnabled: this.store.server().files.editors.onlyoffice,
       onSelect: (id) => this.dispatchNewEntry(id)
     })
   )
