@@ -42,9 +42,14 @@ export class CommentsManager {
     }
     let fileId: number
     if (createCommentDto.fileId > 0) {
-      fileId = await this.getFileId(space)
-      if (createCommentDto.fileId !== fileId) {
+      const dbFileId = await this.getFileId(space)
+      if (dbFileId === undefined) {
+        // File not indexed yet (e.g. browse returned an inode-derived id) — index it now
+        fileId = await this.getFileId(space, createCommentDto.fileId)
+      } else if (createCommentDto.fileId !== dbFileId) {
         throw new HttpException('File id mismatch', HttpStatus.BAD_REQUEST)
+      } else {
+        fileId = dbFileId
       }
     } else {
       fileId = await this.getFileId(space, createCommentDto.fileId)
@@ -79,7 +84,7 @@ export class CommentsManager {
     }
   }
 
-  private async getFileId(space: SpaceEnv, fileId?: number): Promise<number> {
+  private async getFileId(space: SpaceEnv, fileId?: number): Promise<number | undefined> {
     if (!(await isPathExists(space.realPath))) {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }

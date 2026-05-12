@@ -82,10 +82,15 @@ export class OfficeViewComponent implements OnDestroy {
   // duration of this view. Held outside signals so destroy can release the
   // lock without re-running computeds.
   private fileStub: FileModel | null = null
+  // Tracks the last (path, fileId) pair that triggered a load so that
+  // metadata-only parent updates (e.g. hasComments toggled via the comment
+  // panel emitting hasCommentsChange → file.set({...f, hasComments}) creating
+  // a new object reference) do not cause the editor to reload.
+  private loadedKey = ''
 
   constructor() {
-    // (Re-)load whenever the path or file changes. Cancels in-flight HTTP
-    // via takeUntilDestroyed; effect itself is signal-driven.
+    // (Re-)load whenever the path or file identity changes. Cancels in-flight
+    // HTTP via takeUntilDestroyed; effect itself is signal-driven.
     //
     // The seed/HTTP block is wrapped in untracked() because releaseLock()
     // reads this.config() and the success handler writes this.config.set(cfg).
@@ -106,6 +111,9 @@ export class OfficeViewComponent implements OnDestroy {
       const p = this.path()
       const f = this.file()
       if (!p || !f) return
+      const key = `${p}::${f.id ?? ''}`
+      if (key === this.loadedKey) return
+      this.loadedKey = key
       untracked(() => {
         this.releaseLock()
         this.fileStub = buildFileModelStub(f, p)
@@ -140,6 +148,7 @@ export class OfficeViewComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.releaseLock()
+    this.loadedKey = ''
   }
 
   protected onSave(): void {
