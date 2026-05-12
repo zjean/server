@@ -144,6 +144,11 @@ export class FilesQueries {
         })
       }
     }
+    // Before inserting, verify no record already exists at this path to avoid duplicate rows.
+    // This can happen when a negative (inode-based) fileId is used: multiple comment posts in
+    // the same page visit each hit this path, and without the guard each creates a new row.
+    const existingId = await this.getSpaceFileId(file, dbFile)
+    if (existingId !== undefined) return existingId
     // order is important, path is replaced by the FileProps.path
     return dbGetInsertedId(await this.db.insert(files).values({ ...dbFile, ...file }))
   }

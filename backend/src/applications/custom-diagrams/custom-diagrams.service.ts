@@ -54,6 +54,7 @@ export class CustomDiagramsService {
     }
     await writeFile(space.realPath, dto.xml, 'utf-8')
     const stat = await getProps(space.realPath)
+    FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
     return { etag: genEtag(stat, undefined, false), mtime: stat.mtime }
   }
 
