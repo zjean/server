@@ -75,6 +75,8 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     moduleRef.useLogger(['fatal'])
     controller = moduleRef.get(NcLoginV2Controller)
     flows = moduleRef.get(NcLoginFlowService)
+    // Stub only baseUrl() so tests are independent of local OIDC config presence.
+    jest.spyOn(moduleRef.get(NcResponseService), 'baseUrl').mockReturnValue('https://sync-in.example.test')
   })
 
   afterAll(async () => {
