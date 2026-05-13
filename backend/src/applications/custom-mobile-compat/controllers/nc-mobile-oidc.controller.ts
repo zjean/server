@@ -116,11 +116,9 @@ export class NcMobileOidcController {
         stack: err.stack
       })
       res.status(HttpStatus.UNAUTHORIZED)
-      const detail = err.message
-      const causeLine = causeMsg ? `<p>Cause: ${escapeHtml(causeMsg)}</p>` : ''
       return renderHtml({
         title: 'Sign-in failed',
-        body: `<h1>Sign-in failed</h1><p>${escapeHtml(detail)}.</p>${causeLine}<p class="brand">See server logs for full diagnostic.</p>`
+        body: '<h1>Sign-in failed</h1><p>Authentication could not be completed. Please return to the app and try again.</p><p class="brand">See server logs for details.</p>'
       })
     }
 
@@ -159,7 +157,7 @@ export class NcMobileOidcController {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR)
       return renderHtml({
         title: 'Sign-in failed',
-        body: `<h1>Sign-in failed</h1><p>${escapeHtml(err.message)}.</p><p class="brand">See server logs for full diagnostic.</p>`
+        body: '<h1>Sign-in failed</h1><p>Sign-in completed but credentials could not be saved. Please return to the app and try again.</p><p class="brand">See server logs for details.</p>'
       })
     }
 
