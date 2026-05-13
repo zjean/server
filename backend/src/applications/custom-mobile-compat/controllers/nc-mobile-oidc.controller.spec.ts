@@ -52,7 +52,10 @@ describe(NcMobileOidcController.name, () => {
       providers: [
         NcLoginFlowService,
         // Stub baseUrl() so tests are independent of local OIDC config presence.
-        { provide: NcResponseService, useValue: { baseUrl: jest.fn().mockReturnValue('https://sync-in.example.test'), json: jest.fn(), requireJson: jest.fn() } },
+        {
+          provide: NcResponseService,
+          useValue: { baseUrl: jest.fn().mockReturnValue('https://sync-in.example.test'), json: jest.fn(), requireJson: jest.fn() }
+        },
         { provide: NcMobileOidcService, useValue: mobileOidc },
         { provide: UsersManager, useValue: usersManager },
         { provide: NcAppPasswordService, useValue: appPasswords }
