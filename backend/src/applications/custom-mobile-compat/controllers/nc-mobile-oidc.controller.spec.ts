@@ -51,7 +51,8 @@ describe(NcMobileOidcController.name, () => {
       controllers: [NcMobileOidcController],
       providers: [
         NcLoginFlowService,
-        NcResponseService,
+        // Stub baseUrl() so tests are independent of local OIDC config presence.
+        { provide: NcResponseService, useValue: { baseUrl: jest.fn().mockReturnValue('https://sync-in.example.test'), json: jest.fn(), requireJson: jest.fn() } },
         { provide: NcMobileOidcService, useValue: mobileOidc },
         { provide: UsersManager, useValue: usersManager },
         { provide: NcAppPasswordService, useValue: appPasswords }
@@ -217,7 +218,7 @@ describe(NcMobileOidcController.name, () => {
       const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
       expect(html).toContain('Sign-in failed')
-      expect(html).toContain('Name already used')
+      expect(html).toContain('credentials could not be saved')
       // Flow must remain not-ready so the next /poll returns 404, the
       // browser session expires cleanly, and the user can retry.
       expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
