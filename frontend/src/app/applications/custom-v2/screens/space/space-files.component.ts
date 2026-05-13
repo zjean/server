@@ -277,6 +277,15 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe(() => this.refresh())
+    // Trigger browser download when a compress-to-archive task completes.
+    // The task service emits archiveId on the event; classic spaces-browser
+    // handles this in onFileEvent() — we wire it up separately here.
+    this.store.filesOnEvent
+      .pipe(
+        filter((ev: FileEvent | null) => !!ev?.archiveId),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((ev) => this.filesService.downloadTaskArchive(ev!.archiveId!))
   }
 
   ngOnDestroy(): void {
