@@ -1,23 +1,22 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { readFile, writeFile } from 'node:fs/promises'
-import { ACTION } from '../../common/constants'
-import { FilesManager } from '../files/services/files-manager.service'
-import { FileEvent } from '../files/events/file-events'
-import { genEtag, getProps, isPathExists } from '../files/utils/files'
-import { SPACE_OPERATION } from '../spaces/constants/spaces'
-import { SpacesManager } from '../spaces/services/spaces-manager.service'
-import { haveSpaceEnvPermissions } from '../spaces/utils/permissions'
-import { configuration } from '../../configuration/config.environment'
-import { UserModel } from '../users/models/user.model'
-import type { LoadDiagramResponse } from './dto/load-diagram-response.dto'
-import type { NewDiagramDto } from './dto/new-diagram.dto'
-import type { SaveDiagramDto } from './dto/save-diagram.dto'
+import { ACTION } from '../../../../common/constants'
+import { configuration } from '../../../../configuration/config.environment'
+import { FileEvent } from '../../events/file-events'
+import { FilesManager } from '../../services/files-manager.service'
+import { genEtag, getProps, isPathExists } from '../../utils/files'
+import { SPACE_OPERATION } from '../../../spaces/constants/spaces'
+import { SpacesManager } from '../../../spaces/services/spaces-manager.service'
+import { haveSpaceEnvPermissions } from '../../../spaces/utils/permissions'
+import { UserModel } from '../../../users/models/user.model'
+import type { LoadDiagramResponse } from './drawio.dtos'
+import type { NewDiagramDto, SaveDiagramDto } from './drawio.dtos'
 
 const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
 const EMPTY_DIAGRAM_XML = '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>'
 
 @Injectable()
-export class DiagramsService {
+export class DrawioService {
   constructor(
     private readonly spacesManager: SpacesManager,
     private readonly filesManager: FilesManager

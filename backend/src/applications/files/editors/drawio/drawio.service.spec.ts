@@ -1,4 +1,4 @@
-jest.mock('../../configuration/config.environment', () => ({
+jest.mock('../../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: {
@@ -15,25 +15,25 @@ jest.mock('../../configuration/config.environment', () => ({
 
 import { HttpStatus } from '@nestjs/common'
 import { readFile, writeFile } from 'node:fs/promises'
-import { ACTION } from '../../common/constants'
-import { DiagramsService } from './diagrams.service'
+import { ACTION } from '../../../../common/constants'
+import { DrawioService } from './drawio.service'
 
-jest.mock('../files/services/files-manager.service', () => ({
+jest.mock('../../services/files-manager.service', () => ({
   FilesManager: class FilesManager {}
 }))
-jest.mock('../spaces/services/spaces-manager.service', () => ({
+jest.mock('../../../spaces/services/spaces-manager.service', () => ({
   SpacesManager: class SpacesManager {}
 }))
 jest.mock('node:fs/promises', () => ({
   readFile: jest.fn(),
   writeFile: jest.fn()
 }))
-jest.mock('../files/utils/files', () => ({
+jest.mock('../../utils/files', () => ({
   genEtag: jest.fn().mockReturnValue('abc123'),
   getProps: jest.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 }),
   isPathExists: jest.fn().mockResolvedValue(true)
 }))
-jest.mock('../files/events/file-events', () => ({ FileEvent: { emit: jest.fn() } }))
+jest.mock('../../events/file-events', () => ({ FileEvent: { emit: jest.fn() } }))
 
 const mockUser = { id: 7 } as any
 // envPermissions 'amd' = ADD + MODIFY + DELETE → writable
@@ -43,8 +43,8 @@ const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio',
 
 const FILE_PATH = 'files/personal/test.drawio'
 
-describe('DiagramsService', () => {
-  let service: DiagramsService
+describe('DrawioService', () => {
+  let service: DrawioService
   let spacesManager: { spaceEnv: jest.Mock }
   let filesManager: { mkFile: jest.Mock }
 
@@ -52,7 +52,7 @@ describe('DiagramsService', () => {
     jest.clearAllMocks()
     spacesManager = { spaceEnv: jest.fn() }
     filesManager = { mkFile: jest.fn() }
-    service = new DiagramsService(spacesManager as any, filesManager as any)
+    service = new DrawioService(spacesManager as any, filesManager as any)
   })
 
   describe('load', () => {
@@ -77,7 +77,7 @@ describe('DiagramsService', () => {
     })
 
     it('throws 413 when file exceeds size limit', async () => {
-      const { getProps } = await import('../files/utils/files')
+      const { getProps } = await import('../../utils/files')
       ;(getProps as jest.Mock).mockResolvedValueOnce({
         name: 'big.drawio',
         mtime: 1000,
@@ -107,8 +107,8 @@ describe('DiagramsService', () => {
     })
 
     it('writes xml, emits FileEvent, and returns new etag on success', async () => {
-      const { genEtag } = await import('../files/utils/files')
-      const { FileEvent } = await import('../files/events/file-events')
+      const { genEtag } = await import('../../utils/files')
+      const { FileEvent } = await import('../../events/file-events')
       ;(genEtag as jest.Mock)
         .mockReturnValueOnce('abc123') // before-write etag check
         .mockReturnValueOnce('new-etag') // post-write etag

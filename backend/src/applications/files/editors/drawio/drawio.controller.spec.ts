@@ -1,5 +1,4 @@
-// Mock config loader before any module that transitively imports it
-jest.mock('../../configuration/config.environment', () => ({
+jest.mock('../../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: { usersPath: '/tmp/users', tmpPath: '/tmp/tmp', spacesPath: '/tmp/spaces', drawio: { url: 'https://embed.diagrams.net' } }
@@ -10,8 +9,8 @@ jest.mock('../../configuration/config.environment', () => ({
 }))
 
 import { Test } from '@nestjs/testing'
-import { DiagramsController } from './diagrams.controller'
-import { DiagramsService } from './diagrams.service'
+import { DrawioController } from './drawio.controller'
+import { DrawioService } from './drawio.service'
 
 const mockUser = { id: 7 } as any
 const mockService = {
@@ -20,16 +19,16 @@ const mockService = {
   createNew: jest.fn()
 }
 
-describe('DiagramsController', () => {
-  let controller: DiagramsController
+describe('DrawioController', () => {
+  let controller: DrawioController
 
   beforeEach(async () => {
     jest.clearAllMocks()
     const module = await Test.createTestingModule({
-      controllers: [DiagramsController],
-      providers: [{ provide: DiagramsService, useValue: mockService }]
+      controllers: [DrawioController],
+      providers: [{ provide: DrawioService, useValue: mockService }]
     }).compile()
-    controller = module.get(DiagramsController)
+    controller = module.get(DrawioController)
   })
 
   it('load delegates to service', async () => {

@@ -1,14 +1,13 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Post, Put, Query } from '@nestjs/common'
-import { GetUser } from '../users/decorators/user.decorator'
-import { UserModel } from '../users/models/user.model'
-import { DiagramsService } from './diagrams.service'
-import type { LoadDiagramResponse } from './dto/load-diagram-response.dto'
-import { NewDiagramDto } from './dto/new-diagram.dto'
-import { SaveDiagramDto } from './dto/save-diagram.dto'
+import { GetUser } from '../../../users/decorators/user.decorator'
+import { UserModel } from '../../../users/models/user.model'
+import { DrawioService } from './drawio.service'
+import type { LoadDiagramResponse } from './drawio.dtos'
+import { NewDiagramDto, SaveDiagramDto } from './drawio.dtos'
 
 @Controller('api/diagrams')
-export class DiagramsController {
-  constructor(private readonly service: DiagramsService) {}
+export class DrawioController {
+  constructor(private readonly service: DrawioService) {}
 
   @Get('load')
   load(@GetUser() user: UserModel, @Query('path') path: string): Promise<LoadDiagramResponse> {
