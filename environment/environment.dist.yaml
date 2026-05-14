@@ -372,6 +372,11 @@ applications:
       # Note: when using an external server (e.g.: https://collabora.domain.com), make sure it is accessible from the client/browser.
       # default: null
       externalServer:
+    drawio:
+      # draw.io diagram editor URL. Override to point to a self-hosted instance.
+      # Note: the URL must be accessible from the client/browser.
+      # default: https://embed.diagrams.net
+      url: https://embed.diagrams.net
   appStore:
     # repository: `public` | `local`
     # default: `public`

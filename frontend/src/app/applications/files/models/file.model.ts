@@ -167,13 +167,21 @@ export class FileModel implements File {
       return this.getType(inShare)
     }
 
+    const extension = this.getExtension()
+
+    if (extension === 'drawio') {
+      this.shortMime = SHORT_MIME.DIAGRAM
+      this.isViewable = true
+      this.isEditable = true
+      return mime
+    }
+
     if (!mime || mime === mimeFile) {
       this.isViewable = true
       this.shortMime = SHORT_MIME.TEXT
       return this.getType(inShare)
     }
 
-    const extension = this.getExtension()
     const dash = mime.indexOf('-')
     const temporaryMime = dash >= 0 ? mime.slice(0, dash) : mime
 

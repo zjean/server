@@ -1,0 +1,16 @@
+.diagram-viewer__readonly-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 36px;
+  padding: 0 1rem;
+  background: var(--bs-light, #f8f9fa);
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  font-size: 0.875rem;
+  color: var(--bs-secondary, #6c757d);
+}
+
+.diagram-viewer__frame {
+  border: none;
+  width: 100%;
+}

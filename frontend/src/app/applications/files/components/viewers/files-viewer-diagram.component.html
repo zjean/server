@@ -1,0 +1,18 @@
+<div [style.height.px]="currentHeight()">
+  @if (isReadonly()) {
+    <div class="diagram-viewer__readonly-bar">
+      <fa-icon [icon]="faLock"></fa-icon>
+      <span l10nTranslate>Read-only</span>
+    </div>
+  }
+  @if (iframeSrc()) {
+    <iframe
+      #editorFrame
+      [src]="iframeSrc()"
+      [style.height.px]="iframeHeight()"
+      class="diagram-viewer__frame"
+      title="Diagram editor"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
+    ></iframe>
+  }
+</div>

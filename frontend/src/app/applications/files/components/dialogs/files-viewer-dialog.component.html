@@ -37,6 +37,13 @@
           <div [style.height.px]="currentHeight" class="d-flex p-4" l10nTranslate>No editor found</div>
         }
       }
+      @case (SHORT_MIME.DIAGRAM) {
+        <app-files-viewer-diagram
+          [currentHeight]="currentHeight"
+          [file]="currentFile"
+          [(isReadonly)]="isReadonly">
+        </app-files-viewer-diagram>
+      }
       @default {
         <app-files-viewer-text
           [currentHeight]="currentHeight"

@@ -6,7 +6,8 @@ export const EXTRA_MIMES_TYPE = new Map([
   ['.py', 'text-x-python'],
   ['.tgz', 'application-gzip'],
   ['.gz', 'application-gzip'],
-  ['.gzip', 'application-gzip']
+  ['.gzip', 'application-gzip'],
+  ['.drawio', 'application-x-drawio']
 ])
 export const COMPRESSION_EXTENSION = new Map([
   ['.zip', 'zip'],

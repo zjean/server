@@ -18,7 +18,8 @@ export const DOCUMENT_TYPES_BY_GROUP: Record<SampleDocumentGroup, DocumentTypes>
 
 export const DEFAULT_DOCUMENT_TYPES: DocumentTypes = {
   Text: 'txt',
-  Markdown: 'md'
+  Markdown: 'md',
+  Diagram: 'drawio'
 }
 
 export function getDocumentTypes(groups: readonly SampleDocumentGroup[] = SAMPLE_DOCUMENT_GROUPS): DocumentTypes {

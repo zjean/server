@@ -10,6 +10,7 @@ import { StoreService } from '../../../../store/store.service'
 import { SHORT_MIME } from '../../files.constants'
 import { FileModel } from '../../models/file.model'
 import { FilesViewerCollaboraOnlineComponent } from '../viewers/files-viewer-collabora-online.component'
+import { FilesViewerDiagramComponent } from '../viewers/files-viewer-diagram.component'
 import { FilesViewerImageComponent } from '../viewers/files-viewer-image.component'
 import { FilesViewerMediaComponent } from '../viewers/files-viewer-media.component'
 import { FilesViewerOnlyOfficeComponent } from '../viewers/files-viewer-only-office.component'
@@ -26,6 +27,7 @@ import { FilesViewerTextComponent } from '../viewers/files-viewer-text.component
     FaIconComponent,
     FilesViewerOnlyOfficeComponent,
     FilesViewerCollaboraOnlineComponent,
+    FilesViewerDiagramComponent,
     L10nTranslateDirective
   ],
   templateUrl: 'files-viewer-dialog.component.html'

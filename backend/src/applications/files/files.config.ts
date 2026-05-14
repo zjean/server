@@ -19,6 +19,12 @@ import { SAMPLE_DOCUMENT_GROUPS } from './constants/samples'
 import { CollaboraOnlineConfig } from './editors/collabora-online/collabora-online.config'
 import { OnlyOfficeConfig } from './editors/only-office/only-office.config'
 
+export class DrawioConfig {
+  @IsString()
+  @IsNotEmpty()
+  url: string = 'https://embed.diagrams.net'
+}
+
 export class FilesContentIndexingOCRConfig {
   @IsBoolean()
   enabled: boolean = true
@@ -104,4 +110,9 @@ export class FilesConfig {
   @ValidateNested()
   @Type(() => CollaboraOnlineConfig)
   collabora: CollaboraOnlineConfig = new CollaboraOnlineConfig()
+
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => DrawioConfig)
+  drawio: DrawioConfig = new DrawioConfig()
 }

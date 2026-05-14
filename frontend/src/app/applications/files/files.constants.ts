@@ -20,6 +20,7 @@ export const defaultMimeUrl = getAssetsMimeUrl(mimeFile)
 export const MAX_TEXT_FILE_SIZE = 10485760 // 10 MB
 export const COMPRESSIBLE_MIMES = new Set(['application-gzip', 'application-zip', 'application-x-tar'])
 export const SHORT_MIME = {
+  DIAGRAM: 'diagram',
   DOCUMENT: 'document',
   TEXT: 'text',
   IMAGE: 'image',
