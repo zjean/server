@@ -62,7 +62,8 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
   await app.register(fastifyHelmet, {
     contentSecurityPolicy: CONTENT_SECURITY_POLICY(
       configuration.applications.files.onlyoffice.externalServer,
-      configuration.applications.files.collabora.externalServer
+      configuration.applications.files.collabora.externalServer,
+      configuration.applications.files.drawio.url
     )
   })
 
