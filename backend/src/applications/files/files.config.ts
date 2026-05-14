@@ -17,13 +17,8 @@ import {
 import type { SampleDocumentGroup } from './constants/samples'
 import { SAMPLE_DOCUMENT_GROUPS } from './constants/samples'
 import { CollaboraOnlineConfig } from './editors/collabora-online/collabora-online.config'
+import { DrawioConfig } from './editors/drawio/drawio.config'
 import { OnlyOfficeConfig } from './editors/only-office/only-office.config'
-
-export class DrawioConfig {
-  @IsString()
-  @IsNotEmpty()
-  url: string = 'https://embed.diagrams.net'
-}
 
 export class FilesContentIndexingOCRConfig {
   @IsBoolean()
