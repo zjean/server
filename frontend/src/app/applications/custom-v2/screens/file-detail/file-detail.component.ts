@@ -8,6 +8,7 @@ import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/fi
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { ShareDialogService } from '../../components/share-dialog.service'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
@@ -64,6 +65,7 @@ export class FileDetailComponent implements OnInit {
   private readonly sanitizer = inject(DomSanitizer)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly closeGuard = inject(CloseGuardService)
+  private readonly shareDialog = inject(ShareDialogService)
   private readonly destroyRef = inject(DestroyRef)
   private readonly layoutV2 = inject(LayoutV2Service)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
@@ -138,6 +140,12 @@ export class FileDetailComponent implements OnInit {
   protected readonly commentsAvailable = computed(() => {
     const f = this.file()
     return !!f && !f.isDir
+  })
+
+  protected readonly canShare = computed(() => {
+    const parts = this.currentPath().split('/').filter(Boolean)
+    const alias = parts[1] ?? ''
+    return !!this.file() && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES
   })
 
   @HostListener('window:keydown', ['$event'])
@@ -235,6 +243,25 @@ export class FileDetailComponent implements OnInit {
     const p = this.currentPath()
     if (!p || typeof window === 'undefined') return
     window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_self')
+  }
+
+  protected async openShare(): Promise<void> {
+    const f = this.file()
+    if (!f) return
+    const parts = this.currentPath().split('/').filter(Boolean)
+    const alias = parts[1] ?? ''
+    const relativePath = parts.slice(2).join('/')
+    await this.shareDialog.open({
+      file: {
+        id: f.id,
+        name: f.name,
+        isDir: f.isDir,
+        mime: f.mime,
+        space: { alias, name: alias, root: { alias, name: alias } } as never
+      },
+      relativePath,
+      ownerId: null
+    })
   }
 
   private goTo(path: string): void {

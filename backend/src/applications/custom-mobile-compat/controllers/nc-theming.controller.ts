@@ -4,6 +4,7 @@ import { existsSync, createReadStream } from 'node:fs'
 import * as path from 'node:path'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { STATIC_ASSETS_PATH } from '../../../configuration/config.constants'
+import { configuration } from '../../../configuration/config.environment'
 
 // NcThemingController — serves the small subset of /index.php/apps/theming/*
 // endpoints stock NC iOS / Android probe to fetch the server's brand assets.
@@ -105,9 +106,13 @@ export class NcThemingController {
     return path.join(STATIC_ASSETS_PATH, 'favicon.svg')
   }
 
-  private computeBaseUrl(req: FastifyRequest): string {
-    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? 'http'
-    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? (req.headers['host'] as string | undefined) ?? 'localhost'
+  private computeBaseUrl(_req: FastifyRequest): string {
+    const oidcRedirectUri = configuration.auth?.oidc?.redirectUri
+    if (oidcRedirectUri) {
+      return new URL(oidcRedirectUri).origin
+    }
+    const proto = (_req.headers['x-forwarded-proto'] as string | undefined) ?? 'http'
+    const host = (_req.headers['x-forwarded-host'] as string | undefined) ?? (_req.headers['host'] as string | undefined) ?? 'localhost'
     return `${proto}://${host}`
   }
 }

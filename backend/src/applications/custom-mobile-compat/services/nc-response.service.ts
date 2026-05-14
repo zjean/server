@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { configuration } from '../../../configuration/config.environment'
 import { acceptsJson, ocsEnvelope, type OcsEnvelope, type OcsOptions } from '../utils/ocs-envelope'
 
 // Response helpers shared by the OCS controllers.
@@ -22,12 +23,19 @@ export class NcResponseService {
     return ocsEnvelope(data, opts)
   }
 
-  // Compute the server's externally-visible base URL from the request headers.
-  // Respects X-Forwarded-Proto / X-Forwarded-Host if present (Sync-in sits
-  // behind a reverse proxy in most deployments).
-  baseUrl(req: FastifyRequest): string {
-    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? (req.protocol as string | undefined) ?? 'http'
-    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? (req.headers['host'] as string | undefined) ?? 'localhost'
+  // Compute the server's externally-visible base URL.
+  // When OIDC is configured, the redirect URI's origin is authoritative — it is
+  // admin-set and cannot be spoofed via request headers.  Fallback to request
+  // headers only when OIDC is absent (password-only NC deployments), where the
+  // header-based approach is acceptable because no OIDC redirect is involved.
+  baseUrl(_req: FastifyRequest): string {
+    const oidcRedirectUri = configuration.auth?.oidc?.redirectUri
+    if (oidcRedirectUri) {
+      return new URL(oidcRedirectUri).origin
+    }
+    // Non-OIDC fallback — proxy headers are trusted as before.
+    const proto = (_req.headers['x-forwarded-proto'] as string | undefined) ?? (_req.protocol as string | undefined) ?? 'http'
+    const host = (_req.headers['x-forwarded-host'] as string | undefined) ?? (_req.headers['host'] as string | undefined) ?? 'localhost'
     return `${proto}://${host}`
   }
 }
