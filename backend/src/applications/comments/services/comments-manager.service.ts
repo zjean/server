@@ -44,7 +44,6 @@ export class CommentsManager {
     if (createCommentDto.fileId > 0) {
       const dbFileId = await this.getFileId(space)
       if (dbFileId === undefined) {
-        // File not indexed yet (e.g. browse returned an inode-derived id) — index it now
         fileId = await this.getFileId(space, createCommentDto.fileId)
       } else if (createCommentDto.fileId !== dbFileId) {
         throw new HttpException('File id mismatch', HttpStatus.BAD_REQUEST)
@@ -64,8 +63,8 @@ export class CommentsManager {
     if (!comment) {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }
-    const fileId: number = await this.getFileId(space)
-    if (updateCommentDto.fileId !== fileId || comment.fileId !== fileId) {
+    const fileId = await this.getFileId(space)
+    if (fileId === undefined || updateCommentDto.fileId !== fileId || comment.fileId !== fileId) {
       throw new HttpException('File id mismatch', HttpStatus.BAD_REQUEST)
     }
     if (!(await this.commentQueries.updateComment(user.id, updateCommentDto.commentId, updateCommentDto.fileId, updateCommentDto.content))) {
@@ -75,8 +74,8 @@ export class CommentsManager {
   }
 
   async deleteComment(user: UserModel, space: SpaceEnv, deleteCommentDto: DeleteCommentDto): Promise<void> {
-    const fileId: number = await this.getFileId(space)
-    if (deleteCommentDto.fileId !== fileId) {
+    const fileId = await this.getFileId(space)
+    if (fileId === undefined || deleteCommentDto.fileId !== fileId) {
       throw new HttpException('File id mismatch', HttpStatus.BAD_REQUEST)
     }
     if (!(await this.commentQueries.deleteComment(user.id, deleteCommentDto.commentId, fileId, space.dbFile?.ownerId === user.id))) {
