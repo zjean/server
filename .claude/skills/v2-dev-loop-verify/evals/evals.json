@@ -1,0 +1,26 @@
+{
+  "skill_name": "v2-dev-loop-verify",
+  "evals": [
+    {
+      "id": 1,
+      "name": "verify-after-styling-change",
+      "prompt": "I just changed the toolbar height in frontend/src/app/applications/custom-v2/preview/markdown-view.component.ts from 30px to 36px. Dev server is running on :8080. Load a .md file and tell me if it looks right before I commit.",
+      "expected_output": "Identifies the LAN IP (because of the loopback hijack — 127.0.0.1:8080 / localhost don't work), navigates to v2 file preview for a markdown file (creates one via the make → PATCH → UNLOCK dance if none exists, or uses an existing tiptap-test.md), takes a screenshot saved to $TMPDIR (not /tmp — that's denied), reads it back to surface inline, and reports whether the 36px toolbar looks right. Does NOT try to spin up the dev server itself.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "debug-v2-styling-bug",
+      "prompt": "My v2 markdown viewer is showing white text on a white background. Build and lint are clean. Help me figure out what's wrong.",
+      "expected_output": "Loads the v2 markdown viewer in the running dev server, runs the computed-styles audit by walking up from the .ProseMirror leaf to .v2-root capturing color + background-color at each layer, identifies the smoking gun (near-white oklch color over an rgb(255,255,255) background somewhere up the chain), traces it to a var(--si-bg, #fff) or var(--si-danger, #c0392b) reference, and points to the fix (replace --si-bg with --si-bg0, --si-danger with --si-rose, drop the fallback). References sync-in-fork-maintenance's style-token-translation section. Does NOT just say 'looks fine' or guess without inspecting computed styles.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "verify-edit-save-round-trip",
+      "prompt": "I want to confirm the v2 markdown viewer's save actually works end-to-end — load a .md file, make an edit, save, and verify the server-side content matches.",
+      "expected_output": "Logs in if not already (sync-in/password), navigates to a .md file in v2, drives the editor via window.ng.getComponent(host) + component.editor.chain().insertContent() (NOT execCommand or synthetic InputEvents, which don't trigger TipTap's onUpdate), waits for status to flip to 'Aangepast'/'Modified', clicks the Save button, waits for 'Opgeslagen'/'Saved', then fetches the file back via GET /api/app/spaces/operation/<path> and confirms the new content is in the response body. Reports the tail of the saved content as evidence.",
+      "files": []
+    }
+  ]
+}

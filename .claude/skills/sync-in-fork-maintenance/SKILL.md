@@ -29,8 +29,8 @@ Both `origin` and `upstream` remotes use `git@github-prive:...` **not** `git@git
 ### gh CLI gotchas
 
 - **Every `gh pr create` must pass `--repo zjean/server`.** `gh` inherits its default repo from the `upstream` remote otherwise, which means PRs accidentally target `Sync-in/server`. The flag is authoritative — use it even when default is set. If a PR opens against upstream by mistake, close it with `gh pr close <n> --repo Sync-in/server --comment "wrong repo"` and reopen with `--repo zjean/server`.
-- **`rtk proxy` for JSON-returning `gh` calls.** The user runs every shell command through the `rtk` proxy for token savings, but rtk reshapes JSON output of some `gh api` calls. When the real response matters, use `rtk proxy gh api ...` to bypass reshaping. Normal `gh pr create`, `gh run list`, `gh workflow run` work fine unmodified.
-- **`git commit --allow-empty`** — rtk's git wrapper rejects the flag. Use `rtk proxy git commit --allow-empty` if ever needed.
+- **`rtk proxy` for any `gh` call where you depend on specific JSON fields.** The `rtk` proxy reshapes / pretty-prints `gh` output for token savings — great in the common case, lossy when a precise field value matters. This applies to *all* JSON-returning `gh` calls, not just `gh api`: in this session `gh pr view 199 --json mergeable,mergeStateStatus,...` hid the `CONFLICTING` state until I re-ran it through `rtk proxy`. Rule of thumb: if you pass `--json` and you're going to branch on a field, use `rtk proxy gh ...`. Side-effect commands (`gh pr create`, `gh workflow run`, `gh run rerun`) and human-readable listings (`gh run list`, `gh pr list` without `--json`) work fine unmodified.
+- **`git commit --allow-empty` / `--no-edit`** — rtk's git wrapper rejects these flags (and similar uncommon `git` options). The merge-commit step in task 2 specifically needs `rtk proxy git commit --no-edit` so the default merge message is preserved without rtk dropping the flag.
 
 ### Branch protection
 
@@ -121,11 +121,16 @@ rtk proxy npm --prefix frontend run lint    # catches duplicate JSON keys as war
 rtk proxy npm --prefix backend run build    # NestJS compile
 ```
 
-Fix anything new that surfaces, then commit the merge and push:
+Fix anything new that surfaces, then commit the merge and push.
+
+**Don't `git add -A`.** The user's working tree often has untracked or modified `.claude/` files (e.g. `.claude/scheduled_tasks.lock`, `.claude/settings.local.json`) — tooling state that doesn't belong in the sync commit. After conflict resolution, every fix you applied is already staged from your per-file `git add` during resolution, and cleanly-auto-merged files are staged by `git merge` itself. So the index already contains exactly the merge content — just commit it.
+
+Stage anything extra (e.g. a regenerated `package-lock.json` after `npm install`) by name, verify what's staged, then commit:
 
 ```bash
-git add -A
-git commit --no-edit   # uses default merge commit message
+git status --short              # confirm only merge-related files are staged
+git add <regenerated-files>     # e.g. package-lock.json if npm install touched it
+rtk proxy git commit --no-edit  # default merge message; rtk needs --no-edit proxied
 git push -u origin sync/upstream-$(date +%Y-%m-%d)
 ```
 
@@ -159,6 +164,18 @@ EOF
 ```
 
 Tell the user: "PR #<new> is up. Remember — **merge commit**, not squash, when you merge it."
+
+### Aftermath — once the sync PR is merged
+
+When the user reports the PR is merged, do the local cleanup so the next branch doesn't start from stale state:
+
+```bash
+git checkout main
+git pull --ff-only                            # advance to the merged commit on origin
+git branch -D sync/upstream-$(date +%Y-%m-%d) # delete the local sync branch
+```
+
+A small wrinkle worth knowing (not a bug): GitHub's "Create a merge commit" produces a *new* merge commit on the server side, distinct from the one you made locally. So after the pull, `git log -1 main` shows a commit SHA you didn't author (e.g. local `ad0979a7` ≠ origin's `07a8bce1`). The tree contents match; only the SHA differs. Don't try to align them — just let `git pull --ff-only` advance.
 
 ## Task 3 — Investigate custom-UI impact (deep)
 
@@ -196,6 +213,7 @@ Classify each change into one of three buckets:
 | **Wire contract changed** | HTTP method, URL, DTO shape (fields added/renamed/removed with semantic meaning), response shape | **Almost certainly breaks us.** Grep our callers; patch. |
 | **Internal refactor, signature change** | Service method signature changed (e.g. `foo(user, url: string)` → `foo(user, dto: FooDto)`) but HTTP surface unchanged | **Doesn't affect frontend.** Note in report, skip. |
 | **Behaviour change** | Same contract, new validation / error codes / side effects (e.g. "Content-Length now required", "quota now checked pre-download") | **Probably compatible; verify error handling.** Check we surface the new error paths. |
+| **New component / styles in classic UI** | New `.component.ts`, `.html`, `.scss` or inline styles for a feature classic ships and we may want to mirror in v2 (e.g. upstream's TipTap markdown viewer) | **No automatic impact** — `custom-v2/` has its own preview pipeline. But if the user wants v2 to gain visual parity, see [Style token translation](#style-token-translation-when-porting-classic-ui-into-custom-v2) — upstream's CSS uses a different token set than `.v2-root` and a literal copy-paste introduces invisible bugs. |
 
 Behaviour changes often have subtle consequences — read the diff carefully. New `throw new HttpException(...)` paths mean new 4xx/5xx responses callers might not handle.
 
@@ -254,6 +272,55 @@ Structure the final report like this:
 ```
 
 Keep it scannable. If nothing needs adapting, say "No impact" explicitly and stop.
+
+## Style token translation (when porting classic UI into `custom-v2`)
+
+Triggered specifically when the user wants v2 to gain visual parity with a classic-UI feature upstream just shipped (the markdown viewer in PR #201 is the canonical example). The upstream component's CSS is a tempting copy-paste target, but **upstream uses a different design-token namespace than `.v2-root`**, and the var() fallbacks paper over the mismatch silently.
+
+### The hazard, concretely
+
+`.v2-root` (the Stack/navy palette from `feat(custom-v2): adopt Stack design tokens`) defines these and only these surface/text/status tokens:
+
+- Surfaces — `--si-bg0` (canvas) … `--si-bg6` (deepest hover/active)
+- Text — `--si-fg`, `--si-fg-muted`, `--si-fg-faint`, `--si-fg-tertiary`, `--si-fg-ghost`
+- Borders — `--si-border`, `--si-line`, `--si-line-strong`, `--si-line-bold`
+- Accents — `--si-accent`, `--si-accent-hover`, `--si-accent-soft`, `--si-accent-deep`, `--si-accent-fg`, `--si-accent-line`, `--si-nav`, `--si-nav-soft`, `--si-nav-line`
+- Status — `--si-rose` (red), `--si-amber`, `--si-green`, `--si-cyan`, `--si-violet` (plus `*-soft` variants)
+- Radii — `--si-r1` … `--si-r4`
+- Shadows — `--si-shadow1`, `--si-shadow2`, `--si-shadow3`
+- Fonts — `--si-sans`, `--si-serif`, `--si-mono`, `--si-display`
+
+Upstream's classic components reach for tokens that **don't exist in v2** — most commonly `--si-bg`, `--si-bg2` (yes, v2 has `--si-bg2`, but classic's meaning differs), `--si-danger`, `--si-fg` with a *light-mode* fallback (`#111`), and so on. Where v2 has no matching token, the `var(--missing, #fallback)` form silently activates the fallback — and the fallbacks are usually light-mode literals (`#fff`, `#111`, `#c0392b`), so a navy v2 surface ends up with a white sheet painted across it.
+
+This is exactly how PR #201 shipped a markdown viewer with white text on a white background; PR #202 fixed it.
+
+### Translation recipe
+
+When porting a classic component into `custom-v2/preview/` (or anywhere else under `.v2-root`):
+
+1. **List every `var(--si-*)` reference** in the source component's CSS/SCSS — both the file itself and any classic stylesheet it imports.
+   ```bash
+   rtk proxy grep -oE 'var\(--si-[a-z0-9-]+' <classic-source-path> | sort -u
+   ```
+2. **For each token, check whether it exists in v2.** The authoritative inventory is the section above, or live in the running app — `getComputedStyle(document.querySelector('.v2-root'))` iterated for `--si-*` properties.
+3. **Translate missing tokens to the closest v2 equivalent.** Common rewrites (drawn from PR #202):
+
+   | Classic / fallback pattern | v2 replacement | Why |
+   |---|---|---|
+   | `var(--si-bg, #fff)` (canvas) | `var(--si-bg0)` | `--si-bg` does not exist; `#fff` paints a white sheet on the navy canvas. |
+   | `var(--si-bg, ...)` (raised surface) | `var(--si-bg1)` or `--si-bg2` | Pick by elevation — `bg1` for the same-canvas feel, `bg2` for "this is a toolbar / chrome panel". |
+   | `var(--si-fg, #111)` | `var(--si-fg)` (drop fallback) | The token always exists under `.v2-root`; `#111` is a light-mode literal that defeats the dark palette. |
+   | `var(--si-danger, #c0392b)` | `var(--si-rose)` | v2 has no `--si-danger`; `--si-rose` is the warm-red status token. |
+   | Hover bg as `rgba(0,0,0,0.05)` | `var(--si-bg3)` | v2 has dedicated hover/active levels — use them instead of inline alpha tricks. |
+   | Active bg as `rgba(0,0,0,0.08)` | `var(--si-bg4)` | Same reason. |
+
+4. **Drop the `var()` fallback values entirely** for v2 components. The tokens are guaranteed under `.v2-root`, so a fallback only fires when someone typos the variable name. Leaving the fallback in lets that typo render visibly wrong instead of failing fast.
+5. **Drop any explicit `light`/`dark` class plumbing.** v2's palette is intentionally always-dark — there's no light/dark switch at `.v2-root`. Selectors like `.foo--dark .ProseMirror { color: ... }` are dead code and should go.
+6. **Verify visually after the port.** Either:
+   - browser-test through `chrome-devtools` (see PR #202's session for the recipe — log in, navigate to the screen, screenshot), or
+   - inspect the computed styles at the host element and walk down to the leaf (look for `color: oklch(0.97 ...)` on `oklch(0.22 ...)` — the navy-on-near-white pair indicates the canvas is wired correctly).
+
+If the user asked you to port the visual side of a classic feature into v2, deliver the translation as part of the same change — the bug surfaces *only* under v2 dark mode and is invisible during unit tests / Storybook with a light background, so it's easy to ship.
 
 ## Quick-reference snippets
 
