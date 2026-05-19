@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { UserType } from '../../users/interfaces/user.interface'
@@ -11,11 +12,12 @@ import { NotificationsBellComponent } from './notifications-bell.component'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './title-bar.component.html',
   styleUrl: './title-bar.component.scss',
-  imports: [LogoComponent, NotificationsBellComponent]
+  imports: [LogoComponent, NotificationsBellComponent, L10nTranslatePipe]
 })
 export class TitleBarComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly store = inject(StoreService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected user: UserType | null = null
   protected userAvatar: string | null = null
   private subscriptions: Subscription[] = []

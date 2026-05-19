@@ -20,7 +20,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
   imports: [IconV2Component, L10nTranslatePipe],
   template: `
     @if (visible()) {
-      <nav class="pcb" aria-label="Breadcrumb">
+      <nav class="pcb" [attr.aria-label]="'Breadcrumb' | translate: locale.language">
         @for (b of segments(); track $index; let i = $index; let last = $last) {
           @if (i > 0) {
             <app-v2-icon name="chevRight" [size]="11" class="pcb__sep" />

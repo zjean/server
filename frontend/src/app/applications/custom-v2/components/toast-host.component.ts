@@ -13,7 +13,7 @@ import { ToastService } from './toast.service'
         <div class="toast toast--{{ t.kind }}" role="status">
           <app-v2-icon [name]="t.kind === 'error' ? 'x' : 'check'" [size]="14" />
           <span class="toast__msg">{{ t.message | translate: locale.language }}</span>
-          <button type="button" class="toast__close" (click)="dismiss(t.id)" aria-label="Dismiss">
+          <button type="button" class="toast__close" (click)="dismiss(t.id)" [attr.aria-label]="'Dismiss' | translate: locale.language">
             <app-v2-icon name="x" [size]="12" />
           </button>
         </div>

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, viewChild } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router, RouterLink } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { StoreService } from '../../../store/store.service'
 import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
 import { IconV2Component } from '../icons/icon-v2.component'
@@ -35,7 +35,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
         </button>
       </div>
 
-      <nav class="topbar__crumbs" aria-label="Breadcrumb">
+      <nav class="topbar__crumbs" [attr.aria-label]="'Breadcrumb' | translate: locale.language">
         @if (segments().length === 0) {
           <span class="topbar__crumb topbar__crumb--last">{{ 'Sync-In' | translate: locale.language }}</span>
         }
@@ -82,6 +82,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
 })
 export class TopBarComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  private readonly translation = inject(L10nTranslationService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly layoutV2 = inject(LayoutV2Service)
@@ -115,7 +116,8 @@ export class TopBarComponent {
   })()
 
   protected readonly placeholder = computed(() => {
-    return this.layoutV2.isMobile() ? 'Search…' : 'Search files…'
+    const key = this.layoutV2.isMobile() ? 'Search…' : 'Search files…'
+    return this.translation.translate(key)
   })
 
   // Global ⌘K / Ctrl-K — focuses the top-bar search no matter which screen

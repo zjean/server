@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, DestroyRef, OnDestroy, computed, effect, inject, input, output, signal, untracked } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FILE_MODE } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
@@ -23,12 +24,12 @@ import { buildFileModelStub } from '../utils/file-model-stub'
 @Component({
   selector: 'app-v2-preview-office-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [OnlyOfficeComponent],
+  imports: [OnlyOfficeComponent, L10nTranslateDirective, L10nTranslatePipe],
   template: `
     @if (loading()) {
-      <div class="office-view__state">Loading editor…</div>
+      <div class="office-view__state" l10nTranslate>Loading editor…</div>
     } @else if (error(); as err) {
-      <div class="office-view__error">{{ err }}</div>
+      <div class="office-view__error">{{ err | translate: locale.language }}</div>
     } @else if (config(); as cfg) {
       <app-files-onlyoffice-document
         class="office-view__doc"
@@ -68,6 +69,7 @@ export class OfficeViewComponent implements OnDestroy {
   private readonly http = inject(HttpClient)
   private readonly destroyRef = inject(DestroyRef)
   private readonly store = inject(StoreService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   readonly path = input.required<string>()
   readonly file = input.required<FileProps | null>()

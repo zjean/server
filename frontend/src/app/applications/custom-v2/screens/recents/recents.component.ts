@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { CommentsService } from '../../../comments/services/comments.service'
 import { FilesService } from '../../../files/services/files.service'
 import { FileRecentModel } from '../../../files/models/file-recent.model'
@@ -28,7 +29,7 @@ interface RecentBucket {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './recents.component.html',
   styleUrl: './recents.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, AvatarComponent, TimeAgoPipe]
+  imports: [IconV2Component, FileGlyphComponent, AvatarComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class RecentsComponent implements OnInit {
   private readonly filesService = inject(FilesService)
@@ -36,6 +37,7 @@ export class RecentsComponent implements OnInit {
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   private readonly files = computed(() => this.store.filesRecents().slice(0, RECENT_LIMIT))
   protected readonly comments = computed(() => this.store.commentsRecents().slice(0, RECENT_LIMIT))

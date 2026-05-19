@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router'
-import { L10nTranslateDirective } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
@@ -31,13 +31,14 @@ interface NavEntry {
     '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
     '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
   },
-  imports: [IconV2Component, AvatarComponent, LogoComponent, RouterLink, RouterLinkActive, ToBytesPipe, L10nTranslateDirective]
+  imports: [IconV2Component, AvatarComponent, LogoComponent, RouterLink, RouterLinkActive, ToBytesPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class LeftNavComponent {
   protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly store = inject(StoreService)
   private readonly router = inject(Router)
   private readonly destroyRef = inject(DestroyRef)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly user = toSignal(this.store.user)
   protected readonly userAvatar = toSignal(this.store.userAvatarUrl)

@@ -1,13 +1,13 @@
 @if (loading()) {
-  <div class="diagram-view__state">Loading diagram…</div>
+  <div class="diagram-view__state" l10nTranslate>Loading diagram…</div>
 } @else if (errorMessage()) {
-  <div class="diagram-view__state diagram-view__state--error">{{ errorMessage() }}</div>
+  <div class="diagram-view__state diagram-view__state--error">{{ errorMessage() | translate: locale.language }}</div>
 } @else if (iframeSrc()) {
   <iframe
     #editorFrame
     class="diagram-view__frame"
     [src]="iframeSrc()"
-    title="Diagram editor"
+    [title]="'Diagram editor' | translate: locale.language"
     sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-downloads"
   ></iframe>
 }
