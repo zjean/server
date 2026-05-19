@@ -3,10 +3,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  // Match the Stack page surface (bg-0) — the layout body uses the same
-  // value, but each screen sets its own background for cases where the
-  // screen is rendered standalone (e.g. inside a dialog).
-  background: var(--si-bg0);
+  background: var(--si-bg2);
 }
 
 .recents {
@@ -142,7 +139,10 @@
   cursor: pointer;
   color: inherit;
   font: inherit;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 
   &:hover {
     background: var(--si-bg4);
@@ -157,12 +157,7 @@
     position: relative;
     height: 96px;
     border-radius: 10px;
-    background:
-      repeating-linear-gradient(
-        135deg,
-        oklch(0.30 0.011 260) 0 8px,
-        oklch(0.27 0.010 260) 8px 16px
-      );
+    background: repeating-linear-gradient(135deg, oklch(0.34 0.036 255) 0 8px, oklch(0.3 0.034 255) 8px 16px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -230,7 +225,10 @@
   cursor: pointer;
   color: inherit;
   font: inherit;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 
   &:hover {
     background: var(--si-bg4);
@@ -310,7 +308,7 @@
   padding: 16px 0 10px;
   position: sticky;
   top: 0;
-  background: linear-gradient(var(--si-bg0) 70%, transparent);
+  background: linear-gradient(var(--si-bg2) 70%, transparent);
   z-index: 1;
 }
 
