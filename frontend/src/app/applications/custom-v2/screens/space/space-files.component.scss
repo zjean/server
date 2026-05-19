@@ -18,7 +18,7 @@
   }
 
   &__toolbar {
-    padding: 28px 28px 20px;
+    padding: 32px 28px 20px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -35,7 +35,7 @@
   &__title {
     display: flex;
     flex-direction: column;
-    margin-right: 14px;
+    margin-right: auto;
     min-width: 168px;
   }
 
@@ -158,7 +158,9 @@
     border-radius: 5px;
     cursor: pointer;
     padding: 0;
-    transition: background 120ms ease, color 120ms ease;
+    transition:
+      background 120ms ease,
+      color 120ms ease;
 
     &:hover:not(:disabled) {
       background: var(--si-bg4);
@@ -390,7 +392,9 @@
   text-align: left;
   color: inherit;
   font-family: inherit;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 
   &:hover {
     background: var(--si-bg4);
@@ -496,7 +500,9 @@
 
   &--selected {
     border-color: var(--si-nav);
-    box-shadow: inset 0 0 0 1px var(--si-nav), var(--si-shadow1);
+    box-shadow:
+      inset 0 0 0 1px var(--si-nav),
+      var(--si-shadow1);
   }
 
   &__select {
