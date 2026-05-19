@@ -22,11 +22,12 @@ import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.
 import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
-import { isAudioMime, isImageMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
 import { OfficeViewComponent } from '../../preview/office-view.component'
 import { TextCodeViewComponent } from '../../preview/text-code-view.component'
+import { MarkdownViewComponent } from '../../preview/markdown-view.component'
 import { DiagramViewComponent } from '../../preview/diagram-view.component'
 import { CloseGuardService } from '../../preview/close-guard.service'
 
@@ -51,6 +52,7 @@ interface TabDef {
     CommentsPanelComponent,
     OfficeViewComponent,
     TextCodeViewComponent,
+    MarkdownViewComponent,
     DiagramViewComponent,
     ToBytesPipe,
     TimeAgoPipe,
@@ -123,9 +125,14 @@ export class FileDetailComponent implements OnInit {
     const f = this.file()
     return !!f && !isPdfMime(f.mime) && isOfficeExtension(f.name)
   })
+  protected readonly isMarkdown = computed(() => {
+    const f = this.file()
+    return !!f && !f.isDir && isMarkdownMime(f.mime, f.name) && isTextEditable(f)
+  })
   protected readonly isText = computed(() => {
     const f = this.file()
-    return !!f && isTextViewerMime(f.mime) && isTextEditable(f)
+    if (!f || this.isMarkdown()) return false
+    return isTextViewerMime(f.mime) && isTextEditable(f)
   })
   protected readonly isVideo = computed(() => isVideoMime(this.file()?.mime))
   protected readonly isAudio = computed(() => isAudioMime(this.file()?.mime))

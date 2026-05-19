@@ -24,6 +24,20 @@ export function isAudioMime(mime: string | null | undefined): boolean {
   return normalizeMime(mime).startsWith('audio/')
 }
 
+// Markdown files. Detected by mime substring (mirrors upstream FileModel.getMime():
+// `mime.includes('markdown')` handles both `text/markdown` and the dashed
+// `text-markdown` form the browse API emits) or by `.md` / `.markdown` /
+// `.mdown` extension (some servers don't set the mime correctly on upload).
+export function isMarkdownMime(mime: string | null | undefined, fileName?: string): boolean {
+  const m = normalizeMime(mime)
+  if (m.includes('markdown')) return true
+  if (!fileName) return false
+  const dot = fileName.lastIndexOf('.')
+  if (dot < 0 || dot === fileName.length - 1) return false
+  const ext = fileName.slice(dot + 1).toLowerCase()
+  return ext === 'md' || ext === 'markdown' || ext === 'mdown'
+}
+
 // Text/code files the v2 text viewer can render inline via CodeMirror.
 // Office-ish formats (msword/officedocument/opendocument) are excluded; those
 // need the OnlyOffice embed from phase 4.11.
