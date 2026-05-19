@@ -21,7 +21,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        background: conic-gradient(from 210deg, oklch(0.78 0.17 55), oklch(0.55 0.18 25), oklch(0.38 0.12 275), oklch(0.78 0.17 55));
+        background: conic-gradient(from 210deg, oklch(0.83 0.13 40), oklch(0.65 0.18 28), oklch(0.38 0.1 255), oklch(0.83 0.13 40));
         box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
       }
       .ring {
@@ -33,7 +33,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
       .dot {
         position: absolute;
         border-radius: 50%;
-        background: oklch(0.82 0.17 55);
+        background: oklch(0.83 0.13 40);
       }
     `
   ]
@@ -43,5 +43,5 @@ export class LogoComponent {
 
   readonly innerInset = computed(() => Math.round(this.size() * 0.18))
   readonly dotSize = computed(() => Math.round(this.size() * 0.28))
-  readonly dotGlow = computed(() => `0 0 ${Math.round(this.size() * 0.4)}px oklch(0.82 0.17 55 / 0.6)`)
+  readonly dotGlow = computed(() => `0 0 ${Math.round(this.size() * 0.4)}px oklch(0.83 0.13 40 / 0.6)`)
 }
