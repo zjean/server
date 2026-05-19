@@ -393,7 +393,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     if (files.length === 0) return
     const ok = await this.confirmDialog.open({
       title: 'Move to trash',
-      message: 'v3_move_to_trash_n',
+      message: 'v2_move_to_trash_n',
       messageParams: { nb: files.length },
       confirmLabel: 'Move to trash',
       kind: 'danger'
@@ -402,9 +402,9 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const stubs = files.map((f) => this.buildFileStub(f))
     this.filesService.delete(stubs)
     if (files.length === 1) {
-      this.toast.success('v3_moving_to_trash_one_progress', { name: files[0].name })
+      this.toast.success('v2_moving_to_trash_one_progress', { name: files[0].name })
     } else {
-      this.toast.success('v3_moving_to_trash_n_progress', { nb: files.length })
+      this.toast.success('v2_moving_to_trash_n_progress', { nb: files.length })
     }
     this.clearSelection()
   }
@@ -442,7 +442,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         return { name: stub.name, rootAlias: alias, path: stub.path }
       })
     })
-    this.toast.success('v3_archiving_n_progress', { nb: files.length })
+    this.toast.success('v2_archiving_n_progress', { nb: files.length })
     this.clearSelection()
   }
 
@@ -459,9 +459,9 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const stubs = files.map((f) => this.buildFileStub(f))
     this.filesService.copyMove(stubs, dst.path, op).catch(console.error)
     if (files.length === 1) {
-      this.toast.success(isMove ? 'v3_moving_one_progress' : 'v3_copying_one_progress', { name: files[0].name })
+      this.toast.success(isMove ? 'v2_moving_one_progress' : 'v2_copying_one_progress', { name: files[0].name })
     } else {
-      this.toast.success(isMove ? 'v3_moving_n_progress' : 'v3_copying_n_progress', { nb: files.length })
+      this.toast.success(isMove ? 'v2_moving_n_progress' : 'v2_copying_n_progress', { nb: files.length })
     }
     this.clearSelection()
   }
@@ -551,7 +551,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     if (!dst) return
     const stub = this.buildFileStub(file)
     this.filesService.copyMove([stub], dst.path, op).catch(console.error)
-    this.toast.success(isMove ? 'v3_moving_one_progress' : 'v3_copying_one_progress', { name: file.name })
+    this.toast.success(isMove ? 'v2_moving_one_progress' : 'v2_copying_one_progress', { name: file.name })
   }
 
   private buildFileStub(file: FileProps): FileModel {
@@ -567,14 +567,14 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected async confirmAndDelete(file: FileProps): Promise<void> {
     const ok = await this.confirmDialog.open({
       title: 'Move to trash',
-      message: 'v3_move_to_trash_one',
+      message: 'v2_move_to_trash_one',
       messageParams: { name: file.name },
       confirmLabel: 'Move to trash',
       kind: 'danger'
     })
     if (!ok) return
     this.filesService.delete([this.buildFileStub(file)])
-    this.toast.success('v3_moving_to_trash_one_progress', { name: file.name })
+    this.toast.success('v2_moving_to_trash_one_progress', { name: file.name })
   }
 
   protected downloadFile(file: FileProps): void {
@@ -646,7 +646,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const stub = this.buildRenameStub(file)
     this.filesService.rename(stub, trimmed, false).subscribe({
       next: () => {
-        this.toast.success('v3_renamed_to', { name: trimmed })
+        this.toast.success('v2_renamed_to', { name: trimmed })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {
@@ -713,7 +713,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     this.filesService.make('file', name.trim(), dirPath, true).subscribe({
       next: () => {
-        this.toast.success('v3_file_created', { name: name.trim() })
+        this.toast.success('v2_file_created', { name: name.trim() })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {
@@ -727,7 +727,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const name = this.uniqueName('Untitled diagram', 'drawio')
     this.http.post<{ path: string }>('/api/diagrams/new', { dirPath, name }).subscribe({
       next: (res) => {
-        this.toast.success('v3_item_created', { name })
+        this.toast.success('v2_item_created', { name })
         this.refresh()
         this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: res.path } }).catch(console.error)
       },
@@ -749,7 +749,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const fullPath = `${dirPath}/${name}`
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
-        this.toast.success('v3_item_created', { name })
+        this.toast.success('v2_item_created', { name })
         this.refresh()
         this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
       },
@@ -781,7 +781,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     this.filesService.make('directory', name.trim(), dirPath, true).subscribe({
       next: () => {
-        this.toast.success('v3_folder_created', { name: name.trim() })
+        this.toast.success('v2_folder_created', { name: name.trim() })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {

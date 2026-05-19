@@ -172,14 +172,14 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   protected async confirmAndDeletePermanently(file: FileProps): Promise<void> {
     const ok = await this.confirmDialog.open({
       title: 'Delete permanently',
-      message: 'v3_delete_permanently_one',
+      message: 'v2_delete_permanently_one',
       messageParams: { name: file.name },
       confirmLabel: 'Delete permanently',
       kind: 'danger'
     })
     if (!ok) return
     this.filesService.delete([this.buildFileStub(file)])
-    this.toast.success('v3_deleting_one_progress', { name: file.name })
+    this.toast.success('v2_deleting_one_progress', { name: file.name })
   }
 
   protected async confirmAndEmptyTrash(): Promise<void> {
@@ -187,14 +187,14 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     if (items.length === 0) return
     const ok = await this.confirmDialog.open({
       title: 'Empty trash',
-      message: 'v3_empty_trash',
+      message: 'v2_empty_trash',
       messageParams: { nb: items.length },
       confirmLabel: 'Empty trash',
       kind: 'danger'
     })
     if (!ok) return
     this.filesService.delete(items.map((f) => this.buildFileStub(f)))
-    this.toast.success('v3_emptying_trash_progress')
+    this.toast.success('v2_emptying_trash_progress')
   }
 
   private buildFileStub(file: FileProps): FileModel {

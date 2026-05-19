@@ -43,7 +43,7 @@ rooted at `upstream/main`. Pieces:
 |---|---|
 | DB | `users_files_favorites(userId, fileId)` join table + migration |
 | Backend API | `POST/DELETE /api/files/:id/favorite`, `GET /api/files/favorites` |
-| Web UI (v2/v3) | Star toggle on file rows + Favorites entry in sidebar |
+| Web UI (v2) | Star toggle on file rows + Favorites entry in sidebar |
 | PROPFIND `<oc:favorite>` | Per-user lookup against the join table |
 | `PROPPATCH <oc:favorite>` | Persist via the same join table |
 | `REPORT <d:favorites>` | Lists favorited files (NC's own listing endpoint) |

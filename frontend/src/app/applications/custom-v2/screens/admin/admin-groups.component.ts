@@ -613,7 +613,7 @@ export class AdminGroupsComponent implements OnInit {
   protected async confirmDelete(row: GroupRow): Promise<void> {
     const ok = await this.confirm.open({
       title: 'Delete group',
-      message: 'v3_delete_group',
+      message: 'v2_delete_group',
       messageParams: { name: row.name },
       confirmLabel: 'Delete',
       kind: 'danger'

@@ -846,7 +846,7 @@ export class AdminUsersComponent implements OnInit {
     const isGuest = this.isGuests()
     const ok = await this.confirm.open({
       title: isGuest ? 'Delete guest' : 'Delete user',
-      message: 'v3_delete_user',
+      message: 'v2_delete_user',
       messageParams: { login: u.login ?? '' },
       confirmLabel: 'Delete',
       kind: 'danger'

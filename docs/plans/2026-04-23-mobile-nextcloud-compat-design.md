@@ -3,7 +3,7 @@
 **Status**: drafted, not approved
 **Date filed**: 2026-04-23
 **Branch**: `docs/mobile-api-plan` (this doc), implementation to follow on a separate branch
-**Scope milestone**: post-milestone-4 add-on; parallel track to the frontend v3 redesign
+**Scope milestone**: post-milestone-4 add-on; parallel track to the frontend v2 redesign
 
 ## Goal
 

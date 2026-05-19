@@ -33,7 +33,7 @@ interface FormState {
       <div class="ld__backdrop" (click)="cancel()"></div>
       <div class="ld" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
         <div class="ld__title">
-          {{ (isEdit() ? 'v3_link_edit_title' : 'v3_link_create_title') | translate: locale.language }}
+          {{ (isEdit() ? 'v2_link_edit_title' : 'v2_link_create_title') | translate: locale.language }}
         </div>
         <div class="ld__subject" [attr.title]="subjectName()">{{ subjectName() }}</div>
 
@@ -41,7 +41,7 @@ interface FormState {
           <div class="ld__url-row">
             <input class="ld__url-input" readonly [value]="url" (focus)="selectAll($event)" />
             <app-v2-btn kind="secondary" size="sm" icon="copy" (click)="copy(url)">
-              {{ 'v3_link_copy' | translate: locale.language }}
+              {{ 'v2_link_copy' | translate: locale.language }}
             </app-v2-btn>
           </div>
         }
@@ -49,7 +49,7 @@ interface FormState {
         <div class="ld__field">
           <label class="ld__toggle">
             <input type="checkbox" [checked]="form().requireAuth" (change)="onToggleAuth($event)" />
-            <span>{{ 'v3_link_require_password' | translate: locale.language }}</span>
+            <span>{{ 'v2_link_require_password' | translate: locale.language }}</span>
           </label>
           @if (form().requireAuth) {
             <div class="ld__row">
@@ -63,7 +63,7 @@ interface FormState {
                 autocomplete="new-password"
               />
               <app-v2-btn kind="ghost" size="sm" icon="refresh" (click)="generate()">
-                {{ 'v3_link_generate' | translate: locale.language }}
+                {{ 'v2_link_generate' | translate: locale.language }}
               </app-v2-btn>
             </div>
             @if (passwordError(); as err) {
@@ -75,7 +75,7 @@ interface FormState {
         <div class="ld__field">
           <label class="ld__toggle">
             <input type="checkbox" [checked]="form().hasExpiry" (change)="onToggleExpiry($event)" />
-            <span>{{ 'v3_link_set_expiry' | translate: locale.language }}</span>
+            <span>{{ 'v2_link_set_expiry' | translate: locale.language }}</span>
           </label>
           @if (form().hasExpiry) {
             <input type="date" class="ld__input ld__input--date" [value]="form().expiresAt" [min]="minExpiryDate" (input)="onExpiryInput($event)" />
@@ -89,16 +89,16 @@ interface FormState {
         <div class="ld__actions">
           @if (isEdit()) {
             <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="busy()" (click)="revoke()">
-              {{ 'v3_link_revoke' | translate: locale.language }}
+              {{ 'v2_link_revoke' | translate: locale.language }}
             </app-v2-btn>
           }
           <span class="ld__spacer"></span>
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
-            {{ (urlReady() ? 'v3_link_close' : 'Cancel') | translate: locale.language }}
+            {{ (urlReady() ? 'v2_link_close' : 'Cancel') | translate: locale.language }}
           </app-v2-btn>
           @if (!urlReady()) {
             <app-v2-btn kind="primary" size="sm" [disabled]="!canSubmit()" (click)="submit()">
-              {{ (isEdit() ? 'v3_link_save' : 'v3_link_create') | translate: locale.language }}
+              {{ (isEdit() ? 'v2_link_save' : 'v2_link_create') | translate: locale.language }}
             </app-v2-btn>
           }
         </div>
@@ -305,7 +305,7 @@ export class LinkDialogComponent {
     if (!f.requireAuth) return null
     // Edit mode allows leaving password empty (= keep existing). Create requires min length.
     if (this.isEdit() && f.password === '') return null
-    if (f.password.length < this.passwordMinLength) return 'v3_link_password_too_short'
+    if (f.password.length < this.passwordMinLength) return 'v2_link_password_too_short'
     return null
   }
 
@@ -369,7 +369,7 @@ export class LinkDialogComponent {
           this.busy.set(false)
           const url = buildPublicLinkUrl(link.uuid ?? uuid)
           this.urlReady.set(url)
-          this.toast.success('v3_link_updated')
+          this.toast.success('v2_link_updated')
           this.service.latch({
             url,
             shareId: ids.shareId,
@@ -398,7 +398,7 @@ export class LinkDialogComponent {
         this.busy.set(false)
         const url = buildPublicLinkUrl(uuid)
         this.urlReady.set(url)
-        this.toast.success('v3_link_created')
+        this.toast.success('v2_link_created')
         this.service.latch({
           url,
           shareId: share.id,
@@ -419,7 +419,7 @@ export class LinkDialogComponent {
     try {
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
         await navigator.clipboard.writeText(url)
-        this.toast.success('v3_link_copied')
+        this.toast.success('v2_link_copied')
         return
       }
     } catch {
@@ -435,9 +435,9 @@ export class LinkDialogComponent {
       ta.select()
       try {
         document.execCommand('copy')
-        this.toast.success('v3_link_copied')
+        this.toast.success('v2_link_copied')
       } catch {
-        this.toast.error('v3_link_copy_failed')
+        this.toast.error('v2_link_copy_failed')
       } finally {
         document.body.removeChild(ta)
       }
@@ -452,7 +452,7 @@ export class LinkDialogComponent {
     deleteLinkShare(this.http, ids.shareId).subscribe({
       next: () => {
         this.busy.set(false)
-        this.toast.success('v3_link_revoked')
+        this.toast.success('v2_link_revoked')
         this.service.latch({
           url: this.urlReady() ?? '',
           shareId: ids.shareId,

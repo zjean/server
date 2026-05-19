@@ -276,7 +276,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
                 (pick)="addManager($event)"
               />
               @if (d.managers.length === 0) {
-                <span class="au-field__hint" l10nTranslate>v3_space_managers_required</span>
+                <span class="au-field__hint" l10nTranslate>v2_space_managers_required</span>
               }
             </div>
             @if (dialogError(); as err) {
@@ -894,7 +894,7 @@ export class AdminSpacesComponent implements OnInit {
     if (!d.id) return
     const ok = await this.confirm.open({
       title: 'Delete space',
-      message: 'v3_delete_space',
+      message: 'v2_delete_space',
       messageParams: { name: d.name },
       confirmLabel: 'Delete',
       kind: 'danger'
