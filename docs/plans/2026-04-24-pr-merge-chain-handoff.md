@@ -1,5 +1,12 @@
 # PR merge chain — session handoff (2026-04-24)
 
+> **Historical note (added 2026-05-19):** This document predates the
+> naming-unification work. References to `feat/v3-*` branch names and
+> `feat(v3): ...` commit titles are preserved as written because they
+> match the actual git history of the merged PRs. The codebase has since
+> standardised on **`v2`** as the single name for the new UI; the `v3`
+> label is no longer in use anywhere in source.
+
 ## TL;DR
 
 Executing **Option 3** (hybrid PR chain) to land all pending v2 redesign work +

@@ -21,7 +21,7 @@
         <div class="personal__selection">
           <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Deselect all' | translate: locale.language" />
           <span class="personal__selection-count">
-            {{ 'v3_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
+            {{ 'v2_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
             @if (selectionSize() > 0) {
               · {{ selectionSize() | toBytes: 1 : true }}
             }

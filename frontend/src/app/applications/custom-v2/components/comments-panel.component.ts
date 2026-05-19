@@ -384,7 +384,7 @@ export class CommentsPanelComponent implements OnChanges {
   protected async remove(r: CommentRow): Promise<void> {
     const ok = await this.confirm.open({
       title: 'Delete comment',
-      message: 'v3_delete_comment',
+      message: 'v2_delete_comment',
       confirmLabel: 'Delete',
       kind: 'danger'
     })

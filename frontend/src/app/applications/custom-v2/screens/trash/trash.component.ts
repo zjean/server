@@ -64,7 +64,7 @@ export class TrashComponent implements OnInit {
 
   protected openBin(bin: TrashModel): void {
     if (!bin.enabled) {
-      this.toast.info('v3_space_disabled_in_trash', { name: bin.name })
+      this.toast.info('v2_space_disabled_in_trash', { name: bin.name })
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.TRASH, bin.alias]).catch(console.error)

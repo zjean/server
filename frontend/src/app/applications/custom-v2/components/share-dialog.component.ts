@@ -36,10 +36,10 @@ interface RowMember extends ShareMemberInput {
       <div class="sd__backdrop" (click)="cancel()"></div>
       <div class="sd" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
         <div class="sd__title">
-          {{ (isEdit() ? 'v3_share_edit_title' : 'v3_share_create_title') | translate: locale.language }}
+          {{ (isEdit() ? 'v2_share_edit_title' : 'v2_share_create_title') | translate: locale.language }}
         </div>
         @if (isMulti()) {
-          <div class="sd__subject">{{ 'v3_share_n_items_subject' | translate: locale.language : { nb: multiCount() } }}</div>
+          <div class="sd__subject">{{ 'v2_share_n_items_subject' | translate: locale.language : { nb: multiCount() } }}</div>
         } @else {
           <div class="sd__subject" [attr.title]="subjectName()">{{ subjectName() }}</div>
         }
@@ -63,16 +63,16 @@ interface RowMember extends ShareMemberInput {
                     }
                   </div>
                   <select class="sd__preset" [value]="m.preset" (change)="onPresetChange(m, $event)">
-                    <option value="viewer">{{ 'v3_share_preset_viewer' | translate: locale.language }}</option>
-                    <option value="editor">{{ 'v3_share_preset_editor' | translate: locale.language }}</option>
-                    <option value="manager">{{ 'v3_share_preset_manager' | translate: locale.language }}</option>
+                    <option value="viewer">{{ 'v2_share_preset_viewer' | translate: locale.language }}</option>
+                    <option value="editor">{{ 'v2_share_preset_editor' | translate: locale.language }}</option>
+                    <option value="manager">{{ 'v2_share_preset_manager' | translate: locale.language }}</option>
                   </select>
                   <button type="button" class="sd__remove" (click)="removeMember(m)" [attr.title]="'Remove' | translate: locale.language">×</button>
                 </div>
               }
             </div>
           } @else {
-            <div class="sd__empty">{{ 'v3_share_no_recipients' | translate: locale.language }}</div>
+            <div class="sd__empty">{{ 'v2_share_no_recipients' | translate: locale.language }}</div>
           }
 
           <div class="sd__picker-row">
@@ -92,7 +92,7 @@ interface RowMember extends ShareMemberInput {
           <div class="sd__actions">
             @if (isEdit()) {
               <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="busy()" (click)="revoke()">
-                {{ 'v3_share_revoke' | translate: locale.language }}
+                {{ 'v2_share_revoke' | translate: locale.language }}
               </app-v2-btn>
             }
             <span class="sd__spacer"></span>
@@ -100,7 +100,7 @@ interface RowMember extends ShareMemberInput {
               {{ 'Cancel' | translate: locale.language }}
             </app-v2-btn>
             <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">
-              {{ (isEdit() ? 'v3_share_save' : 'v3_share_create') | translate: locale.language }}
+              {{ (isEdit() ? 'v2_share_save' : 'v2_share_create') | translate: locale.language }}
             </app-v2-btn>
           </div>
         }
@@ -411,7 +411,7 @@ export class ShareDialogComponent {
       updateShare(this.http, { shareId, members }).subscribe({
         next: () => {
           this.busy.set(false)
-          this.toast.success('v3_share_updated')
+          this.toast.success('v2_share_updated')
           this.service.latch({ shareId })
           this.service.close()
         },
@@ -435,7 +435,7 @@ export class ShareDialogComponent {
       }).subscribe({
         next: (share) => {
           this.busy.set(false)
-          this.toast.success('v3_share_created')
+          this.toast.success('v2_share_created')
           this.service.latch({ shareId: share.id })
           this.service.close()
         },
@@ -484,11 +484,11 @@ export class ShareDialogComponent {
       return
     }
     if (failed > 0) {
-      this.toast.error('v3_share_n_partial_fail', { created, failed })
+      this.toast.error('v2_share_n_partial_fail', { created, failed })
     } else if (created === 1) {
-      this.toast.success('v3_share_created')
+      this.toast.success('v2_share_created')
     } else {
-      this.toast.success('v3_share_n_created', { nb: created })
+      this.toast.success('v2_share_n_created', { nb: created })
     }
     this.service.latch({ shareId: firstShareId ?? 0, multi: { created, failed } })
     this.service.close()
@@ -503,7 +503,7 @@ export class ShareDialogComponent {
     deleteShare(this.http, shareId).subscribe({
       next: () => {
         this.busy.set(false)
-        this.toast.success('v3_share_revoked')
+        this.toast.success('v2_share_revoked')
         this.service.latch({ shareId, revoked: true })
         this.service.close()
       },

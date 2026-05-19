@@ -35,7 +35,7 @@ git checkout -b upstream-contrib/fix-foo upstream/main
 ### Customization isolation
 
 - **Additions** live under `custom-*` paths (e.g. `backend/src/applications/custom-auth`, `frontend/src/app/applications/custom-dashboard`, `_custom-overrides.scss`). Upstream never touches these — zero merge conflicts.
-- **i18n** keys added by this fork live in `frontend/src/i18n/custom/{en,nl}.json` — a separate angular-l10n provider registered alongside the upstream `app` provider. Keys are merged at lookup time, so callers don't need to know which bundle a key lives in. Naming convention: `v3_*` prefix for parameterised keys (with `{{ placeholders }}`); plain English literals as keys for short static strings (matches upstream's identity-mapping pattern). Upstream's `frontend/src/i18n/{en,nl,...}.json` files should never be edited to add fork-specific keys — that puts them on the merge-conflict surface during upstream syncs. Currently only `en` + `nl` ship custom translations; other languages fall through to the missing-translation handler (which returns the key literal) for fork-specific strings, preserving the pre-existing behaviour. Note: v2 toasts route through `ToastService`, which auto-translates the message and (optionally) interpolates placeholder args — call as `this.toast.success('Group updated')` or `this.toast.success('v3_renamed_to', { name })`.
+- **i18n** keys added by this fork live in `frontend/src/i18n/custom/{en,nl}.json` — a separate angular-l10n provider registered alongside the upstream `app` provider. Keys are merged at lookup time, so callers don't need to know which bundle a key lives in. Naming convention: `v2_*` prefix for parameterised keys (with `{{ placeholders }}`); plain English literals as keys for short static strings (matches upstream's identity-mapping pattern). Upstream's `frontend/src/i18n/{en,nl,...}.json` files should never be edited to add fork-specific keys — that puts them on the merge-conflict surface during upstream syncs. Currently only `en` + `nl` ship custom translations; other languages fall through to the missing-translation handler (which returns the key literal) for fork-specific strings, preserving the pre-existing behaviour. Note: v2 toasts route through `ToastService`, which auto-translates the message and (optionally) interpolates placeholder args — call as `this.toast.success('Group updated')` or `this.toast.success('v2_renamed_to', { name })`.
 - **In-place modifications** to upstream files stay small and atomic, with a `mod(<area>): ...` commit message so they're greppable (`git log --grep '^mod('`).
 
 ## Merge strategy per PR type
@@ -95,24 +95,24 @@ The only PRs that ever belong on `Sync-in/server` are branches with the `upstrea
 
 ## Verifying existing functionality: always use the classic UI as ground truth
 
-The `/v2` (and `/v3`) app is a reimplementation of features that already ship in the **classic UI** (the Angular screens under `frontend/src/app/applications/<feature>/` — shares, links, files, users, spaces, etc.). The classic code is the authoritative reference for how backend APIs want to be called.
+The `/v2` app is a reimplementation of features that already ship in the **classic UI** (the Angular screens under `frontend/src/app/applications/<feature>/` — shares, links, files, users, spaces, etc.). The classic code is the authoritative reference for how backend APIs want to be called.
 
-**Before writing any v2/v3 code that talks to the backend, read the classic implementation first.** Specifically:
+**Before writing any v2 code that talks to the backend, read the classic implementation first.** Specifically:
 
 - Which endpoint does classic hit? (URL + method)
 - What DTO shape does it send?
 - What sentinel values mean "new" vs "existing" (e.g. `id: -1` for new link, not `0`)? How does classic distinguish?
 - What side effects or sequences does classic perform (optimistic UI, refresh, toast, etc.)?
 
-These details aren't guessable from the DTO types — the backend has runtime contracts baked into value conventions (e.g. `shares-manager.service.ts:581` treats `link.id < 0` as "new link" and anything else as update-by-id, which 404s for unknown ids). Every time v2/v3 has diverged from classic on one of these details, it's been a user-facing bug.
+These details aren't guessable from the DTO types — the backend has runtime contracts baked into value conventions (e.g. `shares-manager.service.ts:581` treats `link.id < 0` as "new link" and anything else as update-by-id, which 404s for unknown ids). Every time v2 has diverged from classic on one of these details, it's been a user-facing bug.
 
-**When debugging a v2/v3 feature that doesn't work:**
+**When debugging a v2 feature that doesn't work:**
 
 1. Find the classic screen that does the same thing (grep under `frontend/src/app/applications/` ignoring `custom-v2/`).
-2. Compare the classic service call to the v2/v3 one — URL, DTO, sentinel ids, field presence.
-3. Diff the classic's network request against the failing v2/v3 one if you have DevTools open.
+2. Compare the classic service call to the v2 one — URL, DTO, sentinel ids, field presence.
+3. Diff the classic's network request against the failing v2 one if you have DevTools open.
 
-**When implementing a new v2/v3 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2/v3 version. Do not trust the DTO types alone.
+**When implementing a new v2 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2 version. Do not trust the DTO types alone.
 
 ## NC mobile compat: always read upstream NC source first
 
@@ -144,7 +144,7 @@ The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS
 - File ids: emit real DB ids (PR #126); negative ids confuse NC clients.
 - ETag: use **strong** ETags; `W/` prefix breaks iOS thumbnail paths (PR #140 / commit `00c3fa7`).
 
-The classic-UI-as-ground-truth rule above governs Sync-in's internal v2/v3 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
+The classic-UI-as-ground-truth rule above governs Sync-in's internal v2 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
 
 ## Database migrations
 

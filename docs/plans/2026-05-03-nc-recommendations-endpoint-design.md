@@ -13,7 +13,7 @@ Sync-in already maintains a per-user, 14-day rolling list of recent files (`file
 ## Goals
 
 - NC iOS shows the carousel populated with the user's recently modified files.
-- No regressions in classic UI, v2/v3, or other NC compat surfaces.
+- No regressions in classic UI, v2, or other NC compat surfaces.
 - Cheap to extend later when we add WebDAV `SEARCH` for the Recent filter view (see non-goals).
 
 ## Non-goals

@@ -352,7 +352,7 @@ export class AdminToolsComponent implements OnInit {
   protected async drop(): Promise<void> {
     const ok = await this.confirm.open({
       title: 'Drop indexes',
-      message: 'v3_drop_indexes',
+      message: 'v2_drop_indexes',
       confirmLabel: 'Drop',
       kind: 'danger'
     })

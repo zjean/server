@@ -73,7 +73,7 @@ NC clients expect. Internally just `<seq>`.
 `backend/src/applications/files/events/file-events.ts`** instead of hooking
 each verb in `NcDavController`. The emitter already fires for **every** path
 that mutates files: web UI uploads, server-side cron, OnlyOffice /
-Collabora saves, the v3 SPA, our mobile WebDAV, etc. — payload is
+Collabora saves, the v2 SPA, our mobile WebDAV, etc. — payload is
 `{user, space, action, rPath}`.
 
 ```ts

@@ -9,7 +9,7 @@ connector protocol** (the `/index.php/apps/onlyoffice/...` endpoints exposed
 by NC's official OnlyOffice plugin). When a user adds a "Nextcloud"
 connection in the OnlyOffice app, those endpoints drive the entire
 open-edit-save loop. Sync-in's existing OnlyOffice integration lives at
-`/api/spaces/onlyoffice/...` for the v2/v3 web SPA only — different
+`/api/spaces/onlyoffice/...` for the v2 web SPA only — different
 routing, different JWT signing scheme, iframe-only — so the OnlyOffice
 mobile app sees a 404 and falls back to "no editing".
 
