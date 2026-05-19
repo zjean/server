@@ -12,6 +12,7 @@ import type { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcDirectEditingService, type NcDirectEditClaims } from '../services/nc-direct-editing.service'
+import { renderMarkdownEditorPage } from '../utils/markdown-editor-page'
 import { renderTextEditorPage } from '../utils/text-editor-page'
 
 // 5 MB cap. Big text files cause WKWebView to lag and CodeMirror to thrash;
@@ -102,6 +103,18 @@ export class NcTextEditorController {
     // guarantees didFinish fires after viewDidAppear without any JS tricks.
     await new Promise<void>((resolve) => setTimeout(resolve, 700))
 
+    const language = inferLanguage(fileName, mime)
+    const readOnlyReason = oversized
+      ? `This file is larger than ${Math.round(MAX_EDITABLE_BYTES / 1024 / 1024)} MB and is read-only here.`
+      : undefined
+    // Markdown gets the TipTap WYSIWYG page; everything else stays on
+    // CodeMirror. Both pages share the /content GET+PUT auth/data path so
+    // the dispatch only changes the editor UI.
+    const html =
+      language === 'markdown'
+        ? renderMarkdownEditorPage({ token: token ?? '', fileName, readOnly: oversized, readOnlyReason })
+        : renderTextEditorPage({ token: token ?? '', fileName, language, readOnly: oversized, readOnlyReason })
+
     return (
       res
         .header('Content-Type', 'text/html; charset=utf-8')
@@ -112,17 +125,7 @@ export class NcTextEditorController {
           "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'"
         )
         .header('X-Frame-Options', 'DENY')
-        .send(
-          renderTextEditorPage({
-            token: token ?? '',
-            fileName,
-            language: inferLanguage(fileName, mime),
-            readOnly: oversized,
-            readOnlyReason: oversized
-              ? `This file is larger than ${Math.round(MAX_EDITABLE_BYTES / 1024 / 1024)} MB and is read-only here.`
-              : undefined
-          })
-        )
+        .send(html)
     )
   }
 
@@ -217,7 +220,19 @@ export class NcTextEditorController {
   // that case, so editing still works.
   @Get('custom-mobile-compat/text-editor/codemirror.bundle.js')
   async bundle(@Res() res: FastifyReply): Promise<FastifyReply> {
-    const bundlePath = join(__dirname, '..', 'assets', 'codemirror.bundle.js')
+    return this.serveBundle('codemirror.bundle.js', res)
+  }
+
+  // GET /custom-mobile-compat/text-editor/tiptap.bundle.js
+  // Same fallback contract as the CodeMirror bundle — 404 if not built and
+  // the markdown editor page degrades to its <textarea> fallback.
+  @Get('custom-mobile-compat/text-editor/tiptap.bundle.js')
+  async tiptapBundle(@Res() res: FastifyReply): Promise<FastifyReply> {
+    return this.serveBundle('tiptap.bundle.js', res)
+  }
+
+  private serveBundle(filename: string, res: FastifyReply): FastifyReply {
+    const bundlePath = join(__dirname, '..', 'assets', filename)
     if (!existsSync(bundlePath)) {
       throw new HttpException('bundle not built', HttpStatus.NOT_FOUND)
     }
