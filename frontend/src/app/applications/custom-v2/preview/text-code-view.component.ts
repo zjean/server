@@ -121,13 +121,16 @@ type EditorTheme = 'light' | 'dark'
   `,
   styles: [
     `
+      /* v2's tokens live at .v2-root and are a navy ramp (--si-bg0…bg6); there
+         is no neutral --si-bg. Using --si-bg0 matches .detail__stage so the
+         viewer blends with surrounding chrome instead of stamping a sheet. */
       :host {
         display: flex;
         flex-direction: column;
         width: 100%;
         height: 100%;
-        background: var(--si-bg, #fff);
-        color: var(--si-fg, #111);
+        background: var(--si-bg0);
+        color: var(--si-fg);
         min-height: 0;
       }
       .text-view {
@@ -157,7 +160,7 @@ type EditorTheme = 'light' | 'dark'
         flex: 1 1 auto;
         min-height: 0;
         position: relative;
-        background: var(--si-bg, #fff);
+        background: var(--si-bg0);
       }
       .text-view__editor {
         position: absolute;
@@ -176,7 +179,7 @@ type EditorTheme = 'light' | 'dark'
         color: var(--si-fg-muted, #666);
       }
       .text-view__state--error {
-        color: var(--si-danger, #c0392b);
+        color: var(--si-rose);
       }
     `
   ]
