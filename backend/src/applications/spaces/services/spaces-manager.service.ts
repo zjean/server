@@ -174,7 +174,7 @@ export class SpacesManager {
   async listTrashes(user: UserModel): Promise<SpaceTrash[]> {
     const trashes: SpaceTrash[] = []
     // todo: store 'Personal files' as const somewhere (used in frontend too)
-    const personalTrash: SpaceTrash = { id: 0, name: 'Personal files', alias: SPACE_ALIAS.PERSONAL, nb: 0, mtime: 0, ctime: 0 }
+    const personalTrash: SpaceTrash = { id: 0, name: 'Personal files', alias: SPACE_ALIAS.PERSONAL, nb: 0, mtime: 0, ctime: 0, enabled: true }
     for (const space of [...(await this.listSpaces(user.id)), personalTrash] as SpaceTrash[]) {
       const rPath = space.alias === SPACE_ALIAS.PERSONAL ? user.trashPath : SpaceModel.getTrashPath(space.alias)
       try {
@@ -236,6 +236,7 @@ export class SpacesManager {
     /* only managers of the space can update it */
     const space: SpaceProps = await this.userCanAccessSpace(user, spaceId, true)
     // check and update space info
+    let mustInvalidateCache = false
     const spaceDiffProps: Partial<SpaceProps> = { modifiedAt: new Date() }
     const props: (keyof CreateOrUpdateSpaceDto)[] = ['name', 'description', 'enabled', 'storageQuota', 'storageIndexing']
     for (const prop of props) {
@@ -253,6 +254,7 @@ export class SpacesManager {
           }
         } else if (prop === 'enabled') {
           spaceDiffProps.disabledAt = spaceDiffProps[prop] ? null : new Date()
+          mustInvalidateCache = true
         }
       }
     }
@@ -284,6 +286,9 @@ export class SpacesManager {
     const aliases: string[] = space.roots.map((r) => r.alias)
     const names: string[] = [...(await dirListFileNames(SpaceModel.getFilesPath(space.alias))), ...space.roots.map((r) => r.name)]
     await this.updateRoots(user, space, space.roots, createOrUpdateSpaceDto.roots, aliases, names)
+    if (mustInvalidateCache) {
+      void this.spacesQueries.clearCachePermissions(space.alias, undefined, [user.id])
+    }
     if (rootOwnerIds.indexOf(user.id) > -1) {
       // current manager was removed
       return null
