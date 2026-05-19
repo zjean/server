@@ -223,7 +223,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             [lineWrapping]="true"
           />
         } @else {
-          <div class="md-view__editor" [class.md-view__editor--dark]="theme() === 'dark'">
+          <div class="md-view__editor">
             <tiptap-editor class="md-view__editor-host" [editor]="editor"></tiptap-editor>
           </div>
         }
@@ -232,13 +232,17 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
   `,
   styles: [
     `
+      /* v2's design tokens are a navy ramp scoped under .v2-root — there's no
+         neutral --si-bg; the canvas levels are --si-bg0…bg6. Use --si-bg0 to
+         match the file-detail stage so the editor blends with the surrounding
+         chrome instead of stamping a white sheet over it. */
       :host {
         display: flex;
         flex-direction: column;
         width: 100%;
         height: 100%;
-        background: var(--si-bg, #fff);
-        color: var(--si-fg, #111);
+        background: var(--si-bg0);
+        color: var(--si-fg);
         min-height: 0;
       }
       .md-view {
@@ -323,7 +327,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         flex: 1 1 auto;
         min-height: 0;
         position: relative;
-        background: var(--si-bg, #fff);
+        background: var(--si-bg0);
         overflow: auto;
       }
       .md-view__source {
@@ -347,7 +351,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         min-height: 200px;
         font-size: 15px;
         line-height: 1.6;
-        color: var(--si-fg, #111);
+        color: var(--si-fg);
       }
       .md-view__editor-host ::ng-deep .ProseMirror h1 {
         font-size: 1.9em;
@@ -426,16 +430,13 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         max-width: 100%;
         height: auto;
       }
-      .md-view__editor--dark .md-view__editor-host ::ng-deep .ProseMirror {
-        color: var(--si-fg, #eee);
-      }
       .md-view__state {
         padding: 24px;
         font-size: 13px;
         color: var(--si-fg-muted, #666);
       }
       .md-view__state--error {
-        color: var(--si-danger, #c0392b);
+        color: var(--si-rose);
       }
     `
   ]
