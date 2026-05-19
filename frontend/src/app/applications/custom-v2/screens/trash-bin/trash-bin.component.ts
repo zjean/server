@@ -179,7 +179,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     })
     if (!ok) return
     this.filesService.delete([this.buildFileStub(file)])
-    this.toast.success(`Deleting "${file.name}"…`)
+    this.toast.success('v3_deleting_one_progress', { name: file.name })
   }
 
   protected async confirmAndEmptyTrash(): Promise<void> {
@@ -194,7 +194,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     })
     if (!ok) return
     this.filesService.delete(items.map((f) => this.buildFileStub(f)))
-    this.toast.success(`Emptying trash…`)
+    this.toast.success('v3_emptying_trash_progress')
   }
 
   private buildFileStub(file: FileProps): FileModel {

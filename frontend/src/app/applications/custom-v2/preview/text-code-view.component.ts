@@ -326,7 +326,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
       next: () => {
         this.saving.set(false)
         this.isModified.set(false)
-        this.toast.success(`Saved "${this.stub!.name}"`)
+        this.toast.success('v3_saved_one', { name: this.stub!.name })
       },
       error: (e: HttpErrorResponse) => {
         this.saving.set(false)
@@ -341,7 +341,8 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
     if (!this.isModified()) return true
     return this.confirmDialog.open({
       title: 'Unsaved changes',
-      message: `Discard unsaved changes to "${this.stub?.name ?? 'this file'}"?`,
+      message: 'v3_discard_unsaved_changes',
+      messageParams: { name: this.stub?.name ?? 'this file' },
       confirmLabel: 'Discard',
       kind: 'danger'
     })
