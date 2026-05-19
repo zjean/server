@@ -7,6 +7,7 @@ import {
   L10nFormat,
   L10nLocale,
   L10nMissingTranslationHandler,
+  L10nProvider,
   L10nStorage,
   L10nTranslationLoader
 } from 'angular-l10n'
@@ -50,8 +51,13 @@ export const l10nConfig: L10nConfig & {
   schema: L10nSchema
 } = {
   format: LANG_FORMAT,
-  // Provider without static asset: resources will be loaded through TranslationLoader
-  providers: [{ name: 'app', asset: 'app' }],
+  // Providers loaded via TranslationLoader. The 'custom' provider holds keys
+  // owned by this fork — kept in i18n/custom/ to avoid merge conflicts with
+  // upstream's bundles. Keys from later providers override earlier ones.
+  providers: [
+    { name: 'app', asset: 'app' },
+    { name: 'custom', asset: 'custom' }
+  ],
   fallback: false,
   cache: true,
   keySeparator: '|',
@@ -101,19 +107,30 @@ export class TranslationStorage implements L10nStorage {
   }
 }
 
+// Languages for which this fork ships custom translations. Other languages
+// fall through to the missing-translation handler (which returns the key
+// itself), matching the pre-existing behaviour for unkeyed strings.
+const CUSTOM_LANGS = new Set(['en', 'nl'])
+
 @Injectable()
 export class TranslationLoader implements L10nTranslationLoader {
   private readonly bsLocale = inject(BsLocaleService)
 
-  get(language: string): Observable<Record<string, any>> {
-    if (language && LANG_SUPPORTED.has(language as i18nLocaleSupported)) {
-      loadDayjsLocale(language).catch(console.error)
-      loadBootstrapLocale(language)
-      this.bsLocale.use(language.toLowerCase())
-    } else {
+  get(language: string, provider: L10nProvider): Observable<Record<string, any>> {
+    if (!language || !LANG_SUPPORTED.has(language as i18nLocaleSupported)) {
       return of({})
     }
-    // Dynamically load the JSON file for the requested language
+    if (provider.asset === 'custom') {
+      if (!CUSTOM_LANGS.has(language)) return of({})
+      return from(import(`./custom/${language}.json`)).pipe(
+        map((module: any) => module?.default ?? module ?? {}),
+        catchError(() => of({}))
+      )
+    }
+    // 'app' provider — the upstream-managed bundles.
+    loadDayjsLocale(language).catch(console.error)
+    loadBootstrapLocale(language)
+    this.bsLocale.use(language.toLowerCase())
     return from(import(`./${language}.json`)).pipe(
       map((module: any) => module?.default ?? module ?? {}),
       catchError(() => of({}))
