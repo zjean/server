@@ -484,9 +484,11 @@ export class ShareDialogComponent {
       return
     }
     if (failed > 0) {
-      this.toast.error(`Shared ${created} · ${failed} failed`)
+      this.toast.error('v3_share_n_partial_fail', { created, failed })
+    } else if (created === 1) {
+      this.toast.success('v3_share_created')
     } else {
-      this.toast.success(created === 1 ? 'v3_share_created' : `${created} items shared`)
+      this.toast.success('v3_share_n_created', { nb: created })
     }
     this.service.latch({ shareId: firstShareId ?? 0, multi: { created, failed } })
     this.service.close()

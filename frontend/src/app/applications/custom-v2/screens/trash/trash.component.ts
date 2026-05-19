@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { TrashModel } from '../../../spaces/models/trash.model'
@@ -23,7 +23,6 @@ export class TrashComponent implements OnInit {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly toast = inject(ToastService)
-  private readonly translation = inject(L10nTranslationService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
@@ -65,7 +64,7 @@ export class TrashComponent implements OnInit {
 
   protected openBin(bin: TrashModel): void {
     if (!bin.enabled) {
-      this.toast.info(`${bin.name}: ${this.translation.translate('Space is disabled')}`)
+      this.toast.info('v3_space_disabled_in_trash', { name: bin.name })
       return
     }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.TRASH, bin.alias]).catch(console.error)

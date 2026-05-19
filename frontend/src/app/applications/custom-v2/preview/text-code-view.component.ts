@@ -70,13 +70,25 @@ type EditorTheme = 'light' | 'dark'
           }
         </span>
         <span class="text-view__spacer"></span>
-        <app-v2-icon-btn iconName="search" [size]="26" title="Search (Ctrl/Cmd+F)" [active]="searchOpen()" (click)="toggleSearch()" />
-        <app-v2-icon-btn iconName="list" [size]="26" title="Line wrap" [active]="lineWrap()" (click)="toggleLineWrap()" />
+        <app-v2-icon-btn
+          iconName="search"
+          [size]="26"
+          [title]="'Search (Ctrl/Cmd+F)' | translate: locale.language"
+          [active]="searchOpen()"
+          (click)="toggleSearch()"
+        />
+        <app-v2-icon-btn
+          iconName="list"
+          [size]="26"
+          [title]="'Line wrap' | translate: locale.language"
+          [active]="lineWrap()"
+          (click)="toggleLineWrap()"
+        />
         @if (writeable()) {
           <app-v2-icon-btn
             [iconName]="readonly() ? 'lock' : 'unlock'"
             [size]="26"
-            [title]="readonly() ? 'Read-only — click to edit' : 'Editing — click to lock as read-only'"
+            [title]="(readonly() ? 'Read-only — click to edit' : 'Editing — click to lock as read-only') | translate: locale.language"
             (click)="toggleReadonly()"
           />
         }
@@ -326,7 +338,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
       next: () => {
         this.saving.set(false)
         this.isModified.set(false)
-        this.toast.success(`Saved "${this.stub!.name}"`)
+        this.toast.success('v3_saved_one', { name: this.stub!.name })
       },
       error: (e: HttpErrorResponse) => {
         this.saving.set(false)
@@ -341,7 +353,8 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
     if (!this.isModified()) return true
     return this.confirmDialog.open({
       title: 'Unsaved changes',
-      message: `Discard unsaved changes to "${this.stub?.name ?? 'this file'}"?`,
+      message: 'v3_discard_unsaved_changes',
+      messageParams: { name: this.stub?.name ?? 'this file' },
       confirmLabel: 'Discard',
       kind: 'danger'
     })

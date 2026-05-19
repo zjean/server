@@ -435,7 +435,11 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (!ok) return
     const stubs = files.map((f) => this.buildFileStub(f))
     this.filesService.delete(stubs)
-    this.toast.success(files.length === 1 ? `Moving "${files[0].name}" to trash…` : `Moving ${files.length} items to trash…`)
+    if (files.length === 1) {
+      this.toast.success('v3_moving_to_trash_one_progress', { name: files[0].name })
+    } else {
+      this.toast.success('v3_moving_to_trash_n_progress', { nb: files.length })
+    }
     this.clearSelection()
   }
 
@@ -471,7 +475,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
         return { name: stub.name, rootAlias: SPACE_ALIAS.PERSONAL, path: stub.path }
       })
     })
-    this.toast.success(`Archiving ${files.length} items…`)
+    this.toast.success('v3_archiving_n_progress', { nb: files.length })
     this.clearSelection()
   }
 
@@ -487,8 +491,11 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (!dst) return
     const stubs = files.map((f) => this.buildFileStub(f))
     this.filesService.copyMove(stubs, dst.path, op).catch(console.error)
-    const verb = isMove ? 'Moving' : 'Copying'
-    this.toast.success(files.length === 1 ? `${verb} "${files[0].name}"…` : `${verb} ${files.length} items…`)
+    if (files.length === 1) {
+      this.toast.success(isMove ? 'v3_moving_one_progress' : 'v3_copying_one_progress', { name: files[0].name })
+    } else {
+      this.toast.success(isMove ? 'v3_moving_n_progress' : 'v3_copying_n_progress', { nb: files.length })
+    }
     this.clearSelection()
   }
 
@@ -566,7 +573,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (!dst) return
     const stub = this.buildFileStub(file)
     this.filesService.copyMove([stub], dst.path, op).catch(console.error)
-    this.toast.success(isMove ? `Moving "${file.name}"…` : `Copying "${file.name}"…`)
+    this.toast.success(isMove ? 'v3_moving_one_progress' : 'v3_copying_one_progress', { name: file.name })
   }
 
   private buildFileStub(file: FileProps): FileModel {
@@ -589,7 +596,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     })
     if (!ok) return
     this.filesService.delete([this.buildFileStub(file)])
-    this.toast.success(`Moving "${file.name}" to trash…`)
+    this.toast.success('v3_moving_to_trash_one_progress', { name: file.name })
   }
 
   protected downloadFile(file: FileProps): void {
@@ -642,7 +649,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const stub = this.buildRenameStub(file)
     this.filesService.rename(stub, trimmed, false).subscribe({
       next: () => {
-        this.toast.success(`Renamed to "${trimmed}"`)
+        this.toast.success('v3_renamed_to', { name: trimmed })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {
@@ -701,7 +708,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const name = this.uniqueName('Untitled diagram', 'drawio')
     this.http.post<{ path: string }>('/api/diagrams/new', { dirPath, name }).subscribe({
       next: (res) => {
-        this.toast.success(`"${name}" created`)
+        this.toast.success('v3_item_created', { name })
         this.refresh()
         this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: res.path } }).catch(console.error)
       },
@@ -723,7 +730,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const fullPath = `${dirPath}/${name}`
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
-        this.toast.success(`"${name}" created`)
+        this.toast.success('v3_item_created', { name })
         this.refresh()
         this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
       },
@@ -755,7 +762,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     this.filesService.make('directory', name.trim(), dirPath, true).subscribe({
       next: () => {
-        this.toast.success(`Folder "${name.trim()}" created`)
+        this.toast.success('v3_folder_created', { name: name.trim() })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {
@@ -777,7 +784,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     this.filesService.make('file', name.trim(), dirPath, true).subscribe({
       next: () => {
-        this.toast.success(`File "${name.trim()}" created`)
+        this.toast.success('v3_file_created', { name: name.trim() })
         this.refresh()
       },
       error: (e: HttpErrorResponse) => {
@@ -806,7 +813,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     if (!name) return
     this.filesService.currentRoute = this.currentUploadRoute()
     this.filesService.downloadFromUrl(url.trim(), name.trim())
-    this.toast.success(`Downloading "${name.trim()}"…`)
+    this.toast.success('v3_downloading_one', { name: name.trim() })
   }
 
   private validateEntryName(v: string): string | null {

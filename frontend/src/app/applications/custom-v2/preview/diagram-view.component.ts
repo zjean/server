@@ -15,6 +15,7 @@ import {
 } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 
 interface DrawioEvent {
   event: string
@@ -34,7 +35,8 @@ interface LoadResponse {
   selector: 'app-v2-preview-diagram-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './diagram-view.component.html',
-  styleUrl: './diagram-view.component.scss'
+  styleUrl: './diagram-view.component.scss',
+  imports: [L10nTranslateDirective, L10nTranslatePipe]
 })
 export class DiagramViewComponent implements OnInit {
   @Input({ required: true }) path!: string
@@ -43,6 +45,7 @@ export class DiagramViewComponent implements OnInit {
   private readonly http = inject(HttpClient)
   private readonly sanitizer = inject(DomSanitizer)
   private readonly destroyRef = inject(DestroyRef)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly editorFrame = viewChild<ElementRef<HTMLIFrameElement>>('editorFrame')
 
   protected readonly loading = signal(true)

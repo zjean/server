@@ -68,7 +68,7 @@ const ROOT_SHARES: FileTree = {
       <div class="tree-picker" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
         <header class="tree-picker__head">
           <div class="tree-picker__title">{{ p.title | translate: locale.language }}</div>
-          <button type="button" class="tree-picker__close" (click)="cancel()" aria-label="Close">
+          <button type="button" class="tree-picker__close" (click)="cancel()" [attr.aria-label]="'Close' | translate: locale.language">
             <app-v2-icon name="x" [size]="14" />
           </button>
         </header>

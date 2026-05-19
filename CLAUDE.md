@@ -35,7 +35,7 @@ git checkout -b upstream-contrib/fix-foo upstream/main
 ### Customization isolation
 
 - **Additions** live under `custom-*` paths (e.g. `backend/src/applications/custom-auth`, `frontend/src/app/applications/custom-dashboard`, `_custom-overrides.scss`). Upstream never touches these — zero merge conflicts.
-- **i18n** keys added by this fork use the `custom.` prefix.
+- **i18n** keys added by this fork live in `frontend/src/i18n/custom/{en,nl}.json` — a separate angular-l10n provider registered alongside the upstream `app` provider. Keys are merged at lookup time, so callers don't need to know which bundle a key lives in. Naming convention: `v3_*` prefix for parameterised keys (with `{{ placeholders }}`); plain English literals as keys for short static strings (matches upstream's identity-mapping pattern). Upstream's `frontend/src/i18n/{en,nl,...}.json` files should never be edited to add fork-specific keys — that puts them on the merge-conflict surface during upstream syncs. Currently only `en` + `nl` ship custom translations; other languages fall through to the missing-translation handler (which returns the key literal) for fork-specific strings, preserving the pre-existing behaviour. Note: v2 toasts route through `ToastService`, which auto-translates the message and (optionally) interpolates placeholder args — call as `this.toast.success('Group updated')` or `this.toast.success('v3_renamed_to', { name })`.
 - **In-place modifications** to upstream files stay small and atomic, with a `mod(<area>): ...` commit message so they're greppable (`git log --grep '^mod('`).
 
 ## Merge strategy per PR type

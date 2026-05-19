@@ -6,7 +6,7 @@
       (click)="onBrandClick()"
       [attr.aria-expanded]="layoutV2.leftNavOpen()"
       aria-controls="v2-left-nav"
-      aria-label="Toggle navigation"
+      [attr.aria-label]="'Toggle navigation' | translate: locale.language"
     >
       <app-v2-logo [size]="22" />
     </button>

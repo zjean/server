@@ -5,13 +5,13 @@
         <app-v2-logo [size]="20" />
         <div class="left-nav__brand-text">
           <span class="left-nav__brand-name">Sync-In</span>
-          <span class="left-nav__brand-eyebrow">Files</span>
+          <span class="left-nav__brand-eyebrow" l10nTranslate>Files</span>
         </div>
       </div>
     </header>
   }
 
-  <div class="left-nav__section-label">Workspace</div>
+  <div class="left-nav__section-label" l10nTranslate>Workspace</div>
   @for (it of workspace; track it.id) {
     <a
       [routerLink]="it.route"
@@ -19,15 +19,15 @@
       class="left-nav__item"
     >
       <app-v2-icon [name]="it.icon" [size]="15" />
-      <span class="left-nav__label">{{ it.label }}</span>
+      <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
     </a>
   }
 
   <div class="left-nav__spacer"></div>
-  <div class="left-nav__section-label">Shared</div>
+  <div class="left-nav__section-label" l10nTranslate>Shared</div>
   <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleShared()">
     <app-v2-icon name="share" [size]="15" />
-    <span class="left-nav__label">All shares</span>
+    <span class="left-nav__label" l10nTranslate>All shares</span>
     <app-v2-icon
       name="chevDown"
       [size]="11"
@@ -43,17 +43,17 @@
         class="left-nav__item left-nav__item--sub"
       >
         <app-v2-icon [name]="it.icon" [size]="15" />
-        <span class="left-nav__label">{{ it.label }}</span>
+        <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
       </a>
     }
   }
 
   @if (user()?.isAdmin) {
     <div class="left-nav__spacer"></div>
-    <div class="left-nav__section-label">Admin</div>
+    <div class="left-nav__section-label" l10nTranslate>Admin</div>
     <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleAdmin()">
       <app-v2-icon name="person" [size]="15" />
-      <span class="left-nav__label">Administration</span>
+      <span class="left-nav__label" l10nTranslate>Administration</span>
       <app-v2-icon
         name="chevDown"
         [size]="11"
@@ -69,7 +69,7 @@
           class="left-nav__item left-nav__item--sub"
         >
           <app-v2-icon [name]="it.icon" [size]="15" />
-          <span class="left-nav__label">{{ it.label }}</span>
+          <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
         </a>
       }
     }
@@ -79,11 +79,11 @@
   <div class="left-nav__divider"></div>
   <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
     <app-v2-icon name="person" [size]="15" />
-    <span class="left-nav__label">People</span>
+    <span class="left-nav__label" l10nTranslate>People</span>
   </a>
   <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
     <app-v2-icon name="trash" [size]="15" />
-    <span class="left-nav__label">Trash</span>
+    <span class="left-nav__label" l10nTranslate>Trash</span>
   </a>
 
   @if (user()) {
@@ -104,8 +104,8 @@
       <a
         class="left-nav__user-cog"
         [routerLink]="settingsRoute"
-        [attr.aria-label]="'Settings'"
-        title="Settings"
+        [attr.aria-label]="'Settings' | translate: locale.language"
+        [title]="'Settings' | translate: locale.language"
       >
         <app-v2-icon name="settings" [size]="14" />
       </a>
@@ -120,5 +120,5 @@
   >
     zjean/server · source
   </a>
-  <a class="left-nav__back" (click)="backToClassic()">← Back to classic UI</a>
+  <a class="left-nav__back" (click)="backToClassic()" l10nTranslate>← Back to classic UI</a>
 </nav>
