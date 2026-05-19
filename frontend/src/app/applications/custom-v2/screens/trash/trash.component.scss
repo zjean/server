@@ -122,6 +122,14 @@
     opacity: 1;
   }
 
+  &--disabled {
+    opacity: 0.45;
+
+    &:hover {
+      opacity: 0.55;
+    }
+  }
+
   &__name {
     display: flex;
     align-items: center;

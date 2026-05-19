@@ -26,7 +26,7 @@
         <span></span>
       </div>
       @for (b of bins(); track b.id) {
-        <button type="button" class="bin-row" (click)="openBin(b)">
+        <button type="button" class="bin-row" [class.bin-row--disabled]="!b.enabled" (click)="openBin(b)">
           <div class="bin-row__name">
             <span class="bin-row__glyph">
               <app-v2-icon name="trash" [size]="14" />

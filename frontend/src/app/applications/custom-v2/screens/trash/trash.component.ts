@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core'
 import { Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { TrashModel } from '../../../spaces/models/trash.model'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { IconButtonComponent } from '../../components/icon-button.component'
+import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
@@ -21,6 +22,8 @@ export class TrashComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
+  private readonly toast = inject(ToastService)
+  private readonly translation = inject(L10nTranslationService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 
@@ -61,6 +64,10 @@ export class TrashComponent implements OnInit {
   }
 
   protected openBin(bin: TrashModel): void {
+    if (!bin.enabled) {
+      this.toast.info(`${bin.name}: ${this.translation.translate('Space is disabled')}`)
+      return
+    }
     this.router.navigate(['/', V2_PATH, V2_ROUTES.TRASH, bin.alias]).catch(console.error)
   }
 }
