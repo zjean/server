@@ -130,5 +130,21 @@
   "Read-only — click to edit": "Alleen-lezen — klik om te bewerken",
   "Editing — click to lock as read-only": "Bewerken — klik om te vergrendelen als alleen-lezen",
   "Search files…": "Bestanden zoeken…",
-  "Search…": "Zoeken…"
+  "Search…": "Zoeken…",
+  "Formatting": "Opmaak",
+  "Heading 1": "Kop 1",
+  "Heading 2": "Kop 2",
+  "Heading 3": "Kop 3",
+  "Bold (Ctrl/Cmd+B)": "Vet (Ctrl/Cmd+B)",
+  "Italic (Ctrl/Cmd+I)": "Cursief (Ctrl/Cmd+I)",
+  "Strikethrough": "Doorhalen",
+  "Inline code": "Code (regel)",
+  "Bulleted list": "Lijst met opsommingstekens",
+  "Numbered list": "Genummerde lijst",
+  "Task list": "Takenlijst",
+  "Blockquote": "Citaat",
+  "Code block": "Codeblok",
+  "Link": "Link",
+  "Show formatted view": "Opgemaakte weergave",
+  "Show markdown source": "Brontekst (Markdown)"
 }

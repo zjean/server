@@ -175,6 +175,49 @@ describe(NcTextEditorController.name, () => {
       expect(r.body).toContain('larger than')
     })
 
+    it('renders the TipTap markdown page for .md files (not the CodeMirror page)', async () => {
+      const realPath = join(workDir, 'README.md')
+      writeFileSync(realPath, '# Hello')
+      getUserFile.mockResolvedValue({ id: 42, path: '/README.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, {
+          relativeUrl: '/README.md',
+          url: 'files/personal/README.md',
+          dbFile: { id: 42, name: 'README.md', path: '/personal', mime: 'text/markdown', size: 7 } as any
+        })
+      )
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      const r = makeRes()
+      await controller.page(token, r.res)
+
+      // TipTap page loads tiptap.bundle.js; CodeMirror page loads
+      // codemirror.bundle.js. Asserting on the bundle URL is the cheapest
+      // discriminator — both pages share most of their HTML scaffolding.
+      expect(r.body).toContain('tiptap.bundle.js')
+      expect(r.body).not.toContain('codemirror.bundle.js')
+    })
+
+    it('renders the CodeMirror page for non-markdown text files (.js stays on CM)', async () => {
+      const realPath = join(workDir, 'script.js')
+      writeFileSync(realPath, 'console.log(1)\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/script.js' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, {
+          relativeUrl: '/script.js',
+          url: 'files/personal/script.js',
+          dbFile: { id: 42, name: 'script.js', path: '/personal', mime: 'application/javascript', size: 14 } as any
+        })
+      )
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      const r = makeRes()
+      await controller.page(token, r.res)
+
+      expect(r.body).toContain('codemirror.bundle.js')
+      expect(r.body).not.toContain('tiptap.bundle.js')
+    })
+
     it('refuses to render the page for a non-editable mimetype (defense in depth)', async () => {
       const realPath = join(workDir, 'photo.jpg')
       writeFileSync(realPath, 'fake-jpeg')
@@ -366,6 +409,18 @@ describe(NcTextEditorController.name, () => {
       // so this test is the canary that the bundle is wired correctly.
       const r = makeRes()
       await controller.bundle(r.res)
+      expect(r.headers['Content-Type']).toBe('application/javascript; charset=utf-8')
+      expect(r.headers['Cache-Control']).toContain('max-age=')
+    })
+  })
+
+  describe('GET /custom-mobile-compat/text-editor/tiptap.bundle.js', () => {
+    it('serves the committed TipTap bundle as JavaScript', async () => {
+      // Same canary as the CodeMirror bundle test — if the asset disappears,
+      // the markdown editor page degrades to <textarea> and the user loses the
+      // WYSIWYG experience without any visible error.
+      const r = makeRes()
+      await controller.tiptapBundle(r.res)
       expect(r.headers['Content-Type']).toBe('application/javascript; charset=utf-8')
       expect(r.headers['Cache-Control']).toContain('max-age=')
     })

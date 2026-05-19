@@ -130,5 +130,21 @@
   "Read-only — click to edit": "Read-only — click to edit",
   "Editing — click to lock as read-only": "Editing — click to lock as read-only",
   "Search files…": "Search files…",
-  "Search…": "Search…"
+  "Search…": "Search…",
+  "Formatting": "Formatting",
+  "Heading 1": "Heading 1",
+  "Heading 2": "Heading 2",
+  "Heading 3": "Heading 3",
+  "Bold (Ctrl/Cmd+B)": "Bold (Ctrl/Cmd+B)",
+  "Italic (Ctrl/Cmd+I)": "Italic (Ctrl/Cmd+I)",
+  "Strikethrough": "Strikethrough",
+  "Inline code": "Inline code",
+  "Bulleted list": "Bulleted list",
+  "Numbered list": "Numbered list",
+  "Task list": "Task list",
+  "Blockquote": "Blockquote",
+  "Code block": "Code block",
+  "Link": "Link",
+  "Show formatted view": "Show formatted view",
+  "Show markdown source": "Show markdown source"
 }
