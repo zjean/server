@@ -589,7 +589,20 @@
 // missing metadata via the file's info dock-tab. The kebab actions
 // column is also force-shown — opacity:0 only-on-hover doesn't work
 // on touch.
+// `.personal__create-actions` wraps the "New / Download from URL / Upload"
+// trio so we can hide all three on mobile in one stroke — the FAB owns
+// these actions below 768px. `display: contents` keeps the flex layout
+// unchanged on desktop (the wrapper is invisible to the parent flex
+// container; children behave as direct siblings of the toolbar row).
+.personal__create-actions {
+  display: contents;
+}
+
 :host-context(.layout-v2--mobile) {
+  .personal__create-actions {
+    display: none;
+  }
+
   .file-table__head,
   .file-row {
     grid-template-columns: 28px minmax(0, 1fr) 40px;

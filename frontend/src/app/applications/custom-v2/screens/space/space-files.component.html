@@ -35,12 +35,14 @@
         <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
       </div>
     } @else {
-      <span #newBtnAnchor class="personal__new-anchor">
-        <app-v2-btn kind="primary" size="sm" icon="plus" (click)="onNewMenuClick(newBtnAnchor)">
-          {{ 'New' | translate: locale.language }}
-        </app-v2-btn>
+      <span class="personal__create-actions">
+        <span #newBtnAnchor class="personal__new-anchor">
+          <app-v2-btn kind="primary" size="sm" icon="plus" (click)="onNewMenuClick(newBtnAnchor)">
+            {{ 'New' | translate: locale.language }}
+          </app-v2-btn>
+        </span>
+        <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
       </span>
-      <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
     }
     <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
 
@@ -260,5 +262,14 @@
     [open]="newMenuOpen()"
     [anchor]="newMenuAnchor()"
     (closed)="newMenuOpen.set(false)"
+  />
+
+  <app-v2-fab icon="plus" [ariaLabel]="'Create' | translate: locale.language" (action)="fabSheetOpen.set(true)" />
+  <app-v2-action-sheet
+    [open]="fabSheetOpen()"
+    title="Create"
+    [items]="fabSheetItems()"
+    (selected)="onFabSheetSelect($event)"
+    (closed)="fabSheetOpen.set(false)"
   />
 </div>
