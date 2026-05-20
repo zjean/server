@@ -1,15 +1,7 @@
 import type { ActionSheetEntry } from '../../components/action-sheet.component'
 import type { ContextMenuEntry } from '../../components/context-menu.component'
 
-export type NewEntryId =
-  | 'new-docx'
-  | 'new-xlsx'
-  | 'new-pptx'
-  | 'new-folder'
-  | 'new-text'
-  | 'new-markdown'
-  | 'new-diagram'
-  | 'new-download-url'
+export type NewEntryId = 'new-docx' | 'new-xlsx' | 'new-pptx' | 'new-folder' | 'new-text' | 'new-markdown' | 'new-diagram' | 'new-download-url'
 
 interface BuildOpts {
   onSelect: (id: NewEntryId) => void
