@@ -146,5 +146,9 @@
   "Code block": "Code block",
   "Link": "Link",
   "Show formatted view": "Show formatted view",
-  "Show markdown source": "Show markdown source"
+  "Show markdown source": "Show markdown source",
+  "Conflict — someone else saved this diagram": "Conflict — someone else saved this diagram",
+  "Your unsaved edits are still on the canvas. Pick one:": "Your unsaved edits are still on the canvas. Pick one:",
+  "Keep mine": "Keep mine",
+  "Discard mine": "Discard mine"
 }

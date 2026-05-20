@@ -24,3 +24,72 @@
 .diagram-view__state--error {
   color: var(--danger, #dc3545);
 }
+
+.diagram-conflict__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 70;
+}
+
+.diagram-conflict {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 71;
+  min-width: 340px;
+  max-width: 460px;
+  padding: 18px 20px 14px;
+  background: var(--si-bg1);
+  border: 1px solid var(--si-border);
+  border-radius: 10px;
+  box-shadow: var(--si-shadow3);
+}
+
+.diagram-conflict__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--si-fg);
+  margin-bottom: 8px;
+}
+
+.diagram-conflict__message {
+  font-size: 13px;
+  color: var(--si-fg-muted);
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.diagram-conflict__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.diagram-conflict__btn {
+  appearance: none;
+  border: 1px solid var(--si-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--si-fg);
+}
+
+.diagram-conflict__btn:hover {
+  background: var(--si-bg2);
+}
+
+.diagram-conflict__btn--primary {
+  background: var(--si-accent);
+  border-color: var(--si-accent);
+  color: var(--si-accent-fg, #fff);
+}
+
+.diagram-conflict__btn--primary:hover {
+  filter: brightness(1.05);
+  background: var(--si-accent);
+}
