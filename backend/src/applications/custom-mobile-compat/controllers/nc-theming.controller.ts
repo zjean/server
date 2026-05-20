@@ -4,7 +4,7 @@ import { existsSync, createReadStream } from 'node:fs'
 import * as path from 'node:path'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { STATIC_ASSETS_PATH } from '../../../configuration/config.constants'
-import { configuration } from '../../../configuration/config.environment'
+import { NcResponseService } from '../services/nc-response.service'
 
 // NcThemingController — serves the small subset of /index.php/apps/theming/*
 // endpoints stock NC iOS / Android probe to fetch the server's brand assets.
@@ -25,6 +25,8 @@ import { configuration } from '../../../configuration/config.environment'
 @Controller()
 @AuthTokenSkip()
 export class NcThemingController {
+  constructor(private readonly response: NcResponseService) {}
+
   // The login screen logo + the avatar-strip brand logo. NC clients ignore
   // `theming.logo` from capabilities and instead hit this fixed path; we honor
   // it. Returns the raw frontend asset bytes (SVG); the client renders SVG
@@ -78,7 +80,7 @@ export class NcThemingController {
   @Get('index.php/apps/theming/manifest/:theme')
   @Header('content-type', 'application/manifest+json')
   manifest(@Param('theme') _theme: string, @Req() req: FastifyRequest): NcThemingManifest {
-    const baseUrl = this.computeBaseUrl(req)
+    const baseUrl = this.response.baseUrl(req)
     return {
       name: 'Sync-in',
       short_name: 'Sync-in',
@@ -106,15 +108,6 @@ export class NcThemingController {
     return path.join(STATIC_ASSETS_PATH, 'favicon.svg')
   }
 
-  private computeBaseUrl(_req: FastifyRequest): string {
-    const oidcRedirectUri = configuration.auth?.oidc?.redirectUri
-    if (oidcRedirectUri) {
-      return new URL(oidcRedirectUri).origin
-    }
-    const proto = (_req.headers['x-forwarded-proto'] as string | undefined) ?? 'http'
-    const host = (_req.headers['x-forwarded-host'] as string | undefined) ?? (_req.headers['host'] as string | undefined) ?? 'localhost'
-    return `${proto}://${host}`
-  }
 }
 
 export interface NcThemingManifest {

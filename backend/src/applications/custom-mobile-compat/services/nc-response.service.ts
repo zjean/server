@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
-import { configuration } from '../../../configuration/config.environment'
 import { acceptsJson, ocsEnvelope, type OcsEnvelope, type OcsOptions } from '../utils/ocs-envelope'
 
 // Response helpers shared by the OCS controllers.
@@ -23,17 +22,21 @@ export class NcResponseService {
     return ocsEnvelope(data, opts)
   }
 
-  // Compute the server's externally-visible base URL.
-  // When OIDC is configured, the redirect URI's origin is authoritative — it is
-  // admin-set and cannot be spoofed via request headers.  Fallback to request
-  // headers only when OIDC is absent (password-only NC deployments), where the
-  // header-based approach is acceptable because no OIDC redirect is involved.
+  // Compute the server's externally-visible mobile-facing base URL — the
+  // origin Sync-in advertises in capabilities, login-v2, directEditing.url,
+  // and the OIDC handoff's `server` field.
+  //
+  // Derived from `x-forwarded-proto` / `x-forwarded-host` (Sync-in's standard
+  // assumption that the reverse proxy is the source of truth for the
+  // externally-visible URL). Same convention every other part of Sync-in
+  // uses; the deployment is expected to configure the proxy correctly.
+  //
+  // The OIDC *callback* URL is unrelated to the mobile-facing host —
+  // callback construction reads `auth.oidc.redirectUri` directly in
+  // NcMobileOidcController. Previous versions of this method conflated
+  // the two, which broke deployments where the OIDC redirect host and
+  // the mobile-facing host differ.
   baseUrl(_req: FastifyRequest): string {
-    const oidcRedirectUri = configuration.auth?.oidc?.redirectUri
-    if (oidcRedirectUri) {
-      return new URL(oidcRedirectUri).origin
-    }
-    // Non-OIDC fallback — proxy headers are trusted as before.
     const proto = (_req.headers['x-forwarded-proto'] as string | undefined) ?? (_req.protocol as string | undefined) ?? 'http'
     const host = (_req.headers['x-forwarded-host'] as string | undefined) ?? (_req.headers['host'] as string | undefined) ?? 'localhost'
     return `${proto}://${host}`
