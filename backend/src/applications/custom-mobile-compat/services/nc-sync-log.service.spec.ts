@@ -14,23 +14,38 @@ describe(NcSyncLogService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncLogService
   let captured: Record<string, unknown>[]
-  let fakeDb: { insert: jest.Mock }
+  let fakeDb: { insert: jest.Mock; select: jest.Mock }
+  // Test override for resolveViewers — when set, replaces the real DB-backed
+  // implementation so existing personal-space tests don't need to mock the
+  // shared-space query chain. Shared-space tests assign this directly.
+  let viewerResolver: ((actorId: number, spaceAlias: string, spaceId?: number) => Promise<number[]>) | undefined
 
   beforeEach(async () => {
     captured = []
+    viewerResolver = undefined
     fakeDb = {
       insert: jest.fn(() => ({
         values: (v: Record<string, unknown>) => {
           captured.push(v)
           return Promise.resolve({ affectedRows: 1 })
         }
-      }))
+      })),
+      // Empty select chain — resolveViewers' DB path is exercised via the
+      // viewerResolver override on shared-space tests below.
+      select: jest.fn(() => ({ from: () => ({ where: () => Promise.resolve([]) }) }))
     }
     moduleRef = await Test.createTestingModule({
       providers: [NcSyncLogService, { provide: DB_TOKEN_PROVIDER, useValue: fakeDb }]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(NcSyncLogService)
+    // Patch resolveViewers to honor the per-test override when set.
+    const orig = service.resolveViewers.bind(service)
+    ;(service as { resolveViewers: NcSyncLogService['resolveViewers'] }).resolveViewers = (
+      actorId: number,
+      alias: string,
+      spaceId: number | undefined
+    ) => (viewerResolver ? viewerResolver(actorId, alias, spaceId) : orig(actorId, alias, spaceId))
   })
 
   afterEach(async () => {
@@ -148,5 +163,47 @@ describe(NcSyncLogService.name, () => {
     })
     await new Promise((r) => setImmediate(r))
     expect(captured).toEqual([])
+  })
+
+  it('shared-space event fans out to every viewer (regression for #206)', async () => {
+    // A change made by user 7 in space "team-photos" (id=99) is visible to
+    // every space member: user 8 (direct), user 9 + user 10 (via group 50).
+    // Without fanout, B's REPORT (filtered by ownerId=B) never sees changes
+    // A makes in the shared space.
+    viewerResolver = async (actorId, alias, spaceId) => {
+      expect(alias).toBe('team-photos')
+      expect(spaceId).toBe(99)
+      return [actorId, 8, 9, 10]
+    }
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      space: { id: 99, repository: 'files', alias: 'team-photos', realBasePath: '/data/team-photos/files' },
+      action: ACTION.ADD,
+      rPath: '/data/team-photos/files/photo.jpg'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured).toHaveLength(4)
+    expect((captured.map((c) => c.ownerId) as number[]).sort((a, b) => a - b)).toEqual([7, 8, 9, 10])
+    for (const row of captured) {
+      expect(row).toMatchObject({ spaceAlias: 'team-photos', path: 'photo.jpg', type: 'create' })
+    }
+  })
+
+  it('personal-space event writes exactly one row (no fanout query, no DB lookup)', async () => {
+    // Personal spaces have only one viewer — the owner. The handler must
+    // short-circuit before any DB query, otherwise every PUT in a personal
+    // space pays an extra round-trip.
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
+      action: ACTION.ADD,
+      rPath: '/data/janwiebe/files/personal/photo.jpg'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured).toHaveLength(1)
+    expect(captured[0]).toMatchObject({ ownerId: 7 })
+    expect(fakeDb.select).not.toHaveBeenCalled()
   })
 })

@@ -1,10 +1,12 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
-import { and, asc, eq, gt, lt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm'
 import { ACTION } from '../../../common/constants'
 import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
+import { spacesMembers } from '../../spaces/schemas/spaces-members.schema'
+import { usersGroups } from '../../users/schemas/users-groups.schema'
 import { ncSyncEvents } from '../schemas/nc-sync-events.schema'
 
 // One-line summary of a Sync-in file mutation, normalized to the shape the
@@ -115,7 +117,7 @@ export class NcSyncLogService implements OnModuleInit {
   // Map a Sync-in FileEvent payload to one of our log rows.
   private async handleFileEvent(e: {
     user: { id: number }
-    space: { repository: string; alias?: string; realPath?: string; realBasePath?: string }
+    space: { id?: number; repository: string; alias?: string; realPath?: string; realBasePath?: string }
     action: ACTION
     rPath: string
   }): Promise<void> {
@@ -136,7 +138,53 @@ export class NcSyncLogService implements OnModuleInit {
     // is the space root itself (e.g. /data/<user>/files), independent of the
     // request URL.
     const path = stripSpaceRealBasePathPrefix(e.rPath, e.space)
-    await this.append({ ownerId: e.user.id, repository, spaceAlias, path, type, ts: Date.now() })
+    const ts = Date.now()
+    // Fan out to every user who can see the resource — the actor plus, for
+    // shared spaces, the space's members (direct users + users in member
+    // groups). Without this, a change A makes in B's shared space lands
+    // under A's ownerId, so B's REPORT (filtering by their own ownerId)
+    // never sees it and the mobile cache stays stale until a full refresh.
+    const viewerIds = await this.resolveViewers(e.user.id, spaceAlias, e.space.id)
+    for (const ownerId of viewerIds) {
+      await this.append({ ownerId, repository, spaceAlias, path, type, ts })
+    }
+  }
+
+  // Returns the set of userIds that can see resources in this space —
+  // owner first, then space members (direct users + users in member groups),
+  // deduplicated. Personal spaces resolve to just the actor.
+  //
+  // Public for test injection. The cost is one `spaces_members` query plus
+  // one `users_groups` query when any group memberships exist; both run on
+  // indexed columns so the realistic worst case (a space with 1k members) is
+  // still sub-millisecond.
+  async resolveViewers(actorId: number, spaceAlias: string, spaceId: number | undefined): Promise<number[]> {
+    if (spaceAlias === SPACE_ALIAS.PERSONAL || !spaceId) {
+      return [actorId]
+    }
+    const viewers = new Set<number>([actorId])
+    const members = await this.db
+      .select({ userId: spacesMembers.userId, groupId: spacesMembers.groupId })
+      .from(spacesMembers)
+      .where(and(eq(spacesMembers.spaceId, spaceId), or(sql`${spacesMembers.userId} IS NOT NULL`, sql`${spacesMembers.groupId} IS NOT NULL`)))
+    const groupIds: number[] = []
+    for (const m of members) {
+      if (m.userId) {
+        viewers.add(Number(m.userId))
+      } else if (m.groupId) {
+        groupIds.push(Number(m.groupId))
+      }
+    }
+    if (groupIds.length > 0) {
+      const groupMembers = await this.db
+        .select({ userId: usersGroups.userId })
+        .from(usersGroups)
+        .where(inArray(usersGroups.groupId, groupIds))
+      for (const gm of groupMembers) {
+        viewers.add(Number(gm.userId))
+      }
+    }
+    return [...viewers]
   }
 }
 
