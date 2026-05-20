@@ -107,7 +107,6 @@ export class NcThemingController {
   private resolveFaviconPath(): string {
     return path.join(STATIC_ASSETS_PATH, 'favicon.svg')
   }
-
 }
 
 export interface NcThemingManifest {
