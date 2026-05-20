@@ -83,11 +83,12 @@ export class NcPropfindService {
         // file. Pass envPermissions for the root, full permissions for the
         // children.
         //
-        // Promote FS-only file ids (negative inode placeholders) to real DB
-        // ids so NC iOS can resolve subsequent fileId-keyed calls (preview,
-        // favorites, comments). The ensurer is a no-op when the id is
-        // already real, when the entry is a directory, or when the request
-        // targets the trash repository.
+        // Promote FS-only ids (negative inode placeholders) to real DB ids
+        // so NC iOS can resolve subsequent fileId-keyed calls (preview,
+        // favorites, comments). The ensurer covers both files and dirs
+        // (see #209 — abs(inode) collisions could alias a file DB id with
+        // a dir inode) and is a no-op when the id is already real or the
+        // request targets the trash repository.
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
         responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined, requesterFallback))
         isFirst = false

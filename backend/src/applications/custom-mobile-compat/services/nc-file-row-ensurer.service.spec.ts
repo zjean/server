@@ -89,11 +89,29 @@ describe('NcFileRowEnsurer', () => {
     expect(filesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 
-  it('returns f.id unchanged for directories (no fileid-keyed feature for dirs)', async () => {
-    const f = fsFile({ id: -123, isDir: true })
+  it('ensures dir rows just like file rows (regression for #209: no abs(inode) collisions)', async () => {
+    // Pre-fix behavior: dirs short-circuited and emitted abs(inode) as oc:id.
+    // Inode N could collide with a real DB id N from a file in the same
+    // listing — NC mobile cache would overwrite one entity's metadata with
+    // the other's. Now dirs flow through the same lookup-then-insert path.
+    db.select.mockReturnValue(fakeSelect([]))
+    filesQueries.getOrCreateUserFile.mockResolvedValue(321)
+    const f = fsFile({ id: -123, isDir: true, path: 'Photos', name: 'Subfolder' })
     const result = await service.ensure(f, personalSpace(), user)
-    expect(result).toBe(-123)
-    expect(db.select).not.toHaveBeenCalled()
+    expect(result).toBe(321)
+    expect(filesQueries.getOrCreateUserFile).toHaveBeenCalledTimes(1)
+    const [, props] = filesQueries.getOrCreateUserFile.mock.calls[0]
+    expect(props).toMatchObject({ id: 0, isDir: true, path: 'Photos', name: 'Subfolder' })
+  })
+
+  it('reuses an existing dir DB row (e.g. one already present because the dir is shared)', async () => {
+    // Shares/comments/space-roots already create dir rows; the ensurer must
+    // find and return that id rather than minting a duplicate.
+    db.select.mockReturnValue(fakeSelect([{ id: 654 }]))
+    const f = fsFile({ id: -123, isDir: true, path: 'Photos', name: 'Subfolder' })
+    const result = await service.ensure(f, personalSpace(), user)
+    expect(result).toBe(654)
+    expect(filesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 
   it('returns f.id unchanged for trash-repository requests', async () => {
