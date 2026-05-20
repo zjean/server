@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import * as fsSync from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { pipeline } from 'node:stream/promises'
 import { configuration } from '../../../configuration/config.environment'
 
 // Chunked upload staging. NC protocol for big uploads:
@@ -80,16 +81,24 @@ export class NcChunkedUploadsService {
     await fs.mkdir(path.dirname(dest), { recursive: true })
     const out = fsSync.createWriteStream(dest)
     let total = 0
-    for (const p of parts) {
-      const data = await fs.readFile(this.chunkPath(userId, uploadId, p))
-      total += data.length
-      out.write(data)
+    try {
+      for (const p of parts) {
+        // Stream the chunk through with backpressure; never buffer the
+        // whole part in memory. `{ end: false }` keeps the destination
+        // open between chunks so we can pipe the next one in.
+        const src = fsSync.createReadStream(this.chunkPath(userId, uploadId, p))
+        src.on('data', (c: Buffer | string) => {
+          total += typeof c === 'string' ? Buffer.byteLength(c) : c.length
+        })
+        await pipeline(src, out, { end: false })
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        out.on('error', reject)
+        out.on('finish', () => resolve())
+        out.end()
+      })
     }
-    await new Promise<void>((resolve, reject) => {
-      out.on('error', reject)
-      out.on('finish', () => resolve())
-      out.end()
-    })
     return total
   }
 
