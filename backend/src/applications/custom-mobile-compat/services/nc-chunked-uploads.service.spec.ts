@@ -122,6 +122,32 @@ describe(NcChunkedUploadsService.name, () => {
       const dest = path.join(tmpRoot, 'out', 'empty.bin')
       await expect(svc.concatenate(USER, UPLOAD, dest)).rejects.toThrow('no chunks to assemble')
     })
+
+    it('produces a byte-identical result for chunks larger than the write-stream high-water mark', async () => {
+      // The previous implementation buffered each chunk fully in memory via
+      // fs.readFile + out.write(data) — sidestepping backpressure on the
+      // destination. Switching to stream.pipeline with `{ end: false }` keeps
+      // peak memory bounded but the assembled output must still match.
+      // Pick chunk sizes well above the default 64KB high-water mark so the
+      // streaming path actually has to drain.
+      const chunkSize = 256 * 1024 // 256 KiB
+      const chunks: Record<string, Buffer> = {}
+      for (let i = 0; i < 4; i++) {
+        const buf = Buffer.alloc(chunkSize)
+        buf.fill(`abcd`.charCodeAt(i))
+        chunks[String(i)] = buf
+      }
+      await svc.ensureDir(USER, UPLOAD)
+      for (const [name, buf] of Object.entries(chunks)) {
+        await fsp.writeFile(svc.chunkPath(USER, UPLOAD, name), buf)
+      }
+      const dest = path.join(tmpRoot, 'out', 'big.bin')
+      const total = await svc.concatenate(USER, UPLOAD, dest)
+      const expected = Buffer.concat([chunks['0'], chunks['1'], chunks['2'], chunks['3']])
+      expect(total).toBe(expected.length)
+      const actual = await fsp.readFile(dest)
+      expect(actual.equals(expected)).toBe(true)
+    })
   })
 
   describe('remove', () => {
