@@ -13,6 +13,16 @@ import { NcMobileOidcController } from './nc-mobile-oidc.controller'
 // service is mocked via `useValue`).
 jest.mock('openid-client', () => ({}))
 
+// Pin the OIDC config so the controller's oidcCallbackOrigin helper returns
+// a known origin regardless of which environment.yaml the test runner picked
+// up (the dist file ships sync-in.domain.com; local devs sometimes have
+// nothing set — both should give the same redirect_uri assertion).
+jest.mock('../../../configuration/config.environment', () => ({
+  configuration: {
+    auth: { oidc: { redirectUri: 'https://sync-in.oidc.test/api/auth/oidc/callback' } }
+  }
+}))
+
 describe(NcMobileOidcController.name, () => {
   let moduleRef: TestingModule
   let controller: NcMobileOidcController
@@ -100,7 +110,12 @@ describe(NcMobileOidcController.name, () => {
       })
       const res = fakeRes()
       await controller.start(flow.loginToken, fakeReq(), res)
-      expect(mobileOidc.buildAuthorizationUrl).toHaveBeenCalledWith(flow.loginToken, 'https://sync-in.example.test/custom-mobile/oidc/callback')
+      // The redirect_uri sent to the IdP is built from `auth.oidc.redirectUri`'s
+      // origin (where the IdP can reach the server / what the maintainer
+      // pre-registered), not the mobile-facing baseUrl. The configuration
+      // mock at the top of this file pins the OIDC origin so this assertion
+      // doesn't depend on which environment.yaml the runner picked up.
+      expect(mobileOidc.buildAuthorizationUrl).toHaveBeenCalledWith(flow.loginToken, 'https://sync-in.oidc.test/custom-mobile/oidc/callback')
       const seen = flows.findByLoginToken(flow.loginToken)
       expect(seen?.status).toBe('oidc-pending')
       expect(seen?.oidc).toEqual({ codeVerifier: 'CV', nonce: 'NONCE' })
