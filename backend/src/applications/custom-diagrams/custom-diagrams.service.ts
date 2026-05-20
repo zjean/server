@@ -15,6 +15,8 @@ import type { SaveDiagramDto } from './dto/save-diagram.dto'
 
 const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
 const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
+const EMPTY_DRAWIO_XML =
+  '<mxfile><diagram name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>'
 
 @Injectable()
 export class CustomDiagramsService {
@@ -62,7 +64,7 @@ export class CustomDiagramsService {
     const space = await this.spacesManager.spaceEnv(user, segments)
     if (!space) throw new HttpException('space not found or access denied', HttpStatus.FORBIDDEN)
     await this.filesManager.mkFile(user, space, false, true, false)
-    await writeFile(space.realPath, ' ', 'utf-8')
+    await writeFile(space.realPath, EMPTY_DRAWIO_XML, 'utf-8')
     FileEvent.emit('event', { user, space, action: ACTION.ADD, rPath: space.realPath })
     return { path: segments.join('/') }
   }

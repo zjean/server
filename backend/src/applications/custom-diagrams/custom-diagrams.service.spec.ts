@@ -114,14 +114,26 @@ describe('CustomDiagramsService', () => {
   })
 
   describe('createNew', () => {
-    it('creates file and returns path', async () => {
+    it('creates file seeded with a valid mxGraph skeleton', async () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       filesManager.mkFile.mockResolvedValue(undefined)
       jest.mocked(writeFile).mockResolvedValue(undefined)
 
+      jest.mocked(writeFile).mockClear()
       const result = await service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })
       expect(filesManager.mkFile).toHaveBeenCalled()
-      expect(writeFile).toHaveBeenCalledWith('/data/test.drawio', ' ', 'utf-8')
+      expect(writeFile).toHaveBeenCalledTimes(1)
+      const [destPath, contents, encoding] = jest.mocked(writeFile).mock.calls[0]
+      expect(destPath).toBe('/data/test.drawio')
+      expect(encoding).toBe('utf-8')
+      // mxGraph requires <mxfile> wrapper, <mxGraphModel> body, and a root cell
+      // pair (id=0 with id=1 parent=0). Assert structure rather than exact bytes
+      // so the skeleton can be tweaked without churning the test.
+      expect(contents).toMatch(/^<mxfile>/)
+      expect(contents).toContain('<mxGraphModel>')
+      expect(contents).toContain('<root>')
+      expect(contents).toContain('<mxCell id="0"/>')
+      expect(contents).toContain('<mxCell id="1" parent="0"/>')
       expect(result.path).toBe('files/personal/test.drawio')
     })
   })
