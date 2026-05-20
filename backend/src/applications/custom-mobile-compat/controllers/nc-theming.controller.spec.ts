@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { NcResponseService } from '../services/nc-response.service'
 import { NcThemingController } from './nc-theming.controller'
 
 describe(NcThemingController.name, () => {
@@ -10,7 +11,10 @@ describe(NcThemingController.name, () => {
   let controller: NcThemingController
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ controllers: [NcThemingController] }).compile()
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcThemingController],
+      providers: [NcResponseService]
+    }).compile()
     moduleRef.useLogger(['fatal'])
     controller = moduleRef.get(NcThemingController)
   })

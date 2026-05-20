@@ -1,6 +1,7 @@
 import { Controller, Get, HttpStatus, Logger, Param, Query, Req, Res } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
+import { configuration } from '../../../configuration/config.environment'
 import { NC_ROUTE } from '../constants/routes'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
@@ -46,7 +47,13 @@ export class NcMobileOidcController {
       return
     }
 
-    const redirectUri = `${this.response.baseUrl(req)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`
+    // The OIDC callback URL must match the host the IdP can reach (and the
+    // host the maintainer pre-registered with the IdP), which is encoded in
+    // `auth.oidc.redirectUri`. That is independent of the mobile-facing host
+    // — see NcResponseService.baseUrl. Fall back to the mobile-facing host
+    // only when no OIDC redirect URI is configured (which would itself be a
+    // misconfiguration, since this controller only mounts when OIDC is on).
+    const redirectUri = `${oidcCallbackOrigin(req, this.response)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`
     const auth = await this.mobileOidc.buildAuthorizationUrl(loginToken, redirectUri)
     this.flows.markOidcPending(loginToken, { codeVerifier: auth.codeVerifier, nonce: auth.nonce })
     res.redirect(auth.url, HttpStatus.FOUND)
@@ -93,7 +100,7 @@ export class NcMobileOidcController {
       // exchange. Dropping `iss` causes openid-client to throw OAuth
       // INVALID_RESPONSE. Mirrors the upstream web flow at
       // auth-provider-oidc.service.ts:`callbackParams = new URLSearchParams(query)`.
-      const callbackUrl = new URL(`${this.response.baseUrl(req)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`)
+      const callbackUrl = new URL(`${oidcCallbackOrigin(req, this.response)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`)
       const reqQuery = (req.query ?? {}) as Record<string, unknown>
       for (const [k, v] of Object.entries(reqQuery)) {
         if (typeof v === 'string') callbackUrl.searchParams.set(k, v)
@@ -164,4 +171,16 @@ export class NcMobileOidcController {
     const success = renderNcSuccessBody(creds)
     return renderHtml({ title: 'Signed in', body: success.body, headExtras: success.headExtras })
   }
+}
+
+// Pick the origin to mount the OIDC callback path under. Reads
+// `auth.oidc.redirectUri` directly — that origin is the one registered with
+// the IdP and the one the IdP can reach (which the mobile-facing host may
+// or may not be). Falls back to the mobile-facing host only when no OIDC
+// redirect is configured — defensive, since this controller only mounts on
+// OIDC-enabled deployments.
+function oidcCallbackOrigin(req: FastifyRequest, response: NcResponseService): string {
+  const redirectUri = configuration.auth?.oidc?.redirectUri
+  if (redirectUri) return new URL(redirectUri).origin
+  return response.baseUrl(req)
 }
