@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
+import { configuration } from '../../../configuration/config.environment'
 import { acceptsJson, ocsEnvelope, type OcsEnvelope, type OcsOptions } from '../utils/ocs-envelope'
 
 // Response helpers shared by the OCS controllers.
@@ -26,19 +27,37 @@ export class NcResponseService {
   // origin Sync-in advertises in capabilities, login-v2, directEditing.url,
   // and the OIDC handoff's `server` field.
   //
-  // Derived from `x-forwarded-proto` / `x-forwarded-host` (Sync-in's standard
-  // assumption that the reverse proxy is the source of truth for the
-  // externally-visible URL). Same convention every other part of Sync-in
-  // uses; the deployment is expected to configure the proxy correctly.
+  // Resolution order (first wins):
+  //   1. `x-forwarded-proto` + `x-forwarded-host` — proxy says where clients
+  //      connect. Authoritative when set, since the proxy is the deployment's
+  //      source of truth for externally-visible URLs.
+  //   2. `auth.oidc.redirectUri` origin — admin-set, non-spoofable. Used as
+  //      a safety net for OIDC-enabled deployments where the proxy hasn't
+  //      forwarded headers (or can't be trusted to). For deployments where
+  //      the OIDC redirect host and the mobile-facing host genuinely differ,
+  //      `x-forwarded-host` MUST be set correctly — same requirement as the
+  //      rest of Sync-in.
+  //   3. `host` request header.
+  //   4. `'localhost'`.
   //
-  // The OIDC *callback* URL is unrelated to the mobile-facing host —
-  // callback construction reads `auth.oidc.redirectUri` directly in
-  // NcMobileOidcController. Previous versions of this method conflated
-  // the two, which broke deployments where the OIDC redirect host and
-  // the mobile-facing host differ.
-  baseUrl(_req: FastifyRequest): string {
-    const proto = (_req.headers['x-forwarded-proto'] as string | undefined) ?? (_req.protocol as string | undefined) ?? 'http'
-    const host = (_req.headers['x-forwarded-host'] as string | undefined) ?? (_req.headers['host'] as string | undefined) ?? 'localhost'
+  // The OIDC *callback* URL is unrelated to this method — callback
+  // construction reads `auth.oidc.redirectUri` directly in
+  // NcMobileOidcController. Earlier versions of `baseUrl()` returned the
+  // OIDC origin unconditionally, which silently overrode correctly-set
+  // proxy headers and broke deployments where the OIDC and mobile hosts
+  // differ.
+  baseUrl(req: FastifyRequest): string {
+    const fwdProto = req.headers['x-forwarded-proto'] as string | undefined
+    const fwdHost = req.headers['x-forwarded-host'] as string | undefined
+    if (fwdHost) {
+      return `${fwdProto ?? 'http'}://${fwdHost}`
+    }
+    const oidcRedirectUri = configuration.auth?.oidc?.redirectUri
+    if (oidcRedirectUri) {
+      return new URL(oidcRedirectUri).origin
+    }
+    const proto = fwdProto ?? (req.protocol as string | undefined) ?? 'http'
+    const host = (req.headers['host'] as string | undefined) ?? 'localhost'
     return `${proto}://${host}`
   }
 }
