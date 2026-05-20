@@ -1,10 +1,11 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { ACTION } from '../../common/constants'
 import { FilesManager } from '../files/services/files-manager.service'
 import { FileEvent } from '../files/events/file-events'
-import { genEtag, getProps } from '../files/utils/files'
+import { getProps } from '../files/utils/files'
 import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
 import { haveSpaceEnvPermissions } from '../spaces/utils/permissions'
@@ -17,6 +18,14 @@ const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
 const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
 const EMPTY_DRAWIO_XML =
   '<mxfile><diagram name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>'
+
+// Content-derived ETag. Shared `genEtag` (size+mtime) collides across versions
+// with equal byte length saved in the same mtime granule — possible under
+// autosave bursts — and silently breaks optimistic concurrency. SHA-1 over a
+// <=10 MB string is microseconds.
+function contentEtag(xml: string): string {
+  return createHash('sha1').update(xml, 'utf-8').digest('hex')
+}
 
 @Injectable()
 export class CustomDiagramsService {
@@ -33,7 +42,7 @@ export class CustomDiagramsService {
     const xml = await readFile(space.realPath, 'utf-8')
     return {
       xml,
-      etag: genEtag(stat, undefined, false),
+      etag: contentEtag(xml),
       mtime: stat.mtime,
       name: stat.name,
       isWritable: haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY),
@@ -50,13 +59,26 @@ export class CustomDiagramsService {
     if (Buffer.byteLength(dto.xml, 'utf-8') > MAX_DIAGRAM_BYTES) {
       throw new HttpException('xml payload too large', HttpStatus.PAYLOAD_TOO_LARGE)
     }
-    const beforeStat = await getProps(space.realPath)
-    if (genEtag(beforeStat, undefined, false) !== dto.etag) {
+    const expectedEtag = dto.etag
+    const beforeXml = await readFile(space.realPath, 'utf-8')
+    if (contentEtag(beforeXml) !== expectedEtag) {
       throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     }
-    await writeFile(space.realPath, dto.xml, 'utf-8')
+
+    // Write-tmp + rename = atomic CAS on same filesystem. Readers see the old or
+    // the new bytes, never a half-written file. The recheck closes the window
+    // between the initial readFile and the rename.
+    const tmpPath = `${space.realPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await writeFile(tmpPath, dto.xml, 'utf-8')
+    const recheckXml = await readFile(space.realPath, 'utf-8')
+    if (contentEtag(recheckXml) !== expectedEtag) {
+      await unlink(tmpPath).catch(() => undefined)
+      throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
+    }
+    await rename(tmpPath, space.realPath)
+
     const stat = await getProps(space.realPath)
-    return { etag: genEtag(stat, undefined, false), mtime: stat.mtime }
+    return { etag: contentEtag(dto.xml), mtime: stat.mtime }
   }
 
   async createNew(user: UserModel, dto: NewDiagramDto): Promise<{ path: string }> {
