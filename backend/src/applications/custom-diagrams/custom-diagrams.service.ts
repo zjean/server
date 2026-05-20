@@ -1,7 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { ACTION } from '../../common/constants'
 import { FilesManager } from '../files/services/files-manager.service'
 import { FileEvent } from '../files/events/file-events'
@@ -59,11 +59,24 @@ export class CustomDiagramsService {
     if (Buffer.byteLength(dto.xml, 'utf-8') > MAX_DIAGRAM_BYTES) {
       throw new HttpException('xml payload too large', HttpStatus.PAYLOAD_TOO_LARGE)
     }
+    const expectedEtag = dto.etag
     const beforeXml = await readFile(space.realPath, 'utf-8')
-    if (contentEtag(beforeXml) !== dto.etag) {
+    if (contentEtag(beforeXml) !== expectedEtag) {
       throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     }
-    await writeFile(space.realPath, dto.xml, 'utf-8')
+
+    // Write-tmp + rename = atomic CAS on same filesystem. Readers see the old or
+    // the new bytes, never a half-written file. The recheck closes the window
+    // between the initial readFile and the rename.
+    const tmpPath = `${space.realPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    await writeFile(tmpPath, dto.xml, 'utf-8')
+    const recheckXml = await readFile(space.realPath, 'utf-8')
+    if (contentEtag(recheckXml) !== expectedEtag) {
+      await unlink(tmpPath).catch(() => {})
+      throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
+    }
+    await rename(tmpPath, space.realPath)
+
     const stat = await getProps(space.realPath)
     return { etag: contentEtag(dto.xml), mtime: stat.mtime }
   }

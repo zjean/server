@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { CustomDiagramsService } from './custom-diagrams.service'
 
 // Mock heavy transitive deps before any service code is evaluated.
@@ -16,7 +16,9 @@ jest.mock('../spaces/services/spaces-manager.service', () => ({
 
 jest.mock('node:fs/promises', () => ({
   readFile: jest.fn(),
-  writeFile: jest.fn()
+  writeFile: jest.fn(),
+  rename: jest.fn(),
+  unlink: jest.fn()
 }))
 jest.mock('node:fs', () => ({ existsSync: jest.fn() }))
 jest.mock('../files/utils/files', () => ({
@@ -44,6 +46,8 @@ describe('CustomDiagramsService', () => {
     service = new CustomDiagramsService(spacesManager as any, filesManager as any)
     jest.mocked(readFile).mockReset()
     jest.mocked(writeFile).mockReset()
+    jest.mocked(rename).mockReset()
+    jest.mocked(unlink).mockReset()
   })
 
   describe('load', () => {
@@ -102,21 +106,57 @@ describe('CustomDiagramsService', () => {
       await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
         status: HttpStatus.CONFLICT
       })
+      // Should not have written or renamed anything before discovering the mismatch.
       expect(writeFile).not.toHaveBeenCalled()
+      expect(rename).not.toHaveBeenCalled()
     })
 
-    it('writes and returns content-hash etag on success', async () => {
+    it('writes via tmpfile + rename and returns content-hash etag on success', async () => {
       const baseXml = '<mxfile><graph/></mxfile>'
       const newXml = '<mxfile><graph><cell/></graph></mxfile>'
+      const baseEtag = sha1(baseXml)
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as jest.Mock).mockReturnValue(true)
+      // Same content on both reads = no concurrent writer; recheck passes.
       jest.mocked(readFile).mockResolvedValue(baseXml as any)
       jest.mocked(writeFile).mockResolvedValue(undefined as any)
+      jest.mocked(rename).mockResolvedValue(undefined as any)
 
-      const result = await service.save(mockUser, { path: FILE_PATH, xml: newXml, etag: sha1(baseXml) })
-      expect(writeFile).toHaveBeenCalledWith('/data/test.drawio', newXml, 'utf-8')
+      const result = await service.save(mockUser, { path: FILE_PATH, xml: newXml, etag: baseEtag })
+
+      // writeFile targets a tmpfile alongside the real path, NOT the real path.
+      expect(writeFile).toHaveBeenCalledTimes(1)
+      const [tmpPath, contents, encoding] = jest.mocked(writeFile).mock.calls[0]
+      expect(tmpPath).toMatch(/^\/data\/test\.drawio\.tmp-/)
+      expect(contents).toBe(newXml)
+      expect(encoding).toBe('utf-8')
+      // rename moves tmp → real path atomically.
+      expect(rename).toHaveBeenCalledTimes(1)
+      const [fromPath, toPath] = jest.mocked(rename).mock.calls[0]
+      expect(fromPath).toBe(tmpPath)
+      expect(toPath).toBe('/data/test.drawio')
       expect(result.etag).toBe(sha1(newXml))
-      expect(result.etag).not.toBe(sha1(baseXml))
+      expect(result.etag).not.toBe(baseEtag)
+    })
+
+    it('throws 409 and unlinks tmpfile when a concurrent writer changes the file between read and rename', async () => {
+      const baseXml = '<mxfile><a/></mxfile>'
+      const concurrentXml = '<mxfile><b/></mxfile>'
+      const baseEtag = sha1(baseXml)
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as jest.Mock).mockReturnValue(true)
+      // First read sees the baseline (etag matches). Second read (after writeFile
+      // to tmp) sees a different version — recheck fails → 409, tmpfile cleaned up.
+      jest.mocked(readFile).mockResolvedValueOnce(baseXml as any).mockResolvedValueOnce(concurrentXml as any)
+      jest.mocked(writeFile).mockResolvedValue(undefined as any)
+      jest.mocked(unlink).mockResolvedValue(undefined as any)
+
+      await expect(
+        service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: baseEtag })
+      ).rejects.toMatchObject({ status: HttpStatus.CONFLICT })
+      expect(writeFile).toHaveBeenCalledTimes(1)
+      expect(rename).not.toHaveBeenCalled()
+      expect(unlink).toHaveBeenCalledTimes(1)
     })
 
     it('two distinct payloads of equal byte length produce different etags', () => {
