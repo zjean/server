@@ -51,6 +51,7 @@ export class NcOcsController {
   // Per-user provisioning lookup. Mobile clients call /cloud/users/<me> after
   // /cloud/user; we only allow reading your own profile here.
   @Get('ocs/v1.php/cloud/users/:userid')
+  @UseGuards(NcBasicAuthGuard)
   userProvisioningV1(
     @Param('userid') userid: string,
     @Req() req: FastifyRequest & { user: UserModel },
