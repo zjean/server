@@ -77,7 +77,7 @@ export class DiagramViewComponent implements OnInit {
           this.etag = res.etag
           this.isWritable = res.isWritable
           this.pendingXml = res.xml
-          const src = `${res.editorUrl}?embed=1&spin=1&proto=json`
+          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1`
           this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
           this.loading.set(false)
         },
