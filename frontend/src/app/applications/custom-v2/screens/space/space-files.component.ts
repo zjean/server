@@ -28,6 +28,7 @@ import { FileProps } from '@sync-in-server/backend/src/applications/files/interf
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
+import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
 import { FileUpload } from '../../../files/interfaces/file-upload.interface'
 import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
@@ -55,7 +56,9 @@ import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
-import { buildNewEntryMenu, NewEntryId } from '../files/new-entry-menu'
+import { buildNewEntryMenu, buildNewEntrySheetItems, NewEntryId } from '../files/new-entry-menu'
+import { ActionSheetComponent, ActionSheetEntry } from '../../components/action-sheet.component'
+import { FabComponent } from '../../components/fab.component'
 
 type BrowserMode = 'list' | 'grid' | 'gallery'
 
@@ -88,6 +91,8 @@ function readStoredMode(): BrowserMode {
     PillComponent,
     ContextMenuComponent,
     DropZoneDirective,
+    FabComponent,
+    ActionSheetComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -128,15 +133,25 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   // Desktop "+ New" dropdown — anchored under the primary toolbar button.
   // Items come from buildNewEntryMenu so personal and space-files stay
-  // in lockstep; the OnlyOffice trio is omitted when the editor is off.
+  // in lockstep.
   protected readonly newMenuOpen = signal(false)
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onlyOfficeEnabled: this.store.server().files.editors.onlyoffice,
       onSelect: (id) => this.dispatchNewEntry(id)
     })
   )
+
+  // Mobile FAB-driven action sheet. Mirrors the desktop "+ New" menu
+  // and tacks Upload on at the end — matches personal's pattern. The
+  // toolbar's create/upload buttons are hidden on mobile via CSS so the
+  // FAB is the sole primary CTA there.
+  protected readonly fabSheetOpen = signal(false)
+  protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
+    ...buildNewEntrySheetItems(),
+    { id: 'sep-fab', kind: 'divider' },
+    { id: 'upload', label: 'Upload', icon: 'upload' }
+  ])
 
   protected readonly selection = signal<Set<number>>(new Set())
   private selectionAnchorId: number | null = null
@@ -685,6 +700,9 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       case 'new-text':
         this.newTextFile()
         return
+      case 'new-markdown':
+        this.newMarkdownFile()
+        return
       case 'new-diagram':
         this.newDiagramFile()
         return
@@ -697,7 +715,23 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       case 'new-pptx':
         this.newOfficeFile('pptx')
         return
+      case 'new-download-url':
+        this.downloadFromUrl()
+        return
     }
+  }
+
+  // Dispatch the mobile FAB action-sheet selection. The sheet emits a
+  // string id; the items that map to NewEntryId values delegate to
+  // dispatchNewEntry to keep create paths consistent with the desktop
+  // dropdown. `upload` is FAB-only since it isn't a create action.
+  protected onFabSheetSelect(id: string): void {
+    this.fabSheetOpen.set(false)
+    if (id === 'upload') {
+      this.triggerFilePicker()
+      return
+    }
+    this.dispatchNewEntry(id as NewEntryId)
   }
 
   protected async newTextFile(): Promise<void> {
@@ -747,9 +781,44 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     const name = this.uniqueName('Untitled', ext)
     const fullPath = `${dirPath}/${name}`
+    const onlyOfficeOn = this.store.server().files.editors.onlyoffice
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
         this.toast.success('v2_item_created', { name })
+        this.refresh()
+        // Only open the file inline when there's an editor that can handle
+        // it. Without OnlyOffice the navigate would land on a dead viewer;
+        // the user can still download or sync the freshly-created file.
+        if (onlyOfficeOn) {
+          this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+        }
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'File creation failed')
+      }
+    })
+  }
+
+  // Markdown follows the office pattern: copy the .md sample template
+  // server-side, then open the new file in v2's TipTap editor so the
+  // user lands ready to type.
+  private async newMarkdownFile(): Promise<void> {
+    const initial = this.uniqueName('Untitled', 'md')
+    const name = await this.promptDialog.open({
+      title: 'New markdown file',
+      placeholder: 'File name',
+      submitLabel: 'Create',
+      initialValue: initial,
+      selectionRange: 'stem',
+      validate: (v) => this.validateFolderName(v)
+    })
+    if (!name) return
+    const trimmed = name.trim()
+    const dirPath = this.currentUploadRoute()
+    const fullPath = `${dirPath}/${trimmed}`
+    this.filesService.make('file', trimmed, dirPath, true).subscribe({
+      next: () => {
+        this.toast.success('v2_file_created', { name: trimmed })
         this.refresh()
         this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
       },
@@ -757,6 +826,33 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         this.toast.error(e.error?.message ?? 'File creation failed')
       }
     })
+  }
+
+  // Two-step prompt mirrors classic's download dialog: collect URL,
+  // then offer a derived name the user can rename. Backend kicks off
+  // an async download task — no auto-navigate because the file isn't
+  // available until the task finishes.
+  protected async downloadFromUrl(): Promise<void> {
+    const url = await this.promptDialog.open({
+      title: 'Download from URL',
+      placeholder: 'https://…',
+      submitLabel: 'Next',
+      validate: (v) => (validHttpSchemaRegexp.test(v.trim()) ? null : 'Malformed URL')
+    })
+    if (!url) return
+    const derivedName = url.trim().split('/').filter(Boolean).pop() ?? ''
+    const name = await this.promptDialog.open({
+      title: 'Save as',
+      placeholder: 'File name',
+      submitLabel: 'Download',
+      initialValue: derivedName,
+      selectionRange: 'stem',
+      validate: (v) => this.validateFolderName(v)
+    })
+    if (!name) return
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.filesService.downloadFromUrl(url.trim(), name.trim())
+    this.toast.success('v2_downloading_one', { name: name.trim() })
   }
 
   private uniqueName(stem: string, ext: string): string {

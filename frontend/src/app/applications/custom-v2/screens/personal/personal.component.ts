@@ -141,24 +141,21 @@ export class PersonalComponent implements OnInit, OnDestroy {
   // options (the same ones available in the desktop toolbar) and
   // dispatches by id when picked.
   protected readonly fabSheetOpen = signal(false)
-  // Mirrors the desktop "+ New" menu (Folder/Text + the OnlyOffice trio
-  // when enabled), then tacks on the FAB-only Download from URL and
-  // Upload primitives.
+  // Mirrors the desktop "+ New" menu, then tacks on the FAB-only Upload
+  // primitive.
   protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
-    ...buildNewEntrySheetItems({ onlyOfficeEnabled: this.store.server().files.editors.onlyoffice }),
+    ...buildNewEntrySheetItems(),
     { id: 'sep-fab', kind: 'divider' },
-    { id: 'download-url', label: 'Download from URL', icon: 'globe' },
     { id: 'upload', label: 'Upload', icon: 'upload' }
   ])
 
   // Desktop "+ New" dropdown — anchored under the primary toolbar button.
   // Items come from buildNewEntryMenu so personal and space-files stay
-  // in lockstep; the OnlyOffice trio is omitted when the editor is off.
+  // in lockstep.
   protected readonly newMenuOpen = signal(false)
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onlyOfficeEnabled: this.store.server().files.editors.onlyoffice,
       onSelect: (id) => this.dispatchNewEntry(id)
     })
   )
@@ -688,6 +685,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
       case 'new-text':
         this.newTextFile()
         return
+      case 'new-markdown':
+        this.newMarkdownFile()
+        return
       case 'new-diagram':
         this.newDiagramFile()
         return
@@ -699,6 +699,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
         return
       case 'new-pptx':
         this.newOfficeFile('pptx')
+        return
+      case 'new-download-url':
+        this.downloadFromUrl()
         return
     }
   }
@@ -721,18 +724,21 @@ export class PersonalComponent implements OnInit, OnDestroy {
   // Auto-named office file. The backend's mkFile copies the matching
   // sample template (assets/samples/sample.<ext>) when the extension is
   // a known DOCUMENT_TYPE — so we get a valid, openable doc with one
-  // POST. After creation the file opens straight in the v2 OnlyOffice
-  // overlay; refresh runs in the background so the new row appears
-  // underneath when the user closes the editor.
+  // POST. With OnlyOffice the file opens straight in the v2 overlay;
+  // without it we still create the file (downloadable/syncable) but
+  // skip the navigate so the user isn't dumped on a dead viewer.
   private newOfficeFile(ext: 'docx' | 'xlsx' | 'pptx'): void {
     const dirPath = this.currentUploadRoute()
     const name = this.uniqueName('Untitled', ext)
     const fullPath = `${dirPath}/${name}`
+    const onlyOfficeOn = this.store.server().files.editors.onlyoffice
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
         this.toast.success('v2_item_created', { name })
         this.refresh()
-        this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+        if (onlyOfficeOn) {
+          this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+        }
       },
       error: (e: HttpErrorResponse) => {
         this.toast.error(e.error?.message ?? 'File creation failed')
@@ -793,6 +799,35 @@ export class PersonalComponent implements OnInit, OnDestroy {
     })
   }
 
+  // Markdown gets the office-style flow: pre-fill the name, copy the
+  // .md sample template, then open the new file in v2's TipTap editor
+  // so the user can start typing immediately.
+  protected async newMarkdownFile(): Promise<void> {
+    const initial = this.uniqueName('Untitled', 'md')
+    const name = await this.promptDialog.open({
+      title: 'New markdown file',
+      placeholder: 'File name',
+      submitLabel: 'Create',
+      initialValue: initial,
+      selectionRange: 'stem',
+      validate: (v) => this.validateEntryName(v)
+    })
+    if (!name) return
+    const trimmed = name.trim()
+    const dirPath = this.currentUploadRoute()
+    const fullPath = `${dirPath}/${trimmed}`
+    this.filesService.make('file', trimmed, dirPath, true).subscribe({
+      next: () => {
+        this.toast.success('v2_file_created', { name: trimmed })
+        this.refresh()
+        this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
+      },
+      error: (e: HttpErrorResponse) => {
+        this.toast.error(e.error?.message ?? 'File creation failed')
+      }
+    })
+  }
+
   protected async downloadFromUrl(): Promise<void> {
     const url = await this.promptDialog.open({
       title: 'Download from URL',
@@ -844,6 +879,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
       case 'new-text':
         this.newTextFile()
         return
+      case 'new-markdown':
+        this.newMarkdownFile()
+        return
       case 'new-diagram':
         this.newDiagramFile()
         return
@@ -856,7 +894,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       case 'new-pptx':
         this.newOfficeFile('pptx')
         return
-      case 'download-url':
+      case 'new-download-url':
         this.downloadFromUrl()
         return
       case 'upload':
