@@ -34,6 +34,7 @@ import { NcOnlyOfficeTranslatorService } from './services/nc-onlyoffice-translat
 import { NcPathResolverService } from './services/nc-path-resolver.service'
 import { NcPropfindService } from './services/nc-propfind.service'
 import { NcResponseService } from './services/nc-response.service'
+import { NcSyncLogScheduler } from './services/nc-sync-log-scheduler.service'
 import { NcSyncLogService } from './services/nc-sync-log.service'
 import { NcSyncReportService } from './services/nc-sync-report.service'
 
@@ -84,6 +85,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcFileRowEnsurer,
     NcPropfindService,
     NcSearchService,
+    NcSyncLogScheduler,
     NcSyncLogService,
     NcSyncReportService,
     ...(oidcEnabled ? [NcMobileOidcService] : []),
