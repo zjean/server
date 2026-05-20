@@ -176,10 +176,7 @@ export class NcSyncLogService implements OnModuleInit {
       }
     }
     if (groupIds.length > 0) {
-      const groupMembers = await this.db
-        .select({ userId: usersGroups.userId })
-        .from(usersGroups)
-        .where(inArray(usersGroups.groupId, groupIds))
+      const groupMembers = await this.db.select({ userId: usersGroups.userId }).from(usersGroups).where(inArray(usersGroups.groupId, groupIds))
       for (const gm of groupMembers) {
         viewers.add(Number(gm.userId))
       }
