@@ -25,6 +25,14 @@ import type { DBSchema } from '../../../infrastructure/database/interfaces/datab
 // that was uploaded outside the DB-tracking flows (direct disk drop, restored
 // from backup, pre-existing volume mount).
 //
+// Directories: also handled. Sync-in's data model gives directories real DB
+// rows on demand (when shared, commented, or made a space root — see
+// shares-manager.service.ts, comments-manager.service.ts, spaces-queries
+// `spaceRootFiles`). Without ensurer coverage, dir oc:ids were derived from
+// `abs(inode)` and could collide with file DB ids in the same listing
+// (issue #209). Now dirs go through the same ensure path: lookup by
+// (ownerId|space scope, path, name, isDir) first, insert on miss.
+//
 // Why we can't just call `getOrCreateUserFile` blindly: that helper inserts a
 // row whenever `file.id <= 0` without a path-keyed lookup, and the `files`
 // table has no unique index on (ownerId, path, name). Repeated PROPFINDs of
@@ -42,13 +50,12 @@ export class NcFileRowEnsurer {
   // Returns a stable positive file id for the WebDAVFile.
   //
   // Short-circuits (returns f.id unchanged) when the row is already real, the
-  // entry is a directory, the request is against the trash repository, or no
-  // user is attached. On any DB error, falls back to f.id — better to render
-  // the listing with a placeholder fileid than to drop the entire PROPFIND.
+  // request is against the trash repository, or no user is attached. On any
+  // DB error, falls back to f.id — better to render the listing with a
+  // placeholder fileid than to drop the entire PROPFIND.
   async ensure(f: WebDAVFile, space: SpaceEnv, user: UserModel | undefined): Promise<number> {
     if (!user) return f.id
     if (f.id > 0) return f.id
-    if (f.isDir) return f.id
     if (space.inTrashRepository) return f.id
 
     const fileProps = f as unknown as FileProps
@@ -84,12 +91,14 @@ export class NcFileRowEnsurer {
 
   // Path-keyed lookup for personal-space files. Mirrors what
   // FilesQueries.getSpaceFileId does for spaces, but scoped by ownerId.
+  // Matches the entry's `isDir` so a file and a directory at the same
+  // (path, name) — unlikely but expressible in the schema — don't alias.
   // Returns 0 when not found.
   private async findUserFileByPath(userId: number, file: FileProps): Promise<number> {
     const [row] = await this.db
       .select({ id: files.id })
       .from(files)
-      .where(and(eq(files.ownerId, userId), eq(files.path, file.path), eq(files.name, file.name), eq(files.isDir, false)))
+      .where(and(eq(files.ownerId, userId), eq(files.path, file.path), eq(files.name, file.name), eq(files.isDir, file.isDir)))
       .limit(1)
     return row?.id ?? 0
   }
