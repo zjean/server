@@ -52,12 +52,19 @@ export class DiagramViewComponent implements OnInit {
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly iframeSrc = signal<SafeResourceUrl | null>(null)
 
+  protected readonly conflict = signal<{ theirEtag: string; theirXml: string } | null>(null)
+
   private etag = ''
   private editorOrigin = '__unset__'
   private isWritable = false
   private pendingXml = ''
   private saving = false
   private queuedXml: string | null = null
+  // While a conflict dialog is open we suppress backend saves (they would just
+  // 409 again). We still want to use the user's latest canvas xml when they
+  // pick "Keep mine", so we track the most recent xml the editor handed us.
+  private latestXmlWhileConflicted: string | null = null
+  private conflictRefreshing = false
 
   ngOnInit(): void {
     this.http
@@ -118,6 +125,12 @@ export class DiagramViewComponent implements OnInit {
 
   private saveXml(xml: string): void {
     if (!this.isWritable) return
+    if (this.conflict() !== null) {
+      // Dialog is open. Don't touch the backend — just remember the latest
+      // canvas xml so "Keep mine" applies to what the user can actually see.
+      this.latestXmlWhileConflicted = xml
+      return
+    }
     if (this.saving) {
       this.queuedXml = xml
       return
@@ -145,6 +158,7 @@ export class DiagramViewComponent implements OnInit {
           this.saving = false
           this.queuedXml = null
           if (e?.status === 409) {
+            this.latestXmlWhileConflicted = xml
             this.recoverFromConflict()
             return
           }
@@ -153,29 +167,57 @@ export class DiagramViewComponent implements OnInit {
       })
   }
 
-  // On 409, refresh the in-memory etag + baseline from the server so the next
-  // save can succeed without forcing a page reload (which would discard the
-  // user's in-progress edits). Half-honouring optimistic concurrency — telling
-  // the loser they lost without giving them a path forward — is the bug.
+  // On 409 we ask the server for its current baseline and then surface an
+  // explicit Keep-mine / Discard-mine / Cancel choice. Half-honouring optimistic
+  // concurrency — telling the loser they lost without giving them a real choice
+  // — is the bug: a silent baseline refresh would let the next save overwrite
+  // the other party's edits without the user knowing it happened.
   private recoverFromConflict(): void {
+    if (this.conflictRefreshing || this.conflict() !== null) return
+    this.conflictRefreshing = true
     this.http
       .get<LoadResponse>('/api/diagrams/load', { params: { path: this.path } })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (fresh) => {
-          this.etag = fresh.etag
-          this.pendingXml = fresh.xml
-          this.postToEditor({
-            action: 'status',
-            message: 'Another change landed. Save again to keep your edits, or reload to discard them.'
-          })
+          this.conflictRefreshing = false
+          this.conflict.set({ theirEtag: fresh.etag, theirXml: fresh.xml })
         },
         error: () => {
+          this.conflictRefreshing = false
           this.postToEditor({
             action: 'status',
             message: 'File was modified by someone else and the refresh failed — reload to continue.'
           })
         }
       })
+  }
+
+  protected keepMine(): void {
+    const c = this.conflict()
+    if (!c) return
+    const xml = this.latestXmlWhileConflicted ?? this.pendingXml
+    this.etag = c.theirEtag
+    this.conflict.set(null)
+    this.latestXmlWhileConflicted = null
+    this.doSave(xml)
+  }
+
+  protected discardMine(): void {
+    const c = this.conflict()
+    if (!c) return
+    this.etag = c.theirEtag
+    this.pendingXml = c.theirXml
+    this.conflict.set(null)
+    this.latestXmlWhileConflicted = null
+    this.postToEditor({ action: 'load', xml: c.theirXml })
+  }
+
+  protected cancelConflict(): void {
+    if (!this.conflict()) return
+    this.conflict.set(null)
+    this.latestXmlWhileConflicted = null
+    // Leave etag stale on purpose. The next save attempt will 409 again and the
+    // dialog will reopen with whatever the canvas looks like at that point.
   }
 }

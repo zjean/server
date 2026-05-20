@@ -146,5 +146,9 @@
   "Code block": "Codeblok",
   "Link": "Link",
   "Show formatted view": "Opgemaakte weergave",
-  "Show markdown source": "Brontekst (Markdown)"
+  "Show markdown source": "Brontekst (Markdown)",
+  "Conflict — someone else saved this diagram": "Conflict — iemand anders heeft dit diagram opgeslagen",
+  "Your unsaved edits are still on the canvas. Pick one:": "Je onopgeslagen wijzigingen staan nog op het canvas. Kies één:",
+  "Keep mine": "Mijn versie behouden",
+  "Discard mine": "Mijn versie verwerpen"
 }
