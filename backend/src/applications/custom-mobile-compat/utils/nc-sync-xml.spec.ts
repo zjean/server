@@ -74,7 +74,24 @@ describe('parseSyncCollectionBody', () => {
       <d:sync-collection xmlns:d="DAV:">
         <d:sync-token>https://other-server/sync/abc</d:sync-token>
       </d:sync-collection>`
-    // unrecognized URN → falls through Number() → NaN → 0
+    expect(parseSyncCollectionBody(body).sinceId).toBe(0)
+  })
+
+  it('refuses bare numeric tokens (no URN prefix → foreign sequence space)', () => {
+    // A buggy or hostile client could echo back "42" and land in the middle
+    // of our sequence; the URN-prefix check is the isolation boundary.
+    const body = `
+      <d:sync-collection xmlns:d="DAV:">
+        <d:sync-token>42</d:sync-token>
+      </d:sync-collection>`
+    expect(parseSyncCollectionBody(body).sinceId).toBe(0)
+  })
+
+  it('refuses URN-prefixed tokens with a numeric tail under a different host', () => {
+    const body = `
+      <d:sync-collection xmlns:d="DAV:">
+        <d:sync-token>http://other-server/ns/sync/v1/42</d:sync-token>
+      </d:sync-collection>`
     expect(parseSyncCollectionBody(body).sinceId).toBe(0)
   })
 

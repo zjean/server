@@ -84,11 +84,18 @@ export function parseSyncCollectionBody(raw: string | Buffer | null | undefined)
 // Strip the URN prefix and return the integer sequence. Returns 0 on
 // anything we can't recognize, which causes a full re-sync — safer than
 // 412'ing the client for a token format we don't understand.
+//
+// The URN check is the isolation boundary: tokens without our prefix are
+// foreign (issued by a different deployment, hand-crafted by a buggy
+// client, etc.) and we refuse to interpret their numeric tail as our
+// sequence space. A bare `"42"` could otherwise land in the middle of
+// our log and skip events.
 function parseSyncToken(value: string): number {
   if (!value) return 0
   const trimmed = value.trim()
   if (trimmed.length === 0) return 0
-  const stripped = trimmed.startsWith(SYNC_TOKEN_URN_PREFIX) ? trimmed.slice(SYNC_TOKEN_URN_PREFIX.length) : trimmed
+  if (!trimmed.startsWith(SYNC_TOKEN_URN_PREFIX)) return 0
+  const stripped = trimmed.slice(SYNC_TOKEN_URN_PREFIX.length)
   const n = Number(stripped)
   if (!Number.isFinite(n) || n < 0) return 0
   return Math.floor(n)
