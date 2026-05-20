@@ -18,6 +18,8 @@
 // "1" (and treats "true" as false), so buildLockProps below stays on "1"/"0".
 
 import type { FileLockProps, FileProps } from '../../files/interfaces/file-props.interface'
+import { SHARE_TYPE } from '../../shares/constants/shares'
+import type { Share } from '../../shares/schemas/share.interface'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { buildOcId, ncFileId } from './nc-oc-id'
@@ -88,13 +90,14 @@ export function buildNcPropResponse(
   //   4. empty string (nothing else known)
   const ownerDisplay = ownerDisplayName || (!explicitOwner?.login && requesterFallback?.displayName) || owner.login || ''
 
-  // hasComments / lock land on the WebDAVFile instance only when the
-  // browse layer was called with { withHasComments, withLocks } enabled
-  // (see WebDAVSpaces.listFiles). Cast through FileProps; absent fields
-  // fall through to the safe defaults.
-  const enriched = f as WebDAVFile & Partial<Pick<FileProps, 'hasComments' | 'lock'>>
+  // hasComments / lock / shares land on the WebDAVFile instance only when
+  // the browse layer was called with { withHasComments, withLocks,
+  // withSpacesAndShares } enabled (see WebDAVSpaces.listFiles). Cast
+  // through FileProps; absent fields fall through to the safe defaults.
+  const enriched = f as WebDAVFile & Partial<Pick<FileProps, 'hasComments' | 'lock' | 'shares'>>
   const hasComments = enriched.hasComments === true
   const lock = enriched.lock
+  const shareTypes = buildShareTypes(enriched.shares)
 
   const resourcetype = f.isDir ? { 'd:collection': '' } : ''
   const contentLength = f.isDir ? undefined : String(f.size)
@@ -126,13 +129,12 @@ export function buildNcPropResponse(
     'oc:owner-id': String(owner.login ?? ''),
     'oc:owner-display-name': ownerDisplay,
     // <oc:share-types> contains zero or more <oc:share-type>N</oc:share-type>
-    // entries (0=user, 1=group, 3=link, 4=email). NC iOS uses the
-    // presence of any child to render the share badge on list cells.
-    // Sync-in's WebDAV browse doesn't surface share-type info onto
-    // WebDAVFile, so we emit an empty parent — same shape real NC
-    // emits for unshared files. Populating real entries is a follow-up
-    // wired through `withShares` on spacesBrowser.browse.
-    'oc:share-types': '',
+    // entries (NC codes: 0=user, 1=group, 3=link, 4=email). NC iOS uses
+    // the presence of any child to render the share badge on list cells.
+    // Sync-in only distinguishes COMMON (user-share) from LINK shares,
+    // so we map COMMON → 0 (user) and LINK → 3 (link). Empty parent when
+    // the file isn't shared, matching what real NC emits.
+    'oc:share-types': shareTypes,
     'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
     // oc:comments-unread (oc namespace, not nc:has-comments) is what NC iOS
     // and Android actually parse for the comment badge — see
@@ -206,6 +208,21 @@ function originalLocationFor(f: WebDAVFile, space: SpaceEnv): string {
   if (typeof fromOrigin === 'string' && fromOrigin.length > 0) return fromOrigin
   const alias = space.alias ?? ''
   return alias ? `${alias}/${f.name}` : f.name
+}
+
+// Map Sync-in's binary share-type to NC's integer codes and dedupe.
+// Returns an empty string when there are no shares so the XMLBuilder
+// emits `<oc:share-types></oc:share-types>` — matches what real NC
+// emits for unshared files and is the shape NC iOS expects to see.
+// When shares exist, returns an object that fast-xml-parser expands
+// to one `<oc:share-type>N</oc:share-type>` child per code.
+function buildShareTypes(shares: Pick<Share, 'id' | 'alias' | 'name' | 'type'>[] | undefined): string | { 'oc:share-type': string[] } {
+  if (!shares || shares.length === 0) return ''
+  const codes = new Set<string>()
+  for (const s of shares) {
+    codes.add(s.type === SHARE_TYPE.LINK ? '3' : '0')
+  }
+  return { 'oc:share-type': [...codes] }
 }
 
 // Render the lock-related nc: props NC iOS reads to draw the lock badge
