@@ -143,6 +143,8 @@
                 <div class="file-row__size">
                   @if (!f.isDir) {
                     {{ f.size | toBytes: 1 : true }}
+                  } @else {
+                    ●
                   }
                 </div>
                 <div class="file-row__modified">

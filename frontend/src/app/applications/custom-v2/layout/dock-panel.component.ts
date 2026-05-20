@@ -1,11 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core'
+import { HttpClient, HttpErrorResponse } from '@angular/common/http'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal, untracked } from '@angular/core'
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
+import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { CommentsPanelComponent } from '../components/comments-panel.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { DockRailService } from './dock-rail.service'
 import { LayoutV2Service } from './layout-v2.service'
+
+type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | { kind: 'error' }
 
 // Hosts the body of the right dock panel. Switches by LayoutV2Service.dockActive()
 // (info / comment) and reads the single-selected file from
@@ -30,12 +37,21 @@ import { LayoutV2Service } from './layout-v2.service'
               <span l10nTranslate>Type</span>
               <span class="dp__kv-val">{{ f.mime }}</span>
             </div>
-            @if (!f.isDir) {
-              <div class="dp__kv-row">
-                <span l10nTranslate>Size</span>
+            <div class="dp__kv-row">
+              <span l10nTranslate>Size</span>
+              @if (!f.isDir) {
                 <span class="dp__kv-val dp__kv-mono">{{ f.size | toBytes: 2 : true }}</span>
-              </div>
-            }
+              } @else {
+                @let resolved = folderSizeBytes();
+                @if (resolved !== null) {
+                  <span class="dp__kv-val dp__kv-mono">{{ resolved | toBytes: 2 : true }}</span>
+                } @else if (isFolderSizeLoading()) {
+                  <span class="dp__kv-val dp__kv-faint" l10nTranslate>Loading…</span>
+                } @else {
+                  <span class="dp__kv-val dp__kv-mono dp__kv-faint">●</span>
+                }
+              }
+            </div>
             <div class="dp__kv-row">
               <span l10nTranslate>Location</span>
               <span class="dp__kv-val">{{ f.path }}</span>
@@ -145,6 +161,9 @@ import { LayoutV2Service } from './layout-v2.service'
         font-family: var(--si-mono);
         font-size: 12.5px;
       }
+      .dp__kv-faint {
+        color: var(--si-fg-faint);
+      }
       .dp__empty {
         flex: 1 1 auto;
         display: flex;
@@ -176,6 +195,14 @@ export class DockPanelComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly layoutV2 = inject(LayoutV2Service)
   private readonly dockRail = inject(DockRailService)
+  private readonly http = inject(HttpClient)
+  private readonly destroyRef = inject(DestroyRef)
+
+  // Per-folder recursive size cache. Keyed by file id so reselecting the same
+  // folder reuses the resolved value instead of re-walking the subtree.
+  // Mirrors classic's getSizeLazy + shareReplay pattern in
+  // files-selection.component.ts:99-108.
+  private readonly folderSizes = signal<Map<number, FolderSizeState>>(new Map())
 
   protected readonly active = computed(() => this.layoutV2.dockActive())
   protected readonly selected = computed(() => this.dockRail.currentSelected())
@@ -183,4 +210,51 @@ export class DockPanelComponent {
     const id = this.active()
     return this.dockRail.tabs().find((t) => t.id === id)?.label ?? ''
   })
+
+  private readonly folderSizeState = computed<FolderSizeState | undefined>(() => {
+    const f = this.selected()
+    if (!f || !f.isDir) return undefined
+    return this.folderSizes().get(f.id)
+  })
+
+  protected readonly folderSizeBytes = computed<number | null>(() => {
+    const st = this.folderSizeState()
+    return st?.kind === 'loaded' ? st.size : null
+  })
+
+  protected readonly isFolderSizeLoading = computed<boolean>(() => this.folderSizeState()?.kind === 'loading')
+
+  constructor() {
+    // Lazy-fetch the recursive folder size when the user opens Info on a
+    // folder. Backend GET /api/files/operation/getSize/{path} does a recursive
+    // fs walk per call (no cache; see issue #205 deferral), so we only trigger
+    // it on explicit user inspection — never as part of a listing.
+    effect(() => {
+      if (this.active() !== 'info') return
+      const f = this.selected()
+      if (!f || !f.isDir) return
+      const cached = this.folderSizes().get(f.id)
+      if (cached) return
+      untracked(() => this.fetchFolderSize(f.id, f.path))
+    })
+  }
+
+  private fetchFolderSize(id: number, path: string): void {
+    this.setSizeState(id, { kind: 'loading' })
+    this.http
+      .get<{ size: number }>(`${API_FILES_OPERATION}/${FILE_OPERATION.GET_SIZE}/${encodeUrl(path)}`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (r) => this.setSizeState(id, { kind: 'loaded', size: r.size }),
+        error: (_e: HttpErrorResponse) => this.setSizeState(id, { kind: 'error' })
+      })
+  }
+
+  private setSizeState(id: number, state: FolderSizeState): void {
+    this.folderSizes.update((m) => {
+      const next = new Map(m)
+      next.set(id, state)
+      return next
+    })
+  }
 }
