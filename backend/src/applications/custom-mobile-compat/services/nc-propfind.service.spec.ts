@@ -158,13 +158,123 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:owner-display-name>Alice Liddell</oc:owner-display-name>')
   })
 
-  it('emits oc:share-types as an empty parent element', async () => {
+  it('emits oc:share-types as an empty parent for an unshared file', async () => {
     // Real NC always emits the element; absent → NC iOS skips share-badge
     // logic entirely. Empty parent matches "no shares on this file".
     const r = req()
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
     expect(state.body).toContain('<oc:share-types></oc:share-types>')
+  })
+
+  it('emits <oc:share-type>0</oc:share-type> for a user-shared file (Sync-in COMMON → NC user)', async () => {
+    // NC iOS lights up the share badge when any <oc:share-type> child is
+    // present under <oc:share-types>. NC code 0 = user-share, which matches
+    // Sync-in's COMMON share-type.
+    const folder = new WebDAVFile(
+      { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/alice/',
+      true
+    )
+    const shared = new WebDAVFile(
+      {
+        id: 100,
+        name: 'shared.jpg',
+        isDir: false,
+        size: 1,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        mime: 'image/jpeg',
+        shares: [{ id: 5, alias: 'abc', name: 'shared.jpg', type: 0 }]
+      } as never,
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([folder, shared]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/shared.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<oc:share-types><oc:share-type>0</oc:share-type></oc:share-types>')
+  })
+
+  it('emits <oc:share-type>3</oc:share-type> for a link-shared file (Sync-in LINK → NC link)', async () => {
+    const folder = new WebDAVFile(
+      { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/alice/',
+      true
+    )
+    const shared = new WebDAVFile(
+      {
+        id: 100,
+        name: 'linked.jpg',
+        isDir: false,
+        size: 1,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        mime: 'image/jpeg',
+        shares: [{ id: 5, alias: 'abc', name: 'linked.jpg', type: 1 }]
+      } as never,
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([folder, shared]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/linked.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<oc:share-types><oc:share-type>3</oc:share-type></oc:share-types>')
+  })
+
+  it('dedupes share-type codes when a file has multiple shares of the same kind', async () => {
+    const folder = new WebDAVFile(
+      { id: 42, name: 'Photos', isDir: true, size: 0, ctime: Date.now(), mtime: Date.now(), mime: undefined },
+      '/remote.php/dav/files/alice/',
+      true
+    )
+    const shared = new WebDAVFile(
+      {
+        id: 100,
+        name: 'busy.jpg',
+        isDir: false,
+        size: 1,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        mime: 'image/jpeg',
+        shares: [
+          { id: 5, alias: 'abc', name: 'busy.jpg', type: 0 },
+          { id: 6, alias: 'def', name: 'busy.jpg', type: 0 },
+          { id: 7, alias: 'ghi', name: 'busy.jpg', type: 1 }
+        ]
+      } as never,
+      '/remote.php/dav/files/alice/'
+    )
+    webdavSpaces.propfind.mockReturnValue(makeGen([folder, shared]))
+    const space = {
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    }
+    const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/busy.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    // Two distinct codes only — one 0 (user) and one 3 (link). No duplicate 0 entries.
+    expect(childBlock).toMatch(/<oc:share-types><oc:share-type>0<\/oc:share-type><oc:share-type>3<\/oc:share-type><\/oc:share-types>/)
   })
 
   it('emits oc:comments-unread as "0" when the file has no unread comments (default)', async () => {
