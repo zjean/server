@@ -72,7 +72,7 @@ export class CustomDiagramsService {
     await writeFile(tmpPath, dto.xml, 'utf-8')
     const recheckXml = await readFile(space.realPath, 'utf-8')
     if (contentEtag(recheckXml) !== expectedEtag) {
-      await unlink(tmpPath).catch(() => {})
+      await unlink(tmpPath).catch(() => undefined)
       throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     }
     await rename(tmpPath, space.realPath)

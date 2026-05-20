@@ -94,9 +94,9 @@ describe('CustomDiagramsService', () => {
     it('throws 403 when space is read-only', async () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRo)
       ;(existsSync as jest.Mock).mockReturnValue(true)
-      await expect(
-        service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: sha1('<mxfile/>') })
-      ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: sha1('<mxfile/>') })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
     })
 
     it('throws 409 when client etag does not match on-disk content', async () => {
@@ -147,13 +147,16 @@ describe('CustomDiagramsService', () => {
       ;(existsSync as jest.Mock).mockReturnValue(true)
       // First read sees the baseline (etag matches). Second read (after writeFile
       // to tmp) sees a different version — recheck fails → 409, tmpfile cleaned up.
-      jest.mocked(readFile).mockResolvedValueOnce(baseXml as any).mockResolvedValueOnce(concurrentXml as any)
+      jest
+        .mocked(readFile)
+        .mockResolvedValueOnce(baseXml as any)
+        .mockResolvedValueOnce(concurrentXml as any)
       jest.mocked(writeFile).mockResolvedValue(undefined as any)
       jest.mocked(unlink).mockResolvedValue(undefined as any)
 
-      await expect(
-        service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: baseEtag })
-      ).rejects.toMatchObject({ status: HttpStatus.CONFLICT })
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: baseEtag })).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT
+      })
       expect(writeFile).toHaveBeenCalledTimes(1)
       expect(rename).not.toHaveBeenCalled()
       expect(unlink).toHaveBeenCalledTimes(1)
