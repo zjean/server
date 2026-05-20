@@ -144,8 +144,37 @@ export class DiagramViewComponent implements OnInit {
         error: (e) => {
           this.saving = false
           this.queuedXml = null
-          const msg = e?.status === 409 ? 'File was modified by someone else — reload to continue.' : 'Save failed.'
-          this.postToEditor({ action: 'status', message: msg })
+          if (e?.status === 409) {
+            this.recoverFromConflict()
+            return
+          }
+          this.postToEditor({ action: 'status', message: 'Save failed.' })
+        }
+      })
+  }
+
+  // On 409, refresh the in-memory etag + baseline from the server so the next
+  // save can succeed without forcing a page reload (which would discard the
+  // user's in-progress edits). Half-honouring optimistic concurrency — telling
+  // the loser they lost without giving them a path forward — is the bug.
+  private recoverFromConflict(): void {
+    this.http
+      .get<LoadResponse>('/api/diagrams/load', { params: { path: this.path } })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (fresh) => {
+          this.etag = fresh.etag
+          this.pendingXml = fresh.xml
+          this.postToEditor({
+            action: 'status',
+            message: 'Another change landed. Save again to keep your edits, or reload to discard them.'
+          })
+        },
+        error: () => {
+          this.postToEditor({
+            action: 'status',
+            message: 'File was modified by someone else and the refresh failed — reload to continue.'
+          })
         }
       })
   }
