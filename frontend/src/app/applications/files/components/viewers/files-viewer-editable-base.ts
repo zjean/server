@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { Directive, effect, inject, input, model, OnDestroy, signal, untracked } from '@angular/core'
+import { Directive, effect, HostListener, inject, input, model, OnDestroy, signal, untracked } from '@angular/core'
 import type { FileLockProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { L10N_LOCALE, L10nLocale } from 'angular-l10n'
 import { firstValueFrom } from 'rxjs'
@@ -28,6 +28,8 @@ export abstract class FilesViewerEditableBase implements OnDestroy {
   private readonly filesServices = inject(FilesService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly subscription = this.layout.switchTheme.subscribe((layout: string) => (this.currentTheme = layout === themeDark ? 'dark' : 'light'))
+  private isDestroyed = false
+  private unlockRequested = false
 
   protected constructor() {
     effect(() => {
@@ -47,6 +49,18 @@ export abstract class FilesViewerEditableBase implements OnDestroy {
 
   ngOnDestroy() {
     this.subscription.unsubscribe()
+    this.isDestroyed = true
+    // Fallback for programmatic closes that bypass onClose().
+    if (!this.isReadonly() && this.file().lock) {
+      void this.unlockFile()
+    }
+  }
+
+  @HostListener('window:pagehide', ['$event'])
+  protected onPageHide(event: PageTransitionEvent) {
+    if (!event.persisted) {
+      this.unlockFileOnPageUnload()
+    }
   }
 
   protected abstract currentFileContent(): string
@@ -119,10 +133,15 @@ export abstract class FilesViewerEditableBase implements OnDestroy {
     if (!this.isSupported() || !this.isWriteable()) return false
     try {
       const lock: FileLockProps = await firstValueFrom(this.filesServices.lock(this.file()))
+      this.unlockRequested = false
       this.file.update((f) => {
         f.lock = lock
         return f
       })
+      if (this.isDestroyed) {
+        await this.unlockFile()
+        return false
+      }
       return true
     } catch (e) {
       this.lockError(e as HttpErrorResponse)
@@ -131,7 +150,8 @@ export abstract class FilesViewerEditableBase implements OnDestroy {
   }
 
   protected async unlockFile() {
-    if (!this.isSupported() || !this.isWriteable()) return
+    if (this.unlockRequested || !this.isSupported() || !this.isWriteable()) return
+    this.unlockRequested = true
     try {
       await firstValueFrom(this.filesServices.unlock(this.file()))
       this.file.update((f) => {
@@ -141,6 +161,13 @@ export abstract class FilesViewerEditableBase implements OnDestroy {
     } catch (e) {
       this.lockError(e as HttpErrorResponse)
     }
+  }
+
+  private unlockFileOnPageUnload() {
+    // Firefox may cancel this request when closing the tab before it reaches the backend.
+    if (this.unlockRequested || this.isReadonly() || !this.file().lock || !this.isSupported() || !this.isWriteable()) return
+    this.unlockRequested = true
+    this.filesServices.unlock(this.file()).subscribe({ error: () => undefined })
   }
 
   private lockError(e: HttpErrorResponse) {

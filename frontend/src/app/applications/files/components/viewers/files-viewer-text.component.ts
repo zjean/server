@@ -42,6 +42,7 @@ import { FilesViewerSearchComponent } from './components/files-viewer-search.com
       }
 
       .code-editor {
+        font-size: 0.85rem;
         height: calc(100% - 40px);
       }
 
@@ -103,7 +104,7 @@ export class FilesViewerTextComponent extends FilesViewerEditableBase implements
     }
   }
 
-  async ngOnInit() {
+  ngOnInit() {
     const language: LanguageDescription = LanguageDescription.matchFilename(languages, this.file().name)
     this.currentLanguage = language?.name
     this.isSupported.set(true)

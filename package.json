@@ -1,7 +1,7 @@
 {
   "productName": "Sync-in",
   "name": "sync-in-server",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "The secure, open-source platform for file storage, sharing, collaboration, and syncing",
   "keywords": [
     "self-hosted",
@@ -39,10 +39,6 @@
     {
       "type": "github",
       "url": "https://github.com/sponsors/sync-in"
-    },
-    {
-      "type": "patreon",
-      "url": "https://patreon.com/sync_in"
     },
     {
       "type": "liberapay",
