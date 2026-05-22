@@ -4,7 +4,15 @@ import path from 'node:path'
 import constants from 'node:constants'
 import os from 'node:os'
 import { Readable } from 'node:stream'
-import extract from 'extract-zip'
+import { spawn } from 'node:child_process'
+
+function extract(zipPath, destDir) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('unzip', ['-q', '-o', zipPath, '-d', destDir], { stdio: 'inherit' })
+    child.on('error', reject)
+    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`unzip exited with code ${code}`))))
+  })
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -33,7 +41,8 @@ async function updatePdfjs() {
   await fs.writeFile(tmpZip, Readable.fromWeb(response.body))
   console.log('pdfjs - downloaded:', tmpZip)
   await fs.rm(pdfjsAssetsDirectory, { recursive: true, force: true })
-  await extract(tmpZip, { dir: pdfjsAssetsDirectory })
+  await fs.mkdir(pdfjsAssetsDirectory, { recursive: true })
+  await extract(tmpZip, pdfjsAssetsDirectory)
   console.log('pdfjs - unzipped:', pdfjsAssetsDirectory)
   const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
   if (!(await checkPaths([viewerHtml]))) {
