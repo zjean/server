@@ -1,5 +1,5 @@
 FROM node:24-alpine AS build
-RUN apk add --no-cache build-base g++
+RUN apk add --no-cache build-base g++ unzip
 WORKDIR /build
 COPY . .
 RUN npm ci && \
