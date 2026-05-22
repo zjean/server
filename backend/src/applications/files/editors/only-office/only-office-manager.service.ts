@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { JwtIdentityPayload } from '../../../../authentication/interfaces/jwt-payload.interface'
 import { convertHumanTimeToSeconds } from '../../../../common/functions'
+import { type i18nLocaleSupported, LANG_DEFAULT, normalizeLanguage } from '../../../../common/i18n'
 import { encodeUrl } from '../../../../common/shared'
 import { configuration } from '../../../../configuration/config.environment'
 import { Cache } from '../../../../infrastructure/cache/cache.service'
@@ -50,6 +51,27 @@ import { OnlyOfficeCallBack, OnlyOfficeConfig, OnlyOfficeConvertForm } from './o
 import { API_ONLY_OFFICE_CALLBACK, API_ONLY_OFFICE_DOCUMENT } from './only-office.routes'
 import { FileEvent } from '../../events/file-events'
 import { ACTION } from '../../../../common/constants'
+
+// Maps each supported app language to the BCP-47 locale OnlyOffice's
+// editorConfig.region expects (drives decimal separator, thousands separator,
+// date format and currency inside the document — independent of the editor UI).
+const REGION_BY_LANGUAGE: Record<i18nLocaleSupported, string> = {
+  de: 'de-DE',
+  en: 'en-US',
+  es: 'es-ES',
+  fr: 'fr-FR',
+  hi: 'hi-IN',
+  it: 'it-IT',
+  ja: 'ja-JP',
+  ko: 'ko-KR',
+  nl: 'nl-NL',
+  pl: 'pl-PL',
+  pt: 'pt-PT',
+  'pt-BR': 'pt-BR',
+  ru: 'ru-RU',
+  tr: 'tr-TR',
+  zh: 'zh-CN'
+}
 
 @Injectable()
 export class OnlyOfficeManager {
@@ -169,6 +191,8 @@ export class OnlyOfficeManager {
   ): Promise<OnlyOfficeReqDto> {
     const canEdit = mode === FILE_MODE.EDIT
     const documentType = ONLY_OFFICE_EXTENSIONS.get(fileExtension)
+    const lang = normalizeLanguage(user.language ?? '') ?? LANG_DEFAULT
+    const region = REGION_BY_LANGUAGE[lang]
     return {
       hasLock: hasLock,
       documentServerUrl: this.externalOnlyOfficeServer || `${this.contextManager.headerOriginUrl()}${ONLY_OFFICE_INTERNAL_URI}`,
@@ -194,8 +218,8 @@ export class OnlyOfficeManager {
         },
         editorConfig: {
           mode: mode,
-          lang: 'en',
-          region: 'en',
+          lang,
+          region,
           callbackUrl: callBackUrl,
           user: { id: user.id.toString(), name: `${user.fullName} (${user.email})`, image: await getAvatarBase64(user.login) },
           coEditing: {
