@@ -315,16 +315,10 @@ describe('NcPropfindService', () => {
     expect(childBlock).toContain('<oc:comments-unread>1</oc:comments-unread>')
   })
 
-  it('emits nc:lock as "0" when the file is unlocked', async () => {
-    const r = req()
-    const { res, state } = fakeReply()
-    await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:lock>0</nc:lock>')
-    // No descriptive lock children when unlocked.
-    expect(state.body).not.toContain('<nc:lock-owner>')
-  })
-
-  it('emits nc:lock as "1" plus owner info when the file is locked', async () => {
+  // nc:lock-* props are deliberately not emitted: NC clients gate the lock
+  // UI on the `files.locking` capability (which we don't advertise), so the
+  // props were paying serialization cost for a UI no client renders.
+  it('does not emit nc:lock or nc:lock-* props (locking capability disabled)', async () => {
     const lockedFile = new WebDAVFile(
       {
         id: 100,
@@ -349,11 +343,10 @@ describe('NcPropfindService', () => {
     const r = { space } as unknown as FastifyDAVRequest & { space: typeof space }
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(state.body).toContain('<nc:lock>1</nc:lock>')
-    expect(state.body).toContain('<nc:lock-owner-type>0</nc:lock-owner-type>')
-    expect(state.body).toContain('<nc:lock-owner>bob</nc:lock-owner>')
-    expect(state.body).toContain('<nc:lock-owner-displayname>Bob Borg</nc:lock-owner-displayname>')
-    expect(state.body).toContain('<nc:lock-owner-editor>files</nc:lock-owner-editor>')
+    expect(state.body).not.toContain('<nc:lock>')
+    expect(state.body).not.toContain('<nc:lock-owner')
+    expect(state.body).not.toContain('<nc:lock-owner-type')
+    expect(state.body).not.toContain('<nc:lock-owner-editor')
   })
 
   it('children inherit space.permissions, not envPermissions — so trash/D survives the virtual-endpoint-protection strip on the root', async () => {

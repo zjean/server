@@ -14,10 +14,8 @@
 //     the audit-1 finding that prompted this change).
 // Word-form is the cross-client lingua franca. PR #134 had switched the
 // other way for iOS-only reasons; that fix held but broke Android.
-// nc:lock is the deliberate exception: Android requires the exact literal
-// "1" (and treats "true" as false), so buildLockProps below stays on "1"/"0".
 
-import type { FileLockProps, FileProps } from '../../files/interfaces/file-props.interface'
+import type { FileProps } from '../../files/interfaces/file-props.interface'
 import { SHARE_TYPE } from '../../shares/constants/shares'
 import type { Share } from '../../shares/schemas/share.interface'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
@@ -90,13 +88,12 @@ export function buildNcPropResponse(
   //   4. empty string (nothing else known)
   const ownerDisplay = ownerDisplayName || (!explicitOwner?.login && requesterFallback?.displayName) || owner.login || ''
 
-  // hasComments / lock / shares land on the WebDAVFile instance only when
-  // the browse layer was called with { withHasComments, withLocks,
-  // withSpacesAndShares } enabled (see WebDAVSpaces.listFiles). Cast
-  // through FileProps; absent fields fall through to the safe defaults.
-  const enriched = f as WebDAVFile & Partial<Pick<FileProps, 'hasComments' | 'lock' | 'shares'>>
+  // hasComments / shares land on the WebDAVFile instance only when the
+  // browse layer was called with { withHasComments, withSpacesAndShares }
+  // enabled (see WebDAVSpaces.listFiles). Cast through FileProps; absent
+  // fields fall through to the safe defaults.
+  const enriched = f as WebDAVFile & Partial<Pick<FileProps, 'hasComments' | 'shares'>>
   const hasComments = enriched.hasComments === true
-  const lock = enriched.lock
   const shareTypes = buildShareTypes(enriched.shares)
 
   const resourcetype = f.isDir ? { 'd:collection': '' } : ''
@@ -144,8 +141,12 @@ export function buildNcPropResponse(
     // stand-in for "unread > 0" / "unread == 0".
     'oc:comments-unread': hasComments ? '1' : '0',
     'nc:is-encrypted': '0',
-    'nc:mount-type': '',
-    ...buildLockProps(lock)
+    'nc:mount-type': ''
+    // nc:lock-* props deliberately not emitted: NC clients gate the lock UI
+    // on the `files.locking` capability, which we don't advertise. Sending
+    // the props without the capability was paying serialization cost for a
+    // UI no client renders. If we ever turn on `files.locking`, restore the
+    // lock prop emit here.
   }
 
   if (!f.isDir) {
@@ -225,20 +226,3 @@ function buildShareTypes(shares: Pick<Share, 'id' | 'alias' | 'name' | 'type'>[]
   return { 'oc:share-type': [...codes] }
 }
 
-// Render the lock-related nc: props NC iOS reads to draw the lock badge
-// + "locked by …" UI. nc:lock itself is the "is this file locked?"
-// boolean (1/0); the rest are descriptive and only emitted when locked.
-// Sync-in's FileLockProps doesn't carry a token / timestamp / timeout;
-// real NC's iOS client treats those as optional, so omitting them is fine.
-// lock-owner-type is always 0 (= user) — we don't have app/token-level
-// locks today.
-function buildLockProps(lock: FileLockProps | undefined): Record<string, string> {
-  if (!lock) return { 'nc:lock': '0' }
-  return {
-    'nc:lock': '1',
-    'nc:lock-owner-type': '0',
-    'nc:lock-owner': lock.owner.login,
-    'nc:lock-owner-displayname': lock.owner.fullName || lock.owner.login,
-    'nc:lock-owner-editor': lock.app
-  }
-}
