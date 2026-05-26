@@ -108,10 +108,11 @@
               type="button"
               class="detail__tab"
               [class.detail__tab--active]="tab() === t.id"
+              [title]="t.label | translate: locale.language"
               (click)="setTab(t.id)"
             >
-              <app-v2-icon [name]="t.icon" [size]="12" />
-              <span>{{ t.label | translate: locale.language }}</span>
+              <app-v2-icon [name]="t.icon" [size]="14" />
+              <span class="detail__tab-label">{{ t.label | translate: locale.language }}</span>
             </button>
           }
         </div>
