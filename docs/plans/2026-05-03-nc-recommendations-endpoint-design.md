@@ -4,6 +4,8 @@
 **Branch:** `feat/nc-recommendations`
 **Scope:** Single new OCS endpoint that surfaces existing Sync-in recents data in the shape Nextcloud's `RecommendedFilesController` produces, so stock NC iOS shows its "Recommended files" carousel at the top of the Files tab.
 
+> **Status (2026-05-26):** Shipped. `backend/src/applications/custom-mobile-compat/controllers/nc-recommendations.controller.ts` + `utils/nc-recommendation-entry.ts` (XML output, matching upstream `OCA\Recommendations\Service\RecommendedFile::jsonSerialize`).
+
 ## Why
 
 The NC iOS app (≥ 5.x, server major ≥ 30) renders a "Recommended files" carousel at the top of the Files tab, populated by `GET /ocs/v2.php/apps/files/api/v1/recommendations`. Sync-in does not implement that endpoint, so the carousel stays blank. The user-facing effect is a missing affordance NC users expect.

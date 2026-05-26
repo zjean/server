@@ -1,5 +1,7 @@
 # custom-v2 mobile sidebars — design
 
+> **Status (2026-05-26):** Shipped. `layout/layout-v2.service.ts` carries the `isMobile`/`leftNavOpen`/`dockActive` signals, the Escape handler and the resize sync; `layout-v2.component.scss` has the `.layout-v2--mobile` rules; `left-nav.component.ts` wires the drawer open class, dialog-mode aria, and close-on-navigate. A `bottom-tab-bar.component.ts` was added on top of the original scope.
+
 The custom-v2 UI (`frontend/src/app/applications/custom-v2/`) is currently a desktop-only layout with no media queries. Three vertical regions stack to the left of content (a 56px app-rail and a ~240px left-nav) and a 48px dock-rail (plus a 320px dock-panel when active) sits to the right. On a 375px phone the chrome alone outsizes the content area, and there is no way to collapse anything.
 
 This document specifies the changes required to make the v2 layout usable on phone-sized viewports, modelled on how the classic UI behaves on mobile (logo button toggles a collapsible left sidebar).

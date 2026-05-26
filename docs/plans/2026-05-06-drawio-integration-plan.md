@@ -1,5 +1,7 @@
 # draw.io Integration Implementation Plan
 
+> **Status (2026-05-26):** Shipped. `backend/src/applications/custom-diagrams/` carries the module/controller/service/DTOs; `backend/src/applications/custom-features/custom-features.module.ts` is the aggregator; the v2 frontend has `preview/diagram-view.component.*`, `isDiagramExt` in `utils/classify-file.ts`, and the New menu entry. Follow-up commits hardened the save path (content-hash ETag, write-tmpfile/rename, 409 recovery, mxGraph skeleton seed, autosave URL flag).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Integrate draw.io diagram editing into the v2 Angular web UI — create/open/edit `.drawio` and `.dwb` files via the hosted `app.diagrams.net` iframe embed protocol.

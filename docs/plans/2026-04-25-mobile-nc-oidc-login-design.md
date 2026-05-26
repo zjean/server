@@ -3,6 +3,8 @@
 Date: 2026-04-25
 Branch: `feat/mobile-nc-oidc-login`
 
+> **Status (2026-05-26):** Shipped. `backend/src/applications/custom-mobile-compat/controllers/nc-mobile-oidc.controller.ts` carries the OIDC-delegated browser hop for `/index.php/login/v2/flow/...`; the polling endpoints stayed unchanged.
+
 ## Goal
 
 Let users sign in to the Nextcloud iOS / Android mobile clients against this
