@@ -3,6 +3,8 @@
 **Date:** 2026-05-06
 **Branch:** `feat/drawio-integration`
 
+> **Status (2026-05-26):** Shipped. See companion plan doc `2026-05-06-drawio-integration-plan.md`.
+
 ## Goal
 
 Integrate draw.io diagram editing into the custom v2 Angular web UI. Users can create, open, and edit `.drawio` and `.dwb` files directly in the browser using the draw.io embed protocol. The integration is isolated under `custom-*` paths so upstream merges land cleanly.

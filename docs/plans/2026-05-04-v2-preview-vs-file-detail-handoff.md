@@ -1,5 +1,7 @@
 # V2 preview overlay vs file-detail screen — UX handoff
 
+> **Superseded (2026-05-26):** Both root causes are resolved, but the architecture took a different shape than this doc proposed. The preview overlay was removed entirely; the v2 "show me this file" surface consolidated onto the file-detail screen at `/v2/file?path=…`, with `?tab=comment` deep-linking into the Comments tab. The old `/v2/preview` route is now a backward-compat redirect in `preview-page.component.ts`. The history-stack bug (root cause #2) is fixed at `file-detail.component.ts:278` via `replaceUrl: true`. No further work on this plan.
+
 ## Status
 
 Investigation only. No code changes proposed in a PR yet — handoff doc per request.

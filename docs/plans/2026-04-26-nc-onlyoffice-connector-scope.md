@@ -2,6 +2,8 @@
 
 Date: 2026-04-26
 
+> **Status (2026-05-26):** Shipped. See `2026-04-29-nc-onlyoffice-connector.md`.
+
 ## Why
 
 The OnlyOffice Documents mobile app speaks the **Nextcloud OnlyOffice

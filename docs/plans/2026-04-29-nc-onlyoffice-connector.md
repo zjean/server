@@ -1,5 +1,7 @@
 # NC OnlyOffice connector — implementation plan
 
+> **Status (2026-05-26):** Shipped. `backend/src/applications/custom-mobile-compat/controllers/nc-onlyoffice.controller.ts` + `services/nc-onlyoffice-translator.service.ts` carry all four endpoints (`/config`, `/track`, `/empty`, `/save`); `constants/capabilities.ts` advertises `files.onlyoffice` when enabled.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Each phase is a separately mergeable PR.
 
 **Goal:** Expose Nextcloud's OnlyOffice connector protocol (`/index.php/apps/onlyoffice/*`) so the OnlyOffice Documents mobile app can open, edit, and save Sync-in files via its "Nextcloud" connection type.
