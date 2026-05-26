@@ -225,4 +225,3 @@ function buildShareTypes(shares: Pick<Share, 'id' | 'alias' | 'name' | 'type'>[]
   }
   return { 'oc:share-type': [...codes] }
 }
-
