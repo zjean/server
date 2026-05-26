@@ -219,6 +219,11 @@
     transform: translateX(100%);
     transition: transform 220ms ease;
     z-index: 20;
+    // Establish a size container so .detail__tab-label can collapse to
+    // icon-only when the inspector is too narrow for the localized label set
+    // (Dutch / German / French overflow at the fixed 320px width).
+    container-type: inline-size;
+    container-name: inspector;
 
     &--open {
       transform: translateX(0);
@@ -270,12 +275,13 @@
 
   &__tab {
     flex: 1;
+    min-width: 0;
     height: 32px;
-    padding: 0 10px;
+    padding: 0 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     background: transparent;
     color: var(--si-fg-subtle, var(--si-fg-muted));
     border: none;
@@ -295,6 +301,21 @@
     &--active:hover {
       background: var(--si-bg3);
       color: var(--si-fg);
+    }
+  }
+
+  &__tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+
+  // Inspector is fixed at 320px today, so this query always matches; the
+  // breakpoint exists so labels reappear if the inspector is ever widened.
+  @container inspector (max-width: 360px) {
+    .detail__tab-label {
+      display: none;
     }
   }
 
