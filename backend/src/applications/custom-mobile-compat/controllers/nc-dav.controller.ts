@@ -132,6 +132,13 @@ export class NcDavController {
     try {
       space = await this.spacesManager.spaceEnv(user, urlSegments)
     } catch (e) {
+      // spaceEnv maps a FileError (file-not-found, permission-denied, etc.)
+      // to an HttpException carrying the right httpCode (404, 403, …) —
+      // preserve it so iOS treats missing paths as normal 404s rather than
+      // the generic "broken account" 4xx that any other code triggers. Only
+      // the raw Error("Space path is not valid …") case (malformed URL
+      // shape) becomes a true 400.
+      if (e instanceof HttpException) throw e
       throw new HttpException(`Space path is not valid: ${(e as Error).message}`, HttpStatus.BAD_REQUEST)
     }
     if (!space) throw new HttpException('Space not found', HttpStatus.NOT_FOUND)

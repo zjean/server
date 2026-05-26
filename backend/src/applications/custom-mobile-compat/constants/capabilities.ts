@@ -92,7 +92,10 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
       dav: {
         chunking: '1.0',
         trashbin: '1.0',
-        bulkupload: '1.0',
+        // No `bulkupload: '1.0'` — we don't serve POST /remote.php/dav/bulk.
+        // Advertising it had Android probe the endpoint, eat a 404, then fall
+        // back to per-file PUT — pointless round-trip + bogus 404 in the
+        // access log on every multi-file upload.
         // RFC 6578 sync-collection support — turns NC iOS / Android refresh
         // from PROPFIND-polling into REPORT-incremental, ~1s latency from
         // a server-side or other-device change. Implementation lives in
