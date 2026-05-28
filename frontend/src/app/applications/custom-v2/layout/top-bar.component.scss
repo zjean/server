@@ -75,6 +75,7 @@
     white-space: nowrap;
     cursor: default;
     color: var(--si-fg-faint);
+    text-decoration: none;
     min-width: 0;
 
     &--link {
@@ -85,6 +86,7 @@
 
       &:hover {
         color: var(--si-fg);
+        text-decoration: underline;
       }
     }
 

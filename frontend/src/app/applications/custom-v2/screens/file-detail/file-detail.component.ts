@@ -290,6 +290,30 @@ export class FileDetailComponent implements OnInit {
     return []
   }
 
+  // Intermediate folders between the root and the file itself, each linking
+  // back to the folder browser at that depth. Personal and space routes both
+  // have wildcard children that accept arbitrary subpaths; trash/shares don't
+  // expose a folder-browse view, so their intermediates stay non-navigable.
+  private folderTrail(path: string): BreadcrumbSegment[] {
+    const parts = path.split('/').filter(Boolean)
+    const alias = parts[1] ?? ''
+    const segs = parts.slice(2, -1)
+    if (segs.length === 0) return []
+    if (alias === SPACE_ALIAS.PERSONAL) {
+      return segs.map((seg, i) => ({
+        label: seg,
+        route: ['/', V2_PATH, V2_ROUTES.PERSONAL, ...segs.slice(0, i + 1)]
+      }))
+    }
+    if (alias && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES) {
+      return segs.map((seg, i) => ({
+        label: seg,
+        route: ['/', V2_PATH, V2_ROUTES.SPACES, alias, ...segs.slice(0, i + 1)]
+      }))
+    }
+    return segs.map((seg) => ({ label: seg }))
+  }
+
   private loadFile(path: string): void {
     this.loading.set(true)
     this.errorMessage.set(null)
@@ -323,7 +347,7 @@ export class FileDetailComponent implements OnInit {
           this.file.set(match)
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
-          this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), { label: match.name }])
+          this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), ...this.folderTrail(path), { label: match.name }])
         },
         error: (e: HttpErrorResponse) => {
           this.errorMessage.set(e.status === 403 ? 'You do not have access to this file.' : 'Failed to load file.')
