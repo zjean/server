@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpException, HttpStatus, Logger, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -41,6 +41,14 @@ interface OpenResponseData {
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)
 export class NcDirectEditingController {
+  // Audit U2: instrumentation so a device session reveals whether iOS's
+  // "Edit with OnlyOffice" affordance hits this controller's /open
+  // (directEditing path) or the OnlyOffice connector at
+  // /index.php/apps/onlyoffice/config. Every handler logs entry; correlate
+  // by timestamp + URL during testing. Remove this once U2 is resolved
+  // (PR description will track that).
+  private readonly logger = new Logger(NcDirectEditingController.name)
+
   constructor(
     private readonly directEditing: NcDirectEditingService,
     private readonly response: NcResponseService,
@@ -53,6 +61,10 @@ export class NcDirectEditingController {
     @Res({ passthrough: true }) res: FastifyReply
   ): Promise<OcsEnvelope<InfoResponseData>> {
     this.response.requireJson(req)
+    this.logger.log({
+      tag: 'directEditing.info',
+      msg: `user ${req.user.id} (${req.user.login}) ua=${req.headers['user-agent'] ?? '-'}`
+    })
     return this.response.json(res, {
       editors: this.directEditing.listEditors(),
       creators: this.directEditing.listCreators()
@@ -76,6 +88,10 @@ export class NcDirectEditingController {
     this.response.requireJson(req)
     const _path = queryPath ?? bodyPath
     const editorId = queryEditorId ?? bodyEditorId
+    this.logger.log({
+      tag: 'directEditing.open',
+      msg: `user ${req.user.id} (${req.user.login}) editorId=${editorId ?? '-'} path=${_path ?? '-'} fileId=${fileIdRaw ?? '-'} ua=${req.headers['user-agent'] ?? '-'}`
+    })
 
     // fileId is preferred but optional: NextcloudKit's textOpenFile only
     // appends it when the caller passes one, and NCViewer never does — iOS

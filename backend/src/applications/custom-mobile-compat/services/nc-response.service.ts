@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { configuration } from '../../../configuration/config.environment'
 import { acceptsJson, ocsEnvelope, type OcsEnvelope, type OcsOptions } from '../utils/ocs-envelope'
@@ -6,12 +6,23 @@ import { acceptsJson, ocsEnvelope, type OcsEnvelope, type OcsOptions } from '../
 // Response helpers shared by the OCS controllers.
 @Injectable()
 export class NcResponseService {
+  // Audit U3 instrumentation. requireJson() is the single chokepoint where an
+  // `Accept: application/xml` request earns a 406 from any OCS handler — we
+  // log the URL + Accept header so a device session can reveal which (if any)
+  // endpoints stock NextcloudKit hits with XML-only. Remove once U3 is
+  // resolved.
+  private readonly logger = new Logger(NcResponseService.name)
+
   // Rejects the request if the caller asked for XML-only. Call this at the
   // top of each OCS handler. We could also return XML, but supporting a second
   // serialization buys nothing given every modern NC mobile client speaks JSON.
   requireJson(req: FastifyRequest): void {
     const accept = req.headers['accept']
     if (!acceptsJson(accept)) {
+      this.logger.warn({
+        tag: 'requireJson',
+        msg: `406 — Accept=${Array.isArray(accept) ? accept.join(', ') : (accept ?? '-')} url=${req.url ?? '-'} ua=${req.headers['user-agent'] ?? '-'}`
+      })
       throw new HttpException('OCS XML responses are not supported; send Accept: application/json', HttpStatus.NOT_ACCEPTABLE)
     }
   }

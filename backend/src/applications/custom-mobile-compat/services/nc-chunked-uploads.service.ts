@@ -75,6 +75,30 @@ export class NcChunkedUploadsService {
     })
   }
 
+  // Same ordering as listChunks() plus size + mtime per entry. Used by the
+  // upload-dir PROPFIND handler so Android's ChunkedFileUploadRemoteOperation
+  // can compute `nextByte` (sum of getcontentlength values) and resume an
+  // interrupted big-file upload instead of restarting from byte 0.
+  //
+  // stat() failures (race with a concurrent DELETE chunk, say) skip the
+  // entry rather than failing the whole response — partial enumeration is
+  // strictly better than 500-ing a PROPFIND mid-upload.
+  async listChunksWithStats(userId: number, uploadId: string): Promise<{ name: string; size: number; mtimeMs: number }[]> {
+    if (!this.exists(userId, uploadId)) return []
+    const names = await this.listChunks(userId, uploadId)
+    const out: { name: string; size: number; mtimeMs: number }[] = []
+    for (const name of names) {
+      try {
+        const st = await fs.stat(this.chunkPath(userId, uploadId, name))
+        if (!st.isFile()) continue
+        out.push({ name, size: st.size, mtimeMs: st.mtimeMs })
+      } catch {
+        // chunk vanished between readdir and stat — skip
+      }
+    }
+    return out
+  }
+
   async concatenate(userId: number, uploadId: string, dest: string): Promise<number> {
     const parts = await this.listChunks(userId, uploadId)
     if (parts.length === 0) throw new Error('no chunks to assemble')
