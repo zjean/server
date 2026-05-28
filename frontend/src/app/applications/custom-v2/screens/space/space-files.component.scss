@@ -253,6 +253,10 @@
     text-transform: uppercase;
     letter-spacing: 1.1px;
     font-family: var(--si-display);
+
+    > :nth-child(4) {
+      text-align: center;
+    }
   }
 }
 
