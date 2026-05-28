@@ -4,6 +4,7 @@ import { AuthProviderOIDCModule } from '../../authentication/providers/oidc/auth
 import { CommentsModule } from '../comments/comments.module'
 import { configuration } from '../../configuration/config.environment'
 import { FilesModule } from '../files/files.module'
+import { SharesModule } from '../shares/shares.module'
 import { SpacesModule } from '../spaces/spaces.module'
 import { UsersModule } from '../users/users.module'
 import { WebDAVModule } from '../webdav/webdav.module'
@@ -34,6 +35,7 @@ import { NcOnlyOfficeTranslatorService } from './services/nc-onlyoffice-translat
 import { NcPathResolverService } from './services/nc-path-resolver.service'
 import { NcPropfindService } from './services/nc-propfind.service'
 import { NcResponseService } from './services/nc-response.service'
+import { NcShareMountResolverService } from './services/nc-share-mount-resolver.service'
 import { NcSyncLogScheduler } from './services/nc-sync-log-scheduler.service'
 import { NcSyncLogService } from './services/nc-sync-log.service'
 import { NcSyncReportService } from './services/nc-sync-report.service'
@@ -58,7 +60,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
   // CommentsModule re-exports CommentsQueries for the NC iOS Comments tab —
   // mapped onto the existing comments storage by NcCommentsController, no
   // schema or domain changes.
-  imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, CommentsModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
+  imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, SharesModule, CommentsModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
   controllers: [
     NcDiscoveryController,
     NcLoginV2Controller,
@@ -79,6 +81,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcAppPasswordService,
     NcLoginFlowService,
     NcPathResolverService,
+    NcShareMountResolverService,
     NcResponseService,
     NcChunkedUploadsService,
     NcDirectEditingService,

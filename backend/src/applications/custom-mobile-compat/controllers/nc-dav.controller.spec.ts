@@ -8,6 +8,7 @@ import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { NcDavController } from './nc-dav.controller'
 
@@ -47,6 +48,7 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
       controllers: [NcDavController],
       providers: [
         { provide: NcPathResolverService, useValue: {} },
+        { provide: NcShareMountResolverService, useValue: { findByAlias: jest.fn().mockResolvedValue(null) } },
         { provide: SpacesManager, useValue: {} },
         { provide: SpacesQueries, useValue: spacesQueries },
         { provide: WebDAVMethods, useValue: {} },
@@ -146,6 +148,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
       providers: [
         // Real resolver — its decoding logic is part of what we're testing.
         NcPathResolverService,
+        { provide: NcShareMountResolverService, useValue: { findByAlias: jest.fn().mockResolvedValue(null) } },
         { provide: SpacesManager, useValue: spacesManager },
         { provide: SpacesQueries, useValue: {} },
         { provide: WebDAVMethods, useValue: {} },
@@ -195,5 +198,116 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
       { mode: 'files', subpath: 'My%20folder' }
     )
     expect(req.dav.url).toBe('/remote.php/dav/files/john/My folder')
+  })
+})
+
+// Share-mount routing — when the NC home subpath's first segment matches one
+// of the user's incoming shares, the request is routed into the SHARES
+// repository so SpacesManager.spaceEnv (which already special-cases
+// 'shares/<alias>') resolves the share's donor space + permission overlay.
+//
+// The check happens *before* the path resolver. If the alias collides with a
+// real folder in the user's personal/home space, the share wins (matches real
+// NC behaviour for recipient-side mountpoints).
+describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let spacesManager: { spaceEnv: jest.Mock }
+  let shareMounts: { findByAlias: jest.Mock }
+
+  beforeAll(async () => {
+    spacesManager = { spaceEnv: jest.fn() }
+    shareMounts = { findByAlias: jest.fn() }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        NcPathResolverService,
+        { provide: NcShareMountResolverService, useValue: shareMounts },
+        { provide: SpacesManager, useValue: spacesManager },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: {} },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+  })
+
+  const attach = (req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) =>
+    (
+      controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files' | 'trashbin'; subpath: string }) => Promise<void> }
+    ).attachSpace(req, input)
+
+  it('routes a known share-alias subpath into the shares repository', async () => {
+    shareMounts.findByAlias.mockImplementation(async (_u, alias: string) => (alias === 'alice-photos' ? { alias: 'alice-photos' } : null))
+    const req = {
+      url: '/remote.php/dav/files/bob/alice-photos/vacation.jpg',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: 'alice-photos/vacation.jpg' })
+    expect(shareMounts.findByAlias).toHaveBeenCalledWith(req.user, 'alice-photos')
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['shares', 'alice-photos', 'vacation.jpg'])
+  })
+
+  it('falls through to the personal home when the first segment is not a share alias', async () => {
+    shareMounts.findByAlias.mockResolvedValue(null)
+    const req = {
+      url: '/remote.php/dav/files/bob/Documents/notes.txt',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: 'Documents/notes.txt' })
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal', 'Documents', 'notes.txt'])
+  })
+
+  it('does not consult share-mounts for trashbin requests', async () => {
+    const req = {
+      url: '/remote.php/dav/trashbin/bob/something',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'trashbin', subpath: 'something' })
+    expect(shareMounts.findByAlias).not.toHaveBeenCalled()
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['trash', 'personal', 'something'])
+  })
+
+  it('does not consult share-mounts at the empty home root', async () => {
+    const req = {
+      url: '/remote.php/dav/files/bob',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: '' })
+    expect(shareMounts.findByAlias).not.toHaveBeenCalled()
+  })
+
+  it('decodes the share-alias segment before lookup', async () => {
+    shareMounts.findByAlias.mockImplementation(async (_u, alias: string) => (alias === 'pôt commun' ? { alias: 'pôt commun' } : null))
+    const req = {
+      url: '/remote.php/dav/files/bob/p%C3%B4t%20commun/x.txt',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: 'p%C3%B4t%20commun/x.txt' })
+    expect(shareMounts.findByAlias).toHaveBeenCalledWith(req.user, 'pôt commun')
   })
 })

@@ -12,9 +12,11 @@ import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVMethods } from '../../webdav/services/webdav-methods.service'
+import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
-import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
@@ -35,6 +37,7 @@ export class NcDavController {
 
   constructor(
     private readonly resolver: NcPathResolverService,
+    private readonly shareMounts: NcShareMountResolverService,
     private readonly spacesManager: SpacesManager,
     private readonly spacesQueries: SpacesQueries,
     private readonly webdav: WebDAVMethods,
@@ -123,10 +126,7 @@ export class NcDavController {
   // HttpException which is close enough for the NC clients we support).
   private async attachSpace(req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) {
     const user = req.user as UserModel
-    const resolved = this.resolver.resolve(user, input)
-    const urlSegments: string[] = [resolved.repository, resolved.spaceAlias]
-    if (resolved.rootAlias) urlSegments.push(resolved.rootAlias)
-    if (resolved.relativePath) urlSegments.push(...resolved.relativePath.split('/').filter(Boolean))
+    const urlSegments = await this.buildUrlSegments(user, input)
 
     let space: SpaceEnv
     try {
@@ -188,7 +188,7 @@ export class NcDavController {
       } catch {
         // path-relative — use as-is
       }
-      const destInternal = this.mapNcPathToInternal(user, destPath)
+      const destInternal = await this.mapNcPathToInternal(user, destPath)
       if (destInternal === null) {
         throw new HttpException(`Destination must point at /remote.php/dav/{files,trashbin}/{user}/...: ${destRaw}`, HttpStatus.BAD_REQUEST)
       }
@@ -203,9 +203,9 @@ export class NcDavController {
 
   // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
   // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
-  // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/trash).
+  // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/shares/trash).
   // Returns null if the URL path isn't rooted at /remote.php/dav/{files,trashbin}/{user}/.
-  private mapNcPathToInternal(user: UserModel, urlPath: string): string | null {
+  private async mapNcPathToInternal(user: UserModel, urlPath: string): Promise<string | null> {
     const stripped = urlPath.split('?')[0]
     const filesPrefix = `/remote.php/dav/files/${user.login}/`
     const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
@@ -222,22 +222,38 @@ export class NcDavController {
     } else {
       return null
     }
-    const resolved = this.resolver.resolve(user, { mode, subpath })
-    // Build the WebDAV-style head that WEBDAV_PATH_TO_SPACE_SEGMENTS understands:
-    //   personal       → 'personal'
-    //   files/<alias>  → 'spaces/<alias>'
-    //   trash/<alias>  → 'trash/<alias>'
-    const head: string[] = []
-    if (resolved.repository === 'trash') {
-      head.push('trash', resolved.spaceAlias)
-    } else if (resolved.spaceAlias === 'personal') {
-      head.push('personal')
-    } else {
-      head.push('spaces', resolved.spaceAlias)
+    const segs = await this.buildUrlSegments(user, { mode, subpath })
+    return segmentsToWebdavNsPath(segs)
+  }
+
+  // Resolve an NC subpath into Sync-in spaceEnv segments — i.e.
+  // [repository, spaceAlias, ...path], consumable by SpacesManager.spaceEnv.
+  //
+  // Tries the share-mount alias first: if subpath's first segment matches one
+  // of the user's incoming shares, route into the shares repository. Otherwise
+  // fall through to NcPathResolverService for the user's home setting
+  // (personal or mobileHome-configured space).
+  //
+  // Edge case: a share alias that collides with a real folder in the user's
+  // personal/home space — the share wins (matches real NC behaviour for
+  // recipient-side mountpoints). The personal-space folder remains reachable
+  // via Sync-in's native /webdav route, just not via NC mobile.
+  private async buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }): Promise<string[]> {
+    const normalized = normalizeNcSubpath(input.subpath)
+
+    if (input.mode === 'files' && normalized) {
+      const parts = normalized.split('/').filter(Boolean)
+      const mount = parts.length ? await this.shareMounts.findByAlias(user, parts[0]) : null
+      if (mount) {
+        return [SPACE_REPOSITORY.SHARES, mount.alias, ...parts.slice(1)]
+      }
     }
-    if (resolved.rootAlias) head.push(resolved.rootAlias)
-    const tail = resolved.relativePath ? resolved.relativePath.split('/').filter(Boolean) : []
-    return [...head, ...tail].join('/')
+
+    const resolved = this.resolver.resolve(user, input)
+    const segs: string[] = [resolved.repository, resolved.spaceAlias]
+    if (resolved.rootAlias) segs.push(resolved.rootAlias)
+    if (resolved.relativePath) segs.push(...resolved.relativePath.split('/').filter(Boolean))
+    return segs
   }
 
   private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply, mode: 'files' | 'trashbin'): Promise<string | StreamableFile | FastifyReply> {
@@ -360,6 +376,23 @@ function extractStar(req: FastifyDAVRequest, prefix: string): string {
   // Fallback to the '*' param Nest assembled.
   const starParam = (req as FastifyRequest & { params: Record<string, string> }).params?.['*']
   return starParam ?? ''
+}
+
+// Convert spaceEnv-style segments ([repository, spaceAlias, ...]) to a
+// WEBDAV_NS-style path (the format Sync-in's WebDAVMethods.copyMove consumes
+// from req.dav.copyMove.destination). Mirrors the WEBDAV_SPACES route table:
+//   files/personal   → 'personal'
+//   files/<alias>    → 'spaces/<alias>'
+//   shares/<alias>   → 'shares/<alias>'
+//   trash/<alias>    → 'trash/<alias>'
+function segmentsToWebdavNsPath(segs: string[]): string {
+  const [repo, alias, ...rest] = segs
+  const head: string[] = []
+  if (repo === 'trash') head.push('trash', alias)
+  else if (repo === 'shares') head.push('shares', alias)
+  else if (alias === 'personal') head.push('personal')
+  else head.push('spaces', alias)
+  return [...head, ...rest].join('/')
 }
 
 // Normalize the WebDAV Depth header (case-insensitive; accepts 0 / 1 / infinity).

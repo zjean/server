@@ -101,7 +101,13 @@ export class NcPathResolverService {
 }
 
 // Normalize an NC path segment: strip leading/trailing slashes, collapse
-// doubles, reject path-escape attempts.
+// doubles, reject path-escape attempts. Exported so callers that need to peek
+// at the first segment (e.g. share-mount alias lookup in nc-dav.controller)
+// don't have to re-implement decode/normalize separately.
+export function normalizeNcSubpath(sub: string): string {
+  return normalize(sub)
+}
+
 function normalize(sub: string): string {
   const decoded = safeDecode(sub)
   // Strip leading and trailing slashes.
