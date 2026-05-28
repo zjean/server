@@ -3,6 +3,8 @@
 Date: 2026-04-26
 Status of v1 (4 phases): **shipped** as of PR #95.
 
+> **Status (2026-05-28):** Follow-up #1 and the write-side of #2 are shipped; #2's read-side as originally framed turned out to be a non-issue once the NC URL → single-space resolver was confirmed. Only #3 (low-priority subtree filter) remains genuinely open. See "Status check, 2026-05-28" section below for the audit.
+
 | PR | What |
 |---|---|
 | #88 | Original WebDAV REPORT sync-collection design doc |
@@ -88,3 +90,34 @@ If smoke surfaces issues:
 - **Some changes never surface** → check `nc_sync_events` table directly. Empty rows for a known mutation means the FileEvent subscription missed it; an inserted row that REPORT doesn't return means a query/dedup/href bug.
 
 If smoke is clean, the sync-collection feature is done for the foreseeable. The capability flag stays on, and we revisit only if NC iOS protocol changes (sync-collection has been stable since 2010).
+
+## Status check, 2026-05-28
+
+Re-audited the three follow-ups against the current source tree.
+
+### #1 — DB id resolution: **shipped** ✓
+
+- **PR #97** (`0422bbc9`, 2026-04-26): added a lookup-only resolver via `FilesQueries.getSpaceFileId` after `getProps`. Replaced the inode placeholder with the real DB id when a row already existed.
+- **PR #126** (`3f28a22e`): superseded the lookup-only fix with `NcFileRowEnsurer.ensure(...)` — the same get-or-create helper PROPFIND uses. Now REPORT also *creates* a DB row on miss, so ids stay stable across REPORT and PROPFIND even for pure-web-UI / OnlyOffice uploads that previously lacked a row.
+
+Current code: [`nc-sync-report.service.ts:204-211`](../../backend/src/applications/custom-mobile-compat/services/nc-sync-report.service.ts). Validation steps from the original plan are obsolete — PROPFIND and REPORT now share the ensurer, so the inode-vs-DB drift is structurally impossible.
+
+### #2 — Cross-space sync: **not applicable as originally framed; write-side shipped** ✓
+
+The plan assumed shared spaces are visible at `/remote.php/dav/files/<user>/` (the NC convention upstream — shared mounts merged into the user's home view). **Sync-in doesn't model the NC URL root that way.** [`NcPathResolverService.resolve`](../../backend/src/applications/custom-mobile-compat/services/nc-path-resolver.service.ts:47-80) maps the NC URL root to **one** space — personal by default, optionally redirected to `space:<alias>` via `user.settings.mobileHome`. There is no merged home view; the URL points at a single space at a time.
+
+Consequence: the REPORT handler's `spaceAlias: space.alias` filter ([`nc-sync-report.service.ts:92`](../../backend/src/applications/custom-mobile-compat/services/nc-sync-report.service.ts:92)) is *correct*, not a bug. Events for spaces the URL doesn't resolve to *should* be excluded. Dropping the filter as the plan sketched would surface events from spaces the iOS/Android client can't see at this URL.
+
+What the plan really cared about — "co-members of a shared space see each other's edits" — is handled on the *write* side by **PR #223** (`7e5f0185`, 2026-05-20). [`NcSyncLogService.handleFileEvent`](../../backend/src/applications/custom-mobile-compat/services/nc-sync-log.service.ts:147) now resolves the visible-userId set (actor + direct members + users in member groups) and appends one row per viewer. A user with `mobileHome = space:marketing` whose REPORT URL resolves to the marketing space will see edits made by every co-member, because the event log carries a row tagged with their `ownerId` + `marketing` alias.
+
+No reverse-resolver / cross-space href stitching needed. **Closed.**
+
+### #3 — Subtree filtering: **still open, low impact** 🔴
+
+[`nc-sync-report.service.ts:respond`](../../backend/src/applications/custom-mobile-compat/services/nc-sync-report.service.ts:57-133) does not filter events by `space.relativeUrl`. A REPORT to `/files/<user>/Documents/` will return every event in the resolved space, not just events under `Documents/`. NC iOS still only REPORTs at user-root in practice, so the bug is dormant.
+
+Fix sketch unchanged: in `respond`, after resolving `space`, derive the in-space prefix from `space.relativeUrl` (which is `'.'` for the space root). For any non-`.` value, filter `events` to those whose `path` matches the prefix or its descendants. Two-line change, plus a unit test.
+
+### Net remaining work for this plan
+
+Just #3. Trivial — can be folded into the next NC-compat PR or kept dormant. The plan's "Phase 4 manual smoke" checklist is still worth running once after the next deploy as a sanity check on the full v1 + v2.1 stack.

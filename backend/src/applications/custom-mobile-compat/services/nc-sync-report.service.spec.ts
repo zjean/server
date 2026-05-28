@@ -324,4 +324,58 @@ describe(NcSyncReportService.name, () => {
       expect(Number(match![1])).toBeGreaterThan(0)
     })
   })
+
+  // RFC 6578 §3.1: sync-collection is anchored at the URL the REPORT was
+  // sent to. If iOS/Android REPORT a subfolder (e.g. /files/<user>/Documents/),
+  // only events under that subtree should surface. Sync-in's SpaceEnv carries
+  // the in-space relative URL on `space.relativeUrl` — '.' at the space root,
+  // otherwise the slash-joined subpath.
+  describe('subtree filtering by space.relativeUrl', () => {
+    it("relativeUrl='.' (space root) returns every event in the space", async () => {
+      log.since.mockResolvedValueOnce([
+        { id: 10, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'top.txt', type: 'delete', ts: 1 },
+        { id: 11, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'Documents/note.md', type: 'delete', ts: 2 }
+      ])
+      const { reply, captured } = fakeReply()
+      // space.relativeUrl defaults to '.' on the fake personal space.
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(captured.body).toContain('<d:href>/remote.php/dav/files/janwiebe/top.txt</d:href>')
+      expect(captured.body).toContain('<d:href>/remote.php/dav/files/janwiebe/Documents/note.md</d:href>')
+    })
+
+    it("relativeUrl='Documents' returns only events for that folder + its descendants", async () => {
+      space.relativeUrl = 'Documents'
+      log.since.mockResolvedValueOnce([
+        // outside subtree → must be filtered out
+        { id: 20, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'top.txt', type: 'delete', ts: 1 },
+        // exact match (the folder itself) → included (the REPORT URL anchor)
+        { id: 21, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'Documents', type: 'update', ts: 2 },
+        // descendant → included
+        { id: 22, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'Documents/inside.md', type: 'delete', ts: 3 },
+        // sibling whose name starts with the same prefix → must NOT be included
+        { id: 23, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'DocumentsBackup/old.txt', type: 'delete', ts: 4 }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(captured.body).not.toContain('<d:href>/remote.php/dav/files/janwiebe/top.txt</d:href>')
+      expect(captured.body).toContain('<d:href>/remote.php/dav/files/janwiebe/Documents/inside.md</d:href>')
+      expect(captured.body).not.toContain('<d:href>/remote.php/dav/files/janwiebe/DocumentsBackup/old.txt</d:href>')
+    })
+
+    it('newSyncToken advances past out-of-subtree events so the client does not re-fetch them', async () => {
+      space.relativeUrl = 'Documents'
+      log.since.mockResolvedValueOnce([
+        { id: 30, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'Documents/a.txt', type: 'delete', ts: 1 },
+        // last raw event is outside the subtree — token must still advance to 31
+        { id: 31, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'OtherFolder/b.txt', type: 'delete', ts: 2 }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}31</d:sync-token>`)
+      expect(captured.body).not.toContain('<d:href>/remote.php/dav/files/janwiebe/OtherFolder/b.txt</d:href>')
+    })
+  })
 })
