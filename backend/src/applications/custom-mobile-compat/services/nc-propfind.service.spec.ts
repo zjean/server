@@ -666,5 +666,46 @@ describe('NcPropfindService', () => {
       expect(shareMounts.listMounts).toHaveBeenCalled()
       expect(state.body).not.toMatch(/<nc:mount-type>shared<\/nc:mount-type>/)
     })
+
+    it('degrades to "home minus mounts" when listMounts throws — iOS gets a partial home, not a 500', async () => {
+      // A DB outage or transient share-side failure shouldn't fail the whole
+      // PROPFIND. The user's personal-space entries still render; mounts
+      // simply don't appear until the next refresh recovers them.
+      shareMounts.listMounts.mockRejectedValue(new Error('database connection lost'))
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(state.status).toBe(207)
+      // Personal-space root + child still in the body.
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/alice/</d:href>')
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')
+      // No mount-type=shared entries leaked in.
+      expect(state.body).not.toMatch(/<nc:mount-type>shared<\/nc:mount-type>/)
+    })
+
+    it("encodes the recipient's login in the hrefBase so non-ASCII logins round-trip identically to real NC", async () => {
+      shareMounts.listMounts.mockResolvedValue([
+        {
+          shareId: 1,
+          alias: 'docs',
+          name: 'docs',
+          fileId: 1,
+          isDir: true,
+          size: 0,
+          ctime: 1_716_891_500_000,
+          mtime: 1_716_891_600_000,
+          mime: '',
+          permissions: 'a:d:m',
+          owner: { id: 1, login: 'alice', fullName: 'Alice Liddell' }
+        }
+      ])
+      const r = homeRootReq()
+      ;(r as unknown as { user: { id: number; login: string; fullName: string } }).user = { id: 7, login: "o'malley", fullName: "O'Malley" }
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      // login "o'malley" must be rawurlencode-encoded (apostrophe → %27),
+      // not left literal (encodeURIComponent's default).
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/o%27malley/docs/</d:href>')
+    })
   })
 })

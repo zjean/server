@@ -9,8 +9,11 @@ function mount(over: Partial<NcShareMount> = {}): NcShareMount {
     fileId: 9001,
     isDir: true,
     size: 0,
-    ctime: 1000,
-    mtime: 2_000_000,
+    // Realistic ms-since-epoch timestamps — a future refactor that mixes ms
+    // and seconds would produce visibly-broken RFC1123 dates (1970-XX or
+    // 56000-XX) and break the tests rather than the iOS client.
+    ctime: 1_716_891_500_000,
+    mtime: 1_716_891_600_000,
     mime: '',
     permissions: 'a:d:m',
     owner: { id: 1, login: 'alice', fullName: 'Alice Liddell' },
@@ -60,6 +63,12 @@ describe('buildShareMountPropResponse', () => {
     expect(r['d:href']).toBe('/remote.php/dav/files/bob/p%C3%B4t%20commun/')
   })
 
+  it("encodes the rawurlencode-extra characters (!'()*) so aliases like \"Alice's Photos\" round-trip identically to real NC's sabre/dav", () => {
+    const r = buildShareMountPropResponse(mount({ alias: "Alice's (best) photos!" }), HREF_BASE) as { 'd:href': string }
+    // JS encodeURIComponent leaves !'()* alone; sabre's rawurlencode escapes them.
+    expect(r['d:href']).toBe('/remote.php/dav/files/bob/Alice%27s%20%28best%29%20photos%21/')
+  })
+
   it('emits an empty <oc:share-types> — share-types is "shared by me", not "received by me"', () => {
     const r = buildShareMountPropResponse(mount(), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, string> } }
     expect(r['d:propstat']['d:prop']['oc:share-types']).toBe('')
@@ -90,8 +99,17 @@ describe('buildShareMountPropResponse', () => {
     expect(r['d:propstat']['d:status']).toBe('HTTP/1.1 200 OK')
   })
 
-  it('emits a folder-zero oc:size (real NC also does not recurse for mount roots)', () => {
+  it('passes mount.size through to oc:size so a computed folder size renders in the iOS info pane', () => {
     const r = buildShareMountPropResponse(mount({ size: 999_999 }), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, string> } }
-    expect(r['d:propstat']['d:prop']['oc:size']).toBe('0')
+    expect(r['d:propstat']['d:prop']['oc:size']).toBe('999999')
+  })
+
+  it('clamps a missing or non-positive oc:size to 0', () => {
+    const a = buildShareMountPropResponse(mount({ size: undefined as unknown as number }), HREF_BASE) as {
+      'd:propstat': { 'd:prop': Record<string, string> }
+    }
+    const b = buildShareMountPropResponse(mount({ size: -42 }), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, string> } }
+    expect(a['d:propstat']['d:prop']['oc:size']).toBe('0')
+    expect(b['d:propstat']['d:prop']['oc:size']).toBe('0')
   })
 })

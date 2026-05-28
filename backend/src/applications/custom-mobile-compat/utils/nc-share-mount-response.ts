@@ -19,11 +19,23 @@ import { toNcPermissions } from './nc-permissions'
 
 const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 
+// Encode a single NC <d:href> path segment to match sabre/dav's rawurlencode
+// output. Exported because both the mount-root entry's href and the home-root
+// hrefBase (`{user.login}`) need the same encoding — real NC and iOS expect
+// byte-for-byte equality on segment encoding for cache key reconciliation.
+//
+// `encodeURIComponent` differs from PHP `rawurlencode` on five ASCII chars:
+// `!`, `'`, `(`, `)`, `*` — sabre encodes them, JS doesn't. A share alias
+// like "Alice's Photos" round-trips wrong without this patch.
+export function rawurlencodeSegment(seg: string): string {
+  return encodeURIComponent(seg).replace(/!/g, '%21').replace(/'/g, '%27').replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/\*/g, '%2A')
+}
+
 // hrefBase is the NC URL of the home root, e.g.
 // '/remote.php/dav/files/bob/'. Used as the parent path for the mount-root
 // <d:href>; must already include the trailing slash.
 export function buildShareMountPropResponse(mount: NcShareMount, hrefBase: string): Record<string, unknown> {
-  const href = `${hrefBase}${encodeNcSegment(mount.alias)}/`
+  const href = `${hrefBase}${rawurlencodeSegment(mount.alias)}/`
   // Share-mount entries always live in 'files' mode (trashbin doesn't surface
   // mounts) and are always the root of their own mount — so isRoot semantics
   // for permission emission don't apply here; we use the share's intersected
@@ -47,9 +59,11 @@ export function buildShareMountPropResponse(mount: NcShareMount, hrefBase: strin
     'oc:fileid': String(positiveId),
     'oc:permissions': letters,
     'ocs:share-permissions': shareMask,
-    // Folder sizes aren't cheap to compute here; emit 0 to match real NC's
-    // behaviour for incoming mount roots (real NC also doesn't recurse).
-    'oc:size': '0',
+    // Pass the stored size through. For files this is the byte size; for
+    // folder mount-roots Sync-in stores 0 until a folder-size recompute fires
+    // (see folder-size action) — emit it as-is so a recomputed folder shows
+    // its size in iOS's long-press info pane rather than a misleading 0 B.
+    'oc:size': String(Math.max(0, Math.trunc(mount.size ?? 0))),
     'oc:owner-id': ownerLogin,
     'oc:owner-display-name': ownerDisplay,
     // Empty <oc:share-types> — share-types lists who *I* shared the file
@@ -78,17 +92,11 @@ export function buildShareMountPropResponse(mount: NcShareMount, hrefBase: strin
   }
 }
 
-// Encode a single path segment for inclusion in an NC <d:href>. NC clients
-// re-use the href verbatim as a follow-up URL, so the encoding must round-
-// trip through their URL parser. We encode the standard URI-reserved set
-// EXCEPT '/' (kept as-is — though share aliases shouldn't contain it).
-function encodeNcSegment(seg: string): string {
-  return encodeURIComponent(seg)
-}
-
 // Translate Sync-in's stored mime ("image-jpeg") back to standard form
 // ("image/jpeg"). Sync-in replaces the first '/' with '-' on storage; NC
-// clients want the standard form on the wire.
+// clients want the standard form on the wire. Single-replace is load-bearing
+// — only the first hyphen is the encoded slash; subsequent hyphens (e.g.
+// "vnd-ms-excel") are real subtype separators that must survive.
 function normalizeMime(mime: string): string {
   return mime.replace('-', '/')
 }
