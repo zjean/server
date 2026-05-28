@@ -1,10 +1,16 @@
-# NC mobile-compat — U1/U2/U3 on-device verification guide
+# NC mobile-compat — U1/U2/U3 + #6 on-device verification guide
 
 **Date:** 2026-05-28
-**Predecessor:** [`2026-05-02-nc-mobile-compat-audit-followups.md`](2026-05-02-nc-mobile-compat-audit-followups.md) → "Adversarial unknowns" section.
-**Server-side change tracked here:** branch `fix/nc-compat-u1-u2-u3-verification`.
+**Predecessor:** [`2026-05-02-nc-mobile-compat-audit-followups.md`](2026-05-02-nc-mobile-compat-audit-followups.md) → "Adversarial unknowns" + #6 sections.
+**Server-side changes tracked here:** branch `fix/nc-compat-u1-u2-u3-verification`.
 
-This doc is the testing companion to the server-side changes that ship the U1 mitigation + U2/U3 instrumentation. The branch can merge before any device session — none of the changes regress existing iOS/Android behavior; they only relax one over-strict check (U1) and add log lines (U2, U3).
+This doc is the testing companion to the server-side changes that ship:
+
+- **U1 mitigation** — `OC-Total-Length` optional on chunked-upload assembly.
+- **U2/U3 instrumentation** — log lines on the OnlyOffice / directEditing candidate paths and on every 406 from `requireJson`.
+- **#6 fix** — PROPFIND on the upload staging dir now enumerates already-uploaded chunks so Android can resume from `nextByte` instead of restarting at byte 0.
+
+The branch can merge before any device session — none of the changes regress existing iOS/Android behavior; they only relax one over-strict check (U1), add log lines (U2, U3), and enrich one previously-minimal PROPFIND response (#6).
 
 After merge, run the test steps below against a real iPhone + Android device pointed at a Sync-in instance running the merged build. Record findings inline in the **Results** sections so the next maintainer (or Claude session) can pick up from a known state.
 
@@ -27,6 +33,8 @@ All three instrumentations emit through Nest's `Logger`. Grep your tail for thes
 | `directEditing.open` | `NcDirectEditingController` | iOS hit `/ocs/.../directEditing/open` to start an edit session (U2) |
 | `onlyoffice.config` | `NcOnlyOfficeController` | Client hit `/index.php/apps/onlyoffice/config` (the connector, U2) |
 | `requireJson` | `NcResponseService` | Any OCS endpoint rejected with 406 because the client sent `Accept: application/xml` (U3) |
+
+(#6 doesn't get its own tag — the PROPFIND handler doesn't log on every probe. Inspect the response via the device-side proxy or by curl'ing the staging dir directly while a partial upload is in progress.)
 
 Quick grep: `tail -f backend.log | grep -E 'assembleAndMove|directEditing\.|onlyoffice\.config|requireJson'`.
 
@@ -58,6 +66,38 @@ _Fill in below after the test session._
 - iOS large-file upload: [pass / fail], assembleAndMove log line: [present / absent]
 - Android large-file upload: [pass / fail], assembleAndMove log line: [present / absent]
 - Decision: [tighten header back to required / keep as optional]
+
+## #6 — Android chunked-upload resume
+
+**Bug (confirmed pre-merge):** the upload-dir PROPFIND only emitted the collection itself — no per-chunk responses. Android's `ChunkedFileUploadRemoteOperation` reads `<d:getcontentlength>` across the listing to compute `nextByte`; without per-chunk entries it always sees zero bytes already uploaded → restarts from byte 0 on every retry.
+
+**Fix shipped:** `rootHandler`'s PROPFIND case now reads the Depth header. At depth=1/infinity (Android's actual probe), it calls `staging.listChunksWithStats(userId, uploadId)` and emits a `<d:response>` per chunk with `<d:getcontentlength>` + `<d:getlastmodified>` + empty `<d:resourcetype/>` (file, not collection). Depth=0 keeps the old collection-only shape.
+
+### Test steps
+
+1. On Android, pick a file ≥ 50 MB (the bigger the better — gives more time to interrupt).
+2. Start uploading to Sync-in via the Files app on Wi-Fi.
+3. When the upload progress bar shows ~30–60% complete, **kill the network** by toggling airplane mode on the device.
+4. Wait a few seconds, then turn airplane mode off so the device reconnects. The Files app should auto-retry the upload.
+5. Watch the Files app's upload speed indicator and the server's network monitor (or `iftop` on the server). On retry, Android should **resume from the existing offset**, not restart from 0. The total bytes pushed over the wire after the second attempt should be roughly the size of the *remaining* unsent bytes — not the whole file again.
+6. After completion, verify the assembled file matches the source byte-for-byte (compute a checksum on both sides).
+
+### What to look for
+
+- **PROPFIND traffic in mitmproxy or server access logs:** after retry, Android sends `PROPFIND /remote.php/dav/uploads/<user>/<uploadId>` with `Depth: 1`. The response should be a 207 multistatus containing one `<d:response>` per chunk already on disk, each with a positive `<d:getcontentlength>`.
+- **Resume offset behavior:** if the upload still restarts at byte 0, capture the PROPFIND response body — if it shows the chunks correctly but Android ignores them, the parsing on Android's side is the next thing to investigate (unlikely; this is well-trodden code in `WebdavEntry.kt`).
+
+If you can't easily interrupt mid-upload (devices are fast), you can simulate by manually `kill -9`-ing the connection on the server side, or by using a flaky-network simulator like [`pumba`](https://github.com/alexei-led/pumba) for Docker.
+
+### Results
+
+_Fill in below after the test session._
+
+- Upload size: [____ MB]
+- First-attempt progress before interrupt: [__%]
+- Second-attempt total bytes pushed: [____ MB] (expected: roughly `size × (1 - first-attempt%)`)
+- Final file checksum matches source: [yes / no]
+- PROPFIND response includes per-chunk `<d:getcontentlength>` entries: [yes / no / not captured]
 
 ## U2 — iOS OnlyOffice trigger path
 

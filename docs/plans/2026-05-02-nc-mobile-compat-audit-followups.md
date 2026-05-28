@@ -48,6 +48,8 @@ The empty-result wire shape ships in the audit-1 branch so this is purely a quer
 
 ### 6. Android chunked-upload resume
 
+> **Status (2026-05-28):** Fix shipped on branch `fix/nc-compat-u1-u2-u3-verification`. PROPFIND on the upload staging dir now enumerates already-uploaded chunks (one `<d:response>` per chunk with `<d:getcontentlength>` + `<d:getlastmodified>` + empty `<d:resourcetype/>`) when `Depth: 1`/infinity. Depth 0 keeps the original collection-only shape. Manual Android verification tracked in [`2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md`](2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md) §#6.
+
 **Severity:** HIGH (originally audit item #3, kept on the followups list because it's larger than the audit-1 PR scope)
 
 **Bug:** Android's `ChunkedFileUploadRemoteOperation` does `PROPFIND depth 1` against `/remote.php/dav/uploads/{user}/{uploadId}` to enumerate already-uploaded chunks (sums each `<d:getcontentlength>` to compute `nextByte`). Our handler at `backend/src/applications/custom-mobile-compat/controllers/nc-uploads.controller.ts:65-69` calls `minimalPropfindBody()` which only acknowledges the collection — no per-chunk responses. Android decides "no chunks here yet" and re-uploads the entire file from byte 0 on every retry.
