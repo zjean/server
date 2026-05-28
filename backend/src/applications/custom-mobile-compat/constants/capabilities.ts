@@ -128,8 +128,14 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         preferredUploadType: '',
         supportedTypes: [] as string[]
       },
+      // api_enabled=true so NC iOS renders the bottom-bar Shares tab and
+      // calls /ocs/v2.php/apps/files_sharing/api/v1/shares?shared_with_me=true
+      // — served by NcOcsSharesController. Other knobs stay false: this fork
+      // doesn't surface reshare / public-link / federation flows through NC
+      // mobile, and advertising them would make iOS probe endpoints we
+      // intentionally don't implement.
       files_sharing: {
-        api_enabled: false,
+        api_enabled: true,
         resharing: false,
         public: { enabled: false },
         user: { send_mail: false },

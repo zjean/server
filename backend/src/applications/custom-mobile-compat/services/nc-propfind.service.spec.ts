@@ -6,6 +6,7 @@ import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcPropfindService } from './nc-propfind.service'
+import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 
 function fakeReply() {
   const state: { status?: number; type?: string; body?: string } = {}
@@ -34,14 +35,24 @@ describe('NcPropfindService', () => {
   let service: NcPropfindService
   let webdavSpaces: { propfind: jest.Mock }
   let fileRowEnsurer: { ensure: jest.Mock }
+  let shareMounts: { listMounts: jest.Mock }
 
   beforeEach(async () => {
     webdavSpaces = { propfind: jest.fn() }
     // Default: pass the file id through unchanged. Tests that exercise the
     // negative-id → real-id promotion override this on a per-call basis.
     fileRowEnsurer = { ensure: jest.fn(async (f: WebDAVFile) => f.id) }
+    // Default: no incoming shares — most existing assertions are for the
+    // personal-space listing only and shouldn't be perturbed by mount
+    // injection. Tests covering injection override per-call.
+    shareMounts = { listMounts: jest.fn().mockResolvedValue([]) }
     const module = await Test.createTestingModule({
-      providers: [NcPropfindService, { provide: WebDAVSpaces, useValue: webdavSpaces }, { provide: NcFileRowEnsurer, useValue: fileRowEnsurer }]
+      providers: [
+        NcPropfindService,
+        { provide: WebDAVSpaces, useValue: webdavSpaces },
+        { provide: NcFileRowEnsurer, useValue: fileRowEnsurer },
+        { provide: NcShareMountResolverService, useValue: shareMounts }
+      ]
     }).compile()
     service = module.get(NcPropfindService)
   })
@@ -532,5 +543,169 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:id>00000000000000004242syncin</oc:id>')
     // The placeholder must be gone — otherwise NC iOS caches the wrong key.
     expect(state.body).not.toContain('<oc:fileid>987654</oc:fileid>')
+  })
+
+  // Share-mount injection: at the NC home root with Depth: 1, append one
+  // virtual <d:response> per row from NcShareMountResolverService. iOS uses
+  // these to populate the home listing with folders that carry the
+  // "shared with me" badge (driven by 'S' in oc:permissions).
+  describe('share-mount injection at home root', () => {
+    const mount = {
+      shareId: 42,
+      alias: 'alice-photos',
+      name: "Alice's Photos",
+      fileId: 9001,
+      isDir: true,
+      size: 0,
+      ctime: 1000,
+      mtime: 2000,
+      mime: '',
+      permissions: 'a:d:m',
+      owner: { id: 1, login: 'alice', fullName: 'Alice Liddell' }
+    }
+
+    // A minimal home-root request — Depth: 1, in 'files' mode, with the
+    // NC home-root flag set by the controller in attachSpace.
+    function homeRootReq() {
+      const r = req()
+      ;(r as unknown as { user: { id: number; login: string; fullName: string } }).user = { id: 7, login: 'bob', fullName: 'Bob Burns' }
+      ;(r as unknown as { nc: { isHomeRoot: boolean } }).nc = { isHomeRoot: true }
+      ;(r as unknown as { dav: { depth: string } }).dav = { depth: '1' }
+      return r
+    }
+
+    it('injects one <d:response> per share-mount the user has received', async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(shareMounts.listMounts).toHaveBeenCalledWith(r.user)
+      // d:href targets the user's NC home + the share alias.
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/bob/alice-photos/</d:href>')
+      // Underlying file's real DB id propagates to oc:fileid (so a follow-up
+      // PROPFIND on this href finds the same id from the donor space).
+      expect(state.body).toContain('<oc:fileid>9001</oc:fileid>')
+    })
+
+    it("emits 'S' in oc:permissions on the mount root — drives iOS's shared-with-me folder icon", async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      // Pull out the mount-root block to scope the assertion.
+      const mountBlock = state.body!.split('<d:href>/remote.php/dav/files/bob/alice-photos/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+      expect(mountBlock).toMatch(/<oc:permissions>S[A-Z]*<\/oc:permissions>/)
+    })
+
+    it("omits 'S' from the home-root response itself (the parent must NOT carry S, or iOS treats nothing as a mount)", async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      // The home root is the first <d:response> (href ends with /alice/ — the
+      // default fixture user, since we didn't override the WebDAVFile bases).
+      const homeRootBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+      expect(homeRootBlock).not.toMatch(/<oc:permissions>S[A-Z]*<\/oc:permissions>/)
+    })
+
+    it("emits nc:mount-type='shared' on mount-root entries", async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      const mountBlock = state.body!.split('<d:href>/remote.php/dav/files/bob/alice-photos/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+      expect(mountBlock).toContain('<nc:mount-type>shared</nc:mount-type>')
+    })
+
+    it('emits owner-id / owner-display-name from the donor, not the recipient', async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      const mountBlock = state.body!.split('<d:href>/remote.php/dav/files/bob/alice-photos/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+      expect(mountBlock).toContain('<oc:owner-id>alice</oc:owner-id>')
+      expect(mountBlock).toContain('<oc:owner-display-name>Alice Liddell</oc:owner-display-name>')
+    })
+
+    it('does not inject mounts when not at the home root', async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = req()
+      ;(r as unknown as { user: { id: number; login: string } }).user = { id: 7, login: 'bob' }
+      ;(r as unknown as { nc: { isHomeRoot: boolean } }).nc = { isHomeRoot: false }
+      ;(r as unknown as { dav: { depth: string } }).dav = { depth: '1' }
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(shareMounts.listMounts).not.toHaveBeenCalled()
+      expect(state.body).not.toContain('alice-photos')
+    })
+
+    it('does not inject mounts in trashbin mode', async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'trashbin')
+      expect(shareMounts.listMounts).not.toHaveBeenCalled()
+      expect(state.body).not.toContain('alice-photos')
+    })
+
+    it('does not inject mounts at Depth: 0 (only the home root itself is described)', async () => {
+      shareMounts.listMounts.mockResolvedValue([mount])
+      const r = homeRootReq()
+      ;(r as unknown as { dav: { depth: string } }).dav = { depth: '0' }
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(shareMounts.listMounts).not.toHaveBeenCalled()
+      expect(state.body).not.toContain('alice-photos')
+    })
+
+    it('emits nothing extra when the user has no incoming shares', async () => {
+      shareMounts.listMounts.mockResolvedValue([])
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(shareMounts.listMounts).toHaveBeenCalled()
+      expect(state.body).not.toMatch(/<nc:mount-type>shared<\/nc:mount-type>/)
+    })
+
+    it('degrades to "home minus mounts" when listMounts throws — iOS gets a partial home, not a 500', async () => {
+      // A DB outage or transient share-side failure shouldn't fail the whole
+      // PROPFIND. The user's personal-space entries still render; mounts
+      // simply don't appear until the next refresh recovers them.
+      shareMounts.listMounts.mockRejectedValue(new Error('database connection lost'))
+      const r = homeRootReq()
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      expect(state.status).toBe(207)
+      // Personal-space root + child still in the body.
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/alice/</d:href>')
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')
+      // No mount-type=shared entries leaked in.
+      expect(state.body).not.toMatch(/<nc:mount-type>shared<\/nc:mount-type>/)
+    })
+
+    it("encodes the recipient's login in the hrefBase so non-ASCII logins round-trip identically to real NC", async () => {
+      shareMounts.listMounts.mockResolvedValue([
+        {
+          shareId: 1,
+          alias: 'docs',
+          name: 'docs',
+          fileId: 1,
+          isDir: true,
+          size: 0,
+          ctime: 1_716_891_500_000,
+          mtime: 1_716_891_600_000,
+          mime: '',
+          permissions: 'a:d:m',
+          owner: { id: 1, login: 'alice', fullName: 'Alice Liddell' }
+        }
+      ])
+      const r = homeRootReq()
+      ;(r as unknown as { user: { id: number; login: string; fullName: string } }).user = { id: 7, login: "o'malley", fullName: "O'Malley" }
+      const { res, state } = fakeReply()
+      await service.respond(r, res, 'files')
+      // login "o'malley" must be rawurlencode-encoded (apostrophe → %27),
+      // not left literal (encodeURIComponent's default).
+      expect(state.body).toContain('<d:href>/remote.php/dav/files/o%27malley/docs/</d:href>')
+    })
   })
 })

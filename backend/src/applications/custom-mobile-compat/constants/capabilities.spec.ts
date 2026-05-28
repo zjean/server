@@ -50,9 +50,19 @@ describe('ncCapabilities', () => {
     expect((caps.capabilities as Record<string, unknown>).activity).toBeUndefined()
   })
 
-  it('still hides the share UI (files_sharing.api_enabled = false)', () => {
+  it('advertises files_sharing.api_enabled = true so NC iOS renders the Shares tab', () => {
+    // The Shares tab fetches /ocs/v2.php/apps/files_sharing/api/v1/shares —
+    // served by NcOcsSharesController. Other knobs (resharing, public,
+    // group, federation) stay false: we don't surface those flows through
+    // NC mobile, and advertising them would make iOS probe endpoints we
+    // intentionally don't implement.
     const block = (caps.capabilities as Record<string, Record<string, unknown>>).files_sharing
-    expect(block.api_enabled).toBe(false)
+    expect(block.api_enabled).toBe(true)
+    expect(block.resharing).toBe(false)
+    expect((block.public as Record<string, unknown>).enabled).toBe(false)
+    expect((block.group as Record<string, unknown>).enabled).toBe(false)
+    expect((block.federation as Record<string, unknown>).outgoing).toBe(false)
+    expect((block.federation as Record<string, unknown>).incoming).toBe(false)
   })
 
   describe('files.directEditing block', () => {

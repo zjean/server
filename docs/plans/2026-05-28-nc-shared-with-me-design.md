@@ -188,7 +188,7 @@ Share record (for `shared_with_me=true`), one per `shareRootFiles(user)` row:
 | `displayname_file_owner` | `row.root.ownerFullName` ||
 | `permissions` | bitmask from `toNcPermissions(row.root.permissions, row.isDir).shareMask` ||
 | `can_edit`, `can_delete` | derived from same bitmask ||
-| `stime` | `row.root.createdAt` epoch **seconds** | Sync-in stores ms — divide by 1000 |
+| `stime` | `mount.ctime` epoch **seconds** (file ctime, not share createdAt) | `shareRootFiles` doesn't expose the share's `createdAt` without an upstream-query mod; file ctime sorts close enough for the iOS Shares tab's only use of stime. Trade-off: if we re-issue a share against the same file, the row's apparent stime will shift to the file's last ctime update rather than the new share time. |
 | `path` | `/{row.root.alias}` | Recipient-relative path from home root |
 | `file_target` | `/{row.root.alias}` | Same — no per-recipient rename in v1 |
 | `item_type` | `"folder"` if `row.isDir` else `"file"` ||
