@@ -16,7 +16,7 @@ import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
-import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
+import { NcShareMountResolverService, type NcShareMount } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
@@ -126,7 +126,12 @@ export class NcDavController {
   // HttpException which is close enough for the NC clients we support).
   private async attachSpace(req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) {
     const user = req.user as UserModel
-    const urlSegments = await this.buildUrlSegments(user, input)
+    // Memoize the share-mount lookup for this request scope. buildUrlSegments
+    // and (on COPY/MOVE) mapNcPathToInternal both call into share resolution;
+    // without the memo, a single MOVE between two share-mounts hits the DB
+    // twice. shareRootFiles is a 3-way UNION query — not free.
+    const getMounts = makeMountsMemo(this.shareMounts, user)
+    const urlSegments = await this.buildUrlSegments(user, input, getMounts)
 
     let space: SpaceEnv
     try {
@@ -188,7 +193,7 @@ export class NcDavController {
       } catch {
         // path-relative — use as-is
       }
-      const destInternal = await this.mapNcPathToInternal(user, destPath)
+      const destInternal = await this.mapNcPathToInternal(user, destPath, getMounts)
       if (destInternal === null) {
         throw new HttpException(`Destination must point at /remote.php/dav/{files,trashbin}/{user}/...: ${destRaw}`, HttpStatus.BAD_REQUEST)
       }
@@ -205,7 +210,13 @@ export class NcDavController {
   // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
   // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/shares/trash).
   // Returns null if the URL path isn't rooted at /remote.php/dav/{files,trashbin}/{user}/.
-  private async mapNcPathToInternal(user: UserModel, urlPath: string): Promise<string | null> {
+  //
+  // Share-aware via buildUrlSegments: a destination whose first subpath
+  // segment matches one of the user's incoming share aliases lands in
+  // shares/<alias>/..., not personal/.... `getMounts` should be the same
+  // memo the caller used for its own buildUrlSegments call so the COPY/MOVE
+  // path doesn't double-fetch the share list.
+  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: MountsMemo): Promise<string | null> {
     const stripped = urlPath.split('?')[0]
     const filesPrefix = `/remote.php/dav/files/${user.login}/`
     const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
@@ -222,7 +233,7 @@ export class NcDavController {
     } else {
       return null
     }
-    const segs = await this.buildUrlSegments(user, { mode, subpath })
+    const segs = await this.buildUrlSegments(user, { mode, subpath }, getMounts)
     return segmentsToWebdavNsPath(segs)
   }
 
@@ -238,14 +249,22 @@ export class NcDavController {
   // personal/home space — the share wins (matches real NC behaviour for
   // recipient-side mountpoints). The personal-space folder remains reachable
   // via Sync-in's native /webdav route, just not via NC mobile.
-  private async buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }): Promise<string[]> {
+  //
+  // `getMounts` is an optional request-scope memo. When provided, the share
+  // listing is fetched at most once per request even when both buildUrlSegments
+  // and mapNcPathToInternal need it (COPY/MOVE flow).
+  private async buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }, getMounts?: MountsMemo): Promise<string[]> {
     const normalized = normalizeNcSubpath(input.subpath)
 
     if (input.mode === 'files' && normalized) {
       const parts = normalized.split('/').filter(Boolean)
-      const mount = parts.length ? await this.shareMounts.findByAlias(user, parts[0]) : null
-      if (mount) {
-        return [SPACE_REPOSITORY.SHARES, mount.alias, ...parts.slice(1)]
+      const firstSeg = parts[0]
+      if (firstSeg) {
+        const mounts = getMounts ? await getMounts() : await this.shareMounts.listMounts(user)
+        const mount = mounts.find((m) => m.alias === firstSeg) ?? null
+        if (mount) {
+          return [SPACE_REPOSITORY.SHARES, mount.alias, ...parts.slice(1)]
+        }
       }
     }
 
@@ -376,6 +395,17 @@ function extractStar(req: FastifyDAVRequest, prefix: string): string {
   // Fallback to the '*' param Nest assembled.
   const starParam = (req as FastifyRequest & { params: Record<string, string> }).params?.['*']
   return starParam ?? ''
+}
+
+// Request-scope memo for the user's incoming share-mounts. First call hits
+// the DB via NcShareMountResolverService.listMounts; subsequent calls return
+// the cached promise. Resolvers themselves stay stateless — caching lives at
+// the request boundary (the controller method that created the memo).
+type MountsMemo = () => Promise<NcShareMount[]>
+
+function makeMountsMemo(resolver: NcShareMountResolverService, user: UserModel): MountsMemo {
+  let p: Promise<NcShareMount[]> | undefined
+  return () => (p ??= resolver.listMounts(user))
 }
 
 // Convert spaceEnv-style segments ([repository, spaceAlias, ...]) to a
