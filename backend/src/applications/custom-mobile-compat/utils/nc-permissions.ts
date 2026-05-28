@@ -35,10 +35,19 @@ export type NcPermissionsMode = 'files' | 'trashbin'
 // to the NC letter+bitmask pair. `mode === 'trashbin'` always returns empty
 // (trashed items are read-only on NC, you can only restore or delete — which
 // the NC client models as "no permissions except its own trashbin actions").
+//
+// `isShareMount` prepends 'S' (shared with me) to the letters. iOS derives its
+// "shared with me" folder icon from `metadata.permissions.contains(S) &&
+// !parent.permissions.contains(S)` (NCListCell.swift:441), so callers must set
+// this flag exactly on the mount-root response and leave it false everywhere
+// else — both on the parent home root and on children inside the mount.
+// The numeric `shareMask` is unaffected; 'S' is a marker letter without a
+// bitmask equivalent.
 export function toNcPermissions(
   syncinPermissions: string | undefined | null,
   isDir: boolean,
-  mode: NcPermissionsMode = 'files'
+  mode: NcPermissionsMode = 'files',
+  isShareMount: boolean = false
 ): NcPermissionsResult {
   if (mode === 'trashbin') {
     return { letters: '', shareMask: '0' }
@@ -49,8 +58,10 @@ export function toNcPermissions(
   const canDelete = ops.has(SPACE_OPERATION.DELETE)
   const canShareOut = ops.has(SPACE_OPERATION.SHARE_OUTSIDE)
 
+  const letters: string[] = []
+  if (isShareMount) letters.push('S')
   // G (get) is always implied — if the client saw the entry it can read it.
-  const letters: string[] = ['G']
+  letters.push('G')
   if (canShareOut) letters.push('R')
   if (canDelete) letters.push('D')
   if (canModify) {
