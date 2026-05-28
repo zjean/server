@@ -44,12 +44,12 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
             <app-v2-icon name="chevRight" [size]="11" class="topbar__crumb-sep" />
           }
           @if (!last && b.route) {
-            <button type="button" class="topbar__crumb topbar__crumb--link" (click)="navigate(b.route)">
+            <a class="topbar__crumb topbar__crumb--link" [routerLink]="b.route">
               @if (b.icon) {
                 <app-v2-icon [name]="b.icon" [size]="13" class="topbar__crumb-icon" />
               }
               <span class="topbar__crumb-label">{{ b.label | translate: locale.language }}</span>
-            </button>
+            </a>
           } @else {
             <span class="topbar__crumb topbar__crumb--last">
               @if (b.icon) {
@@ -145,11 +145,6 @@ export class TopBarComponent {
 
   protected goForward(): void {
     if (typeof history !== 'undefined') history.forward()
-  }
-
-  protected navigate(route: string | string[] | undefined): void {
-    if (!route) return
-    this.router.navigate(Array.isArray(route) ? route : [route]).catch(console.error)
   }
 
   protected onSearchSubmit(ev: Event): void {
