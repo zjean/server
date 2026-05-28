@@ -152,5 +152,6 @@
   "Keep mine": "Keep mine",
   "Discard mine": "Discard mine",
   "Calculate size": "Calculate size",
-  "Size calculation failed": "Size calculation failed"
+  "Size calculation failed": "Size calculation failed",
+  "Folders only": "Folders only"
 }

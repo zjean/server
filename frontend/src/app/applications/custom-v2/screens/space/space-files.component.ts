@@ -225,6 +225,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         label: 'Calculate size',
         icon: 'refresh',
         disabled: !f.isDir,
+        disabledReason: !f.isDir ? 'Folders only' : undefined,
         action: () => this.calculateFolderSize(f)
       },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
@@ -316,6 +317,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.navSubscription?.unsubscribe()
     this.spaceSubscription?.unsubscribe()
+    this.folderSize.clear()
     this.dockRail.clear()
   }
 

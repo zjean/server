@@ -152,5 +152,6 @@
   "Keep mine": "Mijn versie behouden",
   "Discard mine": "Mijn versie verwerpen",
   "Calculate size": "Mapgrootte berekenen",
-  "Size calculation failed": "Berekenen van grootte mislukt"
+  "Size calculation failed": "Berekenen van grootte mislukt",
+  "Folders only": "Alleen mappen"
 }
