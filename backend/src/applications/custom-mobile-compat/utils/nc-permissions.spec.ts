@@ -47,4 +47,38 @@ describe('toNcPermissions', () => {
     expect(toNcPermissions(null, false).letters).toBe('G')
     expect(toNcPermissions(undefined, true).letters).toBe('G')
   })
+
+  describe('isShareMount', () => {
+    it('prepends S to the letters when set', () => {
+      const r = toNcPermissions(SPACE_ALL_OPERATIONS, true, 'files', true)
+      expect(r.letters.startsWith('S')).toBe(true)
+      // Other letters still present.
+      expect(r.letters).toContain('G')
+      expect(r.letters).toContain('C')
+      expect(r.letters).toContain('K')
+    })
+
+    it('does not prepend S when false (default)', () => {
+      const r = toNcPermissions(SPACE_ALL_OPERATIONS, true)
+      expect(r.letters).not.toContain('S')
+    })
+
+    it('leaves the share-permissions bitmask unaffected', () => {
+      const withMount = toNcPermissions(SPACE_ALL_OPERATIONS, false, 'files', true)
+      const withoutMount = toNcPermissions(SPACE_ALL_OPERATIONS, false, 'files', false)
+      expect(withMount.shareMask).toBe(withoutMount.shareMask)
+    })
+
+    it('still returns empty in trashbin mode regardless of the flag', () => {
+      const r = toNcPermissions(SPACE_ALL_OPERATIONS, false, 'trashbin', true)
+      expect(r.letters).toBe('')
+      expect(r.shareMask).toBe('0')
+    })
+
+    it('honors a read-only share (G + S only, no add/modify/delete letters)', () => {
+      const r = toNcPermissions('', true, 'files', true)
+      expect(r.letters).toBe('SG')
+      expect(r.shareMask).toBe('1')
+    })
+  })
 })
