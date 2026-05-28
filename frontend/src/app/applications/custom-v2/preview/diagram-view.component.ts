@@ -20,6 +20,9 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 interface DrawioEvent {
   event: string
   xml?: string
+  format?: string
+  filename?: string
+  data?: string
 }
 
 interface LoadResponse {
@@ -106,16 +109,40 @@ export class DiagramViewComponent implements OnInit {
     }
     switch (data.event) {
       case 'init':
-        this.postToEditor({ action: 'load', xml: this.pendingXml })
+        // exportProtocol:true makes drawio route UI-triggered exports (File >
+        // Export As > PDF/PNG/…) through postMessage. Without it, drawio tries
+        // a popup → form-POST to convert.diagrams.net/node/export, which loads
+        // a blank tab in our iframe-embedded context and never produces a
+        // download. See drawio embed-mode docs (UI-triggered exports section).
+        this.postToEditor({ action: 'load', xml: this.pendingXml, exportProtocol: true })
         break
       case 'save':
       case 'autosave':
         if (data.xml != null) this.saveXml(data.xml)
         break
+      case 'export':
+        this.downloadExport(data)
+        break
       case 'exit':
         this.closeRequested.emit()
         break
     }
+  }
+
+  private downloadExport(data: DrawioEvent): void {
+    if (!data.data) return
+    const a = document.createElement('a')
+    a.href = data.data
+    a.download = data.filename ?? this.deriveExportFilename(data.format)
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+
+  private deriveExportFilename(format: string | undefined): string {
+    const base = this.path.split('/').pop()?.replace(/\.drawio$/i, '') || 'diagram'
+    return `${base}.${format ?? 'bin'}`
   }
 
   private postToEditor(msg: unknown): void {
