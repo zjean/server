@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, HttpException, HttpStatus, Logger, Post, Query, Req, UseGuards } from '@nestjs/common'
 import type { FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { OnlyOfficeManager } from '../../files/editors/only-office/only-office-manager.service'
@@ -31,6 +31,13 @@ const TEMPLATE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx'])
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)
 export class NcOnlyOfficeController {
+  // Audit U2: instrumentation so a device session reveals whether iOS's
+  // "Edit with OnlyOffice" affordance routes through the connector here or
+  // through /ocs/v2.php/apps/files/api/v1/directEditing/open. Correlate the
+  // /config log line below with NcDirectEditingController.open by timestamp.
+  // Remove once U2 is resolved.
+  private readonly logger = new Logger(NcOnlyOfficeController.name)
+
   constructor(
     private readonly onlyOfficeManager: OnlyOfficeManager,
     private readonly translator: NcOnlyOfficeTranslatorService,
@@ -51,6 +58,10 @@ export class NcOnlyOfficeController {
   // server-to-server callback.
   @Get('index.php/apps/onlyoffice/config')
   async config(@Req() req: FastifyRequest & { user: UserModel }, @Query('fileId') fileId?: string): Promise<NcOnlyOfficeEnvelope> {
+    this.logger.log({
+      tag: 'onlyoffice.config',
+      msg: `user ${req.user.id} (${req.user.login}) fileId=${fileId ?? '-'} ua=${req.headers['user-agent'] ?? '-'}`
+    })
     const id = Number.parseInt(fileId ?? '', 10)
     if (!Number.isFinite(id) || id <= 0) {
       throw new HttpException('fileId required', HttpStatus.BAD_REQUEST)

@@ -1,4 +1,4 @@
-import { All, Controller, HttpCode, HttpException, HttpStatus, Param, Req, Res, UseGuards } from '@nestjs/common'
+import { All, Controller, HttpCode, HttpException, HttpStatus, Logger, Param, Req, Res, UseGuards } from '@nestjs/common'
 import * as fsSync from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
@@ -33,6 +33,8 @@ import { NcPathResolverService } from '../services/nc-path-resolver.service'
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)
 export class NcUploadsController {
+  private readonly logger = new Logger(NcUploadsController.name)
+
   constructor(
     private readonly staging: NcChunkedUploadsService,
     private readonly resolver: NcPathResolverService,
@@ -174,15 +176,19 @@ export class NcUploadsController {
       throw new HttpException('Not allowed to write at destination', HttpStatus.FORBIDDEN)
     }
 
-    // OC-Total-Length is part of the NC chunked-upload protocol; mobile
-    // clients always send it on the assembly MOVE. We require it so the
-    // assembled-vs-expected check below actually guards every transfer. A
-    // missing header now yields 400 instead of silently trusting the payload.
-    const expectedHeader = req.headers['oc-total-length']
-    const expectedRaw = Array.isArray(expectedHeader) ? expectedHeader[0] : expectedHeader
-    const expectedTotal = Number.parseInt(String(expectedRaw ?? ''), 10)
-    if (!Number.isFinite(expectedTotal) || expectedTotal <= 0) {
-      throw new HttpException('OC-Total-Length header is required for chunked upload assembly', HttpStatus.BAD_REQUEST)
+    // OC-Total-Length is part of the NC chunked-upload protocol; iOS always
+    // sends it on the assembly MOVE. The audit hypothesized that Android's
+    // chunked MoveMethod path may omit it (audit U1). Treat the header as
+    // optional but verify equality when present — each chunk is already
+    // Content-Length-verified at PUT time (see chunkHandler above), so the
+    // per-byte integrity check still runs on every transfer; OC-Total-Length
+    // is a redundant end-to-end re-verify, not a primary safety net.
+    const expectedTotal = parseOcTotalLength(req.headers['oc-total-length'])
+    if (expectedTotal === null) {
+      this.logger.warn({
+        tag: 'assembleAndMove',
+        msg: `OC-Total-Length absent for upload ${uploadId} (user ${req.user.id}) — accepting; per-chunk Content-Length verification still applied`
+      })
     }
 
     // Assemble to a sibling tmp file then atomic-move to avoid partial writes.
@@ -190,7 +196,7 @@ export class NcUploadsController {
     await makeDir(path.dirname(space.realPath), true)
     try {
       const total = await this.staging.concatenate(req.user.id, uploadId, tmpPath)
-      if (expectedTotal !== total) {
+      if (expectedTotal !== null && expectedTotal !== total) {
         await fs.unlink(tmpPath).catch(() => undefined)
         throw new HttpException(`assembled size ${total} != OC-Total-Length ${expectedTotal}`, HttpStatus.BAD_REQUEST)
       }
@@ -226,6 +232,16 @@ function extractTrailing(url: string, prefix: string): string {
   const [bare] = url.split('?')
   if (bare.startsWith(prefix)) return bare.slice(prefix.length)
   return ''
+}
+
+// Parse an OC-Total-Length header into a positive integer, or null when
+// absent / malformed / non-positive. Exported for unit tests; the rest of
+// the controller treats the result as "client told us the expected size"
+// (number) vs "client didn't" (null).
+export function parseOcTotalLength(raw: string | string[] | undefined): number | null {
+  const v = Array.isArray(raw) ? raw[0] : raw
+  const parsed = Number.parseInt(String(v ?? ''), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 // Tiny PROPFIND response body — just acknowledges the collection exists.
