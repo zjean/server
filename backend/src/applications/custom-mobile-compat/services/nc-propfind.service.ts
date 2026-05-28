@@ -9,7 +9,7 @@ import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
 import '../interfaces/nc-request.interface'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { type NcPermissionsMode } from '../utils/nc-permissions'
-import { buildShareMountPropResponse } from '../utils/nc-share-mount-response'
+import { buildShareMountPropResponse, rawurlencodeSegment } from '../utils/nc-share-mount-response'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 
@@ -103,8 +103,17 @@ export class NcPropfindService {
       // — at Depth: 0 we only describe the home root itself, which doesn't
       // include the mounts.
       if (user && mode === 'files' && req.nc?.isHomeRoot === true && req.dav?.depth !== DEPTH.RESOURCE) {
-        const hrefBase = `/remote.php/dav/files/${encodeURIComponent(user.login)}/`
-        const mounts = await this.shareMounts.listMounts(user)
+        const hrefBase = `/remote.php/dav/files/${rawurlencodeSegment(user.login)}/`
+        // Wrap the mount listing in its own try so a DB outage (or any
+        // share-side error) degrades to "home minus mounts" rather than
+        // failing the whole PROPFIND. iOS handles a partial home listing
+        // gracefully; a 500 puts the account into a generic error state.
+        let mounts: Awaited<ReturnType<typeof this.shareMounts.listMounts>> = []
+        try {
+          mounts = await this.shareMounts.listMounts(user)
+        } catch (e) {
+          this.logger.warn({ tag: this.respond.name, msg: `share-mount listing failed (degrading to no mounts): ${(e as Error).message}` })
+        }
         for (const mount of mounts) {
           responses.push(buildShareMountPropResponse(mount, hrefBase))
         }
