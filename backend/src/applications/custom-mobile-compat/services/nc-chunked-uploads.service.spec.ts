@@ -97,6 +97,44 @@ describe(NcChunkedUploadsService.name, () => {
     })
   })
 
+  describe('listChunksWithStats', () => {
+    it('returns name + size + mtimeMs per chunk, in numeric order', async () => {
+      await svc.ensureDir(USER, UPLOAD)
+      const payloads: Record<string, Buffer> = {
+        '0': Buffer.alloc(1024),
+        '1': Buffer.alloc(2048),
+        '10': Buffer.alloc(512)
+      }
+      for (const [name, buf] of Object.entries(payloads)) {
+        await fsp.writeFile(svc.chunkPath(USER, UPLOAD, name), buf)
+      }
+      const stats = await svc.listChunksWithStats(USER, UPLOAD)
+      expect(stats.map((s) => s.name)).toEqual(['0', '1', '10'])
+      expect(stats.map((s) => s.size)).toEqual([1024, 2048, 512])
+      for (const s of stats) {
+        expect(s.mtimeMs).toBeGreaterThan(0)
+      }
+    })
+
+    it('returns [] when the staging dir does not exist (pre-MKCOL probe)', async () => {
+      // Important: do NOT throw. Android may PROPFIND before MKCOL during
+      // a fresh retry; a 500/exception would break the resume flow entirely.
+      const stats = await svc.listChunksWithStats(USER, 'never-created')
+      expect(stats).toEqual([])
+    })
+
+    it('skips entries that vanish between readdir and stat', async () => {
+      // Simulate by creating a directory entry (not a regular file) — stat
+      // will succeed but isFile() returns false, exercising the same skip
+      // branch a race-removed entry takes.
+      await svc.ensureDir(USER, UPLOAD)
+      await fsp.writeFile(svc.chunkPath(USER, UPLOAD, '0'), 'real chunk')
+      await fsp.mkdir(svc.chunkPath(USER, UPLOAD, 'subdir'))
+      const stats = await svc.listChunksWithStats(USER, UPLOAD)
+      expect(stats.map((s) => s.name)).toEqual(['0'])
+    })
+  })
+
   describe('concatenate', () => {
     it('writes all chunks in numeric order into the target file', async () => {
       const chunks = {

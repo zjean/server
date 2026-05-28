@@ -64,11 +64,20 @@ export class NcUploadsController {
         await this.assembleAndMove(req, res, uploadId)
         return
       }
-      case HTTP_METHOD.PROPFIND:
-        // Minimal PROPFIND 207 — NC clients sometimes probe the upload dir.
+      case HTTP_METHOD.PROPFIND: {
+        // Android's ChunkedFileUploadRemoteOperation PROPFIND depth 1 to
+        // enumerate already-uploaded chunks so it can resume from `nextByte`
+        // (sum of getcontentlength values across the listing). Depth 0 just
+        // confirms the collection exists — keep the old shape for that.
+        const depthHeader = req.headers['depth']
+        const depthRaw = (Array.isArray(depthHeader) ? depthHeader[0] : depthHeader)?.toLowerCase().trim()
+        const enumerateChildren = depthRaw === '1' || depthRaw === 'infinity'
+        const chunks = enumerateChildren ? await this.staging.listChunksWithStats(req.user.id, uploadId) : []
+        const baseHref = (req.url ?? '').split('?')[0]
         res.status(HttpStatus.MULTI_STATUS).header('content-type', 'application/xml; charset=utf-8')
-        res.send(minimalPropfindBody(req.url ?? ''))
+        res.send(buildUploadDirPropfindBody(baseHref, chunks))
         return
+      }
       case HTTP_METHOD.HEAD:
       case HTTP_METHOD.GET:
         if (!this.staging.exists(req.user.id, uploadId)) throw new HttpException('upload not found', HttpStatus.NOT_FOUND)
@@ -244,20 +253,61 @@ export function parseOcTotalLength(raw: string | string[] | undefined): number |
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-// Tiny PROPFIND response body — just acknowledges the collection exists.
-// Clients use this to confirm the staging dir without probing real content.
-function minimalPropfindBody(href: string): string {
-  const safe = href.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
-  return `<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>${safe}</d:href>
+// One chunk's identity for the upload-dir PROPFIND. Built from `listChunks`
+// names + `fs.stat` results — the controller does the I/O, this module owns
+// the wire format.
+export interface UploadChunkInfo {
+  name: string
+  size: number
+  mtimeMs: number
+}
+
+// Build the PROPFIND response body for the upload staging dir.
+//
+// Empty chunks list → just the collection response (back-compat with the
+// previous minimalPropfindBody; used for depth=0 or when the dir doesn't
+// exist yet). Non-empty → collection + one <d:response> per chunk carrying
+// <d:getcontentlength> + <d:getlastmodified> + empty <d:resourcetype/>.
+//
+// Audit #6: Android's `ChunkedFileUploadRemoteOperation` sums the chunk
+// sizes to compute `nextByte` for resume. Without per-chunk responses
+// every retry restarts at byte 0 — wasting an entire upload's worth of
+// bytes on every reconnect, on the slowest mobile networks.
+export function buildUploadDirPropfindBody(parentHref: string, chunks: UploadChunkInfo[]): string {
+  const safeParent = xmlEscape(parentHref)
+  const collectionResponse = `  <d:response>
+    <d:href>${safeParent}</d:href>
     <d:propstat>
       <d:prop>
         <d:resourcetype><d:collection/></d:resourcetype>
       </d:prop>
       <d:status>HTTP/1.1 200 OK</d:status>
     </d:propstat>
-  </d:response>
+  </d:response>`
+  const chunkResponses = chunks
+    .map((c) => {
+      const childHref = `${safeParent}/${encodeURIComponent(c.name)}`
+      const lastModified = new Date(c.mtimeMs).toUTCString()
+      return `  <d:response>
+    <d:href>${childHref}</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype/>
+        <d:getcontentlength>${c.size}</d:getcontentlength>
+        <d:getlastmodified>${lastModified}</d:getlastmodified>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>`
+    })
+    .join('\n')
+  const body = chunks.length > 0 ? `${collectionResponse}\n${chunkResponses}` : collectionResponse
+  return `<?xml version="1.0" encoding="utf-8"?>
+<d:multistatus xmlns:d="DAV:">
+${body}
 </d:multistatus>`
+}
+
+function xmlEscape(s: string): string {
+  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
 }
