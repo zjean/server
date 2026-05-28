@@ -112,4 +112,22 @@ describe('buildSharedWithMeRecord', () => {
     expect(buildSharedWithMeRecord(mount({ size: -7 }), recipient).item_size).toBe(0)
     expect(buildSharedWithMeRecord(mount({ size: 12345 }), recipient).item_size).toBe(12345)
   })
+
+  describe('has_preview', () => {
+    it('is true for image-mime shares (so the Shares-tab row shows a thumbnail)', () => {
+      // Sync-in stores mimes with the first '/' replaced by '-'. ncHasPreview
+      // accepts both forms; we feed it the raw stored value.
+      expect(buildSharedWithMeRecord(mount({ isDir: false, mime: 'image-jpeg' }), recipient).has_preview).toBe(true)
+      expect(buildSharedWithMeRecord(mount({ isDir: false, mime: 'image-png' }), recipient).has_preview).toBe(true)
+    })
+
+    it('is false for non-image mimes', () => {
+      expect(buildSharedWithMeRecord(mount({ isDir: false, mime: 'application-pdf' }), recipient).has_preview).toBe(false)
+      expect(buildSharedWithMeRecord(mount({ isDir: false, mime: 'text-plain' }), recipient).has_preview).toBe(false)
+    })
+
+    it('is false for folder mounts even when mime is empty', () => {
+      expect(buildSharedWithMeRecord(mount({ isDir: true, mime: '' }), recipient).has_preview).toBe(false)
+    })
+  })
 })

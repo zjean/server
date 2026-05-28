@@ -10,6 +10,7 @@
 
 import type { NcShareMount } from '../services/nc-share-mount-resolver.service'
 import { toNcPermissions } from './nc-permissions'
+import { ncHasPreview } from './nc-preview-predicate'
 
 // NC OCS share-record. Field names are wire-format; do not rename them.
 // `share_type` codes:
@@ -29,9 +30,13 @@ export interface NcOcsShareRecord {
   can_edit: boolean
   can_delete: boolean
   stime: number
-  parent: null
-  expiration: null
-  token: null
+  // Sub-share parent id (NC only sets this for re-shares; we don't model
+  // resharing on the recipient side, so it's null today). Typed as nullable
+  // number rather than `null` literal so a future emitter that actually
+  // populates it doesn't have to widen the interface.
+  parent: number | null
+  expiration: string | null
+  token: string | null
   note: string
   label: string
   path: string
@@ -61,9 +66,14 @@ export interface NcOcsShareRecord {
 export function buildSharedWithMeRecord(mount: NcShareMount, recipient: { login: string; fullName: string }): NcOcsShareRecord {
   const { shareMask } = toNcPermissions(mount.permissions, mount.isDir, 'files')
   const permissions = Number(shareMask)
-  // Sync-in stores mtime in ms; NC OCS expects seconds. ctime is the share
-  // creation time conceptually, but shareRootFiles only carries the *file*'s
-  // ctime — close enough for the iOS Shares tab which just sorts on it.
+  // Sync-in stores mtime in ms; NC OCS expects seconds. We use the *file*'s
+  // ctime as a proxy for the share's creation time — the actual share
+  // createdAt isn't carried by SharesQueries.shareRootFiles (would need an
+  // upstream mod commit to add to the SELECT). The iOS Shares tab only uses
+  // stime for sorting; file-ctime keeps a stable ordering for the
+  // non-recent-resharing case which covers all of Sync-in's shares today.
+  // If we ever start re-issuing shares for the same file, this will sort
+  // by file-update-time rather than share-creation-time — accept that.
   const stime = Math.max(0, Math.floor((mount.ctime ?? 0) / 1000))
   const item_mtime = Math.max(0, Math.floor((mount.mtime ?? 0) / 1000))
   // canEdit/canDelete are derived from the share's permission bitmask.
@@ -73,6 +83,11 @@ export function buildSharedWithMeRecord(mount: NcShareMount, recipient: { login:
 
   return {
     id: String(mount.shareId),
+    // Always 0 (NC IShare::TYPE_USER). Sync-in's SHARE_TYPE.COMMON maps to
+    // this — we don't model group / link / federated shares as recipient-
+    // side mountpoints (links go via a different controller, group / fed
+    // are out of scope for this fork). If that ever changes, derive from
+    // the share-member-type rather than hardcoding.
     share_type: 0,
     uid_owner: mount.owner.login,
     displayname_owner: mount.owner.fullName || mount.owner.login,
@@ -100,7 +115,10 @@ export function buildSharedWithMeRecord(mount: NcShareMount, recipient: { login:
     item_size: Math.max(0, Math.trunc(mount.size ?? 0)),
     item_mtime,
     mimetype: normalizeMime(mount.mime),
-    has_preview: false,
+    // True for image mimes so iOS renders a thumbnail on the Shares-tab
+    // row. ncHasPreview is the same predicate the PROPFIND builder uses,
+    // so the Shares tab and the home browser agree on what's previewable.
+    has_preview: ncHasPreview(mount.mime),
     storage_id: `home::${recipient.login}`,
     storage: 1,
     'is-mount-root': true,
