@@ -16,6 +16,7 @@ import { NcExtrasController } from './controllers/nc-extras.controller'
 import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
+import { NcOcsSharesController } from './controllers/nc-ocs-shares.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
 import { NcTextEditorController } from './controllers/nc-text-editor.controller'
@@ -65,6 +66,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcDiscoveryController,
     NcLoginV2Controller,
     NcOcsController,
+    NcOcsSharesController,
     NcDavController,
     NcExtrasController,
     NcCommentsController,
