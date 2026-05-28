@@ -5,11 +5,7 @@ import { FileProps } from '@sync-in-server/backend/src/applications/files/interf
 import { ToastService } from '../components/toast.service'
 import { buildFileModelStub } from '../utils/file-model-stub'
 
-export type FolderSizeState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'done'; bytes: number }
-  | { status: 'error' }
+export type FolderSizeState = { status: 'idle' } | { status: 'loading' } | { status: 'done'; bytes: number } | { status: 'error' }
 
 const IDLE: FolderSizeState = { status: 'idle' }
 
