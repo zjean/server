@@ -158,6 +158,8 @@ Recommend Path Y for now — search isn't a stated requirement and the implement
 
 These are findings I could not resolve from source alone. Each needs a real iOS or Android device against a dev instance to confirm whether it's a bug or not.
 
+> **In progress (2026-05-28):** Server-side mitigation (U1) + instrumentation (U2, U3) shipped on branch `fix/nc-compat-u1-u2-u3-verification`. After that lands on `main`, follow the device-test guide at [`2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md`](2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md). Fill in the Results sections there and use the per-item decision table to determine next steps.
+
 ### U1. Android `OC-Total-Length` on chunked MOVE
 
 **Hypothesis:** Android may not send `OC-Total-Length` on the chunked-MOVE assembly request. NextcloudKit-Android sends it on the *non-chunked* PUT path; the chunked path uses `MoveMethod` and the audit didn't confirm whether that adds the header.
