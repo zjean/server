@@ -150,5 +150,7 @@
   "Conflict — someone else saved this diagram": "Conflict — someone else saved this diagram",
   "Your unsaved edits are still on the canvas. Pick one:": "Your unsaved edits are still on the canvas. Pick one:",
   "Keep mine": "Keep mine",
-  "Discard mine": "Discard mine"
+  "Discard mine": "Discard mine",
+  "Calculate size": "Calculate size",
+  "Size calculation failed": "Size calculation failed"
 }
