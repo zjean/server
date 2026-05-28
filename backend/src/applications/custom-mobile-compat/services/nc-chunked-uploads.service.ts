@@ -83,10 +83,10 @@ export class NcChunkedUploadsService {
   // stat() failures (race with a concurrent DELETE chunk, say) skip the
   // entry rather than failing the whole response — partial enumeration is
   // strictly better than 500-ing a PROPFIND mid-upload.
-  async listChunksWithStats(userId: number, uploadId: string): Promise<Array<{ name: string; size: number; mtimeMs: number }>> {
+  async listChunksWithStats(userId: number, uploadId: string): Promise<{ name: string; size: number; mtimeMs: number }[]> {
     if (!this.exists(userId, uploadId)) return []
     const names = await this.listChunks(userId, uploadId)
-    const out: Array<{ name: string; size: number; mtimeMs: number }> = []
+    const out: { name: string; size: number; mtimeMs: number }[] = []
     for (const name of names) {
       try {
         const st = await fs.stat(this.chunkPath(userId, uploadId, name))
