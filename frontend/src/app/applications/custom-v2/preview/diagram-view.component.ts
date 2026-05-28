@@ -141,7 +141,11 @@ export class DiagramViewComponent implements OnInit {
   }
 
   private deriveExportFilename(format: string | undefined): string {
-    const base = this.path.split('/').pop()?.replace(/\.drawio$/i, '') || 'diagram'
+    const base =
+      this.path
+        .split('/')
+        .pop()
+        ?.replace(/\.drawio$/i, '') || 'diagram'
     return `${base}.${format ?? 'bin'}`
   }
 
