@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, signal } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
@@ -23,11 +23,34 @@ export class TransfersPopoverComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly open = signal(false)
-  protected readonly activeTasks = toSignal(this.store.filesActiveTasks, { initialValue: [] as FileTask[] })
+  protected readonly activeTasksRaw = toSignal(this.store.filesActiveTasks, { initialValue: [] as FileTask[] })
   protected readonly endedTasks = toSignal(this.store.filesEndedTasks, { initialValue: [] as FileTask[] })
   protected readonly syncCount = toSignal(this.store.clientSyncTasksCount, { initialValue: 0 })
 
-  protected readonly totalActive = computed(() => this.activeTasks().length + this.syncCount())
+  // Upload progress is written by mutating task.props.size in place — the
+  // upstream FilesUploadService does not re-emit filesActiveTasks on each
+  // progress event. Classic UI's zone-driven change detection picks the
+  // mutation up on the next tick; this OnPush + toSignal view does not, so
+  // the popover used to freeze on its initial snapshot. The 250ms tick below
+  // runs only while at least one active task exists, and feeds activeTasks()
+  // a fresh array reference each tick so the @for re-evaluates the
+  // template bindings (progress bar width, MB counter).
+  private readonly tick = signal(0)
+  private readonly hasActive = computed(() => this.activeTasksRaw().length > 0)
+  protected readonly activeTasks = computed<FileTask[]>(() => {
+    this.tick()
+    return [...this.activeTasksRaw()]
+  })
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.hasActive()) return
+      const id = window.setInterval(() => this.tick.update((v) => v + 1), 250)
+      onCleanup(() => window.clearInterval(id))
+    })
+  }
+
+  protected readonly totalActive = computed(() => this.activeTasksRaw().length + this.syncCount())
   protected readonly totalDone = computed(() => this.endedTasks().filter((t) => t.status === FileTaskStatus.SUCCESS).length)
   protected readonly totalError = computed(() => this.endedTasks().filter((t) => t.status === FileTaskStatus.ERROR).length)
 
