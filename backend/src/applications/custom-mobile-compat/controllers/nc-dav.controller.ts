@@ -20,6 +20,7 @@ import { NcShareMountResolverService } from '../services/nc-share-mount-resolver
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
+import '../interfaces/nc-request.interface'
 
 // NcDavController — WebDAV, trashbin, legacy redirect.
 //
@@ -127,6 +128,12 @@ export class NcDavController {
   private async attachSpace(req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) {
     const user = req.user as UserModel
     const urlSegments = await this.buildUrlSegments(user, input)
+    // Flag the home-root case so NcPropfindService can decide whether to
+    // append virtual share-mount entries. We compute this against the raw
+    // (normalized) subpath rather than the resolved segments: a user whose
+    // mobileHome maps to a non-personal space is still "at home" when
+    // subpath is empty, and they should see their share-mounts there too.
+    req.nc = { isHomeRoot: input.mode === 'files' && normalizeNcSubpath(input.subpath) === '' }
 
     let space: SpaceEnv
     try {

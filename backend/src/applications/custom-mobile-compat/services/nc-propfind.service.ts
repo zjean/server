@@ -6,9 +6,12 @@ import { UserModel } from '../../users/models/user.model'
 import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
+import '../interfaces/nc-request.interface'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { type NcPermissionsMode } from '../utils/nc-permissions'
+import { buildShareMountPropResponse } from '../utils/nc-share-mount-response'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
+import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 
 // Nextcloud clients expect four namespaces on every <d:multistatus>:
 //   d   — DAV:                                        (lowercase prefix, NC convention)
@@ -40,7 +43,8 @@ export class NcPropfindService {
 
   constructor(
     private readonly webdavSpaces: WebDAVSpaces,
-    private readonly fileRowEnsurer: NcFileRowEnsurer
+    private readonly fileRowEnsurer: NcFileRowEnsurer,
+    private readonly shareMounts: NcShareMountResolverService
   ) {}
 
   async respond(req: FastifyDAVRequest, res: FastifyReply, mode: NcPermissionsMode): Promise<FastifyReply> {
@@ -92,6 +96,18 @@ export class NcPropfindService {
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
         responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined, requesterFallback))
         isFirst = false
+      }
+      // After the home space's own entries, append one virtual response per
+      // share-mount the user has received. Only at the NC home root and only
+      // when the client asked for at least one level of children (Depth >= 1)
+      // — at Depth: 0 we only describe the home root itself, which doesn't
+      // include the mounts.
+      if (user && mode === 'files' && req.nc?.isHomeRoot === true && req.dav?.depth !== DEPTH.RESOURCE) {
+        const hrefBase = `/remote.php/dav/files/${encodeURIComponent(user.login)}/`
+        const mounts = await this.shareMounts.listMounts(user)
+        for (const mount of mounts) {
+          responses.push(buildShareMountPropResponse(mount, hrefBase))
+        }
       }
     } catch (e) {
       if (e instanceof HttpException) throw e
