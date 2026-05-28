@@ -228,7 +228,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       {
         id: 'size',
         label: 'Calculate size',
-        icon: 'eye',
+        icon: 'refresh',
         disabled: !f.isDir,
         action: () => this.calculateFolderSize(f)
       },
