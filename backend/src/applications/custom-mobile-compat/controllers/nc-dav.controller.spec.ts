@@ -48,7 +48,10 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
       controllers: [NcDavController],
       providers: [
         { provide: NcPathResolverService, useValue: {} },
-        { provide: NcShareMountResolverService, useValue: { findByAlias: jest.fn().mockResolvedValue(null) } },
+        {
+          provide: NcShareMountResolverService,
+          useValue: { listMounts: jest.fn().mockResolvedValue([]), findByAlias: jest.fn().mockResolvedValue(null) }
+        },
         { provide: SpacesManager, useValue: {} },
         { provide: SpacesQueries, useValue: spacesQueries },
         { provide: WebDAVMethods, useValue: {} },
@@ -148,7 +151,10 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
       providers: [
         // Real resolver — its decoding logic is part of what we're testing.
         NcPathResolverService,
-        { provide: NcShareMountResolverService, useValue: { findByAlias: jest.fn().mockResolvedValue(null) } },
+        {
+          provide: NcShareMountResolverService,
+          useValue: { listMounts: jest.fn().mockResolvedValue([]), findByAlias: jest.fn().mockResolvedValue(null) }
+        },
         { provide: SpacesManager, useValue: spacesManager },
         { provide: SpacesQueries, useValue: {} },
         { provide: WebDAVMethods, useValue: {} },
@@ -213,11 +219,15 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
   let moduleRef: TestingModule
   let controller: NcDavController
   let spacesManager: { spaceEnv: jest.Mock }
-  let shareMounts: { findByAlias: jest.Mock }
+  let shareMounts: { listMounts: jest.Mock; findByAlias: jest.Mock }
 
   beforeAll(async () => {
     spacesManager = { spaceEnv: jest.fn() }
-    shareMounts = { findByAlias: jest.fn() }
+    // attachSpace memoizes a listMounts call once per request. findByAlias
+    // remains on the surface but is unused by buildUrlSegments after the
+    // memo fix; we keep a mock here so the rest of the suite (which provides
+    // it as a fallback) compiles.
+    shareMounts = { listMounts: jest.fn(), findByAlias: jest.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcDavController],
       providers: [
@@ -244,6 +254,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
   beforeEach(() => {
     jest.clearAllMocks()
     spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+    shareMounts.listMounts.mockResolvedValue([])
   })
 
   const attach = (req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) =>
@@ -252,7 +263,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
     ).attachSpace(req, input)
 
   it('routes a known share-alias subpath into the shares repository', async () => {
-    shareMounts.findByAlias.mockImplementation(async (_u, alias: string) => (alias === 'alice-photos' ? { alias: 'alice-photos' } : null))
+    shareMounts.listMounts.mockResolvedValue([{ alias: 'alice-photos' }])
     const req = {
       url: '/remote.php/dav/files/bob/alice-photos/vacation.jpg',
       headers: {},
@@ -260,12 +271,12 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       user: { login: 'bob', settings: null }
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'alice-photos/vacation.jpg' })
-    expect(shareMounts.findByAlias).toHaveBeenCalledWith(req.user, 'alice-photos')
+    expect(shareMounts.listMounts).toHaveBeenCalledWith(req.user)
     expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['shares', 'alice-photos', 'vacation.jpg'])
   })
 
   it('falls through to the personal home when the first segment is not a share alias', async () => {
-    shareMounts.findByAlias.mockResolvedValue(null)
+    shareMounts.listMounts.mockResolvedValue([])
     const req = {
       url: '/remote.php/dav/files/bob/Documents/notes.txt',
       headers: {},
@@ -284,7 +295,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       user: { login: 'bob', settings: null }
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'trashbin', subpath: 'something' })
-    expect(shareMounts.findByAlias).not.toHaveBeenCalled()
+    expect(shareMounts.listMounts).not.toHaveBeenCalled()
     expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['trash', 'personal', 'something'])
   })
 
@@ -296,11 +307,11 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       user: { login: 'bob', settings: null }
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: '' })
-    expect(shareMounts.findByAlias).not.toHaveBeenCalled()
+    expect(shareMounts.listMounts).not.toHaveBeenCalled()
   })
 
   it('decodes the share-alias segment before lookup', async () => {
-    shareMounts.findByAlias.mockImplementation(async (_u, alias: string) => (alias === 'pôt commun' ? { alias: 'pôt commun' } : null))
+    shareMounts.listMounts.mockResolvedValue([{ alias: 'pôt commun' }])
     const req = {
       url: '/remote.php/dav/files/bob/p%C3%B4t%20commun/x.txt',
       headers: {},
@@ -308,6 +319,21 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       user: { login: 'bob', settings: null }
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'p%C3%B4t%20commun/x.txt' })
-    expect(shareMounts.findByAlias).toHaveBeenCalledWith(req.user, 'pôt commun')
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['shares', 'pôt commun', 'x.txt'])
+  })
+
+  it('fetches share-mounts at most once per COPY/MOVE request — destination resolution reuses the memo', async () => {
+    shareMounts.listMounts.mockResolvedValue([{ alias: 'alice-photos' }])
+    const req = {
+      url: '/remote.php/dav/files/bob/alice-photos/source.jpg',
+      method: 'MOVE',
+      headers: { destination: 'https://host/remote.php/dav/files/bob/alice-photos/renamed.jpg' },
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: 'alice-photos/source.jpg' })
+    // attachSpace path + mapNcPathToInternal path together should produce
+    // exactly one listMounts call thanks to makeMountsMemo.
+    expect(shareMounts.listMounts).toHaveBeenCalledTimes(1)
   })
 })
