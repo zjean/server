@@ -34,6 +34,7 @@ import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
+import { FolderSizeService } from '../../services/folder-size.service'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
@@ -105,6 +106,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly filesService = inject(FilesService)
+  private readonly folderSize = inject(FolderSizeService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly spacesService = inject(SpacesService)
   private readonly confirmDialog = inject(ConfirmDialogService)
@@ -218,6 +220,13 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
         action: () => this.downloadFile(f)
       },
       { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
+      {
+        id: 'size',
+        label: 'Calculate size',
+        icon: 'refresh',
+        disabled: !f.isDir,
+        action: () => this.calculateFolderSize(f)
+      },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
@@ -276,6 +285,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.clearSelection()
+      this.folderSize.clear()
       this.loadFiles()
     })
     // Refresh on each task affecting this folder, not just when the active queue
@@ -577,6 +587,22 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       file.name
     )
     return buildFileModelStub(file, fullPath)
+  }
+
+  protected folderSizeState(fileId: number) {
+    return this.folderSize.state(fileId)
+  }
+
+  protected calculateFolderSize(file: FileProps): void {
+    // Mirror the path-building done in `buildFileStub` so FilesService.getSize
+    // receives the full server path it needs to construct the URL.
+    const fullPath = buildSpaceFilePath(
+      SPACE_REPOSITORY.FILES,
+      this.currentAlias(),
+      this.pathSegments().map((s) => s.path),
+      file.name
+    )
+    this.folderSize.compute(file, fullPath)
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {

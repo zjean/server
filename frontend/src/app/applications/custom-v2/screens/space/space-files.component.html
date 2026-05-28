@@ -144,7 +144,26 @@
                   @if (!f.isDir) {
                     {{ f.size | toBytes: 1 : true }}
                   } @else {
-                    ●
+                    @let s = folderSizeState(f.id);
+                    @switch (s.status) {
+                      @case ('done') {
+                        <span class="file-row__size-value">{{ s.bytes | toBytes: 1 : true }}</span>
+                      }
+                      @case ('loading') {
+                        <span class="file-row__size-loading" aria-live="polite">…</span>
+                      }
+                      @default {
+                        <button
+                          type="button"
+                          class="file-row__size-trigger"
+                          (click)="$event.stopPropagation(); calculateFolderSize(f)"
+                          [attr.title]="'Calculate size' | translate: locale.language"
+                          [attr.aria-label]="'Calculate size' | translate: locale.language"
+                        >
+                          ●
+                        </button>
+                      }
+                    }
                   }
                 </div>
                 <div class="file-row__modified">
