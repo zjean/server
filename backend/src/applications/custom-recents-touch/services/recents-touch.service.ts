@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { and, eq } from 'drizzle-orm'
 import fs from 'node:fs/promises'
 import { ACTION } from '../../../common/constants'
@@ -7,7 +7,6 @@ import type { DBSchema } from '../../../infrastructure/database/interfaces/datab
 import { FileEvent } from '../../files/events/file-events'
 import type { FileEventType } from '../../files/interfaces/file-event.interface'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
-import { files } from '../../files/schemas/files.schema'
 import { filesRecents } from '../../files/schemas/files-recents.schema'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { dirName, fileName, getMimeType } from '../../files/utils/files'
@@ -29,19 +28,30 @@ import { UserModel } from '../../users/models/user.model'
 //
 // This service subscribes to the same global FileEvent emitter the
 // FilesEventManager uses for quota/indexing, ensures the file has a real DB
-// row (mirroring NcFileRowEnsurer's logic but for non-NC paths), and upserts
-// a single `files_recents` row keyed by (id, location).
+// row via FilesQueries' public helpers, and upserts a single `files_recents`
+// row keyed by (id, location).
 //
 // Pure-add: nothing in upstream gets edited. All paths live under
 // custom-recents-touch/, mirroring the nc-sync-log subscriber pattern from
 // custom-mobile-compat.
 
+// Keep in sync with FilesRecents.keepTime ('14d') in files-recents.service.ts.
+// Pre-filtering here avoids a stat + DB round-trip for events that would be
+// dropped by the next browse-time reconciliation anyway.
 const RECENTS_KEEP_MS = 14 * 24 * 60 * 60 * 1000
 
 @Injectable()
-export class RecentsTouchService implements OnModuleInit {
+export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RecentsTouchService.name)
   private listenerAttached = false
+  // Held in a field (rather than an inline arrow) so OnModuleDestroy can
+  // remove it. FileEvent is a process-global EventEmitter that outlives the
+  // Nest module — without explicit removal we leak a closure (and the db /
+  // filesQueries refs it captures) every time the module is recreated, which
+  // happens on graceful shutdown, dev hot reload, and e2e test rebuilds.
+  private readonly onEvent = (e: FileEventType): void => {
+    this.handleFileEvent(e).catch((err: Error) => this.logger.warn({ tag: this.handleFileEvent.name, msg: err.message }))
+  }
 
   constructor(
     @Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema,
@@ -56,12 +66,16 @@ export class RecentsTouchService implements OnModuleInit {
     this.attachListener()
   }
 
+  onModuleDestroy(): void {
+    if (!this.listenerAttached) return
+    FileEvent.off('event', this.onEvent)
+    this.listenerAttached = false
+  }
+
   attachListener(): void {
     if (this.listenerAttached) return
     this.listenerAttached = true
-    FileEvent.on('event', (e) =>
-      this.handleFileEvent(e).catch((err: Error) => this.logger.warn({ tag: this.handleFileEvent.name, msg: err.message }))
-    )
+    FileEvent.on('event', this.onEvent)
   }
 
   // Public so the spec can drive it directly without going through the
@@ -85,18 +99,24 @@ export class RecentsTouchService implements OnModuleInit {
     const mtime = stats.mtime.getTime()
     if (Date.now() - mtime > RECENTS_KEEP_MS) return // outside the 14-day retention window
 
+    // Emit paths (OnlyOffice/Collabora/PUT/upload) all set space.url to the
+    // *file*'s URL, not the parent folder's. dirName(space.url) therefore
+    // produces the same `path` that browse-time updateRecents writes
+    // (path = space.url, where in that flow space is the folder being
+    // browsed). The match is what lets the UPDATE branch of the upsert find
+    // rows previously written by browse().
     const baseName = fileName(e.space.url)
     const dirUrl = dirName(e.space.url)
     const mime = getMimeType(e.rPath, false)
 
     let fileId: number
     try {
-      fileId = await this.ensureDbRow(e.user, e.space, { mtime, size: stats.size, mime, baseName, inode: stats.ino })
+      fileId = await this.ensureDbRow(e.user, e.space, { mtime, size: stats.size, mime, baseName })
     } catch (err) {
       this.logger.warn({ tag: this.handleFileEvent.name, msg: `ensureDbRow failed for ${e.space.url}: ${(err as Error).message}` })
       return
     }
-    if (!(fileId > 0)) return
+    if (fileId <= 0) return
 
     await this.upsertRecent({
       fileId,
@@ -112,16 +132,13 @@ export class RecentsTouchService implements OnModuleInit {
   // Materialize a real `files` row for the event's target so its `id` passes
   // the `f.id > 0` filter on the next browse-time reconciliation, and so
   // click-through into v2 file-detail / preview / NC recommendations doesn't
-  // 404 on the recents id. Mirrors NcFileRowEnsurer's lookup-first-insert
-  // pattern (path-keyed) to avoid duplicate rows on repeat events.
-  private async ensureDbRow(
-    user: UserModel,
-    space: SpaceEnv,
-    f: { mtime: number; size: number; mime: string; baseName: string; inode: number }
-  ): Promise<number> {
+  // 404 on the recents id. Path-keyed lookup-first prevents duplicate inserts
+  // — getOrCreateUserFile does not do its own path lookup, only
+  // getOrCreateSpaceFile does.
+  private async ensureDbRow(user: UserModel, space: SpaceEnv, f: { mtime: number; size: number; mime: string; baseName: string }): Promise<number> {
     const dirInSpace = dirName(space.relativeUrl)
     const lookupProps: FileProps = {
-      id: -f.inode,
+      id: 0,
       path: dirInSpace,
       name: f.baseName,
       isDir: false,
@@ -131,26 +148,14 @@ export class RecentsTouchService implements OnModuleInit {
       mime: f.mime
     }
     if (space.inPersonalSpace) {
-      const existing = await this.findUserFileByPath(user.id, lookupProps)
-      if (existing > 0) return existing
-      return this.filesQueries.getOrCreateUserFile(user.id, { ...lookupProps, id: 0 })
+      const existing = await this.filesQueries.getUserFileByPath(user.id, dirInSpace, f.baseName)
+      if (existing !== null) return existing
+      return this.filesQueries.getOrCreateUserFile(user.id, lookupProps)
     }
     const dbFile = dbFileFromSpace(user.id, space)
     const existing = await this.filesQueries.getSpaceFileId(lookupProps, dbFile)
     if (existing !== undefined && existing > 0) return existing
     return this.filesQueries.getOrCreateSpaceFile(0, lookupProps, dbFile)
-  }
-
-  // Path-keyed lookup for personal-space files. Mirrors the helper inside
-  // NcFileRowEnsurer; duplicated here so this module stays independent of
-  // custom-mobile-compat (different domain, different lifecycle).
-  private async findUserFileByPath(userId: number, file: FileProps): Promise<number> {
-    const [row] = await this.db
-      .select({ id: files.id })
-      .from(files)
-      .where(and(eq(files.ownerId, userId), eq(files.path, file.path), eq(files.name, file.name), eq(files.isDir, file.isDir)))
-      .limit(1)
-    return row?.id ?? 0
   }
 
   // UPDATE-then-INSERT upsert. files_recents has no unique constraint we
@@ -199,13 +204,12 @@ export class RecentsTouchService implements OnModuleInit {
 
   // Mirrors FilesRecents.getLocation for the single-file case. inSharesList
   // is unreachable here (gated above); the multi-share fan-out only matters
-  // for the batched browse-time walk.
+  // for the batched browse-time walk. inSharesRepository && id === 0 is
+  // exactly inSharesList per SpaceEnv.setRepository — so when we reach the
+  // share branch space.id is always truthy.
   private locationForUpsert(space: SpaceEnv, userId: number): { ownerId?: number; spaceId?: number; shareId?: number } | null {
     if (space.inPersonalSpace) return { ownerId: userId }
-    if (space.inSharesRepository) {
-      const shareId = space.id || space.root?.id
-      return shareId ? { shareId } : null
-    }
+    if (space.inSharesRepository) return space.id ? { shareId: space.id } : null
     return space.id ? { spaceId: space.id } : null
   }
 }

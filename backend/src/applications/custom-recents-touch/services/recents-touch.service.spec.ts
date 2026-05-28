@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import fs from 'node:fs/promises'
 import { ACTION } from '../../../common/constants'
+import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { RecentsTouchService } from './recents-touch.service'
@@ -13,7 +14,6 @@ interface StatLike {
   isDirectory: () => boolean
   size: number
   mtime: Date
-  ino: number
 }
 
 describe(RecentsTouchService.name, () => {
@@ -21,9 +21,9 @@ describe(RecentsTouchService.name, () => {
   let service: RecentsTouchService
   let updates: Record<string, unknown>[]
   let inserts: Record<string, unknown>[]
-  let selectResult: { id: number }[]
   let updateAffected: number
   let filesQueriesMock: {
+    getUserFileByPath: jest.Mock
     getOrCreateUserFile: jest.Mock
     getOrCreateSpaceFile: jest.Mock
     getSpaceFileId: jest.Mock
@@ -34,24 +34,15 @@ describe(RecentsTouchService.name, () => {
     isDirectory: () => false,
     size: 1234,
     mtime: new Date(),
-    ino: 42,
     ...overrides
   })
 
   beforeEach(async () => {
     updates = []
     inserts = []
-    selectResult = []
     updateAffected = 0
 
     const fakeDb = {
-      select: jest.fn(() => ({
-        from: () => ({
-          where: () => ({
-            limit: () => Promise.resolve(selectResult)
-          })
-        })
-      })),
       update: jest.fn(() => ({
         set: (set: Record<string, unknown>) => ({
           where: () => ({
@@ -71,6 +62,7 @@ describe(RecentsTouchService.name, () => {
     }
 
     filesQueriesMock = {
+      getUserFileByPath: jest.fn().mockResolvedValue(null),
       getOrCreateUserFile: jest.fn().mockResolvedValue(101),
       getOrCreateSpaceFile: jest.fn().mockResolvedValue(202),
       getSpaceFileId: jest.fn().mockResolvedValue(undefined)
@@ -88,6 +80,7 @@ describe(RecentsTouchService.name, () => {
   afterEach(async () => {
     statSpy.mockRestore()
     await moduleRef.close()
+    FileEvent.removeAllListeners('event')
   })
 
   const personalSpace = {
@@ -246,7 +239,7 @@ describe(RecentsTouchService.name, () => {
   })
 
   it('reuses an existing files-row id when the path already resolves (no duplicate insert)', async () => {
-    selectResult = [{ id: 555 }]
+    filesQueriesMock.getUserFileByPath.mockResolvedValueOnce(555)
     await service.handleFileEvent({
       user: { id: 7 } as never,
       space: personalSpace as never,
@@ -256,5 +249,56 @@ describe(RecentsTouchService.name, () => {
 
     expect(filesQueriesMock.getOrCreateUserFile).not.toHaveBeenCalled()
     expect(inserts[0]).toMatchObject({ id: 555, ownerId: 7 })
+  })
+
+  it('UPDATE in a non-personal space for an existing recents row → updates, no insert', async () => {
+    // Catches the symmetric branch to the personal-space update test: the
+    // WHERE clause for the upsert builds spaceId vs ownerId, so a regression
+    // in the space-side construction would slip past the personal test.
+    filesQueriesMock.getSpaceFileId.mockResolvedValueOnce(202)
+    updateAffected = 1
+    const mtime = new Date('2026-05-22T10:00:00Z')
+    statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
+    const spaceSpace = {
+      id: 55,
+      url: 'files/team/docs/quarterly.docx',
+      relativeUrl: 'docs/quarterly.docx',
+      paths: ['docs', 'quarterly.docx'],
+      inPersonalSpace: false,
+      inTrashRepository: false,
+      inSharesList: false,
+      inSharesRepository: false,
+      repository: 'files',
+      root: { id: 0, alias: 'root' }
+    }
+
+    await service.handleFileEvent({
+      user: { id: 7 } as never,
+      space: spaceSpace as never,
+      action: ACTION.UPDATE,
+      rPath: '/data/team/files/docs/quarterly.docx'
+    })
+
+    expect(filesQueriesMock.getOrCreateSpaceFile).not.toHaveBeenCalled()
+    expect(updates).toHaveLength(1)
+    expect(updates[0]).toMatchObject({ name: 'quarterly.docx', path: 'files/team/docs', mtime: mtime.getTime() })
+    expect(inserts).toHaveLength(0)
+  })
+
+  it('attachListener() is idempotent and onModuleDestroy() removes the listener', async () => {
+    // Guards against the leak the principled review caught: FileEvent is a
+    // process-global emitter and must release its handler when the module
+    // tears down, otherwise dev hot-reloads / e2e rebuilds stack listeners.
+    const before = FileEvent.listenerCount('event')
+    service.attachListener()
+    service.attachListener() // second call is a no-op
+    expect(FileEvent.listenerCount('event')).toBe(before + 1)
+
+    service.onModuleDestroy()
+    expect(FileEvent.listenerCount('event')).toBe(before)
+
+    // Idempotent on the destroy side too.
+    service.onModuleDestroy()
+    expect(FileEvent.listenerCount('event')).toBe(before)
   })
 })
