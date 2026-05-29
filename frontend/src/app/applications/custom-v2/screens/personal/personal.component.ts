@@ -33,6 +33,7 @@ import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FolderSizeService } from '../../services/folder-size.service'
+import { V2DragService } from '../../services/drag.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
@@ -115,9 +116,17 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly dockRail = inject(DockRailService)
+  protected readonly drag = inject(V2DragService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private urlSubscription: Subscription | null = null
+  private unregisterDropHandler: (() => void) | null = null
+
+  // Per-row drop-target hover signal. The id of the file-row currently
+  // being hovered as a drop target during an in-flight drag; null when no
+  // drop target is hovered. Template binds the row's `.drop-hover` class
+  // to this.
+  protected readonly dropHoverId = signal<number | null>(null)
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
   @ViewChild('filterInput') private filterInput?: ElementRef<HTMLInputElement>
@@ -293,6 +302,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
+    // Register the drag-and-drop move handler. V2DragService invokes this
+    // when a drop happens via a shared component (the breadcrumb) — the
+    // file-row drop in this screen's own template calls executeMove
+    // directly, but threading both through the same path keeps the toast
+    // and selection-clear behaviour consistent.
+    this.unregisterDropHandler = this.drag.registerDropHandler((targetPath, files) => this.executeMove(targetPath, files))
     this.urlSubscription = this.route.url.subscribe(() => {
       this.syncBreadcrumbs()
       this.clearSelection()
@@ -317,8 +332,68 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.urlSubscription?.unsubscribe()
+    this.unregisterDropHandler?.()
     this.folderSize.clear()
     this.dockRail.clear()
+  }
+
+  // Drag-and-drop move handlers. dragstart picks up the selection (or just
+  // the row if it's not selected) and stamps the V2DragService payload.
+  // Drop on a folder row routes through the screen-local executeMove —
+  // dropping on a breadcrumb segment routes via V2DragService.dropOnPath ⇒
+  // the handler registered in ngOnInit ⇒ executeMove.
+  protected onRowDragStart(event: DragEvent, file: FileProps): void {
+    const files = this.isSelected(file) ? this.selectedFiles() : [file]
+    this.drag.start(files, this.currentUploadRoute())
+    if (event.dataTransfer) {
+      // Some browsers refuse to start a drag without any data on dataTransfer.
+      // The text payload is also useful for cross-app drags (e.g. dragging
+      // into a text editor) — even if the in-app drop never reads it.
+      event.dataTransfer.setData('text/plain', files.map((f) => f.name).join(', '))
+      event.dataTransfer.effectAllowed = 'move'
+    }
+  }
+
+  protected onRowDragEnd(): void {
+    this.dropHoverId.set(null)
+    this.drag.end()
+  }
+
+  protected onRowDragOver(event: DragEvent, file: FileProps): void {
+    if (!this.drag.canDropOnFile(file)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    if (this.dropHoverId() !== file.id) this.dropHoverId.set(file.id)
+  }
+
+  protected onRowDragLeave(file: FileProps): void {
+    if (this.dropHoverId() === file.id) this.dropHoverId.set(null)
+  }
+
+  protected onRowDrop(event: DragEvent, file: FileProps): void {
+    event.preventDefault()
+    this.dropHoverId.set(null)
+    if (!this.drag.canDropOnFile(file)) {
+      this.drag.end()
+      return
+    }
+    const payload = this.drag.payload()
+    if (!payload) return
+    const targetPath = `${this.currentUploadRoute()}/${file.name}`
+    this.executeMove(targetPath, payload.files)
+    this.drag.end()
+  }
+
+  private executeMove(targetPath: string, files: FileProps[]): void {
+    if (files.length === 0) return
+    const stubs = files.map((f) => this.buildFileStub(f))
+    this.filesService.copyMove(stubs, targetPath, FILE_OPERATION.MOVE).catch(console.error)
+    if (files.length === 1) {
+      this.toast.success('v2_moving_one_progress', { name: files[0].name })
+    } else {
+      this.toast.success('v2_moving_n_progress', { nb: files.length })
+    }
+    this.clearSelection()
   }
 
   protected setMode(mode: BrowserMode): void {
@@ -979,15 +1054,26 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   private syncBreadcrumbs(): void {
     const segs = this.pathSegments().map((s) => s.path)
+    // targetPath is the Sync-in absolute directory path each breadcrumb
+    // segment represents — set so the segment can act as a drop target for
+    // drag-and-drop moves. The terminal segment's targetPath equals the
+    // current sourceDir, so V2DragService.canDropOnPath naturally rejects it
+    // as a no-op without per-segment "is current?" gating here.
+    const personalRoot = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL].join('/')
     const root: BreadcrumbSegment = {
       label: 'Personal',
       icon: 'folder',
-      route: ['/', V2_PATH, V2_ROUTES.PERSONAL]
+      route: ['/', V2_PATH, V2_ROUTES.PERSONAL],
+      targetPath: personalRoot
     }
-    const trail: BreadcrumbSegment[] = segs.map((seg, i) => ({
-      label: seg,
-      route: ['/', V2_PATH, V2_ROUTES.PERSONAL, ...segs.slice(0, i + 1)]
-    }))
+    const trail: BreadcrumbSegment[] = segs.map((seg, i) => {
+      const slice = segs.slice(0, i + 1)
+      return {
+        label: seg,
+        route: ['/', V2_PATH, V2_ROUTES.PERSONAL, ...slice],
+        targetPath: [personalRoot, ...slice].join('/')
+      }
+    })
     this.breadcrumbs.setBreadcrumbs([root, ...trail])
   }
 }

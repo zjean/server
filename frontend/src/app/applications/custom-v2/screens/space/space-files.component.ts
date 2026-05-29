@@ -35,6 +35,7 @@ import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FolderSizeService } from '../../services/folder-size.service'
+import { V2DragService } from '../../services/drag.service'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
@@ -117,10 +118,17 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
   private readonly dockRail = inject(DockRailService)
+  protected readonly drag = inject(V2DragService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
   private spaceSubscription: Subscription | null = null
+  private unregisterDropHandler: (() => void) | null = null
+
+  // Per-row drop-target hover signal. Mirrors personal.component — id of
+  // the file-row currently being hovered as a drop target during an
+  // in-flight drag; null when no drop target is hovered.
+  protected readonly dropHoverId = signal<number | null>(null)
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
@@ -283,6 +291,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
+    this.unregisterDropHandler = this.drag.registerDropHandler((targetPath, files) => this.executeMove(targetPath, files))
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.clearSelection()
@@ -317,8 +326,62 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.navSubscription?.unsubscribe()
     this.spaceSubscription?.unsubscribe()
+    this.unregisterDropHandler?.()
     this.folderSize.clear()
     this.dockRail.clear()
+  }
+
+  // Drag-and-drop move handlers — mirror of personal.component. See that
+  // file for the design rationale.
+  protected onRowDragStart(event: DragEvent, file: FileProps): void {
+    const files = this.isSelected(file) ? this.selectedFiles() : [file]
+    this.drag.start(files, this.currentUploadRoute())
+    if (event.dataTransfer) {
+      event.dataTransfer.setData('text/plain', files.map((f) => f.name).join(', '))
+      event.dataTransfer.effectAllowed = 'move'
+    }
+  }
+
+  protected onRowDragEnd(): void {
+    this.dropHoverId.set(null)
+    this.drag.end()
+  }
+
+  protected onRowDragOver(event: DragEvent, file: FileProps): void {
+    if (!this.drag.canDropOnFile(file)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+    if (this.dropHoverId() !== file.id) this.dropHoverId.set(file.id)
+  }
+
+  protected onRowDragLeave(file: FileProps): void {
+    if (this.dropHoverId() === file.id) this.dropHoverId.set(null)
+  }
+
+  protected onRowDrop(event: DragEvent, file: FileProps): void {
+    event.preventDefault()
+    this.dropHoverId.set(null)
+    if (!this.drag.canDropOnFile(file)) {
+      this.drag.end()
+      return
+    }
+    const payload = this.drag.payload()
+    if (!payload) return
+    const targetPath = `${this.currentUploadRoute()}/${file.name}`
+    this.executeMove(targetPath, payload.files)
+    this.drag.end()
+  }
+
+  private executeMove(targetPath: string, files: FileProps[]): void {
+    if (files.length === 0) return
+    const stubs = files.map((f) => this.buildFileStub(f))
+    this.filesService.copyMove(stubs, targetPath, FILE_OPERATION.MOVE).catch(console.error)
+    if (files.length === 1) {
+      this.toast.success('v2_moving_one_progress', { name: files[0].name })
+    } else {
+      this.toast.success('v2_moving_n_progress', { nb: files.length })
+    }
+    this.clearSelection()
   }
 
   protected setMode(mode: BrowserMode): void {
@@ -1002,6 +1065,12 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const alias = this.currentAlias()
     if (!alias) return
     const segs = this.pathSegments().map((s) => s.path)
+    // targetPath maps each routable segment to a Sync-in absolute directory
+    // path so the segment can act as a drop target for drag-and-drop moves.
+    // The Spaces *index* (top of breadcrumb) intentionally has no targetPath
+    // — you can't drop a file *onto* "the list of spaces"; it's not a
+    // directory. The space root and folder trail do.
+    const spaceRootPath = [SPACE_REPOSITORY.FILES, alias].join('/')
     const spacesIndex: BreadcrumbSegment = {
       label: 'Spaces',
       icon: 'box',
@@ -1009,12 +1078,17 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     }
     const root: BreadcrumbSegment = {
       label: this.spaceName() || alias,
-      route: ['/', V2_PATH, V2_ROUTES.SPACES, alias]
+      route: ['/', V2_PATH, V2_ROUTES.SPACES, alias],
+      targetPath: spaceRootPath
     }
-    const trail: BreadcrumbSegment[] = segs.map((seg, i) => ({
-      label: seg,
-      route: ['/', V2_PATH, V2_ROUTES.SPACES, alias, ...segs.slice(0, i + 1)]
-    }))
+    const trail: BreadcrumbSegment[] = segs.map((seg, i) => {
+      const slice = segs.slice(0, i + 1)
+      return {
+        label: seg,
+        route: ['/', V2_PATH, V2_ROUTES.SPACES, alias, ...slice],
+        targetPath: [spaceRootPath, ...slice].join('/')
+      }
+    })
     this.breadcrumbs.setBreadcrumbs([spacesIndex, root, ...trail])
   }
 }

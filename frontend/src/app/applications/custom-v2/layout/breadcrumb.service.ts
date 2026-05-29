@@ -8,6 +8,13 @@ export interface BreadcrumbSegment {
   label: string
   icon?: IconV2Name
   route?: string | string[]
+  // Absolute Sync-in path (e.g. 'files/personal/Photos') this segment maps to.
+  // When set, the segment can act as a drop target for the v2 drag-and-drop
+  // move feature — dropping files here moves them into this directory. Omit
+  // on screens / segments that shouldn't accept drops (the terminal segment
+  // is naturally a no-op since V2DragService.canDropOnPath rejects sourceDir
+  // == targetPath).
+  targetPath?: string
 }
 
 @Injectable({ providedIn: 'root' })
