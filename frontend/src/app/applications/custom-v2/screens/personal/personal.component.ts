@@ -32,6 +32,7 @@ import { FileUpload } from '../../../files/interfaces/file-upload.interface'
 import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
+import { FolderSizeService } from '../../services/folder-size.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
@@ -104,6 +105,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly filesService = inject(FilesService)
+  private readonly folderSize = inject(FolderSizeService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly treePicker = inject(TreePickerService)
@@ -223,6 +225,14 @@ export class PersonalComponent implements OnInit, OnDestroy {
         action: () => this.downloadFile(f)
       },
       { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
+      {
+        id: 'size',
+        label: 'Calculate size',
+        icon: 'refresh',
+        disabled: !f.isDir,
+        disabledReason: !f.isDir ? 'Folders only' : undefined,
+        action: () => this.calculateFolderSize(f)
+      },
       { id: 'copy', label: 'Copy to…', icon: 'copy', action: () => this.copyOrMove(f, FILE_OPERATION.COPY) },
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
@@ -286,6 +296,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     this.urlSubscription = this.route.url.subscribe(() => {
       this.syncBreadcrumbs()
       this.clearSelection()
+      this.folderSize.clear()
       this.loadFiles()
     })
     // Refresh on each task affecting this folder, not just when the active queue
@@ -306,6 +317,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.urlSubscription?.unsubscribe()
+    this.folderSize.clear()
     this.dockRail.clear()
   }
 
@@ -581,6 +593,22 @@ export class PersonalComponent implements OnInit, OnDestroy {
       file.name
     )
     return buildFileModelStub(file, fullPath)
+  }
+
+  protected folderSizeState(fileId: number) {
+    return this.folderSize.state(fileId)
+  }
+
+  protected calculateFolderSize(file: FileProps): void {
+    // Mirror the path-building done in `buildFileStub` so FilesService.getSize
+    // receives the full server path it needs to construct the URL.
+    const fullPath = buildSpaceFilePath(
+      SPACE_REPOSITORY.FILES,
+      SPACE_ALIAS.PERSONAL,
+      this.pathSegments().map((s) => s.path),
+      file.name
+    )
+    this.folderSize.compute(file, fullPath)
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {
