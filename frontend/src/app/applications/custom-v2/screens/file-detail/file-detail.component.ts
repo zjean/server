@@ -73,6 +73,7 @@ export class FileDetailComponent implements OnInit {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
+  private readonly diagramView = viewChild(DiagramViewComponent)
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
@@ -250,6 +251,13 @@ export class FileDetailComponent implements OnInit {
     const p = this.currentPath()
     if (!p || typeof window === 'undefined') return
     window.open(`${API_FILES_OPERATION}/${encodeUrl(p)}`, '_self')
+  }
+
+  protected print(): void {
+    // Diagram print is routed through the parent (this) because drawio's own
+    // PrintDialog uses a popup that Firefox refuses to render from a cross-
+    // origin iframe. See DiagramViewComponent.requestPrint.
+    this.diagramView()?.requestPrint()
   }
 
   protected async openShare(): Promise<void> {

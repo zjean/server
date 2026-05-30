@@ -23,6 +23,7 @@ interface DrawioEvent {
   format?: string
   filename?: string
   data?: string
+  message?: { intent?: string }
 }
 
 interface LoadResponse {
@@ -68,6 +69,13 @@ export class DiagramViewComponent implements OnInit {
   // pick "Keep mine", so we track the most recent xml the editor handed us.
   private latestXmlWhileConflicted: string | null = null
   private conflictRefreshing = false
+  // Print is implemented host-side, not via drawio's File>Print menu, because
+  // drawio's PrintDialog opens a popup via window.open() — Firefox null-blocks
+  // that call when it originates from a third-party iframe (embed.diagrams.net
+  // in a sync-in.apps.* parent), regardless of sandbox attributes. We open the
+  // popup from THIS frame (same-origin with itself), then ask drawio to ship
+  // back the SVG via exportProtocol and write it into the popup ourselves.
+  private printWindow: Window | null = null
 
   ngOnInit(): void {
     this.http
@@ -87,7 +95,15 @@ export class DiagramViewComponent implements OnInit {
           this.etag = res.etag
           this.isWritable = res.isWritable
           this.pendingXml = res.xml
-          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1`
+          // configure=1 makes drawio wait for our `action:configure` reply
+          // before initialising, which is how we get to hide the File>Print
+          // menu item — drawio's PrintDialog opens a popup via window.open()
+          // and Firefox refuses to render document.write into a popup opened
+          // from a cross-origin iframe (sandbox or not). Hiding the menu item
+          // keeps users from finding a broken affordance; our own Print button
+          // does the work from the parent context where the popup is same-
+          // origin and works in every browser.
+          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1&configure=1`
           this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
           this.loading.set(false)
         },
@@ -96,6 +112,20 @@ export class DiagramViewComponent implements OnInit {
           this.loading.set(false)
         }
       })
+  }
+
+  // Fires only when the parent document has focus — keydown events inside a
+  // cross-origin iframe never bubble out. So Ctrl+P here covers the cases
+  // where the user is interacting with our chrome, not drawio's canvas. The
+  // canvas-focused case is unfixable from the host (see configure handler).
+  @HostListener('window:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    const isPrintCombo = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'p' || event.key === 'P')
+    if (!isPrintCombo) return
+    if (!this.iframeSrc()) return
+    event.preventDefault()
+    event.stopPropagation()
+    this.requestPrint()
   }
 
   @HostListener('window:message', ['$event'])
@@ -108,6 +138,16 @@ export class DiagramViewComponent implements OnInit {
       return
     }
     switch (data.event) {
+      case 'configure':
+        // hideMenuItems removes drawio's File>Print entry so users don't find
+        // a broken affordance. We can't disable the Ctrl+P shortcut the same
+        // way — drawio's mxKeyHandler binds it directly (EditorUi.js: keyHandler
+        // .bindAction(80, true, 'print')) and exposes no config gate — so the
+        // shortcut still triggers drawio's broken Print inside the focused
+        // iframe. Mitigated by our own host-side Ctrl+P listener, which fires
+        // whenever the parent (not the iframe) has focus.
+        this.postToEditor({ action: 'configure', config: { hideMenuItems: ['print'] } })
+        break
       case 'init':
         // exportProtocol:true makes drawio route UI-triggered exports (File >
         // Export As > PDF/PNG/…) through postMessage. Without it, drawio tries
@@ -121,7 +161,8 @@ export class DiagramViewComponent implements OnInit {
         if (data.xml != null) this.saveXml(data.xml)
         break
       case 'export':
-        this.downloadExport(data)
+        if (data.message?.intent === 'print') this.completePrint(data)
+        else this.downloadExport(data)
         break
       case 'exit':
         this.closeRequested.emit()
@@ -140,13 +181,78 @@ export class DiagramViewComponent implements OnInit {
     a.remove()
   }
 
-  private deriveExportFilename(format: string | undefined): string {
-    const base =
+  // Public so the file-detail toolbar can trigger it via viewChild ref.
+  // Must run synchronously from a user-click handler — see body.
+  requestPrint(): void {
+    // window.open MUST run synchronously inside the click handler — otherwise
+    // we lose the transient user-activation token and Firefox blocks the popup.
+    // We open about:blank now (no URL → same-origin with parent), fill it once
+    // drawio echoes the SVG back via the export postMessage protocol.
+    const w = window.open('', '_blank')
+    if (!w) return
+    if (this.printWindow && !this.printWindow.closed) this.printWindow.close()
+    this.printWindow = w
+    try {
+      w.document.open()
+      w.document.write('<!doctype html><meta charset="utf-8"><title>Print</title><body style="margin:0;font:14px/1.4 system-ui;display:flex;align-items:center;justify-content:center;height:100vh;color:#666">Preparing print preview…</body>')
+      w.document.close()
+    } catch {
+      // Some browsers throw before navigation completes — ignore, we'll write again.
+    }
+    this.postToEditor({ action: 'export', format: 'svg', asText: true, intent: 'print' })
+  }
+
+  private completePrint(data: DrawioEvent): void {
+    const w = this.printWindow
+    this.printWindow = null
+    if (!w || w.closed) return
+    const svg = data.data ?? ''
+    if (!svg) {
+      try { w.close() } catch { /* noop */ }
+      return
+    }
+    // Inline the SVG so the browser can vectorise it at print DPI. We wrap it
+    // in print-friendly CSS that fits one page and triggers print() after the
+    // SVG has laid out (rAF gives layout a tick to settle).
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${this.escapeHtml(this.deriveBaseName())}</title>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
+  svg { max-width: 100%; max-height: 100vh; height: auto; width: auto; }
+  @media print {
+    body { min-height: auto; }
+    svg { max-height: none; }
+  }
+</style></head><body>${svg}<script>
+  window.addEventListener('load', function () {
+    requestAnimationFrame(function () { requestAnimationFrame(function () { window.focus(); window.print(); }); });
+  });
+  window.addEventListener('afterprint', function () { window.close(); });
+</script></body></html>`
+    try {
+      w.document.open()
+      w.document.write(html)
+      w.document.close()
+    } catch {
+      try { w.close() } catch { /* noop */ }
+    }
+  }
+
+  private escapeHtml(s: string): string {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
+  }
+
+  private deriveBaseName(): string {
+    return (
       this.path
         .split('/')
         .pop()
         ?.replace(/\.drawio$/i, '') || 'diagram'
-    return `${base}.${format ?? 'bin'}`
+    )
+  }
+
+  private deriveExportFilename(format: string | undefined): string {
+    return `${this.deriveBaseName()}.${format ?? 'bin'}`
   }
 
   private postToEditor(msg: unknown): void {
