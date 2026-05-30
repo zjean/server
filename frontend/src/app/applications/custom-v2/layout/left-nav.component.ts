@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, input, signal } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -26,7 +26,9 @@ interface NavEntry {
   styleUrl: './left-nav.component.scss',
   host: {
     '[class.left-nav--open]': 'layoutV2.leftNavOpen()',
-    '[attr.id]': "'v2-left-nav'",
+    '[class.left-nav--compact]': 'compact()',
+    '[class.left-nav--overlay]': 'forceFullRender()',
+    '[attr.id]': "forceFullRender() ? 'v2-left-nav-overlay' : 'v2-left-nav'",
     '[attr.role]': "isDialogMode() ? 'dialog' : null",
     '[attr.aria-modal]': "isDialogMode() ? 'true' : null",
     '[attr.aria-label]': "isDialogMode() ? 'Navigation' : null"
@@ -40,16 +42,26 @@ export class LeftNavComponent {
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
+  // When true, this instance renders its full sidebar even if
+  // sidebarCollapsed() is set — used by the desktop overlay placement so
+  // the same component drives both the persistent rail and the temporary
+  // expanded overlay.
+  readonly forceFullRender = input(false)
+
   protected readonly user = toSignal(this.store.user)
   protected readonly userAvatar = toSignal(this.store.userAvatarUrl)
   protected readonly sharedOpen = signal(true)
   protected readonly adminOpen = signal(true)
-  protected readonly isDialogMode = computed(() => this.layoutV2.isMobile() && this.layoutV2.leftNavOpen())
+  protected readonly isDialogMode = computed(
+    () =>
+      (this.layoutV2.isMobile() && this.layoutV2.leftNavOpen()) ||
+      (!this.layoutV2.isMobile() && this.forceFullRender() && this.layoutV2.sidebarOverlay())
+  )
 
-  // AvatarUser entry for the current user — funnels into the same
-  // `<app-v2-avatar>` rendering path the AvatarStack on Space cards uses,
-  // so the same person renders with the same gradient + initials in both
-  // places. The store's avatar URL takes precedence when present.
+  // True when this instance should render as the 48px icon rail. The
+  // overlay instance (forceFullRender=true) always renders full.
+  protected readonly compact = computed(() => !this.layoutV2.isMobile() && this.layoutV2.sidebarCollapsed() && !this.forceFullRender())
+
   protected readonly meAvatar = computed<AvatarUser>(() => {
     const u = this.user()
     const seed = u?.login ?? u?.fullName ?? ''
@@ -83,8 +95,8 @@ export class LeftNavComponent {
   protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
   // Sidebar header (wordmark) is desktop-only — mobile already shows the
   // wordmark via the title-bar's brand button, so an extra header in the
-  // drawer would duplicate it.
-  protected readonly showHeader = computed(() => !this.layoutV2.isMobile())
+  // drawer would duplicate it. Also hidden in compact rail mode.
+  protected readonly showHeader = computed(() => !this.layoutV2.isMobile() && !this.compact())
 
   // AGPL §13 source link — required when the server is deployed for anyone
   // but the maintainer. Lives in the LeftNav footer so it's visible on every
@@ -101,6 +113,9 @@ export class LeftNavComponent {
         if (this.layoutV2.isMobile() && this.layoutV2.leftNavOpen()) {
           this.layoutV2.closeLeftNav()
         }
+        if (!this.layoutV2.isMobile() && this.layoutV2.sidebarOverlay()) {
+          this.layoutV2.closeSidebarOverlay()
+        }
       })
   }
 
@@ -115,5 +130,9 @@ export class LeftNavComponent {
   protected backToClassic(): void {
     clearUiVersion()
     this.router.navigate(['/']).catch(console.error)
+  }
+
+  protected openOverlay(): void {
+    this.layoutV2.openSidebarOverlay()
   }
 }

@@ -1,68 +1,120 @@
-<nav class="left-nav">
-  @if (showHeader()) {
-    <header class="left-nav__header">
-      <div class="left-nav__brand">
-        <app-v2-logo [size]="20" />
-        <div class="left-nav__brand-text">
-          <span class="left-nav__brand-name">Sync-In</span>
-          <span class="left-nav__brand-eyebrow" l10nTranslate>Files</span>
-        </div>
-      </div>
-    </header>
-  }
+@if (compact()) {
+  <nav class="left-nav left-nav--rail" [attr.aria-label]="'Navigation' | translate: locale.language">
+    @for (it of workspace; track it.id) {
+      <a
+        [routerLink]="it.route"
+        routerLinkActive="left-nav__rail-item--active"
+        class="left-nav__rail-item"
+        [title]="it.label | translate: locale.language"
+        [attr.aria-label]="it.label | translate: locale.language"
+      >
+        <app-v2-icon [name]="it.icon" [size]="17" />
+      </a>
+    }
 
-  <div class="left-nav__section-label" l10nTranslate>Workspace</div>
-  @for (it of workspace; track it.id) {
-    <a
-      [routerLink]="it.route"
-      routerLinkActive="left-nav__item--active"
-      class="left-nav__item"
+    <div class="left-nav__rail-spacer"></div>
+
+    <button
+      type="button"
+      class="left-nav__rail-item"
+      (click)="openOverlay()"
+      [title]="'All shares' | translate: locale.language"
+      [attr.aria-label]="'All shares' | translate: locale.language"
     >
-      <app-v2-icon [name]="it.icon" [size]="15" />
-      <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
-    </a>
-  }
+      <app-v2-icon name="share" [size]="17" />
+    </button>
+    @if (user()?.isAdmin) {
+      <button
+        type="button"
+        class="left-nav__rail-item"
+        (click)="openOverlay()"
+        [title]="'Administration' | translate: locale.language"
+        [attr.aria-label]="'Administration' | translate: locale.language"
+      >
+        <app-v2-icon name="person" [size]="17" />
+      </button>
+    }
 
-  <div class="left-nav__spacer"></div>
-  <div class="left-nav__section-label" l10nTranslate>Shared</div>
-  <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleShared()">
-    <app-v2-icon name="share" [size]="15" />
-    <span class="left-nav__label" l10nTranslate>All shares</span>
-    <app-v2-icon
-      name="chevDown"
-      [size]="11"
-      class="left-nav__caret"
-      [class.left-nav__caret--collapsed]="!sharedOpen()"
-    />
-  </button>
-  @if (sharedOpen()) {
-    @for (it of sharedEntries; track it.id) {
+    <div class="left-nav__rail-fill"></div>
+
+    <a
+      [routerLink]="peopleRoute"
+      routerLinkActive="left-nav__rail-item--active"
+      class="left-nav__rail-item"
+      [title]="'People' | translate: locale.language"
+      [attr.aria-label]="'People' | translate: locale.language"
+    >
+      <app-v2-icon name="person" [size]="17" />
+    </a>
+    <a
+      [routerLink]="trashRoute"
+      routerLinkActive="left-nav__rail-item--active"
+      class="left-nav__rail-item"
+      [title]="'Trash' | translate: locale.language"
+      [attr.aria-label]="'Trash' | translate: locale.language"
+    >
+      <app-v2-icon name="trash" [size]="17" />
+    </a>
+    <a
+      [routerLink]="settingsRoute"
+      routerLinkActive="left-nav__rail-item--active"
+      class="left-nav__rail-item"
+      [title]="'Settings' | translate: locale.language"
+      [attr.aria-label]="'Settings' | translate: locale.language"
+    >
+      <app-v2-icon name="settings" [size]="17" />
+    </a>
+
+    <button
+      type="button"
+      class="left-nav__rail-item left-nav__rail-expand"
+      (click)="openOverlay()"
+      [title]="'Expand sidebar' | translate: locale.language"
+      [attr.aria-label]="'Expand sidebar' | translate: locale.language"
+    >
+      <app-v2-icon name="chevRight" [size]="15" />
+    </button>
+  </nav>
+} @else {
+  <nav class="left-nav">
+    @if (showHeader()) {
+      <header class="left-nav__header">
+        <div class="left-nav__brand">
+          <app-v2-logo [size]="20" />
+          <div class="left-nav__brand-text">
+            <span class="left-nav__brand-name">Sync-In</span>
+            <span class="left-nav__brand-eyebrow" l10nTranslate>Files</span>
+          </div>
+        </div>
+      </header>
+    }
+
+    <div class="left-nav__section-label" l10nTranslate>Workspace</div>
+    @for (it of workspace; track it.id) {
       <a
         [routerLink]="it.route"
         routerLinkActive="left-nav__item--active"
-        class="left-nav__item left-nav__item--sub"
+        class="left-nav__item"
       >
         <app-v2-icon [name]="it.icon" [size]="15" />
         <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
       </a>
     }
-  }
 
-  @if (user()?.isAdmin) {
     <div class="left-nav__spacer"></div>
-    <div class="left-nav__section-label" l10nTranslate>Admin</div>
-    <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleAdmin()">
-      <app-v2-icon name="person" [size]="15" />
-      <span class="left-nav__label" l10nTranslate>Administration</span>
+    <div class="left-nav__section-label" l10nTranslate>Shared</div>
+    <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleShared()">
+      <app-v2-icon name="share" [size]="15" />
+      <span class="left-nav__label" l10nTranslate>All shares</span>
       <app-v2-icon
         name="chevDown"
         [size]="11"
         class="left-nav__caret"
-        [class.left-nav__caret--collapsed]="!adminOpen()"
+        [class.left-nav__caret--collapsed]="!sharedOpen()"
       />
     </button>
-    @if (adminOpen()) {
-      @for (it of adminEntries; track it.id) {
+    @if (sharedOpen()) {
+      @for (it of sharedEntries; track it.id) {
         <a
           [routerLink]="it.route"
           routerLinkActive="left-nav__item--active"
@@ -73,52 +125,79 @@
         </a>
       }
     }
-  }
 
-  <div class="left-nav__fill"></div>
-  <div class="left-nav__divider"></div>
-  <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
-    <app-v2-icon name="person" [size]="15" />
-    <span class="left-nav__label" l10nTranslate>People</span>
-  </a>
-  <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
-    <app-v2-icon name="trash" [size]="15" />
-    <span class="left-nav__label" l10nTranslate>Trash</span>
-  </a>
+    @if (user()?.isAdmin) {
+      <div class="left-nav__spacer"></div>
+      <div class="left-nav__section-label" l10nTranslate>Admin</div>
+      <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleAdmin()">
+        <app-v2-icon name="person" [size]="15" />
+        <span class="left-nav__label" l10nTranslate>Administration</span>
+        <app-v2-icon
+          name="chevDown"
+          [size]="11"
+          class="left-nav__caret"
+          [class.left-nav__caret--collapsed]="!adminOpen()"
+        />
+      </button>
+      @if (adminOpen()) {
+        @for (it of adminEntries; track it.id) {
+          <a
+            [routerLink]="it.route"
+            routerLinkActive="left-nav__item--active"
+            class="left-nav__item left-nav__item--sub"
+          >
+            <app-v2-icon [name]="it.icon" [size]="15" />
+            <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
+          </a>
+        }
+      }
+    }
 
-  @if (user()) {
-    <div class="left-nav__user-card">
-      <app-v2-avatar [user]="meAvatar()" [size]="28" />
-      <div class="left-nav__user-meta">
-        <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
-        <div class="left-nav__user-usage">
-          {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
-          @if ((user()?.storageQuota ?? 0) > 0) {
-            / {{ user()?.storageQuota | toBytes }}
-          } @else {
-            <span class="left-nav__user-usage-sep">·</span>
-            <span l10nTranslate>unlimited</span>
-          }
+    <div class="left-nav__fill"></div>
+    <div class="left-nav__divider"></div>
+    <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+      <app-v2-icon name="person" [size]="15" />
+      <span class="left-nav__label" l10nTranslate>People</span>
+    </a>
+    <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+      <app-v2-icon name="trash" [size]="15" />
+      <span class="left-nav__label" l10nTranslate>Trash</span>
+    </a>
+
+    @if (user()) {
+      <div class="left-nav__user-card">
+        <app-v2-avatar [user]="meAvatar()" [size]="28" />
+        <div class="left-nav__user-meta">
+          <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
+          <div class="left-nav__user-usage">
+            {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
+            @if ((user()?.storageQuota ?? 0) > 0) {
+              / {{ user()?.storageQuota | toBytes }}
+            } @else {
+              <span class="left-nav__user-usage-sep">·</span>
+              <span l10nTranslate>unlimited</span>
+            }
+          </div>
         </div>
+        <a
+          class="left-nav__user-cog"
+          [routerLink]="settingsRoute"
+          [attr.aria-label]="'Settings' | translate: locale.language"
+          [title]="'Settings' | translate: locale.language"
+        >
+          <app-v2-icon name="settings" [size]="14" />
+        </a>
       </div>
-      <a
-        class="left-nav__user-cog"
-        [routerLink]="settingsRoute"
-        [attr.aria-label]="'Settings' | translate: locale.language"
-        [title]="'Settings' | translate: locale.language"
-      >
-        <app-v2-icon name="settings" [size]="14" />
-      </a>
-    </div>
-  }
-  <a
-    class="left-nav__source"
-    [href]="sourceUrl"
-    target="_blank"
-    rel="noopener noreferrer"
-    title="Source code — github.com/zjean/server (AGPL §13)"
-  >
-    zjean/server · source
-  </a>
-  <a class="left-nav__back" (click)="backToClassic()" l10nTranslate>← Back to classic UI</a>
-</nav>
+    }
+    <a
+      class="left-nav__source"
+      [href]="sourceUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Source code — github.com/zjean/server (AGPL §13)"
+    >
+      zjean/server · source
+    </a>
+    <a class="left-nav__back" (click)="backToClassic()" l10nTranslate>← Back to classic UI</a>
+  </nav>
+}

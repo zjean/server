@@ -1,5 +1,18 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, HostListener, inject, OnInit, signal, viewChild } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  OnInit,
+  signal,
+  untracked,
+  viewChild
+} from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
@@ -155,6 +168,22 @@ export class FileDetailComponent implements OnInit {
     const alias = parts[1] ?? ''
     return !!this.file() && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES
   })
+
+  constructor() {
+    // Auto-collapse the desktop sidebar while an office or diagram editor is
+    // mounted; restore the user's prior collapse state on leave. The signal
+    // writes go through untracked() per the LayoutV2Service contract — the
+    // effect itself only reads isOffice/isDiagram, so the writes don't
+    // re-trigger it.
+    effect(() => {
+      const inEditor = this.isOffice() || this.isDiagram()
+      untracked(() => {
+        if (inEditor) this.layoutV2.beginAutoCollapse()
+        else this.layoutV2.endAutoCollapse()
+      })
+    })
+    this.destroyRef.onDestroy(() => this.layoutV2.endAutoCollapse())
+  }
 
   @HostListener('window:keydown', ['$event'])
   onKey(ev: KeyboardEvent): void {

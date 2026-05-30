@@ -26,6 +26,15 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   imports: [IconV2Component, AvatarComponent, NotificationsBellComponent, TransfersPopoverComponent, RouterLink, L10nTranslatePipe],
   template: `
     <header class="topbar">
+      <button
+        type="button"
+        class="topbar__chev topbar__sidebar-toggle"
+        [attr.aria-label]="(layoutV2.sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar') | translate: locale.language"
+        [attr.title]="(layoutV2.sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar') | translate: locale.language"
+        (click)="toggleSidebar()"
+      >
+        <app-v2-icon [name]="layoutV2.sidebarCollapsed() ? 'chevRight' : 'chevLeft'" [size]="14" />
+      </button>
       <div class="topbar__history">
         <button type="button" class="topbar__chev" [attr.aria-label]="'Back' | translate: locale.language" (click)="goBack()">
           <app-v2-icon name="chevLeft" [size]="14" />
@@ -85,7 +94,7 @@ export class TopBarComponent {
   private readonly translation = inject(L10nTranslationService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
-  private readonly layoutV2 = inject(LayoutV2Service)
+  protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly store = inject(StoreService)
   protected readonly segments = this.breadcrumbs.segments
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput')
@@ -139,6 +148,10 @@ export class TopBarComponent {
   // because the v2 shell sits inside the same window history as the classic
   // UI — we want "back" to land wherever the user actually came from, not
   // just the previous v2 route.
+  protected toggleSidebar(): void {
+    this.layoutV2.toggleSidebar()
+  }
+
   protected goBack(): void {
     if (typeof history !== 'undefined') history.back()
   }
