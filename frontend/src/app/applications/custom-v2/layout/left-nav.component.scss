@@ -3,6 +3,24 @@
   flex-shrink: 0;
 }
 
+// Desktop overlay placement — used when the persistent rail is showing
+// and the user has temporarily expanded the full nav over content. The
+// host of the overlay LeftNav instance gets .left-nav--overlay; the
+// inner .left-nav keeps its normal 248px width. Backdrop is rendered by
+// layout-v2 itself.
+:host.left-nav--overlay {
+  position: fixed;
+  top: 0;
+  left: 48px; // sits immediately to the right of the persistent rail
+  bottom: 0;
+  z-index: 41;
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+
+  .left-nav {
+    height: 100%;
+  }
+}
+
 // Mobile drawer — gated on the layout's `.layout-v2--mobile` class via
 // :host-context so the encapsulation matches the desktop rules. The
 // drawer slides in from the left edge of the viewport over content.
@@ -268,5 +286,54 @@
     &:hover {
       color: var(--si-accent);
     }
+  }
+
+  // Compact rail — 48px-wide icon-only column shown when the user has
+  // collapsed the sidebar on desktop. The :host gets .left-nav--compact;
+  // this .left-nav--rail variant replaces the full nav inside.
+  &--rail {
+    width: 48px;
+    padding: 8px 0;
+    align-items: center;
+    gap: 2px;
+  }
+
+  &__rail-item {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: var(--si-fg-muted);
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--si-bg3);
+      color: var(--si-fg);
+    }
+
+    &--active {
+      background: var(--si-accent-soft);
+      color: var(--si-accent);
+    }
+  }
+
+  &__rail-spacer {
+    height: 8px;
+  }
+
+  &__rail-fill {
+    flex: 1 1 auto;
+    min-height: 8px;
+  }
+
+  &__rail-expand {
+    margin-top: 4px;
+    color: var(--si-fg-faint);
   }
 }
