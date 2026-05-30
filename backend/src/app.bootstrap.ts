@@ -90,7 +90,19 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
     contentSecurityPolicy: CONTENT_SECURITY_POLICY(
       configuration.applications.files.onlyoffice.externalServer,
       configuration.applications.files.collabora.externalServer
-    )
+    ),
+    // Helmet defaults to `same-origin`, which places popups opened by
+    // cross-origin iframes (drawio at embed.diagrams.net) in a separate
+    // browsing-context group. The opener relationship is severed, so the
+    // iframe can't write into the popup it just opened — that's what breaks
+    // drawio's native File>Print and Ctrl+P in Firefox. Relaxing to
+    // `same-origin-allow-popups` keeps top-level isolation (the parent still
+    // can't be opened-and-poked-at by hostile cross-origin openers) while
+    // letting popups that don't oppose us — like drawio's about:blank print
+    // preview — stay in the same BCG with an intact opener handle. NC's
+    // drawio integration ships with no COOP at all and works in Firefox for
+    // the same reason.
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' }
   })
 
   /* COOKIES */
