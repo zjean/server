@@ -135,4 +135,17 @@ export class LeftNavComponent {
   protected openOverlay(): void {
     this.layoutV2.openSidebarOverlay()
   }
+
+  // Header collapse button. In the desktop overlay (collapsed-rail user has
+  // temporarily expanded the full nav over content), the right action is to
+  // dismiss the overlay back to the rail — calling toggleSidebar() there
+  // would un-collapse and lose the rail. In normal expanded mode, just
+  // toggle collapse.
+  protected dismissSidebar(): void {
+    if (this.forceFullRender()) {
+      this.layoutV2.closeSidebarOverlay()
+    } else {
+      this.layoutV2.toggleSidebar()
+    }
+  }
 }

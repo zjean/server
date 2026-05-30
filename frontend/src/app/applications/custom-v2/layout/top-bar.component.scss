@@ -20,14 +20,6 @@
   font-family: var(--si-sans);
   color: var(--si-fg);
 
-  // Sidebar collapse/expand toggle — sits to the left of the history chevs
-  // so it lands on the natural edge of the chrome, mirroring where the
-  // sidebar's right border meets the top-bar.
-  &__sidebar-toggle {
-    flex-shrink: 0;
-    margin-right: 4px;
-  }
-
   // Back/forward chevrons. Stack pattern: subtle ghost buttons that hint
   // at navigation depth without competing with the breadcrumb.
   &__history {

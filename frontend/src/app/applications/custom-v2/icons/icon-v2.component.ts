@@ -63,6 +63,7 @@ export type IconV2Name =
   | 'copy'
   | 'moveTo'
   | 'print'
+  | 'sidebar'
 
 @Component({
   selector: 'app-v2-icon',

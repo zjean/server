@@ -26,15 +26,6 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   imports: [IconV2Component, AvatarComponent, NotificationsBellComponent, TransfersPopoverComponent, RouterLink, L10nTranslatePipe],
   template: `
     <header class="topbar">
-      <button
-        type="button"
-        class="topbar__chev topbar__sidebar-toggle"
-        [attr.aria-label]="(layoutV2.sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar') | translate: locale.language"
-        [attr.title]="(layoutV2.sidebarCollapsed() ? 'Expand sidebar' : 'Collapse sidebar') | translate: locale.language"
-        (click)="toggleSidebar()"
-      >
-        <app-v2-icon [name]="layoutV2.sidebarCollapsed() ? 'chevRight' : 'chevLeft'" [size]="14" />
-      </button>
       <div class="topbar__history">
         <button type="button" class="topbar__chev" [attr.aria-label]="'Back' | translate: locale.language" (click)="goBack()">
           <app-v2-icon name="chevLeft" [size]="14" />
