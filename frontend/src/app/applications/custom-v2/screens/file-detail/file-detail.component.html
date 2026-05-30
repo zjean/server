@@ -23,6 +23,9 @@
       <span class="detail__divider"></span>
       <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="!canShare()" (click)="openShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
       <app-v2-btn kind="ghost" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+      @if (isDiagram()) {
+        <app-v2-btn kind="ghost" size="sm" icon="print" (click)="print()">{{ 'Print' | translate: locale.language }}</app-v2-btn>
+      }
       <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Favorite' | translate: locale.language }}</app-v2-btn>
       <span class="detail__divider"></span>
       @if (isImage()) {
