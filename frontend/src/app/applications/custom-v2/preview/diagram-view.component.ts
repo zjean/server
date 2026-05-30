@@ -69,12 +69,12 @@ export class DiagramViewComponent implements OnInit {
   // pick "Keep mine", so we track the most recent xml the editor handed us.
   private latestXmlWhileConflicted: string | null = null
   private conflictRefreshing = false
-  // Print is implemented host-side, not via drawio's File>Print menu, because
-  // drawio's PrintDialog opens a popup via window.open() — Firefox null-blocks
-  // that call when it originates from a third-party iframe (embed.diagrams.net
-  // in a sync-in.apps.* parent), regardless of sandbox attributes. We open the
-  // popup from THIS frame (same-origin with itself), then ask drawio to ship
-  // back the SVG via exportProtocol and write it into the popup ourselves.
+  // Host-side Print path. Native File>Print and Ctrl+P inside the iframe also
+  // work now that the parent serves COOP `same-origin-allow-popups` instead of
+  // `same-origin` (see backend/src/app.bootstrap.ts) — drawio's window.open
+  // popup stays in the parent BCG and can be written to from the iframe. We
+  // keep this host-side path as a discoverable toolbar entry point that mirrors
+  // Share / Download.
   private printWindow: Window | null = null
 
   ngOnInit(): void {
@@ -95,15 +95,7 @@ export class DiagramViewComponent implements OnInit {
           this.etag = res.etag
           this.isWritable = res.isWritable
           this.pendingXml = res.xml
-          // configure=1 makes drawio wait for our `action:configure` reply
-          // before initialising, which is how we get to hide the File>Print
-          // menu item — drawio's PrintDialog opens a popup via window.open()
-          // and Firefox refuses to render document.write into a popup opened
-          // from a cross-origin iframe (sandbox or not). Hiding the menu item
-          // keeps users from finding a broken affordance; our own Print button
-          // does the work from the parent context where the popup is same-
-          // origin and works in every browser.
-          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1&configure=1`
+          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1`
           this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
           this.loading.set(false)
         },
@@ -138,16 +130,6 @@ export class DiagramViewComponent implements OnInit {
       return
     }
     switch (data.event) {
-      case 'configure':
-        // hideMenuItems removes drawio's File>Print entry so users don't find
-        // a broken affordance. We can't disable the Ctrl+P shortcut the same
-        // way — drawio's mxKeyHandler binds it directly (EditorUi.js: keyHandler
-        // .bindAction(80, true, 'print')) and exposes no config gate — so the
-        // shortcut still triggers drawio's broken Print inside the focused
-        // iframe. Mitigated by our own host-side Ctrl+P listener, which fires
-        // whenever the parent (not the iframe) has focus.
-        this.postToEditor({ action: 'configure', config: { hideMenuItems: ['print'] } })
-        break
       case 'init':
         // exportProtocol:true makes drawio route UI-triggered exports (File >
         // Export As > PDF/PNG/…) through postMessage. Without it, drawio tries
