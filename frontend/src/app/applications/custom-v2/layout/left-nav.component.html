@@ -1,5 +1,16 @@
 @if (compact()) {
   <nav class="left-nav left-nav--rail" [attr.aria-label]="'Navigation' | translate: locale.language">
+    <button
+      type="button"
+      class="left-nav__rail-item left-nav__rail-toggle"
+      (click)="dismissSidebar()"
+      [title]="'Expand sidebar' | translate: locale.language"
+      [attr.aria-label]="'Expand sidebar' | translate: locale.language"
+    >
+      <app-v2-icon name="sidebar" [size]="17" />
+    </button>
+    <div class="left-nav__rail-divider" aria-hidden="true"></div>
+
     @for (it of workspace; track it.id) {
       <a
         [routerLink]="it.route"
@@ -86,6 +97,15 @@
             <span class="left-nav__brand-eyebrow" l10nTranslate>Files</span>
           </div>
         </div>
+        <button
+          type="button"
+          class="left-nav__collapse-btn"
+          [attr.aria-label]="'Collapse sidebar' | translate: locale.language"
+          [title]="'Collapse sidebar' | translate: locale.language"
+          (click)="dismissSidebar()"
+        >
+          <app-v2-icon name="sidebar" [size]="16" />
+        </button>
       </header>
     }
 

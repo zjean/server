@@ -90,6 +90,30 @@
     min-width: 0;
   }
 
+  // In-sidebar collapse button — sits at the top-right of the header so the
+  // toggle is co-located with the panel it controls. The top-bar only shows
+  // a toggle when the sidebar is collapsed (i.e., when this button isn't
+  // reachable).
+  &__collapse-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    color: var(--si-fg-faint);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+
+    &:hover {
+      background: var(--si-bg3);
+      color: var(--si-fg);
+    }
+  }
+
   &__brand-text {
     display: flex;
     flex-direction: column;
@@ -321,6 +345,21 @@
       background: var(--si-accent-soft);
       color: var(--si-accent);
     }
+  }
+
+  // Rail-top expand toggle — mirrors the in-header collapse button on the
+  // expanded sidebar. The divider directly below acts as the underline that
+  // separates it from the nav items, so it reads as chrome rather than
+  // another nav item.
+  &__rail-toggle {
+    color: var(--si-fg-faint);
+  }
+
+  &__rail-divider {
+    align-self: stretch;
+    height: 1px;
+    background: var(--si-line);
+    margin: 6px 6px 8px;
   }
 
   &__rail-spacer {
