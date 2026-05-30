@@ -194,7 +194,9 @@ export class DiagramViewComponent implements OnInit {
     this.printWindow = w
     try {
       w.document.open()
-      w.document.write('<!doctype html><meta charset="utf-8"><title>Print</title><body style="margin:0;font:14px/1.4 system-ui;display:flex;align-items:center;justify-content:center;height:100vh;color:#666">Preparing print preview…</body>')
+      w.document.write(
+        '<!doctype html><meta charset="utf-8"><title>Print</title><body style="margin:0;font:14px/1.4 system-ui;display:flex;align-items:center;justify-content:center;height:100vh;color:#666">Preparing print preview…</body>'
+      )
       w.document.close()
     } catch {
       // Some browsers throw before navigation completes — ignore, we'll write again.
@@ -208,7 +210,11 @@ export class DiagramViewComponent implements OnInit {
     if (!w || w.closed) return
     const svg = data.data ?? ''
     if (!svg) {
-      try { w.close() } catch { /* noop */ }
+      try {
+        w.close()
+      } catch {
+        /* noop */
+      }
       return
     }
     // Inline the SVG so the browser can vectorise it at print DPI. We wrap it
@@ -234,7 +240,11 @@ export class DiagramViewComponent implements OnInit {
       w.document.write(html)
       w.document.close()
     } catch {
-      try { w.close() } catch { /* noop */ }
+      try {
+        w.close()
+      } catch {
+        /* noop */
+      }
     }
   }
 
