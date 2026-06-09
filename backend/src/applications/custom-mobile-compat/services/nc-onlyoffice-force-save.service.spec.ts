@@ -1,5 +1,5 @@
 // Mock configuration before any imports trigger config-environment loading.
-jest.mock('../../../configuration/config.environment', () => ({
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: {
@@ -14,8 +14,7 @@ jest.mock('../../../configuration/config.environment', () => ({
   }
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { configuration: mockConfig } = require('../../../configuration/config.environment')
+import { configuration as mockConfig } from '../../../configuration/config.environment'
 
 import { Test, TestingModule } from '@nestjs/testing'
 import { HttpService } from '@nestjs/axios'
@@ -26,13 +25,13 @@ import { NcOnlyOfficeForceSaveService } from './nc-onlyoffice-force-save.service
 describe('NcOnlyOfficeForceSaveService', () => {
   let service: NcOnlyOfficeForceSaveService
 
-  const cacheMock = { get: jest.fn(), set: jest.fn(), del: jest.fn() }
-  const jwtMock = { signAsync: jest.fn() }
-  const axiosRefMock = jest.fn()
+  const cacheMock = { get: vi.fn(), set: vi.fn(), del: vi.fn() }
+  const jwtMock = { signAsync: vi.fn() }
+  const axiosRefMock = vi.fn()
   const httpMock = { axiosRef: axiosRefMock }
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockConfig.applications.files.onlyoffice.externalServer = 'https://docs.example.test'
 
     const module: TestingModule = await Test.createTestingModule({

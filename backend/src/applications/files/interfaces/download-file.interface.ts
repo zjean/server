@@ -9,5 +9,9 @@ export interface DownloadFileContentInfo {
 export interface DownloadFileOptions {
   allowPrivateIP?: boolean
   space?: SpaceEnv
+  publishedPath?: string
   getContentInfo?: boolean
+  maxSize?: number
+  onProgress?: (bytes: number) => void
+  signal?: AbortSignal
 }

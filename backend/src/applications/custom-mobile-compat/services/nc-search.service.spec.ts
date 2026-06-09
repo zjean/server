@@ -6,6 +6,7 @@ import { FilesRecents } from '../../files/services/files-recents.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcPathResolverService } from './nc-path-resolver.service'
 import { NcSearchService } from './nc-search.service'
+import { Mock } from 'vitest'
 
 // Tests focus on observable behavior: HTTP status, content-type, and the
 // shape of the XML body. The exact wire-format byte-equivalence with PROPFIND
@@ -77,12 +78,12 @@ function recentBody(scopeHref = '/files/alice', ts = '1714742400'): string {
 describe(NcSearchService.name, () => {
   let moduleRef: TestingModule
   let svc: NcSearchService
-  let getRecents: jest.Mock
-  let dbSelectFiles: jest.Mock // controls the rows returned by db.select().from(files).where(...)
+  let getRecents: Mock
+  let dbSelectFiles: Mock // controls the rows returned by db.select().from(files).where(...)
 
   beforeAll(async () => {
-    getRecents = jest.fn()
-    dbSelectFiles = jest.fn()
+    getRecents = vi.fn()
+    dbSelectFiles = vi.fn()
 
     // Minimal db proxy — drizzle chains .select().from(table).where(clause)
     // and awaits the result. We only need the chain terminator to resolve.

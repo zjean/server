@@ -11,25 +11,30 @@ import { NcPropfindService } from '../services/nc-propfind.service'
 import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { NcDavController } from './nc-dav.controller'
+import { Mock } from 'vitest'
 
 // `getProps` does fs.stat. Mock it so the test doesn't need a real file on disk.
-jest.mock('../../files/utils/files', () => ({
-  getProps: jest.fn()
+// Partial mock (importActual): vitest is stricter than jest about missing named
+// exports — transitive importers of this module reference other exports (fileName, …),
+// so keep the real module and override only getProps.
+vi.mock('../../files/utils/files', async (importActual) => ({
+  ...(await importActual<typeof import('../../files/utils/files')>()),
+  getProps: vi.fn()
 }))
 
 // `dbFileFromSpace` reads several SpaceEnv branches; mock it to return a known
 // stub so the test asserts the flow, not the helper's internal logic.
-jest.mock('../../spaces/utils/paths', () => ({
-  dbFileFromSpace: jest.fn()
+vi.mock('../../spaces/utils/paths', () => ({
+  dbFileFromSpace: vi.fn()
 }))
 
-const mockedGetProps = getProps as jest.Mock
-const mockedDbFileFromSpace = dbFileFromSpace as jest.Mock
+const mockedGetProps = getProps as Mock
+const mockedDbFileFromSpace = dbFileFromSpace as Mock
 
 describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
   let moduleRef: TestingModule
   let controller: NcDavController
-  let spacesQueries: { getOrCreateUserFile: jest.Mock; getOrCreateSpaceFile: jest.Mock }
+  let spacesQueries: { getOrCreateUserFile: Mock; getOrCreateSpaceFile: Mock }
 
   const fileProps = {
     id: -987654, // negative inode placeholder — what parseFS returns for new files
@@ -43,14 +48,14 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
   }
 
   beforeAll(async () => {
-    spacesQueries = { getOrCreateUserFile: jest.fn(), getOrCreateSpaceFile: jest.fn() }
+    spacesQueries = { getOrCreateUserFile: vi.fn(), getOrCreateSpaceFile: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcDavController],
       providers: [
         { provide: NcPathResolverService, useValue: {} },
         {
           provide: NcShareMountResolverService,
-          useValue: { listMounts: jest.fn().mockResolvedValue([]), findByAlias: jest.fn().mockResolvedValue(null) }
+          useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn().mockResolvedValue(null) }
         },
         { provide: SpacesManager, useValue: {} },
         { provide: SpacesQueries, useValue: spacesQueries },
@@ -71,7 +76,7 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockedGetProps.mockResolvedValue(fileProps)
     mockedDbFileFromSpace.mockReturnValue({ ownerId: 7, spaceId: 42, path: 'sub' })
   })
@@ -142,10 +147,10 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
 describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
   let moduleRef: TestingModule
   let controller: NcDavController
-  let spacesManager: { spaceEnv: jest.Mock }
+  let spacesManager: { spaceEnv: Mock }
 
   beforeAll(async () => {
-    spacesManager = { spaceEnv: jest.fn() }
+    spacesManager = { spaceEnv: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcDavController],
       providers: [
@@ -153,7 +158,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
         NcPathResolverService,
         {
           provide: NcShareMountResolverService,
-          useValue: { listMounts: jest.fn().mockResolvedValue([]), findByAlias: jest.fn().mockResolvedValue(null) }
+          useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn().mockResolvedValue(null) }
         },
         { provide: SpacesManager, useValue: spacesManager },
         { provide: SpacesQueries, useValue: {} },
@@ -174,7 +179,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
   })
 
@@ -218,16 +223,16 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
 describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
   let moduleRef: TestingModule
   let controller: NcDavController
-  let spacesManager: { spaceEnv: jest.Mock }
-  let shareMounts: { listMounts: jest.Mock; findByAlias: jest.Mock }
+  let spacesManager: { spaceEnv: Mock }
+  let shareMounts: { listMounts: Mock; findByAlias: Mock }
 
   beforeAll(async () => {
-    spacesManager = { spaceEnv: jest.fn() }
+    spacesManager = { spaceEnv: vi.fn() }
     // attachSpace memoizes a listMounts call once per request. findByAlias
     // remains on the surface but is unused by buildUrlSegments after the
     // memo fix; we keep a mock here so the rest of the suite (which provides
     // it as a fallback) compiles.
-    shareMounts = { listMounts: jest.fn(), findByAlias: jest.fn() }
+    shareMounts = { listMounts: vi.fn(), findByAlias: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcDavController],
       providers: [
@@ -252,7 +257,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
     shareMounts.listMounts.mockResolvedValue([])
   })

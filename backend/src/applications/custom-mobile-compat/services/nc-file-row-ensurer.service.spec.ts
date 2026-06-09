@@ -6,12 +6,13 @@ import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
+import { Mock } from 'vitest'
 
-jest.mock('../../spaces/utils/paths', () => ({
-  dbFileFromSpace: jest.fn()
+vi.mock('../../spaces/utils/paths', () => ({
+  dbFileFromSpace: vi.fn()
 }))
 
-const mockedDbFileFromSpace = dbFileFromSpace as jest.Mock
+const mockedDbFileFromSpace = dbFileFromSpace as Mock
 
 // Helper: builds a chainable drizzle SELECT thenable that resolves to `rows`.
 // We only need .from().where().limit() to fall through to the row array.
@@ -51,17 +52,17 @@ function fsFile(opts: FsFileOpts = {}): WebDAVFile {
 
 describe('NcFileRowEnsurer', () => {
   let service: NcFileRowEnsurer
-  let db: { select: jest.Mock }
-  let filesQueries: { getOrCreateUserFile: jest.Mock; getSpaceFileId: jest.Mock; getOrCreateSpaceFile: jest.Mock }
+  let db: { select: Mock }
+  let filesQueries: { getOrCreateUserFile: Mock; getSpaceFileId: Mock; getOrCreateSpaceFile: Mock }
 
   const user = { id: 7, login: 'alice' } as unknown as UserModel
 
   beforeEach(async () => {
-    db = { select: jest.fn() }
+    db = { select: vi.fn() }
     filesQueries = {
-      getOrCreateUserFile: jest.fn(),
-      getSpaceFileId: jest.fn(),
-      getOrCreateSpaceFile: jest.fn()
+      getOrCreateUserFile: vi.fn(),
+      getSpaceFileId: vi.fn(),
+      getOrCreateSpaceFile: vi.fn()
     }
     mockedDbFileFromSpace.mockReturnValue({ ownerId: 7, spaceId: 42, path: 'Photos' })
     const moduleRef = await Test.createTestingModule({

@@ -11,20 +11,21 @@ import { UsersManager } from '../../users/services/users-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcExtrasController } from './nc-extras.controller'
+import { Mock } from 'vitest'
 
 describe(NcExtrasController.name, () => {
   let moduleRef: TestingModule
   let controller: NcExtrasController
-  let getAvatar: jest.Mock
-  let generateThumbnail: jest.Mock
-  let spaceEnv: jest.Mock
-  let getUserFile: jest.Mock
+  let getAvatar: Mock
+  let generateThumbnail: Mock
+  let spaceEnv: Mock
+  let getUserFile: Mock
 
   beforeAll(async () => {
-    getAvatar = jest.fn()
-    generateThumbnail = jest.fn()
-    spaceEnv = jest.fn()
-    getUserFile = jest.fn()
+    getAvatar = vi.fn()
+    generateThumbnail = vi.fn()
+    spaceEnv = vi.fn()
+    getUserFile = vi.fn()
     moduleRef = await Test.createTestingModule({
       controllers: [NcExtrasController],
       providers: [
@@ -56,8 +57,8 @@ describe(NcExtrasController.name, () => {
 
   function fakeRes(): FastifyReply {
     return {
-      header: jest.fn().mockReturnThis(),
-      status: jest.fn().mockReturnThis()
+      header: vi.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis()
     } as unknown as FastifyReply
   }
   function fakePreviewReq(login = 'alice'): FastifyRequest & { user: UserModel } {

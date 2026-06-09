@@ -6,6 +6,7 @@ import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcRecommendationsController } from './nc-recommendations.controller'
+import { Mock } from 'vitest'
 
 // NextcloudKit's getRecommendedFiles sends Accept: application/xml; the
 // controller must reply with XML at path ocs → data → recommendations →
@@ -51,10 +52,10 @@ function recent(overrides: Partial<FileRecent> = {}): FileRecent {
 describe(NcRecommendationsController.name, () => {
   let moduleRef: TestingModule
   let controller: NcRecommendationsController
-  let getRecents: jest.Mock
+  let getRecents: Mock
 
   beforeAll(async () => {
-    getRecents = jest.fn()
+    getRecents = vi.fn()
     moduleRef = await Test.createTestingModule({
       controllers: [NcRecommendationsController],
       providers: [

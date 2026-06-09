@@ -5,9 +5,10 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcResponseService } from '../services/nc-response.service'
 import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcOcsSharesController } from './nc-ocs-shares.controller'
+import { Mock } from 'vitest'
 
 function fakeReply(): FastifyReply {
-  return { header: jest.fn() } as unknown as FastifyReply
+  return { header: vi.fn() } as unknown as FastifyReply
 }
 
 function jsonOnlyReq(): FastifyRequest {
@@ -17,7 +18,7 @@ function jsonOnlyReq(): FastifyRequest {
 describe(NcOcsSharesController.name, () => {
   let moduleRef: TestingModule
   let controller: NcOcsSharesController
-  let shareMounts: { listMounts: jest.Mock }
+  let shareMounts: { listMounts: Mock }
 
   const user = { id: 7, login: 'bob', fullName: 'Bob Burns' } as unknown as UserModel
 
@@ -36,7 +37,7 @@ describe(NcOcsSharesController.name, () => {
   }
 
   beforeAll(async () => {
-    shareMounts = { listMounts: jest.fn() }
+    shareMounts = { listMounts: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcOcsSharesController],
       providers: [NcResponseService, { provide: NcShareMountResolverService, useValue: shareMounts }]
@@ -53,7 +54,7 @@ describe(NcOcsSharesController.name, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it('returns one envelope-wrapped record per incoming share when shared_with_me=true (v2)', async () => {

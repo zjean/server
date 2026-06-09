@@ -1,14 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { NcSyncLogScheduler } from './nc-sync-log-scheduler.service'
 import { NcSyncLogService } from './nc-sync-log.service'
+import { Mock } from 'vitest'
 
 describe(NcSyncLogScheduler.name, () => {
   let moduleRef: TestingModule
   let scheduler: NcSyncLogScheduler
-  let prune: jest.Mock
+  let prune: Mock
 
   beforeAll(async () => {
-    prune = jest.fn()
+    prune = vi.fn()
     moduleRef = await Test.createTestingModule({
       providers: [NcSyncLogScheduler, { provide: NcSyncLogService, useValue: { prune } }]
     }).compile()

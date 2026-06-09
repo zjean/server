@@ -2,11 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
+import { Mock } from 'vitest'
 
 describe(NcShareMountResolverService.name, () => {
   let moduleRef: TestingModule
   let svc: NcShareMountResolverService
-  let sharesQueries: { shareRootFiles: jest.Mock }
+  let sharesQueries: { shareRootFiles: Mock }
 
   const user = { id: 7, login: 'bob' } as unknown as UserModel
 
@@ -28,7 +29,7 @@ describe(NcShareMountResolverService.name, () => {
   }
 
   beforeAll(async () => {
-    sharesQueries = { shareRootFiles: jest.fn() }
+    sharesQueries = { shareRootFiles: vi.fn() }
     moduleRef = await Test.createTestingModule({
       providers: [NcShareMountResolverService, { provide: SharesQueries, useValue: sharesQueries }]
     }).compile()
@@ -40,7 +41,7 @@ describe(NcShareMountResolverService.name, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   describe('listMounts', () => {

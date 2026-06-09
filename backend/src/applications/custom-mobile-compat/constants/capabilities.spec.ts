@@ -1,7 +1,7 @@
 // Mock the config singleton — same pattern as nc-login-v2.controller.spec.ts.
 // Loading the real config transitively pulls in class-validator decorators that
-// require `reflect-metadata`, which isn't bootstrapped under jest.
-jest.mock('../../../configuration/config.environment', () => ({
+// require `reflect-metadata`, which isn't bootstrapped under vi.
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: {
@@ -13,8 +13,7 @@ jest.mock('../../../configuration/config.environment', () => ({
   }
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { configuration: mockConfig } = require('../../../configuration/config.environment')
+import { configuration as mockConfig } from '../../../configuration/config.environment'
 
 import { ncCapabilities } from './capabilities'
 

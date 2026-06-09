@@ -9,7 +9,6 @@ import { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios
 import ipaddr from 'ipaddr.js'
 import { HTTP_METHOD } from '../../applications.constants'
 import type { SpaceEnv } from '../../spaces/models/space-env.model'
-import { FILE_OPERATION } from '../constants/operations'
 import type { DownloadFileDto } from '../dto/file-operations.dto'
 import { FileTaskEvent } from '../events/file-events'
 import type { DownloadFileContentInfo, DownloadFileOptions } from '../interfaces/download-file.interface'
@@ -37,15 +36,17 @@ export class DownloadFile {
   async download(
     downloadDto: DownloadFileDto,
     dstPath: string,
-    options: { allowPrivateIP?: boolean; space?: SpaceEnv; getContentInfo: true }
+    options: DownloadFileOptions & { getContentInfo: true }
   ): Promise<DownloadFileContentInfo>
-  async download(
-    downloadDto: DownloadFileDto,
-    dstPath: string,
-    options?: { allowPrivateIP?: boolean; space?: SpaceEnv; getContentInfo?: false | undefined }
-  ): Promise<void>
+  async download(downloadDto: DownloadFileDto, dstPath: string, options?: DownloadFileOptions & { getContentInfo?: false | undefined }): Promise<void>
   async download(downloadDto: DownloadFileDto, dstPath: string, options?: DownloadFileOptions): Promise<void | DownloadFileContentInfo> {
-    const { response: headRes, url } = await this.request(downloadDto.url, { method: HTTP_METHOD.HEAD }, { allowPrivateIP: options?.allowPrivateIP })
+    const identityEncodingConfig = { decompress: false, headers: { 'Accept-Encoding': 'identity' } }
+
+    const { response: headRes, url } = await this.request(
+      downloadDto.url,
+      { method: HTTP_METHOD.HEAD, signal: options?.signal, ...identityEncodingConfig },
+      { allowPrivateIP: options?.allowPrivateIP }
+    )
 
     const headers = AxiosHeaders.from(headRes.headers)
     const contentLength = this.contentLength(headers)
@@ -57,16 +58,19 @@ export class DownloadFile {
       } satisfies DownloadFileContentInfo
     }
 
-    if (contentLength === null) throw new FileError(HttpStatus.BAD_REQUEST, FILE_ERROR_MESSAGES.DOWNLOAD_INVALID_CONTENT_LENGTH)
-    this.prepareSpace(options?.space, contentLength, dstPath)
+    const maxSize = options?.space ? contentLength : (options?.maxSize ?? contentLength)
+    if (maxSize === null || (contentLength === null && options?.space)) {
+      throw new FileError(HttpStatus.BAD_REQUEST, FILE_ERROR_MESSAGES.DOWNLOAD_INVALID_CONTENT_LENGTH)
+    }
+    if (contentLength !== null) this.prepareSpace(options?.space, contentLength, options?.publishedPath || dstPath)
 
     // The HEAD request resolved redirects; the GET must target that final URL directly.
     const { response: getRes } = await this.request(
       url,
-      { method: HTTP_METHOD.GET, responseType: 'stream', decompress: false, headers: { 'Accept-Encoding': 'identity' } },
+      { method: HTTP_METHOD.GET, responseType: 'stream', signal: options?.signal, ...identityEncodingConfig },
       { allowPrivateIP: options?.allowPrivateIP, maxRedirects: 0 }
     )
-    await writeFromStream(dstPath, getRes.data, 0, contentLength)
+    await writeFromStream(dstPath, getRes.data, 0, maxSize, options?.signal, options?.onProgress)
   }
 
   private safeLookup(hostname: string, options: Parameters<LookupFunction>[1], cb: Parameters<LookupFunction>[2]): void {
@@ -164,14 +168,14 @@ export class DownloadFile {
     return Number.isSafeInteger(contentLength) ? contentLength : null
   }
 
-  private prepareSpace(space: SpaceEnv | undefined, contentLength: number, dstPath: string): void {
+  private prepareSpace(space: SpaceEnv | undefined, contentLength: number, publishedPath: string): void {
     if (!space) return
     if (space.willExceedQuota(contentLength)) {
       throw new FileError(HttpStatus.INSUFFICIENT_STORAGE, FILE_ERROR_MESSAGES.STORAGE_QUOTA_EXCEEDED)
     }
     if (space.task?.cacheKey) {
-      space.task.props.totalSize = contentLength
-      FileTaskEvent.emit('startWatch', space, FILE_OPERATION.DOWNLOAD, dstPath)
+      space.task.props = { ...space.task.props, progress: 1, size: 0, totalSize: contentLength }
+      FileTaskEvent.emit('startWatch', space, publishedPath)
     }
   }
 }

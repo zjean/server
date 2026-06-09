@@ -10,6 +10,7 @@ import { SYNC_TOKEN_URN_PREFIX } from '../utils/nc-sync-xml'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcSyncLogService } from './nc-sync-log.service'
 import { NcSyncReportService } from './nc-sync-report.service'
+import { Mock } from 'vitest'
 
 // Build a SpaceEnv-shaped object good enough for the prop builder, without
 // going through the real .setup() (which needs a UserModel + filesystem).
@@ -70,21 +71,21 @@ function fakeReply() {
 describe(NcSyncReportService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncReportService
-  let log: { since: jest.Mock; minKeptToken: jest.Mock; currentToken: jest.Mock }
-  let fileRowEnsurer: { ensure: jest.Mock }
+  let log: { since: Mock; minKeptToken: Mock; currentToken: Mock }
+  let fileRowEnsurer: { ensure: Mock }
   let tmpRoot: string
   let user: UserModel
   let space: SpaceEnv
 
   beforeEach(async () => {
     log = {
-      since: jest.fn().mockResolvedValue([]),
-      minKeptToken: jest.fn().mockResolvedValue(0),
-      currentToken: jest.fn().mockResolvedValue(0)
+      since: vi.fn().mockResolvedValue([]),
+      minKeptToken: vi.fn().mockResolvedValue(0),
+      currentToken: vi.fn().mockResolvedValue(0)
     }
     // Default: pass the file's existing id through (inode placeholder or real).
     // Individual tests can override to assert a specific DB id is emitted.
-    fileRowEnsurer = { ensure: jest.fn().mockImplementation((f: { id: number }) => Promise.resolve(f.id)) }
+    fileRowEnsurer = { ensure: vi.fn().mockImplementation((f: { id: number }) => Promise.resolve(f.id)) }
     moduleRef = await Test.createTestingModule({
       providers: [NcSyncReportService, { provide: NcSyncLogService, useValue: log }, { provide: NcFileRowEnsurer, useValue: fileRowEnsurer }]
     }).compile()

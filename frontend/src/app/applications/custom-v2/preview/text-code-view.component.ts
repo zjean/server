@@ -337,7 +337,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   protected save(): void {
     if (!this.stub || this.saving() || this.readonly() || !this.writeable() || !this.isModified()) return
     this.saving.set(true)
-    this.filesUpload.uploadOneFile(this.stub, this.content(), true).subscribe({
+    this.filesUpload.uploadFileContent(this.stub, this.content(), true).subscribe({
       next: () => {
         this.saving.set(false)
         this.isModified.set(false)

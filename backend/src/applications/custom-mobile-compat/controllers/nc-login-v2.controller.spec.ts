@@ -8,9 +8,9 @@ import { NcResponseService } from '../services/nc-response.service'
 import { NcLoginV2Controller } from './nc-login-v2.controller'
 
 // Mock the config singleton; tests mutate `configuration.auth.*` per-case in
-// beforeEach (jest.mock returns a stable reference, so mutations propagate
+// beforeEach (vi.mock returns a stable reference, so mutations propagate
 // to whatever the controller reads at request time).
-jest.mock('../../../configuration/config.environment', () => ({
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     auth: {
       provider: 'mysql',
@@ -25,8 +25,7 @@ jest.mock('../../../configuration/config.environment', () => ({
   }
 }))
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { configuration: mockConfig } = require('../../../configuration/config.environment')
+import { configuration as mockConfig } from '../../../configuration/config.environment'
 
 describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
   let moduleRef: TestingModule
@@ -36,19 +35,19 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
   function fakeRes() {
     const res: Partial<FastifyReply> & { _status?: number; _redirected?: string; _body?: unknown; _headers: Record<string, string> } = {
       _headers: {},
-      header: jest.fn(function (this: FastifyReply, name: string, value: string) {
+      header: vi.fn(function (this: FastifyReply, name: string, value: string) {
         ;(this as never as { _headers: Record<string, string> })._headers[name] = value
         return this
       }) as never,
-      status: jest.fn(function (this: FastifyReply, n: number) {
+      status: vi.fn(function (this: FastifyReply, n: number) {
         ;(this as never as { _status: number })._status = n
         return this
       }) as never,
-      send: jest.fn(function (this: FastifyReply, body?: unknown) {
+      send: vi.fn(function (this: FastifyReply, body?: unknown) {
         ;(this as never as { _body: unknown })._body = body
         return this
       }) as never,
-      redirect: jest.fn(function (this: FastifyReply, url: string, code?: number) {
+      redirect: vi.fn(function (this: FastifyReply, url: string, code?: number) {
         ;(this as never as { _redirected: string })._redirected = url
         if (typeof code === 'number') {
           ;(this as never as { _status: number })._status = code
@@ -65,10 +64,10 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       providers: [
         NcLoginFlowService,
         NcResponseService,
-        { provide: UsersManager, useValue: { findUser: jest.fn(), logUser: jest.fn() } },
+        { provide: UsersManager, useValue: { findUser: vi.fn(), logUser: vi.fn() } },
         {
           provide: NcAppPasswordService,
-          useValue: { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0), mintMobileAppPassword: jest.fn() }
+          useValue: { pruneMobileAppPasswords: vi.fn().mockResolvedValue(0), mintMobileAppPassword: vi.fn() }
         }
       ]
     }).compile()
@@ -76,7 +75,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     controller = moduleRef.get(NcLoginV2Controller)
     flows = moduleRef.get(NcLoginFlowService)
     // Stub only baseUrl() so tests are independent of local OIDC config presence.
-    jest.spyOn(moduleRef.get(NcResponseService), 'baseUrl').mockReturnValue('https://sync-in.example.test')
+    vi.spyOn(moduleRef.get(NcResponseService), 'baseUrl').mockReturnValue('https://sync-in.example.test')
   })
 
   afterAll(async () => {

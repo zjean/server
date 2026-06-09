@@ -5,13 +5,14 @@ import { Cache } from '../../../infrastructure/cache/cache.service'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcBasicAuthGuard, parseBasicAuth } from './nc-basic-auth.guard'
+import { Mock } from 'vitest'
 
 // Build an ExecutionContext stub that surfaces whatever headers/ip we pass and
 // collects the WWW-Authenticate header + the req.user mutation.
 function makeContext(authHeader?: string | string[]): {
   ctx: ExecutionContext
   req: { headers: Record<string, string | string[] | undefined>; ip: string; user?: unknown }
-  res: { headers: Record<string, string>; header: jest.Mock }
+  res: { headers: Record<string, string>; header: Mock }
 } {
   const req: { headers: Record<string, string | string[] | undefined>; ip: string; user?: unknown } = {
     headers: { authorization: authHeader },
@@ -19,7 +20,7 @@ function makeContext(authHeader?: string | string[]): {
   }
   const res = {
     headers: {} as Record<string, string>,
-    header: jest.fn<void, [string, string]>()
+    header: vi.fn<void, [string, string]>()
   }
   res.header.mockImplementation((k: string, v: string) => {
     res.headers[k] = v
@@ -40,17 +41,17 @@ function basic(login: string, password: string): string {
 
 describe(NcBasicAuthGuard.name, () => {
   let guard: NcBasicAuthGuard
-  let usersQueries: { from: jest.Mock }
-  let usersManager: { validateAppPassword: jest.Mock }
-  let cache: { get: jest.Mock; set: jest.Mock }
-  let logger: { warn: jest.Mock; error: jest.Mock; info: jest.Mock }
+  let usersQueries: { from: Mock }
+  let usersManager: { validateAppPassword: Mock }
+  let cache: { get: Mock; set: Mock }
+  let logger: { warn: Mock; error: Mock; info: Mock }
   let module: TestingModule
 
   beforeEach(async () => {
-    usersQueries = { from: jest.fn() }
-    usersManager = { validateAppPassword: jest.fn() }
-    cache = { get: jest.fn().mockResolvedValue(undefined), set: jest.fn().mockResolvedValue(true) }
-    logger = { warn: jest.fn(), error: jest.fn(), info: jest.fn() }
+    usersQueries = { from: vi.fn() }
+    usersManager = { validateAppPassword: vi.fn() }
+    cache = { get: vi.fn().mockResolvedValue(undefined), set: vi.fn().mockResolvedValue(true) }
+    logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
     module = await Test.createTestingModule({
       providers: [
