@@ -17,9 +17,15 @@ function extract(zipPath, destDir) {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-let latestVersion
-let latestDownloadURL
-const latestURL = 'https://api.github.com/repos/mozilla/pdf.js/releases/latest'
+// Pin PDF.js to a known-good release. PDF.js ships breaking changes that have
+// repeatedly broken PDF rendering when the build silently pulled "latest" — v6
+// introduced a strict viewer meta-CSP (broke the inline polyfill, fixed in #272)
+// and a QuickJS WASM scripting sandbox (needs 'wasm-unsafe-eval', fixed in #273).
+// Bump this deliberately, and re-verify the viewer + scripting sandbox load
+// (and that patchForBrowserCompat still finds its anchors) before committing.
+const PINNED_VERSION = 'v6.0.227'
+const releaseURL = `https://api.github.com/repos/mozilla/pdf.js/releases/tags/${PINNED_VERSION}`
+let pinnedDownloadURL
 const pdfjsAssetsDirectory = path.join(__dirname, '..', 'src', 'assets', 'pdfjs')
 const pdfjsAssetsVersionFile = path.join(pdfjsAssetsDirectory, 'version')
 
@@ -35,9 +41,9 @@ async function checkPaths(paths) {
 }
 
 async function updatePdfjs() {
-  console.log('pdfjs - update to the latest version:', latestDownloadURL)
-  const tmpZip = path.join(os.tmpdir(), 'pdfjs-latest.zip')
-  const response = await fetch(latestDownloadURL)
+  console.log('pdfjs - downloading pinned version:', pinnedDownloadURL)
+  const tmpZip = path.join(os.tmpdir(), 'pdfjs-pinned.zip')
+  const response = await fetch(pinnedDownloadURL)
   await fs.writeFile(tmpZip, Readable.fromWeb(response.body))
   console.log('pdfjs - downloaded:', tmpZip)
   await fs.rm(pdfjsAssetsDirectory, { recursive: true, force: true })
@@ -48,7 +54,7 @@ async function updatePdfjs() {
   if (!(await checkPaths([viewerHtml]))) {
     console.warn(`${viewerHtml} is missing`)
   }
-  await fs.writeFile(pdfjsAssetsVersionFile, latestVersion)
+  await fs.writeFile(pdfjsAssetsVersionFile, PINNED_VERSION)
   console.log('pdfjs - assets update is done')
 }
 
@@ -109,32 +115,38 @@ async function patchForBrowserCompat() {
 }
 
 export async function checkPdfjs() {
+  console.log('pdfjs - pinned version:', PINNED_VERSION)
+  // Fast path: assets already at the pinned version — re-apply the compat patch
+  // (idempotent) and skip the network entirely.
+  if (await checkPaths([pdfjsAssetsDirectory, pdfjsAssetsVersionFile])) {
+    const currentVersion = (await fs.readFile(pdfjsAssetsVersionFile, { encoding: 'utf8' })).trim()
+    console.log('pdfjs - current version:', currentVersion)
+    if (currentVersion === PINNED_VERSION) {
+      console.log('pdfjs - is at pinned version')
+      await patchForBrowserCompat()
+      return
+    }
+  }
+  // (Re)download the pinned release.
   let response
   try {
-    response = await fetch(latestURL)
+    response = await fetch(releaseURL)
   } catch (e) {
-    console.error('pdfjs -', e.message, latestURL)
+    console.error('pdfjs -', e.message, releaseURL)
     return
   }
   let data
   try {
     data = await response.json()
   } catch (e) {
-    console.error('pdfjs - unable to check update:', e.message)
+    console.error('pdfjs - unable to fetch release metadata:', e.message)
     return
   }
-  latestVersion = data.tag_name
-  latestDownloadURL = data.assets[0]['browser_download_url']
-  console.log('pdfjs - latest version:', latestVersion)
-  if (await checkPaths([pdfjsAssetsDirectory, pdfjsAssetsVersionFile])) {
-    const currentVersion = await fs.readFile(pdfjsAssetsVersionFile, { encoding: 'utf8' })
-    console.log('pdfjs - current version:', currentVersion)
-    if (currentVersion === latestVersion) {
-      console.log('pdfjs - is up to date')
-      await patchForBrowserCompat()
-      return
-    }
+  if (!data || !Array.isArray(data.assets) || data.assets.length === 0) {
+    console.error(`pdfjs - no release assets for ${PINNED_VERSION} (${releaseURL}) — is the tag correct?`, data && data.message ? `[${data.message}]` : '')
+    return
   }
+  pinnedDownloadURL = data.assets[0]['browser_download_url']
   await updatePdfjs()
   await patchForBrowserCompat()
 }
