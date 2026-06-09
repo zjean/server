@@ -52,34 +52,56 @@ async function updatePdfjs() {
   console.log('pdfjs - assets update is done')
 }
 
-// Map.prototype.getOrInsertComputed (TC39 proposal) is used by PDF.js 5.x but is
-// only available in Chrome 136+. Polyfill both the viewer (main thread) and the
-// worker (separate global scope) so PDFs open in Firefox and Safari too.
+// Map.prototype.getOrInsertComputed (TC39 proposal) is called by PDF.js 5.x/6.x on
+// BOTH the main thread (build/pdf.mjs) and the worker (build/pdf.worker.mjs), but is
+// only available in Chrome 136+. We must polyfill it for Firefox and Safari.
+//
+// It MUST be delivered by prepending it to the module bundles, NOT as an inline
+// <script> in viewer.html: pdf.js's viewer.html ships its own strict meta CSP
+// (`script-src 'self' 'wasm-unsafe-eval'` — no 'unsafe-inline', no hash, no nonce),
+// which blocks inline scripts. `script-src 'self'` does allow the same-origin module
+// files, so prepending to them runs the polyfill before any getOrInsertComputed call.
 const COMPAT_POLYFILL =
   'if(!Map.prototype.getOrInsertComputed){Map.prototype.getOrInsertComputed=function(k,f){if(!this.has(k))this.set(k,f(k));return this.get(k);}}\n'
 
+// Distinctive marker for idempotency. Native pdf.js code only ever *calls*
+// `.getOrInsertComputed(`, so guarding on the bare method name would falsely report
+// "already patched"; guard on the polyfill's assignment form instead.
+const POLYFILL_MARKER = 'getOrInsertComputed=function'
+
+async function prependPolyfill(filePath, label) {
+  let content
+  try {
+    content = await fs.readFile(filePath, 'utf8')
+  } catch {
+    console.warn(`pdfjs - ${label} not found at ${filePath}; polyfill skipped (PDF.js layout may have changed)`)
+    return
+  }
+  if (content.includes(POLYFILL_MARKER)) return
+  await fs.writeFile(filePath, COMPAT_POLYFILL + content)
+  console.log(`pdfjs - patched ${label} (Map.getOrInsertComputed polyfill)`)
+}
+
 async function patchForBrowserCompat() {
   try {
-    const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
-    const html = await fs.readFile(viewerHtml, 'utf8')
-    if (!html.includes('getOrInsertComputed')) {
-      const patched = html.replace(
-        '<!-- This snippet is used in production',
-        `<script>${COMPAT_POLYFILL.trim()}</script>\n<!-- This snippet is used in production`
-      )
-      if (patched === html) {
-        console.warn('pdfjs - viewer.html anchor comment not found; polyfill NOT injected (PDF.js layout may have changed)')
-      } else {
-        await fs.writeFile(viewerHtml, patched)
-        console.log('pdfjs - patched viewer.html (Map.getOrInsertComputed polyfill)')
-      }
-    }
+    const buildDir = path.join(pdfjsAssetsDirectory, 'build')
+    await prependPolyfill(path.join(buildDir, 'pdf.mjs'), 'pdf.mjs (main thread)')
+    await prependPolyfill(path.join(buildDir, 'pdf.worker.mjs'), 'pdf.worker.mjs (worker)')
+    await prependPolyfill(path.join(buildDir, 'pdf.sandbox.mjs'), 'pdf.sandbox.mjs (scripting)')
 
-    const workerMjs = path.join(pdfjsAssetsDirectory, 'build', 'pdf.worker.mjs')
-    const worker = await fs.readFile(workerMjs, 'utf8')
-    if (!worker.includes('getOrInsertComputed')) {
-      await fs.writeFile(workerMjs, COMPAT_POLYFILL + worker)
-      console.log('pdfjs - patched pdf.worker.mjs (Map.getOrInsertComputed polyfill)')
+    // Earlier builds injected the polyfill as an inline <script> in viewer.html.
+    // That is blocked by viewer.html's own meta CSP and only produces console noise,
+    // so strip it if a previous run (or an older asset cache) left it behind.
+    const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
+    try {
+      const html = await fs.readFile(viewerHtml, 'utf8')
+      const stripped = html.replace(`<script>${COMPAT_POLYFILL.trim()}</script>\n`, '')
+      if (stripped !== html) {
+        await fs.writeFile(viewerHtml, stripped)
+        console.log('pdfjs - removed stale inline polyfill <script> from viewer.html (CSP-blocked)')
+      }
+    } catch {
+      /* viewer.html missing is already reported elsewhere */
     }
   } catch (e) {
     console.warn('pdfjs - browser-compat patch failed:', e.message)
