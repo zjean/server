@@ -3,6 +3,7 @@ import { ACTION } from '../../../common/constants'
 import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { NcSyncLogService } from './nc-sync-log.service'
+import { Mock } from 'vitest'
 
 // Phase 1 spec scope: cover the FileEvent → append() mapping (the only
 // thing that runs without a real DB). The query-side methods (since,
@@ -14,7 +15,7 @@ describe(NcSyncLogService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncLogService
   let captured: Record<string, unknown>[]
-  let fakeDb: { insert: jest.Mock; select: jest.Mock }
+  let fakeDb: { insert: Mock; select: Mock }
   // Test override for resolveViewers — when set, replaces the real DB-backed
   // implementation so existing personal-space tests don't need to mock the
   // shared-space query chain. Shared-space tests assign this directly.
@@ -24,7 +25,7 @@ describe(NcSyncLogService.name, () => {
     captured = []
     viewerResolver = undefined
     fakeDb = {
-      insert: jest.fn(() => ({
+      insert: vi.fn(() => ({
         values: (v: Record<string, unknown>) => {
           captured.push(v)
           return Promise.resolve({ affectedRows: 1 })
@@ -32,7 +33,7 @@ describe(NcSyncLogService.name, () => {
       })),
       // Empty select chain — resolveViewers' DB path is exercised via the
       // viewerResolver override on shared-space tests below.
-      select: jest.fn(() => ({ from: () => ({ where: () => Promise.resolve([]) }) }))
+      select: vi.fn(() => ({ from: () => ({ where: () => Promise.resolve([]) }) }))
     }
     moduleRef = await Test.createTestingModule({
       providers: [NcSyncLogService, { provide: DB_TOKEN_PROVIDER, useValue: fakeDb }]

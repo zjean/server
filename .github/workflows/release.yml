@@ -13,10 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ensure release tag commit is in main history
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "${GITHUB_REF}^{commit}" origin/main
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
 

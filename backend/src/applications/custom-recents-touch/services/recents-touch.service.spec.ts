@@ -5,6 +5,16 @@ import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { RecentsTouchService } from './recents-touch.service'
+import { Mock } from 'vitest'
+
+// Stub fs.stat at the module level. The service does `import fs from 'node:fs/promises'`
+// and calls `fs.stat`; under vitest a default-import spy (vi.spyOn(fs, 'stat')) does not
+// reliably propagate to the service's own default-import binding, so mock the module and
+// keep the rest of fs/promises real (importActual) for anything else in the graph.
+vi.mock('node:fs/promises', async (importActual) => {
+  const actual = await importActual<typeof import('node:fs/promises')>()
+  return { ...actual, default: { ...(actual as any).default, stat: vi.fn() } }
+})
 
 // Scope: FileEvent → ensureDbRow → upsertRecent. The DB layer is mocked at the
 // drizzle-builder level (matches the pattern in nc-sync-log.service.spec.ts);
@@ -23,12 +33,12 @@ describe(RecentsTouchService.name, () => {
   let inserts: Record<string, unknown>[]
   let updateAffected: number
   let filesQueriesMock: {
-    getUserFileByPath: jest.Mock
-    getOrCreateUserFile: jest.Mock
-    getOrCreateSpaceFile: jest.Mock
-    getSpaceFileId: jest.Mock
+    getUserFileByPath: Mock
+    getOrCreateUserFile: Mock
+    getOrCreateSpaceFile: Mock
+    getSpaceFileId: Mock
   }
-  let statSpy: jest.SpyInstance
+  let statSpy: Mock
 
   const makeStat = (overrides: Partial<StatLike> = {}): StatLike => ({
     isDirectory: () => false,
@@ -38,12 +48,19 @@ describe(RecentsTouchService.name, () => {
   })
 
   beforeEach(async () => {
+    // Pin the clock (Date only — leaves timers/promises real) so the 14-day
+    // retention check in handleFileEvent is deterministic against the fixed
+    // mtimes the tests assert on; otherwise real time eventually drifts past
+    // the window and the UPDATE/insert tests silently stop firing.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-05-23T00:00:00Z'))
+
     updates = []
     inserts = []
     updateAffected = 0
 
     const fakeDb = {
-      update: jest.fn(() => ({
+      update: vi.fn(() => ({
         set: (set: Record<string, unknown>) => ({
           where: () => ({
             limit: () => {
@@ -53,7 +70,7 @@ describe(RecentsTouchService.name, () => {
           })
         })
       })),
-      insert: jest.fn(() => ({
+      insert: vi.fn(() => ({
         values: (v: Record<string, unknown>) => {
           inserts.push(v)
           return Promise.resolve({ affectedRows: 1 })
@@ -62,10 +79,10 @@ describe(RecentsTouchService.name, () => {
     }
 
     filesQueriesMock = {
-      getUserFileByPath: jest.fn().mockResolvedValue(null),
-      getOrCreateUserFile: jest.fn().mockResolvedValue(101),
-      getOrCreateSpaceFile: jest.fn().mockResolvedValue(202),
-      getSpaceFileId: jest.fn().mockResolvedValue(undefined)
+      getUserFileByPath: vi.fn().mockResolvedValue(null),
+      getOrCreateUserFile: vi.fn().mockResolvedValue(101),
+      getOrCreateSpaceFile: vi.fn().mockResolvedValue(202),
+      getSpaceFileId: vi.fn().mockResolvedValue(undefined)
     }
 
     moduleRef = await Test.createTestingModule({
@@ -74,11 +91,14 @@ describe(RecentsTouchService.name, () => {
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(RecentsTouchService)
 
-    statSpy = jest.spyOn(fs, 'stat').mockResolvedValue(makeStat() as never)
+    statSpy = vi.mocked(fs.stat as unknown as Mock)
+    statSpy.mockReset()
+    statSpy.mockResolvedValue(makeStat() as never)
   })
 
   afterEach(async () => {
     statSpy.mockRestore()
+    vi.useRealTimers()
     await moduleRef.close()
     FileEvent.removeAllListeners('event')
   })

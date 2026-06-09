@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify'
 
 // Mock the configuration module so we don't pull in the full class-validator
 // + file-IO graph at test-load time. Tests mutate this object via `mockConfig`.
-jest.mock('../../../configuration/config.environment', () => ({
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     auth: { oidc: { redirectUri: undefined as string | undefined } }
   }

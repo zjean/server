@@ -7,6 +7,7 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcDirectEditingService, NC_DIRECT_EDITING_EDITOR_ID, NC_DIRECT_EDITING_EDITOR_NAME } from '../services/nc-direct-editing.service'
 import { NcResponseService } from '../services/nc-response.service'
 import { NcDirectEditingController } from './nc-direct-editing.controller'
+import { Mock } from 'vitest'
 
 const TEST_SECRET = 'test-secret-for-direct-editing-controller-spec'
 
@@ -32,13 +33,13 @@ function makeRes(): { res: FastifyReply; headers: Record<string, string> } {
 describe(NcDirectEditingController.name, () => {
   let moduleRef: TestingModule
   let controller: NcDirectEditingController
-  let getUserFile: jest.Mock
-  let getUserFileByPath: jest.Mock
+  let getUserFile: Mock
+  let getUserFileByPath: Mock
   let jwt: JwtService
 
   beforeAll(async () => {
-    getUserFile = jest.fn()
-    getUserFileByPath = jest.fn()
+    getUserFile = vi.fn()
+    getUserFileByPath = vi.fn()
     moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: TEST_SECRET })],
       controllers: [NcDirectEditingController],
@@ -56,7 +57,7 @@ describe(NcDirectEditingController.name, () => {
     controller = moduleRef.get(NcDirectEditingController)
     jwt = moduleRef.get(JwtService)
     // Stub only baseUrl() so tests are independent of local OIDC config presence.
-    jest.spyOn(moduleRef.get(NcResponseService), 'baseUrl').mockReturnValue('https://sync-in.example.test')
+    vi.spyOn(moduleRef.get(NcResponseService), 'baseUrl').mockReturnValue('https://sync-in.example.test')
   })
 
   afterAll(async () => {
@@ -68,7 +69,7 @@ describe(NcDirectEditingController.name, () => {
     getUserFileByPath.mockReset()
     // Production code reads configuration.auth.token.access.secret. Override
     // in tests so JWT round-trips work without a real config file.
-    jest.resetModules()
+    vi.resetModules()
     process.env.NC_DIRECT_EDITING_TEST = 'true'
   })
 

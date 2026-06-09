@@ -12,14 +12,14 @@ import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './nc-onl
 describe('NcOnlyOfficeController', () => {
   let controller: NcOnlyOfficeController
 
-  const onlyOfficeManagerMock = { getSettings: jest.fn(), callBack: jest.fn() }
-  const translatorMock = { toNcEnvelope: jest.fn() }
-  const resolverMock = { resolve: jest.fn(), resolveChild: jest.fn() }
-  const filesManagerMock = { mkFile: jest.fn() }
-  const forceSaveMock = { forceSave: jest.fn() }
+  const onlyOfficeManagerMock = { getSettings: vi.fn(), callBack: vi.fn() }
+  const translatorMock = { toNcEnvelope: vi.fn() }
+  const resolverMock = { resolve: vi.fn(), resolveChild: vi.fn() }
+  const filesManagerMock = { mkFile: vi.fn() }
+  const forceSaveMock = { forceSave: vi.fn() }
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NcOnlyOfficeController],
       providers: [
@@ -193,11 +193,11 @@ describe('NcOnlyOfficeController', () => {
 describe('NcOnlyOfficeCallbackController', () => {
   let controller: NcOnlyOfficeCallbackController
 
-  const onlyOfficeManagerMock = { getSettings: jest.fn(), callBack: jest.fn() }
-  const resolverMock = { resolve: jest.fn() }
+  const onlyOfficeManagerMock = { getSettings: vi.fn(), callBack: vi.fn() }
+  const resolverMock = { resolve: vi.fn() }
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     const module: TestingModule = await Test.createTestingModule({
       controllers: [NcOnlyOfficeCallbackController],
       providers: [

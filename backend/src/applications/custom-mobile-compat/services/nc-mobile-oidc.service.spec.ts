@@ -4,8 +4,9 @@ import { authorizationCodeGrant, calculatePKCECodeChallenge, fetchUserInfo, rand
 import { AuthProviderOIDC } from '../../../authentication/providers/oidc/auth-provider-oidc.service'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcMobileOidcService } from './nc-mobile-oidc.service'
+import { Mock } from 'vitest'
 
-jest.mock('../../../configuration/config.environment', () => ({
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     auth: {
       oidc: {
@@ -20,25 +21,25 @@ jest.mock('../../../configuration/config.environment', () => ({
   }
 }))
 
-jest.mock('openid-client', () => ({
-  authorizationCodeGrant: jest.fn(),
-  calculatePKCECodeChallenge: jest.fn(),
-  fetchUserInfo: jest.fn(),
-  randomNonce: jest.fn(),
-  randomPKCECodeVerifier: jest.fn(),
+vi.mock('openid-client', () => ({
+  authorizationCodeGrant: vi.fn(),
+  calculatePKCECodeChallenge: vi.fn(),
+  fetchUserInfo: vi.fn(),
+  randomNonce: vi.fn(),
+  randomPKCECodeVerifier: vi.fn(),
   skipSubjectCheck: Symbol('skipSubjectCheck')
 }))
 
-const mockedAuthorizationCodeGrant = authorizationCodeGrant as jest.Mock
-const mockedCalculatePKCECodeChallenge = calculatePKCECodeChallenge as jest.Mock
-const mockedFetchUserInfo = fetchUserInfo as jest.Mock
-const mockedRandomNonce = randomNonce as jest.Mock
-const mockedRandomPKCECodeVerifier = randomPKCECodeVerifier as jest.Mock
+const mockedAuthorizationCodeGrant = authorizationCodeGrant as Mock
+const mockedCalculatePKCECodeChallenge = calculatePKCECodeChallenge as Mock
+const mockedFetchUserInfo = fetchUserInfo as Mock
+const mockedRandomNonce = randomNonce as Mock
+const mockedRandomPKCECodeVerifier = randomPKCECodeVerifier as Mock
 
 describe(NcMobileOidcService.name, () => {
   let service: NcMobileOidcService
-  let authProviderOIDC: { getConfig: jest.Mock }
-  let usersManager: { findUser: jest.Mock }
+  let authProviderOIDC: { getConfig: Mock }
+  let usersManager: { findUser: Mock }
 
   const makeConfig = (supportsPKCE = true) => ({
     serverMetadata: () => ({
@@ -48,8 +49,8 @@ describe(NcMobileOidcService.name, () => {
   })
 
   beforeAll(async () => {
-    authProviderOIDC = { getConfig: jest.fn() }
-    usersManager = { findUser: jest.fn() }
+    authProviderOIDC = { getConfig: vi.fn() }
+    usersManager = { findUser: vi.fn() }
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [{ provide: AuthProviderOIDC, useValue: authProviderOIDC }, { provide: UsersManager, useValue: usersManager }, NcMobileOidcService]
@@ -60,7 +61,7 @@ describe(NcMobileOidcService.name, () => {
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     mockedRandomNonce.mockReturnValue('NONCE')
     mockedRandomPKCECodeVerifier.mockReturnValue('CV')
     mockedCalculatePKCECodeChallenge.mockResolvedValue('CC')

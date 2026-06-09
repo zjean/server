@@ -16,8 +16,8 @@ describe(NcOcsController.name, () => {
       controllers: [NcOcsController],
       providers: [
         NcResponseService,
-        { provide: UsersManager, useValue: { listAppPasswords: jest.fn(), validateAppPassword: jest.fn(), deleteAppPassword: jest.fn() } },
-        { provide: NcBasicAuthGuard, useValue: { canActivate: () => true, evictCache: jest.fn() } }
+        { provide: UsersManager, useValue: { listAppPasswords: vi.fn(), validateAppPassword: vi.fn(), deleteAppPassword: vi.fn() } },
+        { provide: NcBasicAuthGuard, useValue: { canActivate: () => true, evictCache: vi.fn() } }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -40,8 +40,8 @@ describe(NcOcsController.name, () => {
 
   function fakeRes(): FastifyReply {
     return {
-      header: jest.fn().mockReturnThis(),
-      status: jest.fn().mockReturnThis()
+      header: vi.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis()
     } as unknown as FastifyReply
   }
 

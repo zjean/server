@@ -5,16 +5,17 @@ import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcSearchService } from '../services/nc-search.service'
 import { NcDiscoveryController } from './nc-discovery.controller'
+import { Mock } from 'vitest'
 
 describe(NcDiscoveryController.name, () => {
   let moduleRef: TestingModule
   let controller: NcDiscoveryController
-  let basicAuth: { canActivate: jest.Mock }
-  let search: { respond: jest.Mock }
+  let basicAuth: { canActivate: Mock }
+  let search: { respond: Mock }
 
   beforeEach(async () => {
-    basicAuth = { canActivate: jest.fn() }
-    search = { respond: jest.fn() }
+    basicAuth = { canActivate: vi.fn() }
+    search = { respond: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcDiscoveryController],
       providers: [
@@ -62,12 +63,12 @@ describe(NcDiscoveryController.name, () => {
     function makeRes() {
       const headers: Record<string, string> = {}
       const r = {
-        status: jest.fn().mockReturnThis(),
-        header: jest.fn((k: string, v: string) => {
+        status: vi.fn().mockReturnThis(),
+        header: vi.fn((k: string, v: string) => {
           headers[k] = v
           return r
         }),
-        send: jest.fn().mockReturnThis()
+        send: vi.fn().mockReturnThis()
       }
       return { res: r as unknown as FastifyReply, headers, raw: r }
     }

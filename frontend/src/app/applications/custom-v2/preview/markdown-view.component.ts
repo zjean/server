@@ -648,7 +648,7 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     if (!this.canSave() || !this.stub) return
     this.saving.set(true)
     const content = this.currentMarkdown()
-    this.filesUpload.uploadOneFile(this.stub, content, true).subscribe({
+    this.filesUpload.uploadFileContent(this.stub, content, true).subscribe({
       next: () => {
         this.savedContent = content
         if (this.sourceMode()) this.sourceContent.set(content)

@@ -7,6 +7,7 @@ import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcPropfindService } from './nc-propfind.service'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
+import { Mock } from 'vitest'
 
 function fakeReply() {
   const state: { status?: number; type?: string; body?: string } = {}
@@ -33,19 +34,19 @@ async function* makeGen(items: WebDAVFile[]) {
 
 describe('NcPropfindService', () => {
   let service: NcPropfindService
-  let webdavSpaces: { propfind: jest.Mock }
-  let fileRowEnsurer: { ensure: jest.Mock }
-  let shareMounts: { listMounts: jest.Mock }
+  let webdavSpaces: { propfind: Mock }
+  let fileRowEnsurer: { ensure: Mock }
+  let shareMounts: { listMounts: Mock }
 
   beforeEach(async () => {
-    webdavSpaces = { propfind: jest.fn() }
+    webdavSpaces = { propfind: vi.fn() }
     // Default: pass the file id through unchanged. Tests that exercise the
     // negative-id → real-id promotion override this on a per-call basis.
-    fileRowEnsurer = { ensure: jest.fn(async (f: WebDAVFile) => f.id) }
+    fileRowEnsurer = { ensure: vi.fn(async (f: WebDAVFile) => f.id) }
     // Default: no incoming shares — most existing assertions are for the
     // personal-space listing only and shouldn't be perturbed by mount
     // injection. Tests covering injection override per-call.
-    shareMounts = { listMounts: jest.fn().mockResolvedValue([]) }
+    shareMounts = { listMounts: vi.fn().mockResolvedValue([]) }
     const module = await Test.createTestingModule({
       providers: [
         NcPropfindService,

@@ -12,6 +12,7 @@ import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcDirectEditingService } from '../services/nc-direct-editing.service'
 import { NcTextEditorController } from './nc-text-editor.controller'
+import { Mock } from 'vitest'
 
 const TEST_SECRET = 'test-secret-for-text-editor-controller'
 
@@ -73,17 +74,17 @@ describe(NcTextEditorController.name, () => {
   let moduleRef: TestingModule
   let controller: NcTextEditorController
   let directEditing: NcDirectEditingService
-  let getUserFile: jest.Mock
-  let spaceEnv: jest.Mock
-  let saveStream: jest.Mock
+  let getUserFile: Mock
+  let spaceEnv: Mock
+  let saveStream: Mock
   let workDir: string
 
   beforeAll(async () => {
     workDir = mkdtempSync(join(tmpdir(), 'nc-text-editor-spec-'))
 
-    getUserFile = jest.fn()
-    spaceEnv = jest.fn()
-    saveStream = jest.fn()
+    getUserFile = vi.fn()
+    spaceEnv = vi.fn()
+    saveStream = vi.fn()
 
     moduleRef = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: TEST_SECRET, global: true })],

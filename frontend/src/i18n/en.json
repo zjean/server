@@ -52,5 +52,6 @@
   "Searching…": "Searching…",
   "No matches": "No matches",
   "preview_counter": "{{ current }} of {{ total }}",
-  "preview_counter_one": "1 of 1"
+  "preview_counter_one": "1 of 1",
+  "Cancelled": "Cancelled"
 }

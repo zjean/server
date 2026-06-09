@@ -97,14 +97,13 @@
     "dev:frontend": "npm -w frontend start"
   },
   "devDependencies": {
-    "commit-and-tag-version": "^12.5.1",
+    "commit-and-tag-version": "^12.7.3",
     "husky": "^9.1.7",
     "noop3": "^1000.0.0",
-    "prettier": "^3.4.1"
+    "prettier": "^3.8.3"
   },
   "overrides": {
-    "@napi-rs/canvas": "npm:noop3",
-    "fastify": "5.8.5"
+    "@napi-rs/canvas": "npm:noop3"
   },
   "commit-and-tag-version": {
     "header": "",

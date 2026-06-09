@@ -4,21 +4,22 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcAppPasswordService } from './nc-app-password.service'
+import { Mock } from 'vitest'
 
 describe(NcAppPasswordService.name, () => {
   let moduleRef: TestingModule
   let service: NcAppPasswordService
-  let listAppPasswords: jest.Mock
-  let deleteAppPassword: jest.Mock
-  let getUserSecrets: jest.Mock
-  let updateUserOrGuest: jest.Mock
+  let listAppPasswords: Mock
+  let deleteAppPassword: Mock
+  let getUserSecrets: Mock
+  let updateUserOrGuest: Mock
   const fakeUser = { id: 7, login: 'alice' } as UserModel
 
   beforeAll(async () => {
-    listAppPasswords = jest.fn()
-    deleteAppPassword = jest.fn()
-    getUserSecrets = jest.fn()
-    updateUserOrGuest = jest.fn()
+    listAppPasswords = vi.fn()
+    deleteAppPassword = vi.fn()
+    getUserSecrets = vi.fn()
+    updateUserOrGuest = vi.fn()
     moduleRef = await Test.createTestingModule({
       providers: [
         NcAppPasswordService,

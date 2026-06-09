@@ -5,6 +5,7 @@ import { FilesQueries } from '../../files/services/files-queries.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcCommentsController } from './nc-comments.controller'
+import { Mock } from 'vitest'
 
 // Wire-format tests for the per-file Comments tab in NC iOS. NextcloudKit
 // gates POST/PUT/DELETE on a 200..299 status and parses PROPFIND with
@@ -52,18 +53,18 @@ function makeReq(method: string, body: unknown = undefined): FastifyRequest & { 
 describe(NcCommentsController.name, () => {
   let moduleRef: TestingModule
   let controller: NcCommentsController
-  let getUserFile: jest.Mock
-  let getComments: jest.Mock
-  let createComment: jest.Mock
-  let updateComment: jest.Mock
-  let deleteComment: jest.Mock
+  let getUserFile: Mock
+  let getComments: Mock
+  let createComment: Mock
+  let updateComment: Mock
+  let deleteComment: Mock
 
   beforeAll(async () => {
-    getUserFile = jest.fn()
-    getComments = jest.fn()
-    createComment = jest.fn()
-    updateComment = jest.fn()
-    deleteComment = jest.fn()
+    getUserFile = vi.fn()
+    getComments = vi.fn()
+    createComment = vi.fn()
+    updateComment = vi.fn()
+    deleteComment = vi.fn()
 
     moduleRef = await Test.createTestingModule({
       controllers: [NcCommentsController],

@@ -28,9 +28,9 @@ describe(NcThemingController.name, () => {
   }
   function fakeRes(): FastifyReply {
     return {
-      header: jest.fn().mockReturnThis(),
-      status: jest.fn().mockReturnThis(),
-      type: jest.fn().mockReturnThis()
+      header: vi.fn().mockReturnThis(),
+      status: vi.fn().mockReturnThis(),
+      type: vi.fn().mockReturnThis()
     } as unknown as FastifyReply
   }
 
@@ -42,7 +42,7 @@ describe(NcThemingController.name, () => {
       // we patch the resolved path to a known-existing file so the stream
       // doesn't error out at open time.
       const knownExisting = __filename
-      jest.spyOn(controller as unknown as { resolveLogoPath: () => string }, 'resolveLogoPath').mockReturnValue(knownExisting)
+      vi.spyOn(controller as unknown as { resolveLogoPath: () => string }, 'resolveLogoPath').mockReturnValue(knownExisting)
       const res = fakeRes()
       const result = controller.logo(res)
       expect(result).toBeInstanceOf(StreamableFile)
@@ -51,7 +51,7 @@ describe(NcThemingController.name, () => {
     })
 
     it('returns 404 if the logo is missing on disk', () => {
-      jest.spyOn(controller as unknown as { resolveLogoPath: () => string }, 'resolveLogoPath').mockReturnValue(path.join('/nonexistent', 'logo.svg'))
+      vi.spyOn(controller as unknown as { resolveLogoPath: () => string }, 'resolveLogoPath').mockReturnValue(path.join('/nonexistent', 'logo.svg'))
       const res = fakeRes()
       expect(() => controller.logo(res)).toThrow(HttpException)
       try {
@@ -75,7 +75,7 @@ describe(NcThemingController.name, () => {
 
   describe('favicon', () => {
     it('streams favicon.svg when present', () => {
-      jest.spyOn(controller as unknown as { resolveFaviconPath: () => string }, 'resolveFaviconPath').mockReturnValue(__filename)
+      vi.spyOn(controller as unknown as { resolveFaviconPath: () => string }, 'resolveFaviconPath').mockReturnValue(__filename)
       const res = fakeRes()
       const result = controller.favicon('core', res)
       expect(result).toBeInstanceOf(StreamableFile)
@@ -83,9 +83,9 @@ describe(NcThemingController.name, () => {
     })
 
     it('returns 404 if favicon.svg is missing', () => {
-      jest
-        .spyOn(controller as unknown as { resolveFaviconPath: () => string }, 'resolveFaviconPath')
-        .mockReturnValue(path.join('/nonexistent', 'favicon.svg'))
+      vi.spyOn(controller as unknown as { resolveFaviconPath: () => string }, 'resolveFaviconPath').mockReturnValue(
+        path.join('/nonexistent', 'favicon.svg')
+      )
       const res = fakeRes()
       expect(() => controller.favicon('core', res)).toThrow(HttpException)
     })

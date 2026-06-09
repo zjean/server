@@ -8,7 +8,7 @@ describe(NcLoginFlowService.name, () => {
   })
 
   afterEach(() => {
-    jest.useRealTimers()
+    vi.useRealTimers()
   })
 
   it('initiate returns unique poll + login tokens', () => {
@@ -61,20 +61,20 @@ describe(NcLoginFlowService.name, () => {
   })
 
   it('evicts expired flows automatically (findByLoginToken)', () => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-04-23T12:00:00Z'))
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-23T12:00:00Z'))
     const flow = svc.initiate()
     // advance past the 20-minute TTL (21 minutes).
-    jest.setSystemTime(new Date('2026-04-23T12:21:00Z'))
+    vi.setSystemTime(new Date('2026-04-23T12:21:00Z'))
     expect(svc.findByLoginToken(flow.loginToken)).toBeNull()
   })
 
   it('evicts expired flows automatically (consumeByPollToken)', () => {
-    jest.useFakeTimers()
-    jest.setSystemTime(new Date('2026-04-23T12:00:00Z'))
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-23T12:00:00Z'))
     const flow = svc.initiate()
     svc.completeWithCredentials(flow.loginToken, { server: 's', loginName: 'l', appPassword: 'p' })
-    jest.setSystemTime(new Date('2026-04-23T12:21:00Z'))
+    vi.setSystemTime(new Date('2026-04-23T12:21:00Z'))
     expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
   })
 

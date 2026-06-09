@@ -7,17 +7,18 @@ import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
 import { NcMobileOidcController } from './nc-mobile-oidc.controller'
+import { Mock } from 'vitest'
 
 // Prevent the real `openid-client` ES module from being evaluated when the
 // service file is imported as a DI token below — we never call into it (the
 // service is mocked via `useValue`).
-jest.mock('openid-client', () => ({}))
+vi.mock('openid-client', () => ({}))
 
 // Pin the OIDC config so the controller's oidcCallbackOrigin helper returns
 // a known origin regardless of which environment.yaml the test runner picked
 // up (the dist file ships sync-in.domain.com; local devs sometimes have
 // nothing set — both should give the same redirect_uri assertion).
-jest.mock('../../../configuration/config.environment', () => ({
+vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     auth: { oidc: { redirectUri: 'https://sync-in.oidc.test/api/auth/oidc/callback' } }
   }
@@ -27,25 +28,25 @@ describe(NcMobileOidcController.name, () => {
   let moduleRef: TestingModule
   let controller: NcMobileOidcController
   let flows: NcLoginFlowService
-  let mobileOidc: { buildAuthorizationUrl: jest.Mock; exchangeAndResolveUser: jest.Mock }
-  let usersManager: { generateAppPassword: jest.Mock }
-  let appPasswords: { pruneMobileAppPasswords: jest.Mock; mintMobileAppPassword: jest.Mock }
+  let mobileOidc: { buildAuthorizationUrl: Mock; exchangeAndResolveUser: Mock }
+  let usersManager: { generateAppPassword: Mock }
+  let appPasswords: { pruneMobileAppPasswords: Mock; mintMobileAppPassword: Mock }
 
   function fakeReq(query?: Record<string, string>): FastifyRequest {
     return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }, query: query ?? {} } as unknown as FastifyRequest
   }
   function fakeRes() {
     const res: Partial<FastifyReply> & { _status?: number; _body?: string; _redirected?: string } = {
-      header: jest.fn().mockReturnThis() as never,
-      status: jest.fn(function (this: FastifyReply, n: number) {
+      header: vi.fn().mockReturnThis() as never,
+      status: vi.fn(function (this: FastifyReply, n: number) {
         ;(this as never as { _status: number })._status = n
         return this
       }) as never,
-      send: jest.fn(function (this: FastifyReply, body: string) {
+      send: vi.fn(function (this: FastifyReply, body: string) {
         ;(this as never as { _body: string })._body = body
         return this
       }) as never,
-      redirect: jest.fn(function (this: FastifyReply, url: string) {
+      redirect: vi.fn(function (this: FastifyReply, url: string) {
         ;(this as never as { _redirected: string })._redirected = url
         return this
       }) as never
@@ -54,9 +55,9 @@ describe(NcMobileOidcController.name, () => {
   }
 
   beforeAll(async () => {
-    mobileOidc = { buildAuthorizationUrl: jest.fn(), exchangeAndResolveUser: jest.fn() }
-    usersManager = { generateAppPassword: jest.fn() }
-    appPasswords = { pruneMobileAppPasswords: jest.fn().mockResolvedValue(0), mintMobileAppPassword: jest.fn() }
+    mobileOidc = { buildAuthorizationUrl: vi.fn(), exchangeAndResolveUser: vi.fn() }
+    usersManager = { generateAppPassword: vi.fn() }
+    appPasswords = { pruneMobileAppPasswords: vi.fn().mockResolvedValue(0), mintMobileAppPassword: vi.fn() }
     moduleRef = await Test.createTestingModule({
       controllers: [NcMobileOidcController],
       providers: [
@@ -64,7 +65,7 @@ describe(NcMobileOidcController.name, () => {
         // Stub baseUrl() so tests are independent of local OIDC config presence.
         {
           provide: NcResponseService,
-          useValue: { baseUrl: jest.fn().mockReturnValue('https://sync-in.example.test'), json: jest.fn(), requireJson: jest.fn() }
+          useValue: { baseUrl: vi.fn().mockReturnValue('https://sync-in.example.test'), json: vi.fn(), requireJson: vi.fn() }
         },
         { provide: NcMobileOidcService, useValue: mobileOidc },
         { provide: UsersManager, useValue: usersManager },
@@ -82,7 +83,7 @@ describe(NcMobileOidcController.name, () => {
 
   beforeEach(() => {
     flows.clearForTests()
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   describe('start (initiate OIDC redirect)', () => {

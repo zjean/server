@@ -1,8 +1,8 @@
 // Mock configuration loader before any module that transitively imports it (UserModel → config.environment)
-jest.mock('../../configuration/config.environment', () => ({
+vi.mock('../../configuration/config.environment', () => ({
   configuration: { applications: { files: { usersPath: '/tmp/users', tmpPath: '/tmp/tmp', spacesPath: '/tmp/spaces' } } },
   serverConfig: {},
-  exportConfiguration: jest.fn()
+  exportConfiguration: vi.fn()
 }))
 
 import { Test } from '@nestjs/testing'
@@ -11,16 +11,16 @@ import { CustomDiagramsService } from './custom-diagrams.service'
 
 const mockUser = { id: 7 } as any
 const mockService = {
-  load: jest.fn(),
-  save: jest.fn(),
-  createNew: jest.fn()
+  load: vi.fn(),
+  save: vi.fn(),
+  createNew: vi.fn()
 }
 
 describe('CustomDiagramsController', () => {
   let controller: CustomDiagramsController
 
   beforeEach(async () => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
     const module = await Test.createTestingModule({
       controllers: [CustomDiagramsController],
       providers: [{ provide: CustomDiagramsService, useValue: mockService }]
