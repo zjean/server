@@ -35,12 +35,29 @@ jobs:
           BEFORE=$(git rev-parse HEAD)
           git reset --hard upstream/main
           AFTER=$(git rev-parse HEAD)
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
           if [ "$BEFORE" = "$AFTER" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No upstream changes."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "upstream-main: $BEFORE -> $AFTER"
+          fi
+
+      # The default GITHUB_TOKEN cannot create or update files under
+      # .github/workflows/ — there is no `workflows` permission scope for it.
+      # When upstream changes a workflow file the push below is otherwise
+      # rejected with a cryptic "refusing to allow a GitHub App ..." error.
+      # Detect it here and fail with an actionable message instead. This is an
+      # intentional manual gate: upstream workflow changes are reviewed by hand
+      # via the sync-in-fork-maintenance skill (recovery: sync from upstream/main).
+      - name: Guard — upstream workflow-file changes need a manual sync
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          if ! git diff --quiet "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/; then
+            echo "::error title=Upstream changed workflow files::The Upstream Sync GITHUB_TOKEN cannot push .github/workflows/* changes (no 'workflows' scope). This is expected. Run the sync-in-fork-maintenance skill and follow its 'Failure mode' recovery: sync manually from upstream/main (NOT the now-stale upstream-main)."
+            git --no-pager diff --stat "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/
+            exit 1
           fi
 
       - name: Push upstream-main

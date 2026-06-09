@@ -66,6 +66,8 @@ gh run list --repo zjean/server --workflow "Upstream Sync" --limit 1
 rtk proxy gh run watch <RUN_ID> --repo zjean/server --exit-status
 ```
 
+If the run **fails** (non-zero exit), jump to [Failure mode](#failure-mode-the-run-fails-at-push-upstream-main-upstream-changed-a-workflow-file) below — it's almost always upstream changing a workflow file.
+
 Once the workflow finishes, check whether it opened a PR:
 
 ```bash
@@ -77,6 +79,38 @@ gh pr list --repo zjean/server --base main --head upstream-main --state open
 - **PR open, CONFLICTING** → proceed to task 2.
 
 Use `gh pr view <n> --repo zjean/server --json mergeable,mergeStateStatus,additions,deletions,changedFiles,body` for the merge state. `MERGEABLE` + `BLOCKED` usually means CI is still running, not a conflict.
+
+### Failure mode: the run fails at *Push upstream-main* (upstream changed a workflow file)
+
+If `gh run watch ... --exit-status` reports the run **failed**, the most likely cause is that **upstream changed a file under `.github/workflows/`**. The sync workflow pushes `upstream-main` with the default `GITHUB_TOKEN`, and GitHub forbids that token from creating or updating workflow files — there is **no `workflows` permission scope** available for the auto-generated token (only a PAT or SSH deploy key with `workflow` scope can push workflow-file changes). This is a **deliberate, accepted** design choice for this fork: the run fails loudly as the signal to sync manually, so the maintainer reviews upstream's workflow changes by hand rather than auto-merging them (the fork's `release.yml` is customized and `upstream-sync.yml`/`build-image.yml` are fork-only).
+
+Confirm the cause:
+
+```bash
+gh run list --repo zjean/server --workflow "Upstream Sync" --status failure --limit 1
+gh run view <RUN_ID> --repo zjean/server --log-failed | grep -i "refusing to allow a GitHub App"
+# → "refusing to allow a GitHub App to create or update workflow '.github/workflows/<file>' without 'workflows' permission"
+```
+
+**Consequences — read carefully, they change the recovery from Task 2:**
+
+- `origin/upstream-main` is **stale**: the force-push never landed, so it still points at the *previous* sync's commit. Merging `origin/upstream-main` (what Task 2 does) would **not** bring in the new upstream work.
+- Any open `chore: sync upstream (...)` PR with head `upstream-main` is from an **earlier** sync; once you finish the manual sync, close it as superseded (`git merge-base --is-ancestor origin/upstream-main upstream/main` confirms it's fully contained).
+
+**Recovery — sync manually from `upstream/main` (not `origin/upstream-main`):**
+
+```bash
+git fetch upstream main origin main
+git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/main
+git merge upstream/main --no-ff --no-edit      # resolve conflicts per Task 2's guidance
+```
+
+From here it is exactly Task 2's resolve → verify → commit → PR flow, with two differences:
+
+1. **Source is `upstream/main`, not `origin/upstream-main`.** The read-only `upstream` remote has the real new commits; the mirror branch is stale.
+2. **The maintainer's SSH key carries `workflow` scope**, so `git push -u origin sync/upstream-...` pushes the workflow-file changes fine (the restriction is only on the Actions `GITHUB_TOKEN`, not on SSH). Resolve `.github/workflows/*` conflicts deliberately — usually keep the fork's customized version and adopt only the upstream CI changes you actually want (see PR #270 for a worked example: kept our no-publish `release.yml`, took upstream's `checkout@v6` + tag-in-main guard).
+
+Then open the replacement PR and **merge it with a merge commit** (see Task 2's "Open the replacement PR" and "Aftermath" sections — they apply verbatim). The automation is intentionally left unfixed; this manual path via the skill is the supported recovery.
 
 ## Task 2 — Resolve upstream-main → main conflicts
 
