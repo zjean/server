@@ -63,7 +63,22 @@ else
 fi
 ```
 
-The `reset --hard` is safe because `upstream-main` is supposed to be an exact mirror. Setting `changed=false` short-circuits remaining steps if nothing new.
+The `reset --hard` is safe because `upstream-main` is supposed to be an exact mirror. Setting `changed=false` short-circuits remaining steps if nothing new. It also exports `before=$BEFORE` for the guard step below.
+
+### 4b. Guard — upstream workflow-file changes need a manual sync
+
+```yaml
+- name: Guard — upstream workflow-file changes need a manual sync
+  if: steps.sync.outputs.changed == 'true'
+  run: |
+    if ! git diff --quiet "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/; then
+      echo "::error title=Upstream changed workflow files::... sync manually from upstream/main ..."
+      git --no-pager diff --stat "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/
+      exit 1
+    fi
+```
+
+The default `GITHUB_TOKEN` **cannot create or update files under `.github/workflows/`** — there is no `workflows` permission scope for it (only a PAT or SSH deploy key with `workflow` scope can). When upstream changes a workflow file, the push in step 5 is rejected with a cryptic `refusing to allow a GitHub App to create or update workflow ... without 'workflows' permission`. This guard turns that into an actionable failure **before** the push, with a clear message pointing at the skill's recovery. This is **intentional**: the fork keeps customized/own workflows, so upstream workflow changes are reviewed by hand rather than auto-merged. See the skill's "Failure mode" section in Task 1.
 
 ### 5. Push `upstream-main` (only if changed)
 
@@ -72,7 +87,7 @@ if: steps.sync.outputs.changed == 'true'
 run: git push --force-with-lease origin upstream-main
 ```
 
-Force-push is mandatory because upstream occasionally rewrites history. `--force-with-lease` guards against racing with another sync (shouldn't happen in practice, cheap insurance).
+Force-push is mandatory because upstream occasionally rewrites history. `--force-with-lease` guards against racing with another sync (shouldn't happen in practice, cheap insurance). Reaches this step only when upstream did **not** touch `.github/workflows/` (step 4b otherwise fails the run).
 
 ### 6. Open or update the sync PR
 
@@ -114,6 +129,7 @@ Three cases:
 
 ## Common failure modes
 
+- **Run fails at the "Guard" step (or, pre-guard, at "Push upstream-main") with `refusing to allow a GitHub App to create or update workflow`** — upstream changed a file under `.github/workflows/`, which the `GITHUB_TOKEN` can't push (no `workflows` scope). **This is expected and intentional.** Recovery: run the sync-in-fork-maintenance skill and follow its Task 1 "Failure mode" section — sync manually from `upstream/main` (the mirror `upstream-main` is now stale). Worked example: PR #270.
 - **`git fetch upstream` fails with 403** — `Sync-in/server` briefly went private or the URL changed. Check upstream repo status.
 - **`git push origin upstream-main` fails with "protected branch"** — branch protection on `upstream-main` is misconfigured to block the bot. Fix rule: allow bypass for `github-actions[bot]`.
 - **`gh pr create` opens against wrong repo** — workflow uses `${{ github.repository }}` which is always the fork, so this shouldn't happen. If it does, the repo was forked incorrectly.
