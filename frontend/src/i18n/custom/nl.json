@@ -154,5 +154,12 @@
   "Calculate size": "Mapgrootte berekenen",
   "Size calculation failed": "Berekenen van grootte mislukt",
   "Folders only": "Alleen mappen",
-  "Print": "Afdrukken"
+  "Print": "Afdrukken",
+  "Favorites": "Favorieten",
+  "Add to favorites": "Toevoegen aan favorieten",
+  "Remove from favorites": "Verwijderen uit favorieten",
+  "Starred": "Met ster",
+  "No favorites yet": "Nog geen favorieten",
+  "Files and folders you have starred for quick access.": "Bestanden en mappen die je met een ster hebt gemarkeerd voor snelle toegang.",
+  "Star a file or folder from the file browser and it will show up here.": "Markeer een bestand of map met een ster in de bestandsverkenner, dan verschijnt het hier."
 }

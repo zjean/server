@@ -349,6 +349,11 @@
     min-width: 0;
   }
 
+  &__favorite {
+    color: var(--si-accent, var(--si-fg-muted));
+    flex-shrink: 0;
+  }
+
   &__info {
     display: flex;
     align-items: center;
@@ -478,6 +483,14 @@
     position: absolute;
     top: 8px;
     right: 8px;
+  }
+
+  &__favorite {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: var(--si-accent, var(--si-fg-muted));
+    line-height: 0;
   }
 
   &__body {

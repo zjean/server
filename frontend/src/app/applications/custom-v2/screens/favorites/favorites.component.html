@@ -1,0 +1,46 @@
+<div class="favorites">
+  <header class="favorites__hero">
+    <div class="favorites__kicker">
+      <app-v2-icon name="star" [size]="11" class="favorites__kicker-icon" />
+      <span class="favorites__kicker-text" l10nTranslate>Workspace</span>
+    </div>
+    <h1 class="favorites__title" l10nTranslate>Favorites</h1>
+    <p class="favorites__lede" l10nTranslate>Files and folders you have starred for quick access.</p>
+  </header>
+
+  @if (hasAny()) {
+    <section class="favorites__section">
+      <header class="favorites__section-head">
+        <span class="favorites__section-label" l10nTranslate>Starred</span>
+        <span class="favorites__count-pill">{{ favorites().length }}</span>
+      </header>
+      @for (f of favorites(); track f.id) {
+        <button
+          type="button"
+          class="favorite-row"
+          (click)="openFavorite(f)"
+          (auxclick)="onRowAuxClick($event, f)"
+        >
+          <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
+          <div class="favorite-row__meta">
+            <div class="favorite-row__name">{{ f.name }}</div>
+            <div class="favorite-row__sub">
+              <app-v2-icon name="folder" [size]="10" class="favorite-row__sub-icon" />
+              <span class="favorite-row__path">{{ parentPath(f) }}</span>
+            </div>
+          </div>
+          <app-v2-icon name="star" [size]="14" class="favorite-row__star" />
+          <div class="favorite-row__time">{{ f.mtime | amTimeAgo }}</div>
+        </button>
+      }
+    </section>
+  } @else {
+    <div class="favorites-empty">
+      <div class="favorites-empty__icon">
+        <app-v2-icon name="star" [size]="22" />
+      </div>
+      <div class="favorites-empty__title" l10nTranslate>No favorites yet</div>
+      <div class="favorites-empty__lede" l10nTranslate>Star a file or folder from the file browser and it will show up here.</div>
+    </div>
+  }
+</div>

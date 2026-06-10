@@ -132,6 +132,9 @@
                 <div class="file-row__name">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
                   <span class="file-row__name-text">{{ f.name }}</span>
+                  @if (favoritesService.isFavorite(f.id)) {
+                    <app-v2-icon name="star" [size]="13" class="file-row__favorite" [attr.title]="'Favorites' | translate: locale.language" />
+                  }
                 </div>
                 <div class="file-row__info">
                   @if (f.hasComments) {
@@ -219,6 +222,11 @@
                       </app-v2-pill>
                     </span>
                   }
+                  @if (favoritesService.isFavorite(f.id)) {
+                    <span class="file-card__favorite" [attr.title]="'Favorites' | translate: locale.language">
+                      <app-v2-icon name="star" [size]="12" />
+                    </span>
+                  }
                 </div>
                 <div class="file-card__body">
                   <div class="file-card__name">{{ f.name }}</div>
@@ -271,6 +279,11 @@
                     @if (f.hasComments) {
                       <app-v2-pill color="green" [size]="10">
                         <app-v2-icon name="comment" [size]="9" />
+                      </app-v2-pill>
+                    }
+                    @if (favoritesService.isFavorite(f.id)) {
+                      <app-v2-pill color="gray" [size]="10">
+                        <app-v2-icon name="star" [size]="9" />
                       </app-v2-pill>
                     }
                   </div>

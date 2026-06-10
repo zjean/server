@@ -33,6 +33,7 @@ import { FileModel } from '../../../files/models/file.model'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import { FolderSizeService } from '../../services/folder-size.service'
+import { FavoritesService } from '../../services/favorites.service'
 import { V2DragService } from '../../services/drag.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
@@ -107,6 +108,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly filesService = inject(FilesService)
   private readonly folderSize = inject(FolderSizeService)
+  protected readonly favoritesService = inject(FavoritesService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly treePicker = inject(TreePickerService)
@@ -246,6 +248,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
       { id: 'move', label: 'Move to…', icon: 'moveTo', action: () => this.copyOrMove(f, FILE_OPERATION.MOVE) },
       { id: 'get-link', label: 'Get link', icon: 'link', action: () => this.getLink(f) },
       { id: 'share', label: 'Share', icon: 'share', action: () => this.shareEntry(f) },
+      {
+        id: 'favorite',
+        label: this.favoritesService.isFavorite(f.id) ? 'Remove from favorites' : 'Add to favorites',
+        icon: 'star',
+        action: () => this.toggleFavorite(f)
+      },
       { id: 'comments', label: 'Comments', icon: 'comment', disabled: f.isDir, action: () => this.openComments(f) },
       {
         id: 'delete',
@@ -313,6 +321,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       this.clearSelection()
       this.folderSize.clear()
       this.loadFiles()
+      this.favoritesService.loadFavoriteIds()
     })
     // Refresh on each task affecting this folder, not just when the active queue
     // empties — a single hung upload (e.g. a backgrounded tab pausing requests)
@@ -684,6 +693,17 @@ export class PersonalComponent implements OnInit, OnDestroy {
       file.name
     )
     this.folderSize.compute(file, fullPath)
+  }
+
+  // Star toggle. Builds the same repository path buildFullPath/the dock-context
+  // effect use (files/personal/<segs>/<name>) and hands it to FavoritesService,
+  // which optimistically flips the id Set before firing the add/remove request.
+  // Personal is always in the personal space, so the alias is the constant
+  // SPACE_ALIAS.PERSONAL rather than a dynamic current-alias signal.
+  protected toggleFavorite(file: FileProps): void {
+    const segs = this.pathSegments().map((s) => s.path)
+    const path = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs, file.name].join('/')
+    this.favoritesService.toggle(path, file.id, !this.favoritesService.isFavorite(file.id))
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {

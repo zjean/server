@@ -1,0 +1,71 @@
+import { HttpClient } from '@angular/common/http'
+import { inject, Injectable, signal } from '@angular/core'
+import { API_CUSTOM_FAVORITES } from '@sync-in-server/backend/src/applications/custom-favorites/constants/routes'
+import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
+
+// custom-v2-owned favorites state. Deliberately self-contained — it does NOT
+// touch the upstream StoreService or FilesService, so an upstream sync never
+// has to reckon with fork-only favorite state. Two signals back the two views:
+//   - `favorites`     → the Favorites screen list (full FileFavorite rows)
+//   - `favoriteIds`   → a Set used by the file browser to render the star
+//                       indicator + drive the context-menu label cheaply.
+@Injectable({ providedIn: 'root' })
+export class FavoritesService {
+  private readonly http = inject(HttpClient)
+
+  readonly favorites = signal<FileFavorite[]>([])
+  readonly favoriteIds = signal<Set<number>>(new Set())
+
+  loadFavorites(limit = 100): void {
+    this.http.get<FileFavorite[]>(API_CUSTOM_FAVORITES, { params: { limit } }).subscribe({
+      next: (favs) => this.favorites.set(favs),
+      error: (e) => console.error(e)
+    })
+  }
+
+  loadFavoriteIds(): void {
+    this.http.get<number[]>(`${API_CUSTOM_FAVORITES}/ids`).subscribe({
+      next: (ids) => this.favoriteIds.set(new Set(ids)),
+      error: (e) => console.error(e)
+    })
+  }
+
+  isFavorite(fileId: number): boolean {
+    return this.favoriteIds().has(fileId)
+  }
+
+  // Optimistically flip the Set so the star/menu update instantly, then fire
+  // the path-based add/remove. On error the Set rolls back to its prior state.
+  // `spacePath` is a Sync-in repository path (e.g. `files/<alias>/dir/name`) —
+  // its slashes are path separators that must reach the wildcard route intact.
+  // encodeUrl() percent-encodes each segment but preserves the slashes, so
+  // names containing reserved chars (#, %, ?) survive the round-trip.
+  toggle(spacePath: string, fileId: number, add: boolean): void {
+    const previous = this.favoriteIds()
+    const next = new Set(previous)
+    if (add) next.add(fileId)
+    else next.delete(fileId)
+    this.favoriteIds.set(next)
+
+    const url = `${API_CUSTOM_FAVORITES}/spaces/${encodeUrl(spacePath)}`
+    const onSuccess = (): void => {
+      // Keep the Favorites screen list coherent after a successful toggle.
+      // Only refresh when the list is already populated (i.e. the screen has
+      // been visited) — avoids an extra request on every browser toggle.
+      if (this.favorites().length > 0) this.loadFavorites()
+    }
+    const onError = (e: unknown): void => {
+      this.favoriteIds.set(previous)
+      console.error(e)
+    }
+    // Branch the subscribe rather than the Observable: post<FileFavorite> and
+    // delete<void> have incompatible emission types, so a shared `request`
+    // variable would be a union TS can't call .subscribe on.
+    if (add) {
+      this.http.post<FileFavorite>(url, {}).subscribe({ next: onSuccess, error: onError })
+    } else {
+      this.http.delete<void>(url).subscribe({ next: onSuccess, error: onError })
+    }
+  }
+}

@@ -10,6 +10,7 @@ export const V2_ROUTES = {
   STUB: '',
   KIT: '_kit',
   RECENTS: 'recents',
+  FAVORITES: 'favorites',
   PERSONAL: 'personal',
   SPACES: 'spaces',
   SHARED: 'shared',
