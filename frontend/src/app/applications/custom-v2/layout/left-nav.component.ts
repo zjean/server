@@ -75,6 +75,7 @@ export class LeftNavComponent {
   protected readonly workspace: NavEntry[] = [
     { id: 'search', label: 'Search', icon: 'search', route: `/${V2_PATH}/${V2_ROUTES.SEARCH}` },
     { id: 'recents', label: 'Recents', icon: 'clock', route: `/${V2_PATH}/${V2_ROUTES.RECENTS}` },
+    { id: 'favorites', label: 'Favorites', icon: 'star', route: `/${V2_PATH}/${V2_ROUTES.FAVORITES}` },
     { id: 'personal', label: 'Personal', icon: 'folder', route: `/${V2_PATH}/${V2_ROUTES.PERSONAL}` },
     { id: 'spaces', label: 'Spaces', icon: 'box', route: `/${V2_PATH}/${V2_ROUTES.SPACES}` }
   ]

@@ -4,6 +4,7 @@ import { AdminGroupsComponent } from './screens/admin/admin-groups.component'
 import { AdminSpacesComponent } from './screens/admin/admin-spaces.component'
 import { AdminToolsComponent } from './screens/admin/admin-tools.component'
 import { AdminUsersComponent } from './screens/admin/admin-users.component'
+import { FavoritesComponent } from './screens/favorites/favorites.component'
 import { FileDetailComponent } from './screens/file-detail/file-detail.component'
 import { KitComponent } from './screens/kit/kit.component'
 import { PeopleComponent } from './screens/people/people.component'
@@ -22,6 +23,7 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.STUB, pathMatch: 'full', redirectTo: V2_ROUTES.RECENTS },
   { path: V2_ROUTES.KIT, component: KitComponent },
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
+  { path: V2_ROUTES.FAVORITES, component: FavoritesComponent },
   { path: V2_ROUTES.FILE, component: FileDetailComponent },
   {
     path: V2_ROUTES.PERSONAL,
