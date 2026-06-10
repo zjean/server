@@ -72,11 +72,9 @@ export class FavoritesQueries {
         and(
           eq(customFilesFavorites.userId, userId),
           eq(files.inTrash, false),
-          or(
-            eq(files.ownerId, userId),
-            ...(spaceIds.length ? [inArray(files.spaceId, spaceIds)] : []),
-            ...(shareIds.length ? [inArray(files.shareExternalId, shareIds)] : [])
-          )
+          // inArray(col, []) compiles to `false` in drizzle, so empty scopes
+          // simply drop out — same pattern as getRecentsFromUser upstream.
+          or(eq(files.ownerId, userId), inArray(files.spaceId, spaceIds), inArray(files.shareExternalId, shareIds))
         )
       )
       .orderBy(desc(customFilesFavorites.createdAt))
@@ -112,6 +110,6 @@ export class FavoritesQueries {
     const result = await this.db
       .delete(customFilesFavorites)
       .where(and(eq(customFilesFavorites.userId, userId), eq(customFilesFavorites.fileId, fileId)))
-    if (!result[0].affectedRows) throw new NotFoundException()
+    if (!result[0].affectedRows) throw new NotFoundException('Favorite not found')
   }
 }

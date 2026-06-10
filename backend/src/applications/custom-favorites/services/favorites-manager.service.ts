@@ -36,7 +36,7 @@ export class FavoritesManager {
     const fileId = await this.getOrCreateFileId(space)
     await this.favoritesQueries.addFavorite(user.id, fileId)
     const fav = await this.favoritesQueries.getFavoriteForFile(user.id, fileId)
-    if (!fav) throw new NotFoundException()
+    if (!fav) throw new NotFoundException('Favorite not found after insert')
     return fav
   }
 
