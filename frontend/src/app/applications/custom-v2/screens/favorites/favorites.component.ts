@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core'
 import { Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { L10nTranslateDirective } from 'angular-l10n'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
@@ -16,13 +16,12 @@ import { FavoritesService } from '../../services/favorites.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './favorites.component.html',
   styleUrl: './favorites.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [IconV2Component, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective]
 })
 export class FavoritesComponent implements OnInit {
   private readonly favoritesService = inject(FavoritesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
-  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly favorites = this.favoritesService.favorites

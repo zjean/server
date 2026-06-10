@@ -48,18 +48,23 @@ export class FavoritesService {
     this.favoriteIds.set(next)
 
     const url = `${API_CUSTOM_FAVORITES}/spaces/${spacePath}`
-    const request = add ? this.http.post<FileFavorite>(url, {}) : this.http.delete<void>(url)
-    request.subscribe({
-      next: () => {
-        // Keep the Favorites screen list coherent after a successful toggle.
-        // Only refresh when the list is already populated (i.e. the screen has
-        // been visited) — avoids an extra request on every browser toggle.
-        if (this.favorites().length > 0) this.loadFavorites()
-      },
-      error: (e) => {
-        this.favoriteIds.set(previous)
-        console.error(e)
-      }
-    })
+    const onSuccess = (): void => {
+      // Keep the Favorites screen list coherent after a successful toggle.
+      // Only refresh when the list is already populated (i.e. the screen has
+      // been visited) — avoids an extra request on every browser toggle.
+      if (this.favorites().length > 0) this.loadFavorites()
+    }
+    const onError = (e: unknown): void => {
+      this.favoriteIds.set(previous)
+      console.error(e)
+    }
+    // Branch the subscribe rather than the Observable: post<FileFavorite> and
+    // delete<void> have incompatible emission types, so a shared `request`
+    // variable would be a union TS can't call .subscribe on.
+    if (add) {
+      this.http.post<FileFavorite>(url, {}).subscribe({ next: onSuccess, error: onError })
+    } else {
+      this.http.delete<void>(url).subscribe({ next: onSuccess, error: onError })
+    }
   }
 }
