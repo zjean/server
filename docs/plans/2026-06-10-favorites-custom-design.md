@@ -292,15 +292,28 @@ Three things the build/lint gates did **not** catch, fixed during verification:
 3. **Toggle path not per-segment encoded.** Wrapped the space path in
    `encodeUrl()` so names with reserved chars (`#`, `%`, `?`) round-trip.
 
-**Finding deferred at design time — shares:** the `getFavorites` access filter
-includes a `files.shareExternalId` branch, which only matches *external-path*
-shares. This is **not reachable from the v2 UI**: opening a share in v2
-(`SharedComponent.openShare`) navigates to the classic route
-`/spaces/shares/<alias>`, which has no star. The only v2-favoritable files are
-**personal** (filter: `ownerId = user`) and **member-space** (filter:
-`spaceId IN …`), both handled correctly. The shares branch is harmless and left
-in place for when a v2 share-file browser exists. If v2 later gains one,
-re-test share favorites against the filter before shipping.
+**Shares — fixed with a per-favorite access context (migration 0006).** The
+original `getFavorites` filter re-derived access from the **file row's** columns
+(`ownerId`/`spaceId`/`shareExternalId`). But a file shared *into* a user stores a
+`files` row describing the **owner's** context (`ownerId = owner`, no
+`spaceId`/`shareExternalId`), so the filter silently dropped share-reached
+favorites from the list — while `/ids` still returned them (a star with an empty
+Favorites screen) — and `navPath` mis-resolved to the owner's personal path.
+Proven empirically: as user B, favoriting user A's file reached via a share
+returned `/ids = [fileId]` but `/favorites = []`.
+
+Root cause: `(userId, fileId)` can't reconstruct *how the user reaches the file*.
+Fix mirrors `files_recents`: stamp the access context on each favorite at
+favorite-time — `path` (the full per-user repository path, used verbatim as
+`navPath`), `spaceId`, `shareId`. The list filters on the stamped context
+(`personal | spaceId ∈ myspaces | shareId ∈ myshares`, re-checked against current
+membership) and `navPath` is the stored path. Verified end-to-end: a file owned
+by another user, shared in and favorited by the recipient, now appears with
+`navPath = shares/<alias>/<file>`.
+
+Note: a v2 share-file browser still doesn't exist (opening a share in v2 drops to
+classic), so this path isn't yet reachable from the v2 UI — but the backend
+contract is now correct for when it is (and for NC-compat favorites).
 
 **Migration-chain repair (folded in):** generating the favorites migration
 surfaced a pre-existing defect — `0004_nc_sync_events` (PR #92) was committed
