@@ -6,6 +6,7 @@ import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { UserModel } from '../../users/models/user.model'
+import { FavoriteContext } from '../interfaces/favorite-context.interface'
 import { FileFavorite } from '../interfaces/file-favorite.interface'
 import { FavoritesQueries } from './favorites-queries.service'
 
@@ -34,10 +35,22 @@ export class FavoritesManager {
 
   async addFavorite(user: UserModel, space: SpaceEnv): Promise<FileFavorite> {
     const fileId = await this.getOrCreateFileId(space)
-    await this.favoritesQueries.addFavorite(user.id, fileId)
+    await this.favoritesQueries.addFavorite(user.id, fileId, this.favoriteContext(space))
     const fav = await this.favoritesQueries.getFavoriteForFile(user.id, fileId)
     if (!fav) throw new NotFoundException('Favorite not found after insert')
     return fav
+  }
+
+  // Capture the per-user access context at favorite-time. `space.url` is the
+  // full repository path the user reached the file through (e.g.
+  // `files/personal/x/y.md`, `shares/<alias>/x`) — stored verbatim as the nav
+  // path. The space/share id lets the list re-check current access later.
+  // In the shares repository, `space.id` is the share id. Mirrors the
+  // location mapping in FilesRecents.
+  private favoriteContext(space: SpaceEnv): FavoriteContext {
+    if (space.inPersonalSpace) return { path: space.url, spaceId: null, shareId: null }
+    if (space.inSharesRepository) return { path: space.url, spaceId: null, shareId: space.id }
+    return { path: space.url, spaceId: space.id, shareId: null }
   }
 
   async removeFavorite(user: UserModel, space: SpaceEnv): Promise<void> {

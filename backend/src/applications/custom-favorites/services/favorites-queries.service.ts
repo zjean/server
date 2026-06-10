@@ -1,14 +1,15 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common'
-import { and, desc, eq, inArray, or } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, or } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { files } from '../../files/schemas/files.schema'
-import { shares } from '../../shares/schemas/shares.schema'
-import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
-import { spaces } from '../../spaces/schemas/spaces.schema'
 import { FileFavorite } from '../interfaces/file-favorite.interface'
+import { FavoriteContext } from '../interfaces/favorite-context.interface'
 import { customFilesFavorites } from '../schemas/files-favorites.schema'
 
+// The metadata columns come from the joined `files` row; `navPath` is the
+// per-user access path stamped on the favorite itself (customFilesFavorites.path),
+// so a file shared into the user navigates through THEIR path, not the owner's.
 const favoriteFileSelect = {
   id: files.id,
   name: files.name,
@@ -17,23 +18,7 @@ const favoriteFileSelect = {
   size: files.size,
   mtime: files.mtime,
   ctime: files.ctime,
-  path: files.path,
-  ownerId: files.ownerId,
-  spaceAlias: spaces.alias,
-  shareAlias: shares.alias
-}
-
-// `path` is the item's PARENT directory within the space ('.' at the space
-// root); `name` is the item itself. The nav path is the full repository path
-// to the item (parent + name) so the v2 UI can open a file directly or
-// navigate into a folder. Mirrors how recents combines parentPath + name.
-const buildFavoriteNavPath = (path: string, name: string, ownerId: number | null, spaceAlias: string | null, shareAlias: string | null): string => {
-  const dir = path && path !== '.' ? `/${path}` : ''
-  const tail = `${dir}/${name}`
-  if (ownerId !== null) return `${SPACE_REPOSITORY.FILES}/${SPACE_ALIAS.PERSONAL}${tail}`
-  if (spaceAlias) return `${SPACE_REPOSITORY.FILES}/${spaceAlias}${tail}`
-  if (shareAlias) return `${SPACE_REPOSITORY.SHARES}/${shareAlias}${tail}`
-  return ''
+  navPath: customFilesFavorites.path
 }
 
 interface FavoriteFileRow {
@@ -44,10 +29,7 @@ interface FavoriteFileRow {
   size: number
   mtime: number
   ctime: number
-  path: string
-  ownerId: number | null
-  spaceAlias: string | null
-  shareAlias: string | null
+  navPath: string
 }
 
 const toFileFavorite = (row: FavoriteFileRow): FileFavorite => ({
@@ -59,8 +41,19 @@ const toFileFavorite = (row: FavoriteFileRow): FileFavorite => ({
   mtime: row.mtime,
   ctime: row.ctime,
   isFavorite: true,
-  navPath: buildFavoriteNavPath(row.path, row.name, row.ownerId, row.spaceAlias, row.shareAlias)
+  navPath: row.navPath
 })
+
+// Access predicate: a favorite is visible when it is personal (no space/share
+// context — a user's own personal space is always theirs) OR its stamped space
+// is one the user still belongs to OR its stamped share is one still shared
+// with them. inArray(col, []) compiles to `false`, so empty scopes drop out.
+const accessibleFavorite = (spaceIds: number[], shareIds: number[]) =>
+  or(
+    and(isNull(customFilesFavorites.spaceId), isNull(customFilesFavorites.shareId)),
+    inArray(customFilesFavorites.spaceId, spaceIds),
+    inArray(customFilesFavorites.shareId, shareIds)
+  )
 
 @Injectable()
 export class FavoritesQueries {
@@ -71,17 +64,7 @@ export class FavoritesQueries {
       .select(favoriteFileSelect)
       .from(customFilesFavorites)
       .innerJoin(files, eq(files.id, customFilesFavorites.fileId))
-      .leftJoin(spaces, eq(spaces.id, files.spaceId))
-      .leftJoin(shares, eq(shares.id, files.shareExternalId))
-      .where(
-        and(
-          eq(customFilesFavorites.userId, userId),
-          eq(files.inTrash, false),
-          // inArray(col, []) compiles to `false` in drizzle, so empty scopes
-          // simply drop out — same pattern as getRecentsFromUser upstream.
-          or(eq(files.ownerId, userId), inArray(files.spaceId, spaceIds), inArray(files.shareExternalId, shareIds))
-        )
-      )
+      .where(and(eq(customFilesFavorites.userId, userId), eq(files.inTrash, false), accessibleFavorite(spaceIds, shareIds)))
       .orderBy(desc(customFilesFavorites.createdAt))
       .limit(limit)
     return rows.map(toFileFavorite)
@@ -100,15 +83,19 @@ export class FavoritesQueries {
       .select(favoriteFileSelect)
       .from(customFilesFavorites)
       .innerJoin(files, eq(files.id, customFilesFavorites.fileId))
-      .leftJoin(spaces, eq(spaces.id, files.spaceId))
-      .leftJoin(shares, eq(shares.id, files.shareExternalId))
       .where(and(eq(customFilesFavorites.userId, userId), eq(customFilesFavorites.fileId, fileId)))
       .limit(1)
     return row ? toFileFavorite(row) : undefined
   }
 
-  async addFavorite(userId: number, fileId: number): Promise<void> {
-    await this.db.insert(customFilesFavorites).ignore().values({ userId, fileId })
+  // Upsert: re-favoriting a file refreshes the access context (e.g. the user
+  // now reaches it through a different space/share/path).
+  async addFavorite(userId: number, fileId: number, context: FavoriteContext): Promise<void> {
+    const values = { userId, fileId, path: context.path, spaceId: context.spaceId ?? null, shareId: context.shareId ?? null }
+    await this.db
+      .insert(customFilesFavorites)
+      .values(values)
+      .onDuplicateKeyUpdate({ set: { path: values.path, spaceId: values.spaceId, shareId: values.shareId } })
   }
 
   async removeFavorite(userId: number, fileId: number): Promise<void> {

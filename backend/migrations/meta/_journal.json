@@ -43,6 +43,13 @@
       "when": 1781103134441,
       "tag": "0005_silent_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1781114595380,
+      "tag": "0006_harsh_rogue",
+      "breakpoints": true
     }
   ]
 }

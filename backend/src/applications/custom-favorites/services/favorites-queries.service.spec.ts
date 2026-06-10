@@ -11,7 +11,7 @@ describe(FavoritesQueries.name, () => {
   let moduleRef: TestingModule
   let service: FavoritesQueries
   let selectRows: Record<string, unknown>[]
-  let inserts: { values: Record<string, unknown>; ignored: boolean }[]
+  let inserts: { values: Record<string, unknown>; upserted: boolean }[]
   let deleteAffected: number
   let fakeDb: { select: Mock; insert: Mock; delete: Mock }
 
@@ -33,21 +33,18 @@ describe(FavoritesQueries.name, () => {
 
     fakeDb = {
       select: vi.fn(() => makeSelectBuilder()),
-      insert: vi.fn(() => {
-        const entry = { values: {} as Record<string, unknown>, ignored: false }
-        const chain = {
-          ignore: () => {
-            entry.ignored = true
-            return chain
-          },
-          values: (v: Record<string, unknown>) => {
-            entry.values = v
-            inserts.push(entry)
-            return Promise.resolve({ affectedRows: 1 })
+      insert: vi.fn(() => ({
+        values: (v: Record<string, unknown>) => {
+          const entry = { values: v, upserted: false }
+          inserts.push(entry)
+          return {
+            onDuplicateKeyUpdate: () => {
+              entry.upserted = true
+              return Promise.resolve([{ affectedRows: 1 }])
+            }
           }
         }
-        return chain
-      }),
+      })),
       delete: vi.fn(() => ({
         where: () => Promise.resolve([{ affectedRows: deleteAffected }])
       }))
@@ -75,12 +72,18 @@ describe(FavoritesQueries.name, () => {
     expect(ids).toEqual([11, 22, 33])
   })
 
-  it('addFavorite issues an insert-ignore with userId + fileId', async () => {
-    await service.addFavorite(7, 42)
+  it('addFavorite upserts userId + fileId + access context', async () => {
+    await service.addFavorite(7, 42, { path: 'files/personal/x.md', spaceId: null, shareId: null })
     expect(fakeDb.insert).toHaveBeenCalled()
     expect(inserts).toHaveLength(1)
-    expect(inserts[0].ignored).toBe(true)
-    expect(inserts[0].values).toMatchObject({ userId: 7, fileId: 42 })
+    expect(inserts[0].values).toMatchObject({ userId: 7, fileId: 42, path: 'files/personal/x.md', spaceId: null, shareId: null })
+    // re-favoriting refreshes context → onDuplicateKeyUpdate path
+    expect(inserts[0].upserted).toBe(true)
+  })
+
+  it('addFavorite stamps the share context when favorited in a share', async () => {
+    await service.addFavorite(7, 42, { path: 'shares/team-share/x.md', spaceId: null, shareId: 9 })
+    expect(inserts[0].values).toMatchObject({ shareId: 9, spaceId: null, path: 'shares/team-share/x.md' })
   })
 
   it('removeFavorite throws NotFound when no rows are affected', async () => {
@@ -94,7 +97,7 @@ describe(FavoritesQueries.name, () => {
     expect(fakeDb.delete).toHaveBeenCalled()
   })
 
-  it('getFavorites issues the chained select and maps rows to FileFavorite objects', async () => {
+  it('getFavorites maps rows to FileFavorite objects, navPath from the stored per-user path', async () => {
     selectRows = [
       {
         id: 5,
@@ -104,22 +107,18 @@ describe(FavoritesQueries.name, () => {
         size: 1234,
         mtime: 1000,
         ctime: 900,
-        // path is the PARENT directory within the space; name is the item
-        path: 'docs',
-        ownerId: 7,
-        spaceAlias: null,
-        shareAlias: null
+        // navPath is the access path stamped at favorite-time (customFilesFavorites.path)
+        navPath: 'files/personal/docs/report.pdf'
       }
     ]
     const favs = await service.getFavorites(7, [55], [88], 50)
     expect(fakeDb.select).toHaveBeenCalled()
     expect(favs).toHaveLength(1)
     expect(favs[0]).toMatchObject({ id: 5, name: 'report.pdf', isDir: false, isFavorite: true })
-    // personal-space file (ownerId set) → files/personal/<parent>/<name>
     expect(favs[0].navPath).toBe('files/personal/docs/report.pdf')
   })
 
-  it('getFavoriteForFile returns a mapped FileFavorite when a row exists', async () => {
+  it('getFavoriteForFile returns a mapped FileFavorite carrying its stored navPath', async () => {
     selectRows = [
       {
         id: 5,
@@ -129,17 +128,14 @@ describe(FavoritesQueries.name, () => {
         size: 10,
         mtime: 1,
         ctime: 1,
-        // file at the space root → parent path is '.'
-        path: '.',
-        ownerId: null,
-        spaceAlias: 'team',
-        shareAlias: null
+        // favorited through a share → nav path is the share path the user used
+        navPath: 'shares/team-share/photo.jpg'
       }
     ]
     const fav = await service.getFavoriteForFile(7, 5)
     expect(fav).toBeDefined()
     expect(fav?.isFavorite).toBe(true)
-    expect(fav?.navPath).toBe('files/team/photo.jpg')
+    expect(fav?.navPath).toBe('shares/team-share/photo.jpg')
   })
 
   it('getFavoriteForFile returns undefined when no row exists', async () => {
