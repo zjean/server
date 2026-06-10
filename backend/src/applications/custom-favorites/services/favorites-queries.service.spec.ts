@@ -104,7 +104,8 @@ describe(FavoritesQueries.name, () => {
         size: 1234,
         mtime: 1000,
         ctime: 900,
-        path: 'docs/report.pdf',
+        // path is the PARENT directory within the space; name is the item
+        path: 'docs',
         ownerId: 7,
         spaceAlias: null,
         shareAlias: null
@@ -114,7 +115,7 @@ describe(FavoritesQueries.name, () => {
     expect(fakeDb.select).toHaveBeenCalled()
     expect(favs).toHaveLength(1)
     expect(favs[0]).toMatchObject({ id: 5, name: 'report.pdf', isDir: false, isFavorite: true })
-    // personal-space file (ownerId set) → files/personal/<path>
+    // personal-space file (ownerId set) → files/personal/<parent>/<name>
     expect(favs[0].navPath).toBe('files/personal/docs/report.pdf')
   })
 
@@ -128,7 +129,8 @@ describe(FavoritesQueries.name, () => {
         size: 10,
         mtime: 1,
         ctime: 1,
-        path: 'photo.jpg',
+        // file at the space root → parent path is '.'
+        path: '.',
         ownerId: null,
         spaceAlias: 'team',
         shareAlias: null

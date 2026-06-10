@@ -23,11 +23,16 @@ const favoriteFileSelect = {
   shareAlias: shares.alias
 }
 
-const buildFavoriteNavPath = (path: string, ownerId: number | null, spaceAlias: string | null, shareAlias: string | null): string => {
-  const subPath = path !== '.' ? `/${path}` : ''
-  if (ownerId !== null) return `${SPACE_REPOSITORY.FILES}/${SPACE_ALIAS.PERSONAL}${subPath}`
-  if (spaceAlias) return `${SPACE_REPOSITORY.FILES}/${spaceAlias}${subPath}`
-  if (shareAlias) return `${SPACE_REPOSITORY.SHARES}/${shareAlias}${subPath}`
+// `path` is the item's PARENT directory within the space ('.' at the space
+// root); `name` is the item itself. The nav path is the full repository path
+// to the item (parent + name) so the v2 UI can open a file directly or
+// navigate into a folder. Mirrors how recents combines parentPath + name.
+const buildFavoriteNavPath = (path: string, name: string, ownerId: number | null, spaceAlias: string | null, shareAlias: string | null): string => {
+  const dir = path && path !== '.' ? `/${path}` : ''
+  const tail = `${dir}/${name}`
+  if (ownerId !== null) return `${SPACE_REPOSITORY.FILES}/${SPACE_ALIAS.PERSONAL}${tail}`
+  if (spaceAlias) return `${SPACE_REPOSITORY.FILES}/${spaceAlias}${tail}`
+  if (shareAlias) return `${SPACE_REPOSITORY.SHARES}/${shareAlias}${tail}`
   return ''
 }
 
@@ -54,7 +59,7 @@ const toFileFavorite = (row: FavoriteFileRow): FileFavorite => ({
   mtime: row.mtime,
   ctime: row.ctime,
   isFavorite: true,
-  navPath: buildFavoriteNavPath(row.path, row.ownerId, row.spaceAlias, row.shareAlias)
+  navPath: buildFavoriteNavPath(row.path, row.name, row.ownerId, row.spaceAlias, row.shareAlias)
 })
 
 @Injectable()
