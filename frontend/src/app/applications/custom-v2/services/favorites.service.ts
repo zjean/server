@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http'
 import { inject, Injectable, signal } from '@angular/core'
 import { API_CUSTOM_FAVORITES } from '@sync-in-server/backend/src/applications/custom-favorites/constants/routes'
 import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 
 // custom-v2-owned favorites state. Deliberately self-contained — it does NOT
 // touch the upstream StoreService or FilesService, so an upstream sync never
@@ -37,9 +38,9 @@ export class FavoritesService {
   // Optimistically flip the Set so the star/menu update instantly, then fire
   // the path-based add/remove. On error the Set rolls back to its prior state.
   // `spacePath` is a Sync-in repository path (e.g. `files/<alias>/dir/name`) —
-  // its slashes are path separators that must reach the wildcard route intact,
-  // so we append it raw (mirrors how space-files builds the browse URL with a
-  // plain join rather than encodeURIComponent).
+  // its slashes are path separators that must reach the wildcard route intact.
+  // encodeUrl() percent-encodes each segment but preserves the slashes, so
+  // names containing reserved chars (#, %, ?) survive the round-trip.
   toggle(spacePath: string, fileId: number, add: boolean): void {
     const previous = this.favoriteIds()
     const next = new Set(previous)
@@ -47,7 +48,7 @@ export class FavoritesService {
     else next.delete(fileId)
     this.favoriteIds.set(next)
 
-    const url = `${API_CUSTOM_FAVORITES}/spaces/${spacePath}`
+    const url = `${API_CUSTOM_FAVORITES}/spaces/${encodeUrl(spacePath)}`
     const onSuccess = (): void => {
       // Keep the Favorites screen list coherent after a successful toggle.
       // Only refresh when the list is already populated (i.e. the screen has
