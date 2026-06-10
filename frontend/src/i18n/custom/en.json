@@ -154,5 +154,12 @@
   "Calculate size": "Calculate size",
   "Size calculation failed": "Size calculation failed",
   "Folders only": "Folders only",
-  "Print": "Print"
+  "Print": "Print",
+  "Favorites": "Favorites",
+  "Add to favorites": "Add to favorites",
+  "Remove from favorites": "Remove from favorites",
+  "Starred": "Starred",
+  "No favorites yet": "No favorites yet",
+  "Files and folders you have starred for quick access.": "Files and folders you have starred for quick access.",
+  "Star a file or folder from the file browser and it will show up here.": "Star a file or folder from the file browser and it will show up here."
 }
