@@ -78,15 +78,15 @@ export class NcPropfindService {
     // owner-id was the root cause of NC Android's "no permissions to create
     // files/folders here" message after a successful login.
     const requesterFallback = user ? { login: user.login, displayName: user.fullName || user.login } : undefined
-    // Favorite-id set, fetched once per request. getFavoriteIdsForUser returns
-    // ALL of the user's favorite file ids (no access filter) — correct for
-    // marking a file the user is already viewing. We check membership by the
-    // post-ensure real DB id below. Wrapped defensively: a favorites lookup
-    // failure degrades to "no stars" rather than failing the whole PROPFIND.
+    // Favorite-id set, fetched once per request. getFavoriteIds returns ALL of
+    // the user's favorite file ids (no access filter) — correct for marking a
+    // file the user is already viewing. We check membership by the post-ensure
+    // real DB id below. Wrapped defensively: a favorites lookup failure
+    // degrades to "no stars" rather than failing the whole PROPFIND.
     let favoriteIds = new Set<number>()
     if (user) {
       try {
-        favoriteIds = new Set(await this.favorites.getFavoriteIdsForUser(user.id))
+        favoriteIds = new Set(await this.favorites.getFavoriteIds(user))
       } catch (e) {
         this.logger.warn({ tag: this.respond.name, msg: `favorite-id lookup failed (degrading to no stars): ${(e as Error).message}` })
       }
