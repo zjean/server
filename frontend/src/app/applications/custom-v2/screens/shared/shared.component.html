@@ -19,7 +19,7 @@
   } @else if (errorMessage(); as err) {
     <div class="shared__state shared__state--error">{{ err | translate: locale.language }}</div>
   } @else if (shares().length === 0) {
-    <div class="shared__state">{{ config().emptyState | translate: locale.language }}</div>
+    <app-v2-empty-state [icon]="config().icon" title="Nothing here yet" [lede]="config().emptyState" />
   } @else {
     <div class="share-table">
       <div class="share-table__head">

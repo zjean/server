@@ -9,6 +9,7 @@ import { SpaceModel } from '../../../spaces/models/space.model'
 import { avatarHue, avatarInitials } from '../../components/avatar.component'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { ButtonComponent } from '../../components/button.component'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -25,6 +26,7 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
     IconV2Component,
     AvatarStackComponent,
     ButtonComponent,
+    EmptyStateComponent,
     FabComponent,
     IconButtonComponent,
     ToBytesPipe,

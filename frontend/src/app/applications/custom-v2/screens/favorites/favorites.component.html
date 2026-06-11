@@ -1,11 +1,7 @@
 <div class="favorites">
-  <header class="favorites__hero">
-    <div class="favorites__kicker">
-      <app-v2-icon name="star" [size]="11" class="favorites__kicker-icon" />
-      <span class="favorites__kicker-text" l10nTranslate>Workspace</span>
-    </div>
-    <h1 class="favorites__title" l10nTranslate>Favorites</h1>
-    <p class="favorites__lede" l10nTranslate>Files and folders you have starred for quick access.</p>
+  <header class="favorites__header">
+    <h1 class="favorites__title-text" l10nTranslate>Favorites</h1>
+    <div class="favorites__title-meta" l10nTranslate>Files and folders you have starred for quick access.</div>
   </header>
 
   @if (hasAny()) {
@@ -35,12 +31,10 @@
       }
     </section>
   } @else {
-    <div class="favorites-empty">
-      <div class="favorites-empty__icon">
-        <app-v2-icon name="star" [size]="22" />
-      </div>
-      <div class="favorites-empty__title" l10nTranslate>No favorites yet</div>
-      <div class="favorites-empty__lede" l10nTranslate>Star a file or folder from the file browser and it will show up here.</div>
-    </div>
+    <app-v2-empty-state
+      icon="star"
+      title="No favorites yet"
+      lede="Star a file or folder from the file browser and it will show up here."
+    />
   }
 </div>

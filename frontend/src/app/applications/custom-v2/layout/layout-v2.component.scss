@@ -31,8 +31,8 @@
 .layout-v2__dock-panel {
   width: 320px;
   flex-shrink: 0;
+  // Separated by surface tone (dock-panel bg1 vs content bg2), not a line.
   background: var(--si-bg1);
-  border-left: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
   min-width: 0;

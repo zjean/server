@@ -19,7 +19,7 @@
   } @else if (errorMessage(); as err) {
     <div class="spaces__state spaces__state--error">{{ err | translate: locale.language }}</div>
   } @else if (spaces().length === 0) {
-    <div class="spaces__state" l10nTranslate>You don't belong to any spaces yet.</div>
+    <app-v2-empty-state icon="grid" title="No spaces yet" lede="You don't belong to any spaces yet." />
   } @else {
     <div class="space-grid">
       @for (s of sortedSpaces(); track s.id) {

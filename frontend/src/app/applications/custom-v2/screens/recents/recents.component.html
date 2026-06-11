@@ -1,11 +1,7 @@
 <div class="recents">
-  <header class="recents__hero">
-    <div class="recents__kicker">
-      <app-v2-icon name="clock" [size]="11" class="recents__kicker-icon" />
-      <span class="recents__kicker-text">{{ 'Workspace' | translate: locale.language }} · {{ nowLabel }}</span>
-    </div>
-    <h1 class="recents__title" l10nTranslate>Recents</h1>
-    <p class="recents__lede" l10nTranslate>Files you and your collaborators have touched recently.</p>
+  <header class="recents__header">
+    <h1 class="recents__title-text" l10nTranslate>Recents</h1>
+    <div class="recents__title-meta" l10nTranslate>Files you and your collaborators have touched recently.</div>
   </header>
 
   @if (pinnedFiles().length > 0) {

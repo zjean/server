@@ -13,43 +13,28 @@
   min-height: 0;
   overflow: auto;
 
-  &__hero {
-    padding: 32px 28px 8px;
+  // Compact page header, matching personal/spaces/shared/trash (one header
+  // system across the app — 26px title + 14px meta).
+  &__header {
+    padding: 32px 28px 18px;
   }
 
-  &__kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    color: var(--si-fg-muted);
+  &__title-text {
+    margin: 0;
     font-family: var(--si-display);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  &__kicker-icon {
-    color: var(--si-fg-faint);
-    flex-shrink: 0;
-  }
-
-  &__title {
-    margin: 10px 0 0;
-    font-family: var(--si-display);
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.02em;
-    line-height: 1.05;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
   }
 
-  &__lede {
-    margin: 8px 0 0;
+  &__title-meta {
+    margin: 4px 0 0;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--si-fg-muted);
-    max-width: 56ch;
+    font-family: var(--si-sans);
   }
 
   &__section {
@@ -155,45 +140,5 @@
   }
 }
 
-.favorites-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 56px 20px;
-  margin: 16px 28px 28px;
-  color: var(--si-fg-faint);
-  text-align: center;
-  background: var(--si-bg3);
-  border: 1px dashed var(--si-line-strong);
-  border-radius: var(--si-r3);
-
-  &__icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 24px;
-    background: var(--si-bg4);
-    color: var(--si-fg-ghost);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 14px;
-    border: 1px solid var(--si-line);
-  }
-
-  &__title {
-    font-family: var(--si-display);
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--si-fg-muted);
-    letter-spacing: -0.1px;
-  }
-
-  &__lede {
-    margin-top: 6px;
-    font-size: 12.5px;
-    color: var(--si-fg-faint);
-    max-width: 32ch;
-    line-height: 1.5;
-  }
-}
+// Empty state now uses the shared <app-v2-empty-state> component
+// (components/empty-state.component.ts) so it matches shares + spaces.

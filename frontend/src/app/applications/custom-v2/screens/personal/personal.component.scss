@@ -31,10 +31,11 @@
     background: var(--si-bg2);
     transition: background var(--dur-1, 120ms) ease;
 
-    // Selection mode: tint the whole toolbar so it's clear the screen
-    // is in a different state. Subtle amber wash, no inner border.
+    // Selection mode: lift the toolbar to a clean neutral surface so the
+    // screen reads as a different state — a warm accent wash over the navy
+    // muddies to orange-brown, so the cue is tonal, not chromatic.
     &--selecting {
-      background: var(--si-accent-soft);
+      background: var(--si-bg3);
     }
   }
 
@@ -77,7 +78,7 @@
   }
 
   &__title-meta {
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.4;
     min-height: 18px;
     color: var(--si-fg-muted);
@@ -87,9 +88,15 @@
 
   &__selection {
     display: flex;
+    // Vertically centre the contextual toolbar against the full title block
+    // so it sits balanced beside the title, instead of pinned to the bottom
+    // (the row is align-items:flex-end for the create-actions case).
     align-items: center;
+    align-self: center;
     gap: 8px;
     flex: 1 1 auto;
+    // Breathing room between the page title and the selection toolbar.
+    margin-left: 32px;
     min-width: 0;
   }
 
@@ -130,7 +137,7 @@
     border: none;
     outline: none;
     color: var(--si-fg);
-    font-size: 12.5px;
+    font-size: 14px;
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
     min-width: 0;
@@ -249,26 +256,33 @@
 .file-table {
   display: flex;
   flex-direction: column;
+  // 28px content margin so the row block (and its rounded highlight) lines up
+  // with the page title + toolbar; the checkbox column then sits at that 28px
+  // margin, aligned with the title.
+  padding: 0 12px;
 
   &__head {
     display: grid;
-    grid-template-columns: 28px minmax(280px, 2fr) 100px 120px 160px 40px;
-    padding: 0 18px;
-    height: 32px;
+    grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
+    padding: 0 16px;
+    height: 36px;
     align-items: center;
-    border-bottom: 1px solid var(--si-line);
-    font-size: 10.5px;
-    color: var(--si-fg-faint);
+    // De-emphasised header: no bottom rule, no all-caps/display-font shouting —
+    // a quiet column label in the body sans. Separation now comes from the
+    // sticky surface tint, not a border.
+    font-size: 13px;
+    color: var(--si-fg-tertiary);
     font-weight: 600;
+    letter-spacing: 0.01em;
+    // Match the canvas so the sticky header blends in (no contrasting band /
+    // pseudo-divider); it still occludes rows scrolling underneath.
     background: var(--si-bg2);
     position: sticky;
     top: 0;
     z-index: 1;
-    text-transform: uppercase;
-    letter-spacing: 1.1px;
-    font-family: var(--si-display);
 
-    > :nth-child(4) {
+    // Size column (now 3rd) is centre-aligned to match the row cells.
+    > :nth-child(3) {
       text-align: center;
     }
   }
@@ -276,16 +290,16 @@
 
 .file-row {
   display: grid;
-  grid-template-columns: 28px minmax(280px, 2fr) 100px 120px 160px 40px;
-  padding: 0 18px;
-  height: 48px;
+  grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
+  padding: 0 16px;
+  height: 56px;
   align-items: center;
-  border-bottom: 1px solid var(--si-line);
+  // Borderless: no per-row divider. Rhythm comes from row height + the
+  // rounded hover/selection fill, not hairlines between every row.
+  border: none;
+  border-radius: 12px;
   cursor: pointer;
   background: transparent;
-  border-top: none;
-  border-left: none;
-  border-right: none;
   text-align: left;
   color: inherit;
   width: 100%;
@@ -296,13 +310,16 @@
     background: var(--si-bg3);
   }
 
+  // Clean cool selection: just a lighter navy fill, clearly distinct from the
+  // bg3 hover. The checked checkbox already carries the brand cue, so no
+  // accent edge-bar is needed (and a warm wash over navy would muddy).
   &--selected {
-    background: var(--si-nav-soft);
+    background: var(--si-bg4);
   }
 
   &--selected:hover {
-    background: var(--si-nav-soft);
-    filter: brightness(1.08);
+    background: var(--si-bg4);
+    filter: brightness(1.05);
   }
 
   // Drag-and-drop visuals. `--dragging` fades the source row(s) so the user
@@ -339,7 +356,7 @@
   }
 
   &__name-text {
-    font-size: 14px;
+    font-size: 15px;
     color: var(--si-fg);
     letter-spacing: -0.1px;
     font-weight: 500;
@@ -413,15 +430,19 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 12px;
-  padding: 16px;
+  // Left/right margin matches the page title + toolbar (28px content margin).
+  padding: 16px 28px 28px;
 }
 
 .file-card {
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
+  background: var(--si-bg2);
+  // Soft elevation instead of a hard 1px outline — reads modern, lets the
+  // card lift on hover rather than just swapping a border colour.
+  border: none;
+  box-shadow: var(--si-shadow1);
   border-radius: var(--si-r3);
   overflow: hidden;
   cursor: pointer;
@@ -431,16 +452,16 @@
   font-family: inherit;
   transition:
     background 120ms ease,
-    border-color 120ms ease;
+    box-shadow 120ms ease,
+    transform 120ms ease;
 
   &:hover {
-    background: var(--si-bg4);
-    border-color: var(--si-line-strong);
+    // Subtle tonal hover like a list row — no dramatic lift shadow.
+    background: var(--si-bg3);
   }
 
   &--selected {
-    border-color: var(--si-nav);
-    box-shadow: inset 0 0 0 1px var(--si-nav);
+    box-shadow: inset 0 0 0 2px var(--si-nav);
   }
 
   &--dragging {
@@ -459,9 +480,17 @@
     z-index: 2;
     opacity: 0;
     transition: opacity 120ms ease;
-    padding: 2px;
-    border-radius: 6px;
-    background: color-mix(in oklab, var(--si-bg2) 80%, transparent);
+    // Flex so the chip hugs the 16px checkbox (otherwise the inline line-box
+    // from the inherited font size makes the chip taller than the checkbox).
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border-radius: 7px;
+    // Clean opaque chip so the checkbox reads on any file-type header tint
+    // (the old translucent color-mix went muddy over the colored headers).
+    background: var(--si-bg1);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
   }
 
   &:hover &__select,
@@ -470,13 +499,12 @@
   }
 
   &__header {
-    height: 108px;
+    height: 92px;
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-bottom: 1px solid var(--si-line);
-    background: var(--si-bg2);
+    background: var(--si-bg3);
   }
 
   &__pill {
@@ -529,7 +557,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
-  padding: 18px;
+  padding: 18px 28px 28px;
 }
 
 .gallery-card {
@@ -538,24 +566,26 @@
   flex-direction: column;
   border-radius: var(--si-r3);
   overflow: hidden;
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
+  background: var(--si-bg2);
+  border: none;
   box-shadow: var(--si-shadow1);
   cursor: pointer;
   padding: 0;
   text-align: left;
   color: inherit;
   font-family: inherit;
-  transition: border-color 120ms ease;
+  transition:
+    box-shadow 120ms ease,
+    background 120ms ease;
 
   &:hover {
-    border-color: var(--si-line-strong);
+    // Subtle tonal hover like a list row — no dramatic lift shadow.
+    background: var(--si-bg3);
   }
 
   &--selected {
-    border-color: var(--si-nav);
     box-shadow:
-      inset 0 0 0 1px var(--si-nav),
+      inset 0 0 0 2px var(--si-nav),
       var(--si-shadow1);
   }
 
@@ -577,9 +607,14 @@
     z-index: 2;
     opacity: 0;
     transition: opacity 120ms ease;
-    padding: 2px;
-    border-radius: 6px;
-    background: color-mix(in oklab, var(--si-bg2) 80%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border-radius: 7px;
+    // Clean opaque chip (was a muddy translucent color-mix over the stage).
+    background: var(--si-bg1);
+    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
   }
 
   &:hover &__select,
@@ -607,7 +642,6 @@
 
   &__footer {
     padding: 10px 12px;
-    border-top: 1px solid var(--si-line);
   }
 
   &__name {
