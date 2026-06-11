@@ -131,7 +131,7 @@ export class NcSyncReportService {
     // Degrades to "no stars" on lookup failure rather than failing the REPORT.
     let favoriteIds = new Set<number>()
     try {
-      favoriteIds = new Set(await this.favorites.getFavoriteIdsForUser(user.id))
+      favoriteIds = new Set(await this.favorites.getFavoriteIds(user))
     } catch (err) {
       this.logger.warn({ tag: this.respond.name, msg: `favorite-id lookup failed (degrading to no stars): ${(err as Error).message}` })
     }

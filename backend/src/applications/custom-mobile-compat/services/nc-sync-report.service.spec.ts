@@ -74,7 +74,7 @@ describe(NcSyncReportService.name, () => {
   let service: NcSyncReportService
   let log: { since: Mock; minKeptToken: Mock; currentToken: Mock }
   let fileRowEnsurer: { ensure: Mock }
-  let favorites: { getFavoriteIdsForUser: Mock }
+  let favorites: { getFavoriteIds: Mock }
   let tmpRoot: string
   let user: UserModel
   let space: SpaceEnv
@@ -88,7 +88,7 @@ describe(NcSyncReportService.name, () => {
     // Default: pass the file's existing id through (inode placeholder or real).
     // Individual tests can override to assert a specific DB id is emitted.
     fileRowEnsurer = { ensure: vi.fn().mockImplementation((f: { id: number }) => Promise.resolve(f.id)) }
-    favorites = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([]) }
+    favorites = { getFavoriteIds: vi.fn().mockResolvedValue([]) }
     moduleRef = await Test.createTestingModule({
       providers: [
         NcSyncReportService,
@@ -166,14 +166,14 @@ describe(NcSyncReportService.name, () => {
     const filePath = path.join(tmpRoot, 'starred.jpg')
     await fs.writeFile(filePath, 'pretend-this-is-jpeg')
     fileRowEnsurer.ensure.mockResolvedValueOnce(9999)
-    favorites.getFavoriteIdsForUser.mockResolvedValue([9999])
+    favorites.getFavoriteIds.mockResolvedValue([9999])
     log.since.mockResolvedValueOnce([
       { id: 60, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'starred.jpg', type: 'create', ts: Date.now() }
     ])
     const { reply, captured } = fakeReply()
     await service.respond(buildReq(null) as never, reply)
 
-    expect(favorites.getFavoriteIdsForUser).toHaveBeenCalledWith(user.id)
+    expect(favorites.getFavoriteIds).toHaveBeenCalledWith(user)
     expect(captured.body).toContain('<oc:favorite>1</oc:favorite>')
   })
 

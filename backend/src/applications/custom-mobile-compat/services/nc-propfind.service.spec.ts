@@ -38,7 +38,7 @@ describe('NcPropfindService', () => {
   let webdavSpaces: { propfind: Mock }
   let fileRowEnsurer: { ensure: Mock }
   let shareMounts: { listMounts: Mock }
-  let favorites: { getFavoriteIdsForUser: Mock }
+  let favorites: { getFavoriteIds: Mock }
 
   beforeEach(async () => {
     webdavSpaces = { propfind: vi.fn() }
@@ -50,7 +50,7 @@ describe('NcPropfindService', () => {
     // injection. Tests covering injection override per-call.
     shareMounts = { listMounts: vi.fn().mockResolvedValue([]) }
     // Default: no favorites — keeps existing assertions emitting oc:favorite=0.
-    favorites = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([]) }
+    favorites = { getFavoriteIds: vi.fn().mockResolvedValue([]) }
     const module = await Test.createTestingModule({
       providers: [
         NcPropfindService,
@@ -109,10 +109,10 @@ describe('NcPropfindService', () => {
     const r = req()
     // Attach a user so the favorites lookup runs; pic.jpg has id 100.
     ;(r as unknown as { user: unknown }).user = { id: 1, login: 'alice', fullName: 'Alice' }
-    favorites.getFavoriteIdsForUser.mockResolvedValue([100])
+    favorites.getFavoriteIds.mockResolvedValue([100])
     const { res, state } = fakeReply()
     await service.respond(r, res, 'files')
-    expect(favorites.getFavoriteIdsForUser).toHaveBeenCalledWith(1)
+    expect(favorites.getFavoriteIds).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }))
     const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
     expect(childBlock).toContain('<oc:favorite>1</oc:favorite>')
     const folderBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
