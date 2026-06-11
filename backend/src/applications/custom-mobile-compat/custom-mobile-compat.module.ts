@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 import { AUTH_PROVIDER } from '../../authentication/providers/auth-providers.constants'
 import { AuthProviderOIDCModule } from '../../authentication/providers/oidc/auth-provider-oidc.module'
 import { CommentsModule } from '../comments/comments.module'
+import { CustomFavoritesModule } from '../custom-favorites/custom-favorites.module'
 import { configuration } from '../../configuration/config.environment'
 import { FilesModule } from '../files/files.module'
 import { SharesModule } from '../shares/shares.module'
@@ -27,6 +28,7 @@ import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
 import { NcDirectEditingService } from './services/nc-direct-editing.service'
+import { NcFavoritesReportService } from './services/nc-favorites-report.service'
 import { NcFileRowEnsurer } from './services/nc-file-row-ensurer.service'
 import { NcLoginFlowService } from './services/nc-login-flow.service'
 import { NcMobileOidcService } from './services/nc-mobile-oidc.service'
@@ -61,7 +63,19 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
   // CommentsModule re-exports CommentsQueries for the NC iOS Comments tab —
   // mapped onto the existing comments storage by NcCommentsController, no
   // schema or domain changes.
-  imports: [UsersModule, FilesModule, WebDAVModule, SpacesModule, SharesModule, CommentsModule, ...(oidcEnabled ? [AuthProviderOIDCModule] : [])],
+  // CustomFavoritesModule exports FavoritesManager — reused by NcPropfindService,
+  // NcSyncReportService, and NcFavoritesReportService to surface per-user
+  // favorites to the stock NC clients (star / toggle / Favorites tab).
+  imports: [
+    UsersModule,
+    FilesModule,
+    WebDAVModule,
+    SpacesModule,
+    SharesModule,
+    CommentsModule,
+    CustomFavoritesModule,
+    ...(oidcEnabled ? [AuthProviderOIDCModule] : [])
+  ],
   controllers: [
     NcDiscoveryController,
     NcLoginV2Controller,
@@ -87,6 +101,7 @@ const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled =
     NcResponseService,
     NcChunkedUploadsService,
     NcDirectEditingService,
+    NcFavoritesReportService,
     NcFileRowEnsurer,
     NcPropfindService,
     NcSearchService,

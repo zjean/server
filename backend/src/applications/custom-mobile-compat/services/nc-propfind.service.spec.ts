@@ -4,6 +4,7 @@ import { SPACE_ALIAS, SPACE_ALL_OPERATIONS, SPACE_REPOSITORY } from '../../space
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
+import { FavoritesManager } from '../../custom-favorites/services/favorites-manager.service'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcPropfindService } from './nc-propfind.service'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
@@ -37,6 +38,7 @@ describe('NcPropfindService', () => {
   let webdavSpaces: { propfind: Mock }
   let fileRowEnsurer: { ensure: Mock }
   let shareMounts: { listMounts: Mock }
+  let favorites: { getFavoriteIdsForUser: Mock }
 
   beforeEach(async () => {
     webdavSpaces = { propfind: vi.fn() }
@@ -47,12 +49,15 @@ describe('NcPropfindService', () => {
     // personal-space listing only and shouldn't be perturbed by mount
     // injection. Tests covering injection override per-call.
     shareMounts = { listMounts: vi.fn().mockResolvedValue([]) }
+    // Default: no favorites — keeps existing assertions emitting oc:favorite=0.
+    favorites = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([]) }
     const module = await Test.createTestingModule({
       providers: [
         NcPropfindService,
         { provide: WebDAVSpaces, useValue: webdavSpaces },
         { provide: NcFileRowEnsurer, useValue: fileRowEnsurer },
-        { provide: NcShareMountResolverService, useValue: shareMounts }
+        { provide: NcShareMountResolverService, useValue: shareMounts },
+        { provide: FavoritesManager, useValue: favorites }
       ]
     }).compile()
     service = module.get(NcPropfindService)
@@ -98,6 +103,20 @@ describe('NcPropfindService', () => {
     expect(state.body).toContain('<oc:fileid>42</oc:fileid>')
     expect(state.body).toMatch(/<oc:permissions>[A-Z]+<\/oc:permissions>/)
     expect(state.body).toMatch(/<ocs:share-permissions>\d+<\/ocs:share-permissions>/)
+  })
+
+  it('marks oc:favorite=1 on favorited file ids and 0 on the rest', async () => {
+    const r = req()
+    // Attach a user so the favorites lookup runs; pic.jpg has id 100.
+    ;(r as unknown as { user: unknown }).user = { id: 1, login: 'alice', fullName: 'Alice' }
+    favorites.getFavoriteIdsForUser.mockResolvedValue([100])
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(favorites.getFavoriteIdsForUser).toHaveBeenCalledWith(1)
+    const childBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/pic.jpg</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(childBlock).toContain('<oc:favorite>1</oc:favorite>')
+    const folderBlock = state.body!.split('<d:href>/remote.php/dav/files/alice/</d:href>')[1]?.split('</d:response>')[0] ?? ''
+    expect(folderBlock).toContain('<oc:favorite>0</oc:favorite>')
   })
 
   it('sets nc:has-preview to "true" for an image child and "false" for a non-previewable folder', async () => {
