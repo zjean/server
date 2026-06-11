@@ -94,9 +94,9 @@
     } @else if (errorMessage(); as err) {
       <div class="personal__state personal__state--error">{{ err | translate: locale.language }}</div>
     } @else if (filteredFiles().length === 0 && filter()) {
-      <div class="personal__state">{{ 'no_files_match_query' | translate: locale.language : { query: filter() } }}</div>
+      <app-v2-empty-state icon="search" title="no_files_match_query" [titleParams]="{ query: filter() }" />
     } @else if (files().length === 0) {
-      <div class="personal__state" l10nTranslate>This folder is empty.</div>
+      <app-v2-empty-state icon="folder" title="This folder is empty." />
     } @else {
       @switch (mode()) {
         @case ('list') {
@@ -106,9 +106,9 @@
                 <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Select all' | translate: locale.language" />
               </span>
               <span l10nTranslate>Name</span>
-              <span l10nTranslate>Info</span>
               <span l10nTranslate>Size</span>
               <span l10nTranslate>Modified</span>
+              <span l10nTranslate>Info</span>
               <span></span>
             </div>
             @for (f of filteredFiles(); track f.id) {
@@ -136,21 +136,6 @@
                   <span class="file-row__name-text">{{ f.name }}</span>
                   @if (favoritesService.isFavorite(f.id)) {
                     <app-v2-icon name="star" [size]="13" class="file-row__favorite" [attr.title]="'Favorites' | translate: locale.language" />
-                  }
-                </div>
-                <div class="file-row__info">
-                  @if (f.hasComments) {
-                    <button
-                      type="button"
-                      class="file-row__comments-btn"
-                      (click)="$event.stopPropagation(); openComments(f)"
-                      [attr.title]="'Show comments' | translate: locale.language"
-                    >
-                      <app-v2-pill color="green" [size]="11">
-                        <app-v2-icon name="comment" [size]="10" />
-                        <span>·</span>
-                      </app-v2-pill>
-                    </button>
                   }
                 </div>
                 <div class="file-row__size">
@@ -184,6 +169,21 @@
                     <span class="file-row__modified-pill">{{ f.mtime | amTimeAgo }}</span>
                   } @else {
                     —
+                  }
+                </div>
+                <div class="file-row__info">
+                  @if (f.hasComments) {
+                    <button
+                      type="button"
+                      class="file-row__comments-btn"
+                      (click)="$event.stopPropagation(); openComments(f)"
+                      [attr.title]="'Show comments' | translate: locale.language"
+                    >
+                      <app-v2-pill color="green" [size]="11">
+                        <app-v2-icon name="comment" [size]="10" />
+                        <span>·</span>
+                      </app-v2-pill>
+                    </button>
                   }
                 </div>
                 <div class="file-row__actions" (click)="openRowMenu($event, f)">

@@ -9,6 +9,7 @@ import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ShareLinkModel } from '../../../links/models/share-link.model'
 import { ShareFileModel } from '../../../shares/models/share-file.model'
 import { SharesService } from '../../../shares/services/shares.service'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { LinkDialogService } from '../../components/link-dialog.service'
@@ -58,7 +59,7 @@ const CONFIGS: Record<SharedVariant, VariantConfig> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shared.component.html',
   styleUrl: './shared.component.scss',
-  imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe, EmptyStateComponent]
 })
 export class SharedComponent implements OnInit, OnDestroy {
   private readonly sharesService = inject(SharesService)

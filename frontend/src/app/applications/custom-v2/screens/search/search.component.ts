@@ -5,6 +5,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { FileContentModel } from '../../../files/models/file-content.model'
 import { FilesService } from '../../../files/services/files.service'
 import { ButtonComponent } from '../../components/button.component'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -19,7 +20,7 @@ const LIMIT = 100
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './search.component.html',
   styleUrl: './search.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, ButtonComponent, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [IconV2Component, FileGlyphComponent, ButtonComponent, EmptyStateComponent, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class SearchComponent implements OnInit {
   private readonly filesService = inject(FilesService)

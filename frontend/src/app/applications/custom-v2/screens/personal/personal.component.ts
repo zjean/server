@@ -48,6 +48,7 @@ import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuAnchor, ContextMenuComponent, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { FileThumbComponent } from '../../components/file-thumb.component'
@@ -93,6 +94,7 @@ function readStoredMode(): BrowserMode {
     PillComponent,
     ContextMenuComponent,
     DropZoneDirective,
+    EmptyStateComponent,
     FabComponent,
     ActionSheetComponent,
     ToBytesPipe,

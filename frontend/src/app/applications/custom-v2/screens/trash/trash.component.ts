@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { TrashModel } from '../../../spaces/models/trash.model'
 import { SpacesService } from '../../../spaces/services/spaces.service'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -16,7 +17,7 @@ import { V2_PATH, V2_ROUTES } from '../../v2.constants'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './trash.component.html',
   styleUrl: './trash.component.scss',
-  imports: [IconV2Component, IconButtonComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [IconV2Component, IconButtonComponent, EmptyStateComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class TrashComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)

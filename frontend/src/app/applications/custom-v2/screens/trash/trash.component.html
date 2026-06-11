@@ -16,7 +16,7 @@
   } @else if (errorMessage(); as err) {
     <div class="trash__state trash__state--error">{{ err | translate: locale.language }}</div>
   } @else if (bins().length === 0) {
-    <div class="trash__state" l10nTranslate>Nothing in the trash.</div>
+    <app-v2-empty-state icon="trash" title="Nothing in the trash." />
   } @else {
     <div class="bin-table">
       <div class="bin-table__head">

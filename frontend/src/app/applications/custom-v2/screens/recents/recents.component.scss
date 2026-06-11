@@ -16,43 +16,27 @@
   // Stack hero rhythm: kicker chip → display title → lede line. Same
   // breathing room as Personal/Spaces so a user moving between them sees
   // the page-header consistently.
-  &__hero {
-    padding: 32px 28px 8px;
+  // Compact page header, matching the rest of the app (26px title + 14px meta).
+  &__header {
+    padding: 32px 28px 18px;
   }
 
-  &__kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    color: var(--si-fg-muted);
+  &__title-text {
+    margin: 0;
     font-family: var(--si-display);
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  &__kicker-icon {
-    color: var(--si-fg-faint);
-    flex-shrink: 0;
-  }
-
-  &__title {
-    margin: 10px 0 0;
-    font-family: var(--si-display);
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
-    letter-spacing: -0.02em;
-    line-height: 1.05;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
   }
 
-  &__lede {
-    margin: 8px 0 0;
+  &__title-meta {
+    margin: 4px 0 0;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--si-fg-muted);
-    max-width: 56ch;
+    font-family: var(--si-sans);
   }
 
   &__section {
@@ -157,7 +141,8 @@
     position: relative;
     height: 96px;
     border-radius: 10px;
-    background: repeating-linear-gradient(135deg, oklch(0.34 0.036 255) 0 8px, oklch(0.3 0.034 255) 8px 16px);
+    // Clean tonal surface instead of the diagonal hatch texture.
+    background: var(--si-bg3);
     display: flex;
     align-items: center;
     justify-content: center;

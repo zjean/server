@@ -1,119 +1,111 @@
-// Sync-In v2 design tokens — "Stack" navy + peach palette.
-// Mood: deep navy surfaces (hue 255, low chroma so they read as sophisticated
-// dark, not flat black) with a single confident peach brand accent (hue 40).
-// Replaces the previous warm-neutral + amber direction. Variable names are
-// unchanged so existing consumers across the v2 tree keep resolving — only
-// the values shift hue and chroma.
+// Sync-In v2 design tokens — vibrant navy + peach.
+// Mood: a richer, deeper-blue navy (hue 255, chroma lifted to ~0.045–0.062 so
+// the surfaces read as real ocean-navy, not flat charcoal) with wider lightness
+// steps so the sidebar, canvas and cards separate by elevation. A single
+// confident peach brand accent (hue ~55), now more saturated for punch.
+// Text is brightened across the tier ladder so secondary metadata stays legible
+// rather than greying out. The semantic + file-type colours are tuned as one
+// vivid family (held at L≈0.80 with a consistent chroma envelope) so they read
+// as a coordinated set, not a scattered rainbow.
 //
-// Source of truth: Claude Design "Stack" handoff (Navy + Peach, base :root).
-// All body text passes WCAG AA on bg-0..bg-2:
-//   fg         ~14:1   AAA
-//   fg-muted   ~6.9:1  AAA
-//   fg-faint   ~5.5:1  AA   (maps from design's fg-subtle tier)
-//   fg-tertiary ~4.6:1 AA   (maps from design's fg-faint tier)
+// Variable names are unchanged so every existing consumer across the v2 tree
+// keeps resolving — only the values shift. All body text passes WCAG AA on
+// bg-0..bg-2.
 //
 // Scoped under .v2-root so nothing leaks into the classic layout.
 // hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the
-// fallback.
+// fallback (fallbacks generated from the oklch values, sRGB-accurate).
 
 .v2-root {
-  // ─── Backgrounds — navy surfaces (hue 255, very low chroma) ──────────
-  // Stack's canonical scale is bg-0..bg-4 (L 22→37); bg-5 and bg-6 are
-  // extrapolated for hover/lifted states to preserve the existing slot
-  // count across this codebase.
-  --si-bg0: #1d2230; // page / outermost
-  --si-bg0: oklch(0.22 0.028 255);
-  --si-bg1: #232839; // sidebar / rails
-  --si-bg1: oklch(0.25 0.032 255);
-  --si-bg2: #282e42; // content canvas / card
-  --si-bg2: oklch(0.28 0.034 255);
-  --si-bg3: #2f364c; // card hover / input bg
-  --si-bg3: oklch(0.32 0.036 255);
-  --si-bg4: #38405a; // selected row
-  --si-bg4: oklch(0.37 0.038 255);
-  --si-bg5: #424c69; // active surface (extrapolated)
-  --si-bg5: oklch(0.42 0.04 255);
-  --si-bg6: #4f5a79; // lifted element (extrapolated)
-  --si-bg6: oklch(0.48 0.04 255);
+  // ─── Backgrounds — richer navy (hue 255), wider elevation steps ──────
+  --si-bg0: #0f1f33; // page / outermost
+  --si-bg0: oklch(0.235 0.045 255);
+  --si-bg1: #152841; // sidebar / rails
+  --si-bg1: oklch(0.275 0.052 255);
+  --si-bg2: #1d324d; // content canvas / card
+  --si-bg2: oklch(0.315 0.056 255);
+  --si-bg3: #29415f; // card hover / input bg
+  --si-bg3: oklch(0.37 0.06 255);
+  --si-bg4: #3b5474; // selected row
+  --si-bg4: oklch(0.44 0.062 255);
+  --si-bg5: #4f6888; // active surface
+  --si-bg5: oklch(0.51 0.06 255);
+  --si-bg6: #647c9b; // lifted element
+  --si-bg6: oklch(0.58 0.055 255);
 
   // ─── Lines — same navy hue family ────────────────────────────────────
-  --si-line: rgba(141, 153, 178, 0.36);
-  --si-line: oklch(0.42 0.03 255 / 0.6);
-  --si-line-strong: rgba(159, 172, 196, 0.55);
-  --si-line-strong: oklch(0.48 0.032 255);
-  --si-line-bold: rgba(177, 190, 214, 0.62);
-  --si-line-bold: oklch(0.54 0.034 255 / 0.7);
+  --si-line: rgba(108, 130, 158, 0.55);
+  --si-line: oklch(0.6 0.05 255 / 0.55);
+  --si-line-strong: #7288a4;
+  --si-line-strong: oklch(0.62 0.05 255);
+  --si-line-bold: rgba(132, 154, 183, 0.7);
+  --si-line-bold: oklch(0.68 0.05 255 / 0.7);
 
   // Alias — referenced by form controls, dialogs, context menus, inspector.
   --si-border: var(--si-line-strong);
 
-  // ─── Text — cool-white (hue 230) tier ladder ─────────────────────────
-  // Stack's text hues sit at 230 so the navy surfaces don't tilt text
-  // toward yellow. All tiers ≥ 4.5:1 WCAG AA on bg-0..bg-2.
-  --si-fg: #f4f5f7;
-  --si-fg: oklch(0.97 0.01 230);
-  --si-fg-muted: #d3d6dd;
-  --si-fg-muted: oklch(0.86 0.022 230);
-  --si-fg-faint: #bcc0ca;
-  --si-fg-faint: oklch(0.78 0.022 230);
-  --si-fg-tertiary: #a9aeb9;
-  --si-fg-tertiary: oklch(0.72 0.02 230);
-  --si-fg-ghost: #777d8a;
-  --si-fg-ghost: oklch(0.55 0.018 230);
+  // ─── Text — cool-white (hue 250) tier ladder, brightened ─────────────
+  --si-fg: #f1f8ff;
+  --si-fg: oklch(0.975 0.012 250);
+  --si-fg-muted: #d4dfeb;
+  --si-fg-muted: oklch(0.9 0.02 250);
+  --si-fg-faint: #bac6d2;
+  --si-fg-faint: oklch(0.82 0.022 250);
+  --si-fg-tertiary: #aab6c2;
+  --si-fg-tertiary: oklch(0.77 0.022 250);
+  --si-fg-ghost: #8b96a5;
+  --si-fg-ghost: oklch(0.67 0.026 255);
 
-  // ─── Accent — peach, single confident primary (hue 40) ───────────────
-  // Stack uses one accent: peach for active sidebar rows, primary
-  // buttons, focus rings, active app-rail icons, folder file-type chips.
-  --si-accent: #f2b58c;
-  --si-accent: oklch(0.83 0.13 40);
-  --si-accent-soft: rgba(242, 181, 140, 0.12);
-  --si-accent-soft: oklch(0.83 0.13 40 / 0.12);
-  --si-accent-line: rgba(242, 181, 140, 0.45);
-  --si-accent-line: oklch(0.83 0.13 40 / 0.45);
-  --si-accent-deep: #e69472;
-  --si-accent-deep: oklch(0.76 0.17 28);
-  --si-accent-fg: #38200f; // text on peach primary
-  --si-accent-fg: oklch(0.22 0.05 30);
-  --si-accent-hover: #f6c5a3;
-  --si-accent-hover: oklch(0.86 0.13 40);
+  // ─── Accent — peach, single confident primary (hue ~55), vivid ───────
+  --si-accent: #ffb36b;
+  --si-accent: oklch(0.85 0.145 55);
+  --si-accent-soft: rgba(255, 179, 107, 0.16);
+  --si-accent-soft: oklch(0.85 0.145 55 / 0.16);
+  --si-accent-line: rgba(255, 179, 107, 0.45);
+  --si-accent-line: oklch(0.85 0.145 55 / 0.45);
+  --si-accent-deep: #ff8f52;
+  --si-accent-deep: oklch(0.78 0.17 45);
+  --si-accent-fg: #321707; // text on peach primary
+  --si-accent-fg: oklch(0.24 0.05 50);
+  --si-accent-hover: #ffc07a;
+  --si-accent-hover: oklch(0.88 0.135 58);
 
-  // ─── Nav — alias of accent (Stack uses one accent everywhere) ────────
+  // ─── Nav — alias of accent (one accent everywhere) ───────────────────
   --si-nav: var(--si-accent);
   --si-nav-soft: var(--si-accent-soft);
   --si-nav-line: var(--si-accent-line);
 
   // ─── Title bar — one step deeper than bg0, navy-coherent ─────────────
-  --si-chrome-bg: #181c27;
-  --si-chrome-bg: oklch(0.17 0.026 255);
-  --si-chrome-bg-dark: #181c27;
-  --si-chrome-bg-dark: oklch(0.17 0.026 255);
+  --si-chrome-bg: #061324;
+  --si-chrome-bg: oklch(0.185 0.04 255);
+  --si-chrome-bg-dark: #061324;
+  --si-chrome-bg-dark: oklch(0.185 0.04 255);
 
-  // ─── Semantic palette — Stack tints + bases ──────────────────────────
-  --si-green: #8bd9a8;
-  --si-green: oklch(0.8 0.16 150);
-  --si-green-soft: rgba(139, 217, 168, 0.2);
-  --si-green-soft: oklch(0.8 0.16 150 / 0.2);
+  // ─── Semantic palette — vivid, L≈0.80 family ─────────────────────────
+  --si-green: #53e39c;
+  --si-green: oklch(0.82 0.16 158);
+  --si-green-soft: rgba(83, 227, 156, 0.2);
+  --si-green-soft: oklch(0.82 0.16 158 / 0.2);
 
-  // "amber" is the brand-tint slot in Stack's token system (always tied
-  // to the active brand color, regardless of theme name). Aliased to
-  // accent so badges/avatars/folder-chips keep resolving to peach.
+  // "amber" is the brand-tint slot (always tied to the active brand colour).
+  // Aliased to accent so badges/avatars/folder-chips keep resolving to peach.
   --si-amber: var(--si-accent);
   --si-amber-soft: var(--si-accent-soft);
 
-  --si-rose: #ed8e7a;
-  --si-rose: oklch(0.74 0.2 25);
-  --si-rose-soft: rgba(237, 142, 122, 0.2);
-  --si-rose-soft: oklch(0.74 0.2 18 / 0.2);
+  --si-rose: #ff6c5d;
+  --si-rose: oklch(0.72 0.19 28);
+  --si-rose-soft: rgba(255, 108, 93, 0.2);
+  --si-rose-soft: oklch(0.72 0.19 28 / 0.2);
 
-  --si-violet: #c69cea;
-  --si-violet: oklch(0.76 0.16 295);
-  --si-violet-soft: rgba(198, 156, 234, 0.22);
-  --si-violet-soft: oklch(0.76 0.16 295 / 0.22);
+  --si-violet: #c89eff;
+  --si-violet: oklch(0.78 0.16 300);
+  --si-violet-soft: rgba(200, 158, 255, 0.22);
+  --si-violet-soft: oklch(0.78 0.16 300 / 0.22);
 
-  --si-cyan: #9bc8f0;
-  --si-cyan: oklch(0.82 0.12 245);
-  --si-cyan-soft: rgba(155, 200, 240, 0.22);
-  --si-cyan-soft: oklch(0.82 0.12 245 / 0.22);
+  --si-cyan: #6dcfff;
+  --si-cyan: oklch(0.82 0.13 240);
+  --si-cyan-soft: rgba(109, 207, 255, 0.22);
+  --si-cyan-soft: oklch(0.82 0.13 240 / 0.22);
 
   // ─── Type system — Geist sans/display, JetBrains Mono ────────────────
   --si-sans: 'Geist Variable', 'Inter Variable', system-ui, -apple-system, sans-serif;
@@ -135,66 +127,61 @@
   --si-shadow3: 0 24px 60px rgba(0, 0, 0, 0.5), 0 6px 18px rgba(0, 0, 0, 0.38);
   --si-shadow3: 0 1px 0 oklch(1 0 0 / 0.06) inset, 0 24px 60px oklch(0 0 0 / 0.5);
 
-  // ─── File-type color coding ──────────────────────────────────────────
-  // Aligned with Stack's ftype mapping:
-  //   image → violet, doc → blue (info), sheet → green (success),
-  //   folder → peach (brand), pdf → rose (danger). Audio/code/archive
-  //   are project extensions Stack doesn't define; left in-family.
-  --fc-image-bg: rgba(198, 156, 234, 0.22);
-  --fc-image-bg: oklch(0.76 0.16 295 / 0.22);
-  --fc-image-fg: #cba6ec;
-  --fc-image-fg: oklch(0.8 0.12 295);
+  // ─── File-type color coding — vivid, one family ──────────────────────
+  //   image → violet, doc → blue, sheet → green, folder/deck → peach (brand),
+  //   pdf/video → coral. Audio/code/archive kept in-family.
+  --fc-image-bg: rgba(205, 166, 255, 0.2);
+  --fc-image-bg: oklch(0.8 0.15 300 / 0.2);
+  --fc-image-fg: #cda6ff;
+  --fc-image-fg: oklch(0.8 0.15 300);
 
-  --fc-video-bg: rgba(237, 142, 122, 0.2);
-  --fc-video-bg: oklch(0.74 0.2 25 / 0.2);
-  --fc-video-fg: #f3a294;
-  --fc-video-fg: oklch(0.8 0.18 25);
+  --fc-video-bg: rgba(255, 138, 122, 0.2);
+  --fc-video-bg: oklch(0.8 0.18 28 / 0.2);
+  --fc-video-fg: #ff8a7a;
+  --fc-video-fg: oklch(0.8 0.18 28);
 
-  --fc-doc-bg: rgba(155, 200, 240, 0.22);
-  --fc-doc-bg: oklch(0.82 0.12 245 / 0.22);
-  --fc-doc-fg: #9bc8f0;
-  --fc-doc-fg: oklch(0.82 0.12 245);
+  --fc-doc-bg: rgba(102, 200, 255, 0.2);
+  --fc-doc-bg: oklch(0.8 0.13 240 / 0.2);
+  --fc-doc-fg: #66c8ff;
+  --fc-doc-fg: oklch(0.8 0.13 240);
 
-  --fc-sheet-bg: rgba(139, 217, 168, 0.2);
-  --fc-sheet-bg: oklch(0.8 0.16 150 / 0.2);
-  --fc-sheet-fg: #8bd9a8;
-  --fc-sheet-fg: oklch(0.8 0.16 150);
+  --fc-sheet-bg: rgba(82, 219, 151, 0.2);
+  --fc-sheet-bg: oklch(0.8 0.155 158 / 0.2);
+  --fc-sheet-fg: #52db97;
+  --fc-sheet-fg: oklch(0.8 0.155 158);
 
-  --fc-pdf-bg: rgba(237, 142, 122, 0.2);
-  --fc-pdf-bg: oklch(0.74 0.2 18 / 0.2);
-  --fc-pdf-fg: #ed8e7a;
-  --fc-pdf-fg: oklch(0.74 0.2 25);
+  --fc-pdf-bg: rgba(255, 132, 116, 0.2);
+  --fc-pdf-bg: oklch(0.78 0.18 28 / 0.2);
+  --fc-pdf-fg: #ff8474;
+  --fc-pdf-fg: oklch(0.78 0.18 28);
 
-  // Deck = peach (brand). Folder also = peach in Stack's mapping; keeping
-  // them visually distinct via the nav-active overlay alpha difference
-  // (nav 0.12 vs chip 0.22) matches the design intent.
-  --fc-deck-bg: rgba(242, 181, 140, 0.22);
-  --fc-deck-bg: oklch(0.83 0.13 40 / 0.22);
-  --fc-deck-fg: #f2b58c;
-  --fc-deck-fg: oklch(0.83 0.13 40);
+  --fc-deck-bg: rgba(255, 179, 107, 0.22);
+  --fc-deck-bg: oklch(0.85 0.145 55 / 0.22);
+  --fc-deck-fg: #ffb36b;
+  --fc-deck-fg: oklch(0.85 0.145 55);
 
-  --fc-folder-bg: rgba(242, 181, 140, 0.22);
-  --fc-folder-bg: oklch(0.83 0.13 40 / 0.22);
-  --fc-folder-fg: #f2b58c;
-  --fc-folder-fg: oklch(0.83 0.13 40);
+  --fc-folder-bg: rgba(255, 179, 107, 0.22);
+  --fc-folder-bg: oklch(0.85 0.145 55 / 0.22);
+  --fc-folder-fg: #ffb36b;
+  --fc-folder-fg: oklch(0.85 0.145 55);
 
-  --fc-code-bg: rgba(155, 200, 240, 0.2);
-  --fc-code-bg: oklch(0.82 0.12 245 / 0.2);
-  --fc-code-fg: #b3d5f3;
-  --fc-code-fg: oklch(0.86 0.1 245);
+  --fc-code-bg: rgba(109, 207, 255, 0.2);
+  --fc-code-bg: oklch(0.82 0.13 240 / 0.2);
+  --fc-code-fg: #6dcfff;
+  --fc-code-fg: oklch(0.82 0.13 240);
 
-  --fc-audio-bg: rgba(228, 154, 200, 0.2);
-  --fc-audio-bg: oklch(0.78 0.14 335 / 0.2);
-  --fc-audio-fg: #ebb1d1;
-  --fc-audio-fg: oklch(0.86 0.13 335);
+  --fc-audio-bg: rgba(255, 157, 234, 0.2);
+  --fc-audio-bg: oklch(0.82 0.15 335 / 0.2);
+  --fc-audio-fg: #ff9dea;
+  --fc-audio-fg: oklch(0.82 0.15 335);
 
-  --fc-archive-bg: rgba(189, 174, 224, 0.2);
-  --fc-archive-bg: oklch(0.74 0.07 275 / 0.2);
-  --fc-archive-fg: #c6bce0;
-  --fc-archive-fg: oklch(0.8 0.06 275);
+  --fc-archive-bg: rgba(177, 183, 253, 0.2);
+  --fc-archive-bg: oklch(0.8 0.1 280 / 0.2);
+  --fc-archive-fg: #b1b7fd;
+  --fc-archive-fg: oklch(0.8 0.1 280);
 
   --fc-default-bg: rgba(255, 255, 255, 0.06);
   --fc-default-bg: oklch(1 0 0 / 0.06);
-  --fc-default-fg: #bcc0ca;
-  --fc-default-fg: oklch(0.78 0.022 230);
+  --fc-default-fg: #adb9c5;
+  --fc-default-fg: oklch(0.78 0.022 250);
 }

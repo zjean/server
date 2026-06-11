@@ -4,6 +4,7 @@ import { L10nTranslateDirective } from 'angular-l10n'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
+import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -16,7 +17,7 @@ import { FavoritesService } from '../../services/favorites.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './favorites.component.html',
   styleUrl: './favorites.component.scss',
-  imports: [IconV2Component, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective]
+  imports: [IconV2Component, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, EmptyStateComponent]
 })
 export class FavoritesComponent implements OnInit {
   private readonly favoritesService = inject(FavoritesService)
