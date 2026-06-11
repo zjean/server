@@ -7,6 +7,7 @@ import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { SYNC_TOKEN_URN_PREFIX } from '../utils/nc-sync-xml'
+import { FavoritesManager } from '../../custom-favorites/services/favorites-manager.service'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcSyncLogService } from './nc-sync-log.service'
 import { NcSyncReportService } from './nc-sync-report.service'
@@ -73,6 +74,7 @@ describe(NcSyncReportService.name, () => {
   let service: NcSyncReportService
   let log: { since: Mock; minKeptToken: Mock; currentToken: Mock }
   let fileRowEnsurer: { ensure: Mock }
+  let favorites: { getFavoriteIdsForUser: Mock }
   let tmpRoot: string
   let user: UserModel
   let space: SpaceEnv
@@ -86,8 +88,14 @@ describe(NcSyncReportService.name, () => {
     // Default: pass the file's existing id through (inode placeholder or real).
     // Individual tests can override to assert a specific DB id is emitted.
     fileRowEnsurer = { ensure: vi.fn().mockImplementation((f: { id: number }) => Promise.resolve(f.id)) }
+    favorites = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([]) }
     moduleRef = await Test.createTestingModule({
-      providers: [NcSyncReportService, { provide: NcSyncLogService, useValue: log }, { provide: NcFileRowEnsurer, useValue: fileRowEnsurer }]
+      providers: [
+        NcSyncReportService,
+        { provide: NcSyncLogService, useValue: log },
+        { provide: NcFileRowEnsurer, useValue: fileRowEnsurer },
+        { provide: FavoritesManager, useValue: favorites }
+      ]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(NcSyncReportService)
@@ -150,6 +158,23 @@ describe(NcSyncReportService.name, () => {
     expect(captured.body).toContain('HTTP/1.1 200 OK')
     expect(captured.body).toContain('<d:displayname>photo.jpg</d:displayname>')
     expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}42</d:sync-token>`)
+  })
+
+  it('emits oc:favorite=1 in a sync-collection response for a favorited file', async () => {
+    // A favorited file synced via sync-collection must carry the star, else
+    // iOS toggles it off locally after a refresh (PROPFIND said 1, sync said 0).
+    const filePath = path.join(tmpRoot, 'starred.jpg')
+    await fs.writeFile(filePath, 'pretend-this-is-jpeg')
+    fileRowEnsurer.ensure.mockResolvedValueOnce(9999)
+    favorites.getFavoriteIdsForUser.mockResolvedValue([9999])
+    log.since.mockResolvedValueOnce([
+      { id: 60, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'starred.jpg', type: 'create', ts: Date.now() }
+    ])
+    const { reply, captured } = fakeReply()
+    await service.respond(buildReq(null) as never, reply)
+
+    expect(favorites.getFavoriteIdsForUser).toHaveBeenCalledWith(user.id)
+    expect(captured.body).toContain('<oc:favorite>1</oc:favorite>')
   })
 
   it('create event for a now-deleted file falls back to 404 (delete) response', async () => {
@@ -218,39 +243,9 @@ describe(NcSyncReportService.name, () => {
     expect(log.since).toHaveBeenCalledWith(expect.objectContaining({ limit: 500 }))
   })
 
-  // ──────────── oc:filter-files (Favorites tab) ────────────
-  // NC iOS sends a REPORT with body <oc:filter-files> + <oc:filter-rules>
-  // <oc:favorite>1</oc:favorite> when the user opens the Favorites tab —
-  // a different shape from <d:sync-collection>. Sync-in's `files` table
-  // doesn't yet carry a favorite column (DB schema follow-up), so we
-  // accept the request and return a well-formed empty multistatus rather
-  // than 5xx-ing into an iOS spinner.
-  describe('respondFilterFiles', () => {
-    it('returns a 207 multistatus with no <d:response> entries and all four namespaces', async () => {
-      const { reply, captured } = fakeReply()
-      const body = `<oc:filter-files xmlns:oc="http://owncloud.org/ns" xmlns:d="DAV:"><d:prop><d:displayname/></d:prop><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>`
-      await service.respondFilterFiles(buildReq(body) as never, reply)
-
-      expect(captured.status).toBe(HttpStatus.MULTI_STATUS)
-      expect(captured.type).toContain('xml')
-      expect(captured.body).toContain('xmlns:d="DAV:"')
-      expect(captured.body).toContain('xmlns:oc="http://owncloud.org/ns"')
-      expect(captured.body).toContain('xmlns:nc="http://nextcloud.org/ns"')
-      expect(captured.body).toContain('xmlns:ocs="http://open-collaboration-services.org/ns"')
-      // Empty result set → the multistatus carries no <d:response> children.
-      expect(captured.body).not.toContain('<d:response>')
-      // Filter-files responses carry no <d:sync-token> — that's sync-collection-only.
-      expect(captured.body).not.toContain('<d:sync-token>')
-    })
-
-    it('does not consult the sync log (filter-files is not a delta query)', async () => {
-      const { reply } = fakeReply()
-      const body = `<oc:filter-files xmlns:oc="http://owncloud.org/ns"><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>`
-      await service.respondFilterFiles(buildReq(body) as never, reply)
-      expect(log.since).not.toHaveBeenCalled()
-      expect(log.minKeptToken).not.toHaveBeenCalled()
-    })
-  })
+  // The REPORT <oc:filter-files> (Favorites tab) body is no longer handled
+  // here — NcDavController routes it to NcFavoritesReportService now that
+  // favorites have real per-user storage. See nc-favorites-report.service.spec.ts.
 
   it('URL-encodes path segments containing special characters', async () => {
     log.since.mockResolvedValueOnce([

@@ -6,6 +6,7 @@ import { UserModel } from '../../users/models/user.model'
 import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
 import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
+import { FavoritesManager } from '../../custom-favorites/services/favorites-manager.service'
 import '../interfaces/nc-request.interface'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { type NcPermissionsMode } from '../utils/nc-permissions'
@@ -44,7 +45,8 @@ export class NcPropfindService {
   constructor(
     private readonly webdavSpaces: WebDAVSpaces,
     private readonly fileRowEnsurer: NcFileRowEnsurer,
-    private readonly shareMounts: NcShareMountResolverService
+    private readonly shareMounts: NcShareMountResolverService,
+    private readonly favorites: FavoritesManager
   ) {}
 
   async respond(req: FastifyDAVRequest, res: FastifyReply, mode: NcPermissionsMode): Promise<FastifyReply> {
@@ -76,6 +78,19 @@ export class NcPropfindService {
     // owner-id was the root cause of NC Android's "no permissions to create
     // files/folders here" message after a successful login.
     const requesterFallback = user ? { login: user.login, displayName: user.fullName || user.login } : undefined
+    // Favorite-id set, fetched once per request. getFavoriteIdsForUser returns
+    // ALL of the user's favorite file ids (no access filter) — correct for
+    // marking a file the user is already viewing. We check membership by the
+    // post-ensure real DB id below. Wrapped defensively: a favorites lookup
+    // failure degrades to "no stars" rather than failing the whole PROPFIND.
+    let favoriteIds = new Set<number>()
+    if (user) {
+      try {
+        favoriteIds = new Set(await this.favorites.getFavoriteIdsForUser(user.id))
+      } catch (e) {
+        this.logger.warn({ tag: this.respond.name, msg: `favorite-id lookup failed (degrading to no stars): ${(e as Error).message}` })
+      }
+    }
     try {
       for await (const f of this.webdavSpaces.propfind(req, repository)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
@@ -94,7 +109,9 @@ export class NcPropfindService {
         // a dir inode) and is a no-op when the id is already real or the
         // request targets the trash repository.
         f.id = await this.fileRowEnsurer.ensure(f, space, user)
-        responses.push(buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined, requesterFallback))
+        responses.push(
+          buildNcPropResponse(f, space, mode, isFirst, ownerDisplayName, isFirst ? rootQuota : undefined, requesterFallback, favoriteIds.has(f.id))
+        )
         isFirst = false
       }
       // After the home space's own entries, append one virtual response per

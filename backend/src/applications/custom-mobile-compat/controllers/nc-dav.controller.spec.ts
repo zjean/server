@@ -10,6 +10,7 @@ import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
 import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
+import { NcFavoritesReportService } from '../services/nc-favorites-report.service'
 import { NcDavController } from './nc-dav.controller'
 import { Mock } from 'vitest'
 
@@ -61,7 +62,8 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
         { provide: SpacesQueries, useValue: spacesQueries },
         { provide: WebDAVMethods, useValue: {} },
         { provide: NcPropfindService, useValue: {} },
-        { provide: NcSyncReportService, useValue: {} }
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -164,7 +166,8 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
         { provide: SpacesQueries, useValue: {} },
         { provide: WebDAVMethods, useValue: {} },
         { provide: NcPropfindService, useValue: {} },
-        { provide: NcSyncReportService, useValue: {} }
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -242,7 +245,8 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
         { provide: SpacesQueries, useValue: {} },
         { provide: WebDAVMethods, useValue: {} },
         { provide: NcPropfindService, useValue: {} },
-        { provide: NcSyncReportService, useValue: {} }
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
       ]
     })
       .overrideGuard(NcBasicAuthGuard)
@@ -340,5 +344,93 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
     // attachSpace path + mapNcPathToInternal path together should produce
     // exactly one listMounts call thanks to makeMountsMemo.
     expect(shareMounts.listMounts).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Favorites dispatch — invokeWebDAV must route oc:favorite PROPPATCH bodies to
+// NcFavoritesReportService (and leave non-favorite PROPPATCHes on the upstream
+// mtime path), and route the REPORT <oc:filter-files> body to the favorites
+// listing rather than the sync-collection handler.
+describe(`${NcDavController.name} — favorites dispatch`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let webdav: { proppatch: Mock }
+  let favoritesReport: { respond: Mock; respondProppatchFavorite: Mock }
+  let syncReport: { respond: Mock }
+
+  const invoke = (req: FastifyDAVRequest, res: unknown, mode: 'files' | 'trashbin') =>
+    (
+      controller as unknown as {
+        invokeWebDAV: (r: FastifyDAVRequest, res: unknown, mode: 'files' | 'trashbin') => Promise<unknown>
+      }
+    ).invokeWebDAV(req, res, mode)
+
+  beforeAll(async () => {
+    webdav = { proppatch: vi.fn().mockResolvedValue(undefined) }
+    favoritesReport = { respond: vi.fn().mockResolvedValue(undefined), respondProppatchFavorite: vi.fn().mockResolvedValue(undefined) }
+    syncReport = { respond: vi.fn().mockResolvedValue(undefined) }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        { provide: NcPathResolverService, useValue: {} },
+        { provide: NcShareMountResolverService, useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn() } },
+        { provide: SpacesManager, useValue: {} },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: webdav },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: syncReport },
+        { provide: NcFavoritesReportService, useValue: favoritesReport }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  function req(method: string, body: string | null): FastifyDAVRequest {
+    return {
+      method,
+      body,
+      space: { repository: 'files' },
+      user: { id: 7, login: 'alice' },
+      dav: { url: '/remote.php/dav/files/alice/report.pdf' }
+    } as unknown as FastifyDAVRequest
+  }
+
+  const FAV_SET = `<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>`
+  const FAV_REMOVE = `<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:remove><d:prop><oc:favorite/></d:prop></d:remove></d:propertyupdate>`
+  const MTIME = `<d:propertyupdate xmlns:d="DAV:"><d:set><d:prop><d:getlastmodified>x</d:getlastmodified></d:prop></d:set></d:propertyupdate>`
+  const FILTER_FILES = `<oc:filter-files xmlns:oc="http://owncloud.org/ns" xmlns:d="DAV:"><d:prop><d:displayname/></d:prop><oc:filter-rules><oc:favorite>1</oc:favorite></oc:filter-rules></oc:filter-files>`
+
+  it('routes a PROPPATCH oc:favorite=1 to the favorites service (favorite=true), not the mtime handler', async () => {
+    await invoke(req('PROPPATCH', FAV_SET), {}, 'files')
+    expect(favoritesReport.respondProppatchFavorite).toHaveBeenCalledWith(expect.anything(), expect.anything(), true)
+    expect(webdav.proppatch).not.toHaveBeenCalled()
+  })
+
+  it('routes a PROPPATCH oc:favorite <d:remove> to the favorites service (favorite=false)', async () => {
+    await invoke(req('PROPPATCH', FAV_REMOVE), {}, 'files')
+    expect(favoritesReport.respondProppatchFavorite).toHaveBeenCalledWith(expect.anything(), expect.anything(), false)
+    expect(webdav.proppatch).not.toHaveBeenCalled()
+  })
+
+  it('leaves a non-favorite PROPPATCH (mtime) on the upstream proppatch handler', async () => {
+    await invoke(req('PROPPATCH', MTIME), {}, 'files')
+    expect(webdav.proppatch).toHaveBeenCalled()
+    expect(favoritesReport.respondProppatchFavorite).not.toHaveBeenCalled()
+  })
+
+  it('routes a REPORT <oc:filter-files> body to the favorites listing, not the sync-collection handler', async () => {
+    await invoke(req('REPORT', FILTER_FILES), {}, 'files')
+    expect(favoritesReport.respond).toHaveBeenCalled()
+    expect(syncReport.respond).not.toHaveBeenCalled()
   })
 })

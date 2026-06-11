@@ -14,10 +14,12 @@ import { FastifyDAVRequest } from '../../webdav/interfaces/webdav.interface'
 import { WebDAVMethods } from '../../webdav/services/webdav-methods.service'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
+import { NcFavoritesReportService } from '../services/nc-favorites-report.service'
 import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
 import { NcShareMountResolverService, type NcShareMount } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
+import { parseFavoriteProppatch } from '../utils/nc-favorites-xml'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
 import '../interfaces/nc-request.interface'
@@ -43,7 +45,8 @@ export class NcDavController {
     private readonly spacesQueries: SpacesQueries,
     private readonly webdav: WebDAVMethods,
     private readonly propfind: NcPropfindService,
-    private readonly syncReport: NcSyncReportService
+    private readonly syncReport: NcSyncReportService,
+    private readonly favoritesReport: NcFavoritesReportService
   ) {}
 
   // /remote.php/webdav/* — legacy clients. 301 to the modern dav-files route.
@@ -320,8 +323,17 @@ export class NcDavController {
       }
       case HTTP_METHOD.DELETE:
         return this.webdav.delete(req, res)
-      case HTTP_METHOD.PROPPATCH:
+      case HTTP_METHOD.PROPPATCH: {
+        // NC clients toggle a favorite with a PROPPATCH carrying <oc:favorite>
+        // against the file's own DAV URL (iOS: <d:set>1|0; Android unfavorite:
+        // <d:remove>). Intercept that here and route to the favorites service —
+        // upstream WebDAVMethods.proppatch only knows mtime/Win32 props and
+        // would 423 oc:favorite. A body without oc:favorite (the mtime case)
+        // returns null and falls through to the upstream handler untouched.
+        const favorite = parseFavoriteProppatch(req.body as string | Buffer | null | undefined)
+        if (favorite !== null) return this.favoritesReport.respondProppatchFavorite(req, res, favorite)
         return this.webdav.proppatch(req, res)
+      }
       case HTTP_METHOD.MKCOL:
         return this.webdav.mkcol(req, res)
       case HTTP_METHOD.COPY:
@@ -344,7 +356,7 @@ export class NcDavController {
           throw new HttpException(`REPORT not supported on ${mode}`, HttpStatus.METHOD_NOT_ALLOWED)
         }
         const reportType = detectReportBodyType(req.body as string | Buffer | null | undefined)
-        if (reportType === 'filter-files') return this.syncReport.respondFilterFiles(req, res)
+        if (reportType === 'filter-files') return this.favoritesReport.respond(req, res)
         // 'sync-collection' OR 'unknown' (empty body): defer to the
         // sync-collection handler. It already treats empty bodies as
         // "first sync" and surfaces 400 on truly malformed XML.

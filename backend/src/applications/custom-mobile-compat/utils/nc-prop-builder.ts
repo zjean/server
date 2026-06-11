@@ -67,7 +67,8 @@ export function buildNcPropResponse(
   isRoot: boolean,
   ownerDisplayName = '',
   rootQuota?: NcRootQuota,
-  requesterFallback?: NcRequesterFallback
+  requesterFallback?: NcRequesterFallback,
+  isFavorite = false
 ): Record<string, unknown> {
   const href = f.href
   const sourcePerms = isRoot ? (space.envPermissions ?? space.permissions) : (space.permissions ?? space.envPermissions ?? '')
@@ -133,6 +134,14 @@ export function buildNcPropResponse(
     // the file isn't shared, matching what real NC emits.
     'oc:share-types': shareTypes,
     'nc:has-preview': ncHasPreview(f.mime) ? 'true' : 'false',
+    // oc:favorite is the EXCEPTION to the "word-form lingua franca" rule that
+    // governs nc:has-preview above: it MUST be the integer string "1"/"0".
+    // Android's WebdavEntry.kt reads it with an exact `"1" == value` compare
+    // (the IS_ENCRYPTED constant), so "true" silently parses as not-favorite
+    // and the star never lights up. iOS uses NSString.boolValue and accepts
+    // both, so "1"/"0" satisfies both clients. (Verified against upstream
+    // TagsPlugin.php / WebdavEntry.kt — see the favorites design doc.)
+    'oc:favorite': isFavorite ? '1' : '0',
     // oc:comments-unread (oc namespace, not nc:has-comments) is what NC iOS
     // and Android actually parse for the comment badge — see
     // NKDataFileXML.swift:436 (NSString.boolValue) and the matching Android
