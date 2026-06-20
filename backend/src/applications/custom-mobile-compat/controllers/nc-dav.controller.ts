@@ -287,7 +287,6 @@ export class NcDavController {
 
   private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply, mode: 'files' | 'trashbin'): Promise<string | StreamableFile | FastifyReply> {
     const method = req.method
-    const repository = req.space.repository
 
     switch (method) {
       case HTTP_METHOD.PROPFIND:
@@ -298,7 +297,13 @@ export class NcDavController {
         return this.propfind.respond(req, res, mode)
       case HTTP_METHOD.HEAD:
       case HTTP_METHOD.GET:
-        return this.webdav.headOrGet(req, res, repository)
+        // Always pass FILES, exactly like the native WebDAV controller
+        // (webdav.controller.ts). headOrGet only streams when its `repository`
+        // arg is FILES; passing req.space.repository (= SHARES for a
+        // recipient-side share-mount) made every download/open/preview of a
+        // shared-with-me file 403 on the NC mobile clients. headOrGet's own
+        // `inSharesList` guard still rejects the virtual shares-list root.
+        return this.webdav.headOrGet(req, res, SPACE_REPOSITORY.FILES)
       case HTTP_METHOD.PUT: {
         const result = await this.webdav.put(req, res)
         // Synchronously create the DB row before returning. NC iOS issues a
