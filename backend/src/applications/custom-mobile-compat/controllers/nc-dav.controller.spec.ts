@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing'
+import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { getProps } from '../../files/utils/files'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
@@ -432,5 +433,73 @@ describe(`${NcDavController.name} — favorites dispatch`, () => {
     await invoke(req('REPORT', FILTER_FILES), {}, 'files')
     expect(favoritesReport.respond).toHaveBeenCalled()
     expect(syncReport.respond).not.toHaveBeenCalled()
+  })
+})
+
+// GET/HEAD dispatch — the download handler must call WebDAVMethods.headOrGet
+// with SPACE_REPOSITORY.FILES regardless of the resolved space repository,
+// exactly like the native WebDAV controller (webdav.controller.ts). headOrGet
+// only streams when its `repository` arg is FILES; passing req.space.repository
+// (which is SHARES for a recipient-side share-mount) made it 403 every
+// download/open/preview of a shared-with-me file on the NC mobile clients.
+// The `inSharesList` guard inside headOrGet still rejects the virtual
+// shares-list pseudo-root, so passing FILES is safe.
+describe(`${NcDavController.name} — GET/HEAD dispatch`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let webdav: { headOrGet: Mock }
+
+  const invoke = (req: FastifyDAVRequest, res: unknown, mode: 'files' | 'trashbin') =>
+    (
+      controller as unknown as {
+        invokeWebDAV: (r: FastifyDAVRequest, res: unknown, mode: 'files' | 'trashbin') => Promise<unknown>
+      }
+    ).invokeWebDAV(req, res, mode)
+
+  beforeAll(async () => {
+    webdav = { headOrGet: vi.fn().mockResolvedValue(undefined) }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        { provide: NcPathResolverService, useValue: {} },
+        { provide: NcShareMountResolverService, useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn() } },
+        { provide: SpacesManager, useValue: {} },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: webdav },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => vi.clearAllMocks())
+
+  function getReq(repository: SPACE_REPOSITORY): FastifyDAVRequest {
+    return {
+      method: 'GET',
+      space: { repository },
+      user: { id: 7, login: 'bob' },
+      dav: { url: '/remote.php/dav/files/bob/alice-photos/vacation.jpg' }
+    } as unknown as FastifyDAVRequest
+  }
+
+  it('downloads a shared-with-me file: calls headOrGet with FILES even though the space is SHARES', async () => {
+    await invoke(getReq(SPACE_REPOSITORY.SHARES), {}, 'files')
+    expect(webdav.headOrGet).toHaveBeenCalledWith(expect.anything(), expect.anything(), SPACE_REPOSITORY.FILES)
+  })
+
+  it('downloads a personal-space file: still calls headOrGet with FILES', async () => {
+    await invoke(getReq(SPACE_REPOSITORY.FILES), {}, 'files')
+    expect(webdav.headOrGet).toHaveBeenCalledWith(expect.anything(), expect.anything(), SPACE_REPOSITORY.FILES)
   })
 })
