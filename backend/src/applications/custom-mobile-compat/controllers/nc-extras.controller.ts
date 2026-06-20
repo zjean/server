@@ -11,6 +11,8 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
+import { resolveSharedFileSegments } from '../utils/nc-shared-file-resolver'
 
 // NcExtrasController — odds and ends the stock Nextcloud iOS/Android clients
 // hit outside of OCS/WebDAV: avatar display + file-preview thumbnails. Kept
@@ -25,7 +27,8 @@ export class NcExtrasController {
     private readonly filesManager: FilesManager,
     private readonly spacesManager: SpacesManager,
     private readonly resolver: NcPathResolverService,
-    private readonly filesQueries: FilesQueries
+    private readonly filesQueries: FilesQueries,
+    private readonly shareMounts: NcShareMountResolverService
   ) {}
 
   // Avatar binary. NC clients call this for every user they render (chat,
@@ -184,8 +187,9 @@ export class NcExtrasController {
     }
     diag.dbRow = row
     if (!row?.path) {
-      this.logger.debug({ tag: this.resolveFileId.name, msg: `no row (or empty path) for id=${id}` })
-      return null
+      // Not owned by the requester — it may still be a file shared WITH them.
+      // getUserFile is owner-scoped, so fall through to share-mount resolution.
+      return this.resolveSharedFileId(user, id, diag)
     }
     // filesQueries.getUserFile returns path as "<dir>/<name>" already joined.
     // Build the URL segments that SpacesManager.spaceEnv expects for personal
@@ -199,6 +203,50 @@ export class NcExtrasController {
       this.logger.warn({
         tag: this.resolveFileId.name,
         msg: `spaceEnv failed for id=${id} dbPath=${row.path} segments=${JSON.stringify(urlSegments)}: ${(e as Error).message}`
+      })
+      return null
+    }
+  }
+
+  // Resolve a fileId that the requester doesn't own into a SpaceEnv via one of
+  // their incoming share-mounts. NC clients keep requesting `?fileId=` thumbs
+  // for files inside shared folders (the id is the donor-side child's real DB
+  // id), so without this they render icon-only. resolveSharedFileSegments is
+  // the access boundary: it only yields segments when the target is the share
+  // root or a descendant in the same physical tree, and spaceEnv then
+  // re-validates the user actually holds that share.
+  private async resolveSharedFileId(user: UserModel, id: number, diag: PreviewDiagContext): Promise<SpaceEnv | null> {
+    let mounts: Awaited<ReturnType<NcShareMountResolverService['listMounts']>>
+    let rows: Awaited<ReturnType<FilesQueries['getFilesByIds']>>
+    try {
+      mounts = await this.shareMounts.listMounts(user)
+      if (!mounts.length) {
+        this.logger.debug({ tag: this.resolveSharedFileId.name, msg: `no row and no share-mounts for id=${id}` })
+        return null
+      }
+      rows = await this.filesQueries.getFilesByIds([id, ...mounts.map((m) => m.fileId)])
+    } catch (e) {
+      this.logger.warn({ tag: this.resolveSharedFileId.name, msg: `lookup threw for id=${id}: ${(e as Error).message}` })
+      return null
+    }
+    const target = rows.find((r) => r.id === id)
+    if (!target) {
+      this.logger.debug({ tag: this.resolveSharedFileId.name, msg: `no file row for id=${id}` })
+      return null
+    }
+    const rootById = new Map(rows.map((r) => [r.id, r]))
+    const segments = resolveSharedFileSegments(target, mounts, rootById)
+    if (!segments) {
+      this.logger.debug({ tag: this.resolveSharedFileId.name, msg: `id=${id} not inside any share-mount` })
+      return null
+    }
+    diag.urlSegments = segments
+    try {
+      return await this.spacesManager.spaceEnv(user, segments)
+    } catch (e) {
+      this.logger.warn({
+        tag: this.resolveSharedFileId.name,
+        msg: `spaceEnv failed for shared id=${id} segments=${JSON.stringify(segments)}: ${(e as Error).message}`
       })
       return null
     }

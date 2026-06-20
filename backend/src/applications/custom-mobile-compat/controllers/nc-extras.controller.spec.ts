@@ -10,6 +10,7 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcExtrasController } from './nc-extras.controller'
 import { Mock } from 'vitest'
 
@@ -20,19 +21,24 @@ describe(NcExtrasController.name, () => {
   let generateThumbnail: Mock
   let spaceEnv: Mock
   let getUserFile: Mock
+  let getFilesByIds: Mock
+  let listMounts: Mock
 
   beforeAll(async () => {
     getAvatar = vi.fn()
     generateThumbnail = vi.fn()
     spaceEnv = vi.fn()
     getUserFile = vi.fn()
+    getFilesByIds = vi.fn()
+    listMounts = vi.fn()
     moduleRef = await Test.createTestingModule({
       controllers: [NcExtrasController],
       providers: [
         { provide: UsersManager, useValue: { getAvatar } },
         { provide: FilesManager, useValue: { generateThumbnail } },
         { provide: SpacesManager, useValue: { spaceEnv } },
-        { provide: FilesQueries, useValue: { getUserFile } },
+        { provide: FilesQueries, useValue: { getUserFile, getFilesByIds } },
+        { provide: NcShareMountResolverService, useValue: { listMounts } },
         NcPathResolverService
       ]
     })
@@ -53,6 +59,13 @@ describe(NcExtrasController.name, () => {
     generateThumbnail.mockReset()
     spaceEnv.mockReset()
     getUserFile.mockReset()
+    getFilesByIds.mockReset()
+    listMounts.mockReset()
+    // Default: the user has no incoming share-mounts, so a non-owned fileId
+    // resolves to nothing (404). Tests that exercise the shared-file path
+    // override listMounts + getFilesByIds explicitly.
+    listMounts.mockResolvedValue([])
+    getFilesByIds.mockResolvedValue([])
   })
 
   function fakeRes(): FastifyReply {
@@ -133,13 +146,54 @@ describe(NcExtrasController.name, () => {
       expect(result).toBeInstanceOf(StreamableFile)
     })
 
-    it('returns 404 when ?fileId is not owned by the user', async () => {
+    it('returns 404 when ?fileId is neither owned by the user nor inside a share-mount', async () => {
       getUserFile.mockResolvedValueOnce(null)
+      listMounts.mockResolvedValueOnce([]) // no incoming shares
       const req = fakePreviewReq()
       const res = fakeRes()
       await expect(controller.preview(req, res, undefined, '999')).rejects.toMatchObject({
         status: HttpStatus.NOT_FOUND
       })
+      expect(generateThumbnail).not.toHaveBeenCalled()
+    })
+
+    it('resolves ?fileId for a file shared WITH the user via a share-mount and streams a thumbnail', async () => {
+      // Not owned by the requester...
+      getUserFile.mockResolvedValueOnce(null)
+      // ...but it lives inside a folder ("Photos", fileId 100) shared with them
+      // under the alias "alice-photos". The requested file (id 101) is its child.
+      listMounts.mockResolvedValueOnce([{ alias: 'alice-photos', fileId: 100, owner: { id: 10 } }])
+      getFilesByIds.mockResolvedValueOnce([
+        { id: 101, ownerId: 10, spaceId: null, path: 'Photos/vacation.jpg' },
+        { id: 100, ownerId: 10, spaceId: null, path: 'Photos' }
+      ])
+      const fakeSpace = { realPath: '/data/alice/files/Photos/vacation.jpg' }
+      spaceEnv.mockResolvedValueOnce(fakeSpace)
+      generateThumbnail.mockResolvedValueOnce({ stream: Readable.from([Buffer.from('jpegdata')]), contentType: 'image/webp', contentLength: 8 })
+
+      const req = fakePreviewReq('bob')
+      const res = fakeRes()
+      const result = await controller.preview(req, res, undefined, '101', '128', '128')
+
+      expect(getFilesByIds).toHaveBeenCalledWith([101, 100])
+      expect(spaceEnv).toHaveBeenCalledWith(req.user, ['shares', 'alice-photos', 'vacation.jpg'])
+      expect(generateThumbnail).toHaveBeenCalledWith(fakeSpace, 128)
+      expect(result).toBeInstanceOf(StreamableFile)
+    })
+
+    it('returns 404 for a non-owned ?fileId that is not inside any of the user’s share-mounts', async () => {
+      getUserFile.mockResolvedValueOnce(null)
+      listMounts.mockResolvedValueOnce([{ alias: 'alice-photos', fileId: 100, owner: { id: 10 } }])
+      getFilesByIds.mockResolvedValueOnce([
+        { id: 555, ownerId: 10, spaceId: null, path: 'Documents/secret.png' }, // not under Photos
+        { id: 100, ownerId: 10, spaceId: null, path: 'Photos' }
+      ])
+      const req = fakePreviewReq('bob')
+      const res = fakeRes()
+      await expect(controller.preview(req, res, undefined, '555')).rejects.toMatchObject({
+        status: HttpStatus.NOT_FOUND
+      })
+      expect(spaceEnv).not.toHaveBeenCalled()
       expect(generateThumbnail).not.toHaveBeenCalled()
     })
 

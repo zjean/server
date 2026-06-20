@@ -85,6 +85,19 @@ export class FilesQueries {
     return q
   }
 
+  // Unscoped lookup of file rows by id, returning the physical-tree keys
+  // (ownerId, spaceId) and the full within-tree path. Used by NC mobile-compat
+  // to resolve previews of files shared WITH the user (which getUserFile, being
+  // owner-scoped, deliberately can't see). Callers MUST enforce access — this
+  // returns rows regardless of ownership.
+  async getFilesByIds(ids: number[]): Promise<{ id: number; ownerId: number | null; spaceId: number | null; path: string }[]> {
+    if (!ids.length) return []
+    return this.db
+      .select({ id: files.id, ownerId: files.ownerId, spaceId: files.spaceId, path: filePathSQL(files) })
+      .from(files)
+      .where(inArray(files.id, ids))
+  }
+
   async getUserFile(userId: number, fileId: number): Promise<Pick<File, 'id' | 'path'>> {
     if (fileId > 0) {
       const [fileInDB] = await this.db
