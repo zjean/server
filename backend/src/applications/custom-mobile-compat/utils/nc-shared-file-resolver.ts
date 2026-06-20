@@ -26,11 +26,7 @@ export interface ResolverMount {
 // SAME physical storage tree. spaceEnv re-validates the user actually holds
 // the share for the returned alias, so a wrong match degrades to a missing
 // thumbnail — never to disclosure of a file outside the user's own shares.
-export function resolveSharedFileSegments(
-  target: ResolverFileRow,
-  mounts: ResolverMount[],
-  rootById: Map<number, ResolverFileRow>
-): string[] | null {
+export function resolveSharedFileSegments(target: ResolverFileRow, mounts: ResolverMount[], rootById: Map<number, ResolverFileRow>): string[] | null {
   for (const mount of mounts) {
     const root = rootById.get(mount.fileId)
     if (!root) continue
