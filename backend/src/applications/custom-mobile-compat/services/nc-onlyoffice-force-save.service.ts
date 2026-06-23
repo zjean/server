@@ -34,7 +34,7 @@ export class NcOnlyOfficeForceSaveService {
   ) {}
 
   async forceSave(space: SpaceEnv): Promise<{ ok: boolean; reason?: string }> {
-    const oo = configuration.applications.files.onlyoffice
+    const oo = configuration.applications.files.editors.onlyoffice
     const externalServer = oo?.externalServer
     if (!externalServer) {
       return { ok: false, reason: 'doc server not configured' }

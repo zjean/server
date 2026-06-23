@@ -2,6 +2,7 @@ import type { TreeNode } from '@ali-hm/angular-tree-component'
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { inject, Injectable } from '@angular/core'
 import { DomSanitizer } from '@angular/platform-browser'
+import { TAR_EXTENSION, TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import {
   FILE_MODE,
   FILE_OPERATION,
@@ -177,7 +178,8 @@ export class FilesService {
 
   compress(op: CompressFileDto) {
     const dirPath = this.currentRoute
-    this.http.post<FileTask>(`${API_FILES_TASK_OPERATION_COMPRESS}/${dirPath}/${op.name}.${op.extension}`, op).subscribe({
+    const outputExtension = op.extension === TAR_EXTENSION && op.compression ? TAR_GZ_EXTENSION : op.extension
+    this.http.post<FileTask>(`${API_FILES_TASK_OPERATION_COMPRESS}/${dirPath}/${op.name}.${outputExtension}`, op).subscribe({
       next: (t: FileTask) => this.filesTasksService.addTask(t),
       error: (e: HttpErrorResponse) => this.layout.sendNotification('error', 'Compression failed', op.name, e)
     })
@@ -333,31 +335,33 @@ export class FilesService {
       this.layout.sendNotification('info', 'The file is locked', fileLockPropsToString(file.lock))
     }
 
-    const editorProvider: FileEditorProviders = { collabora: false, onlyoffice: false }
+    const editorProvider: FileEditorProviders = { collabora: false, eurooffice: false, onlyoffice: false }
     if (hookedShortMime === SHORT_MIME.DOCUMENT) {
-      if (this.store.server().files.editors.collabora && this.store.server().files.editors.onlyoffice) {
+      const officeEditorProvider: keyof FileEditorProviders = this.store.server().files.editors.onlyoffice ? 'onlyoffice' : 'eurooffice'
+      const officeEditorEnabled = this.store.server().files.editors[officeEditorProvider]
+      if (this.store.server().files.editors.collabora && officeEditorEnabled) {
         // Case with multiple editors
         const collaboraHasExtension = COLLABORA_ONLINE_EXTENSIONS.has(file.getExtension())
-        const onlyofficeHasExtension = ONLY_OFFICE_EXTENSIONS.has(file.getExtension())
-        if (collaboraHasExtension && onlyofficeHasExtension) {
+        const officeEditorHasExtension = ONLY_OFFICE_EXTENSIONS.has(file.getExtension())
+        if (collaboraHasExtension && officeEditorHasExtension) {
           // Get user's saved preference
           const userEditorPreference = this.userService.getEditorProviderPreference()
-          if (userEditorPreference && userEditorPreference in editorProvider) {
+          if (userEditorPreference === 'collabora' || userEditorPreference === officeEditorProvider) {
             editorProvider[userEditorPreference] = true
           } else {
             // Both editors support this file extension, let the user choose
             await this.openSelectViewerDialog(file, editorProvider)
-            if (!editorProvider.onlyoffice && !editorProvider.collabora) return
+            if (!editorProvider.onlyoffice && !editorProvider.eurooffice && !editorProvider.collabora) return
           }
         } else {
           // Based on the supported extension
           editorProvider.collabora = collaboraHasExtension
-          editorProvider.onlyoffice = onlyofficeHasExtension
+          editorProvider[officeEditorProvider] = officeEditorHasExtension
         }
       } else {
         // Based on availability
         editorProvider.collabora = this.store.server().files.editors.collabora
-        editorProvider.onlyoffice = this.store.server().files.editors.onlyoffice
+        editorProvider[officeEditorProvider] = officeEditorEnabled
       }
     }
 
