@@ -25,8 +25,10 @@ import { FilesTrashRetention } from './services/files-trash-retention.service'
 
 @Module({
   imports: [
-    ...(configuration.applications.files.onlyoffice.enabled ? [OnlyOfficeModule] : []),
-    ...(configuration.applications.files.collabora.enabled ? [CollaboraOnlineModule] : [])
+    ...(configuration.applications.files.editors.onlyoffice.enabled || configuration.applications.files.editors.eurooffice.enabled
+      ? [OnlyOfficeModule]
+      : []),
+    ...(configuration.applications.files.editors.collabora.enabled ? [CollaboraOnlineModule] : [])
   ],
   controllers: [FilesController, FilesTasksController],
   providers: [
@@ -58,7 +60,7 @@ import { FilesTrashRetention } from './services/files-trash-retention.service'
     // Re-export OnlyOfficeModule so consumers of FilesModule (currently the
     // custom-mobile-compat NC OnlyOffice connector) get DI access to the
     // manager + guard exported above.
-    ...(configuration.applications.files.onlyoffice.enabled ? [OnlyOfficeModule] : [])
+    ...(configuration.applications.files.editors.onlyoffice.enabled ? [OnlyOfficeModule] : [])
   ]
 })
 export class FilesModule {}

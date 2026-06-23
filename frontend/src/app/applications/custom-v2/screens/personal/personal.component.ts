@@ -54,7 +54,7 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { FileThumbComponent } from '../../components/file-thumb.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
-import { TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
+import { TAR_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
@@ -564,7 +564,8 @@ export class PersonalComponent implements OnInit, OnDestroy {
     this.filesService.compress({
       name: name.trim(),
       compressInDirectory: false,
-      extension: TAR_GZ_EXTENSION,
+      compression: true,
+      extension: TAR_EXTENSION,
       files: files.map((f) => {
         const stub = this.buildFileStub(f)
         return { name: stub.name, rootAlias: SPACE_ALIAS.PERSONAL, path: stub.path }

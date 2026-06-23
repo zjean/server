@@ -38,7 +38,7 @@ const ONLYOFFICE_CAPABILITY = {
 } as const
 
 export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
-  const onlyofficeBlock = configuration.applications.files.onlyoffice.enabled ? { onlyoffice: ONLYOFFICE_CAPABILITY } : {}
+  const onlyofficeBlock = configuration.applications.files.editors.onlyoffice.enabled ? { onlyoffice: ONLYOFFICE_CAPABILITY } : {}
 
   return {
     version: {

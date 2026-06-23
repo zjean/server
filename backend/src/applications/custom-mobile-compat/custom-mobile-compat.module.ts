@@ -54,7 +54,7 @@ const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
 // Mounted only when OnlyOffice is enabled — FilesModule re-exports
 // OnlyOfficeModule conditionally on the same flag, so requiring DI on
 // disabled deployments would fail at boot.
-const onlyofficeEnabled = configuration.applications.files.onlyoffice?.enabled === true
+const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.enabled === true
 
 @Module({
   // FilesModule exports FilesQueries (used by NcSyncReportService for DB id

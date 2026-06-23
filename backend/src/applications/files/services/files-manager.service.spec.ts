@@ -18,18 +18,19 @@ import { DownloadFileDto } from '../dto/file-operations.dto'
 import { FileEvent, FileTaskEvent } from '../events/file-events'
 import { FileError, SourceCleanupError } from '../models/file-error'
 import { LockConflict } from '../models/file-lock-error'
-import { FILE_ERROR_MESSAGES } from '../utils/errors'
 import { SendFile } from '../utils/send-file'
 import * as unzipUtils from '../utils/unzip-file'
 import * as untarUtils from '../utils/untar-file'
 import * as filesUtils from '../utils/files'
 import * as tarUtils from '../utils/tar-file'
 import * as taskUtils from '../utils/tasks'
+import * as zipUtils from '../utils/zip-file'
 import { FilesLockManager } from './files-lock-manager.service'
 import { FilesManager } from './files-manager.service'
 import { FilesQueries } from './files-queries.service'
 import { FilesTasksTransfer } from './tasks/files-tasks-transfer.service'
 import { Mock } from 'vitest'
+import { FILE_ERROR } from '../constants/errors'
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn()
@@ -202,6 +203,7 @@ describe(FilesManager.name, () => {
       path.join(parentPath, `${taskUtils.taskTemporaryPrefix(cacheKey)}${path.basename(name)}`)
     )
     vi.spyOn(tarUtils, 'createTar').mockResolvedValue(undefined)
+    vi.spyOn(zipUtils, 'createZip').mockResolvedValue(undefined)
     vi.spyOn(filesUtils, 'getMimeType').mockReturnValue('image-png')
     vi.spyOn(spacesPermsUtils, 'canAccessToSpace').mockReturnValue(true)
     vi.spyOn(spacesPermsUtils, 'haveSpaceEnvPermissions').mockReturnValue(true)
@@ -262,6 +264,29 @@ describe(FilesManager.name, () => {
       expect(filesLockManager.checkConflicts).toHaveBeenCalledWith(space.dbFile, DEPTH.RESOURCE, { userId: 7, lockTokens: ['token'] })
       expect(filesLockManager.create).not.toHaveBeenCalled()
       expect(filesUtils.writeFromStreamAndChecksum).toHaveBeenCalled()
+    })
+
+    it('should validate tmp stream before moving it to the destination', async () => {
+      const space = makeSpace()
+      const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+      const validationError = new FileError(HttpStatus.BAD_REQUEST, 'Invalid sync upload')
+      const validateTmpFile = vi.fn().mockRejectedValue(validationError)
+      const emitSpy = vi.spyOn(FileEvent, 'emit')
+      setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true, [tmpPath]: true }, false)
+
+      await expect(
+        service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['chunk']) } as any, {
+          tmpPath,
+          checksumAlg: 'sha256',
+          validateTmpFile
+        })
+      ).rejects.toEqual(validationError)
+
+      expect(validateTmpFile).toHaveBeenCalledWith({ tmpPath, realPath: space.realPath, checksum: 'sha256-abc' })
+      expect(filesUtils.writeFromStreamAndChecksum).toHaveBeenCalledWith(tmpPath, expect.anything(), 0, 'sha256')
+      expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+      expect(filesUtils.removeFiles).not.toHaveBeenCalledWith(tmpPath)
+      expect(emitSpy).not.toHaveBeenCalled()
     })
   })
 
@@ -504,7 +529,7 @@ describe(FilesManager.name, () => {
       }
 
       await expect(service.saveMultipart(user, space, req as any)).rejects.toEqual(
-        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR_MESSAGES.MAX_FILE_SIZE_EXCEEDED)
+        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR.MAX_FILE_SIZE_EXCEEDED)
       )
 
       const tmpWritePath = vi.mocked(filesUtils.writeFromStream).mock.calls[0][0] as string
@@ -533,7 +558,7 @@ describe(FilesManager.name, () => {
       }
 
       await expect(service.saveMultipart(user, space, req as any)).rejects.toEqual(
-        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR_MESSAGES.MAX_FILE_SIZE_EXCEEDED)
+        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR.MAX_FILE_SIZE_EXCEEDED)
       )
 
       expect(req.files).toHaveBeenCalled()
@@ -557,7 +582,7 @@ describe(FilesManager.name, () => {
       }
 
       await expect(service.saveMultipart(user, space, req as any)).rejects.toEqual(
-        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR_MESSAGES.MAX_FILE_SIZE_EXCEEDED)
+        new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR.MAX_FILE_SIZE_EXCEEDED)
       )
 
       expect(filesUtils.writeFromStream).not.toHaveBeenCalled()
@@ -748,7 +773,8 @@ describe(FilesManager.name, () => {
         run: (space: any) =>
           service.compress(user, space, {
             name: 'archive',
-            extension: 'tar.gz',
+            extension: 'tar',
+            compression: false,
             compressInDirectory: true,
             files: [{ name: 'file.txt', path: '/data/users/john/files/file.txt' }]
           } as any)
@@ -1105,7 +1131,7 @@ describe(FilesManager.name, () => {
     })
 
     it('should cleanup partial file and skip ADD event when download write fails', async () => {
-      const error = new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR_MESSAGES.MAX_FILE_SIZE_EXCEEDED)
+      const error = new FileError(HttpStatus.PAYLOAD_TOO_LARGE, FILE_ERROR.MAX_FILE_SIZE_EXCEEDED)
       const space = makeSpace()
       vi.mocked(filesUtils.uniqueFilePathFromDir).mockResolvedValueOnce('/tmp/download.txt')
       vi.mocked(filesUtils.tempFilePath).mockReturnValueOnce('/data/users/john/tmp/download.txt-download-uuid')
@@ -1164,7 +1190,8 @@ describe(FilesManager.name, () => {
       const space = makeSpace({ realPath: '/data/users/john/files/source.txt', task: { cacheKey: 'task-c', props: {} } })
       const dto = {
         name: 'archive',
-        extension: 'tgz',
+        extension: 'tar',
+        compression: true,
         compressInDirectory: false,
         files: [
           { path: '/data/users/john/files/dir', name: 'dir', rootAlias: null },
@@ -1194,7 +1221,8 @@ describe(FilesManager.name, () => {
       })
       const dto = {
         name: 'archive-trash',
-        extension: 'tgz',
+        extension: 'tar',
+        compression: true,
         compressInDirectory: false,
         files: [{ path: '/data/users/john/trash/source.txt', name: 'source.txt', rootAlias: null }]
       } as any
@@ -1222,7 +1250,8 @@ describe(FilesManager.name, () => {
       const space = makeSpace({ realPath: '/data/users/john/files/source.txt' })
       const dto = {
         name: 'archive',
-        extension: 'tgz',
+        extension: 'tar',
+        compression: true,
         compressInDirectory: false,
         files: [{ path: '/data/users/john/files/source.txt', name: 'source.txt', rootAlias: null }]
       } as any
@@ -1242,7 +1271,8 @@ describe(FilesManager.name, () => {
       const space = makeSpace({ realPath: '/data/users/john/files/source.txt' })
       const dto = {
         name: 'archive',
-        extension: 'tgz',
+        extension: 'tar',
+        compression: true,
         compressInDirectory: false,
         files: [{ path: '/data/users/john/files/source.txt', name: 'source.txt', rootAlias: null }]
       } as any
@@ -1264,6 +1294,7 @@ describe(FilesManager.name, () => {
       const dto = {
         name: 'archive',
         extension: 'tar',
+        compression: false,
         compressInDirectory: false,
         files: [{ path: '/data/users/john/files/source.txt', name: 'source.txt', rootAlias: null }]
       } as any
@@ -1292,6 +1323,7 @@ describe(FilesManager.name, () => {
       const dto = {
         name: 'archive',
         extension: 'tar',
+        compression: false,
         compressInDirectory: true,
         files: [{ path: '/data/users/john/files/source.txt', name: 'source.txt', rootAlias: null }]
       } as any
@@ -1299,6 +1331,32 @@ describe(FilesManager.name, () => {
       await service.compress(user, space, dto)
 
       expect(tarUtils.createTar).toHaveBeenCalledWith('/data/users/john/tmp/archive.tar-compress-uuid', dto.files, false, undefined, undefined, 60)
+    })
+
+    it('should create a compressed ZIP archive', async () => {
+      vi.mocked(filesUtils.uniqueFilePathFromDir).mockResolvedValueOnce('/tmp/archive.zip')
+      vi.mocked(filesUtils.tempFilePath).mockReturnValueOnce('/data/users/john/tmp/archive.zip-compress-uuid')
+      const space = makeSpace({ realPath: '/data/users/john/files/source.txt' })
+      const dto = {
+        name: 'archive.zip',
+        extension: 'zip',
+        compression: true,
+        compressInDirectory: false,
+        files: [{ path: '/data/users/john/files/source.txt', name: 'source.txt', rootAlias: null }]
+      } as any
+
+      await service.compress(user, space, dto)
+
+      expect(zipUtils.createZip).toHaveBeenCalledWith(
+        '/data/users/john/tmp/archive.zip-compress-uuid',
+        dto.files,
+        true,
+        undefined,
+        undefined,
+        undefined
+      )
+      expect(tarUtils.createTar).not.toHaveBeenCalled()
+      expect(filesUtils.moveFiles).toHaveBeenCalledWith('/data/users/john/tmp/archive.zip-compress-uuid', '/tmp/archive.zip')
     })
   })
 
