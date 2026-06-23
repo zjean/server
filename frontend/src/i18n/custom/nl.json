@@ -67,6 +67,7 @@
   "v2_moving_to_trash_one_progress": "\"{{ name }}\" verplaatsen naar prullenbak…",
   "v2_moving_to_trash_n_progress": "{{ nb }} items verplaatsen naar prullenbak…",
   "v2_archiving_n_progress": "{{ nb }} items archiveren…",
+  "v2_decompressing_progress": "\"{{ name }}\" uitpakken…",
   "v2_moving_one_progress": "\"{{ name }}\" verplaatsen…",
   "v2_copying_one_progress": "\"{{ name }}\" kopiëren…",
   "v2_moving_n_progress": "{{ nb }} items verplaatsen…",
