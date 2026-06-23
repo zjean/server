@@ -35,7 +35,7 @@
         <app-v2-icon-btn
           iconName="pencil"
           [active]="pdfStage() === 'office'"
-          [title]="(pdfStage() === 'office' ? 'Switch to PDF view' : 'Edit in OnlyOffice') | translate: locale.language"
+          [title]="(pdfStage() === 'office' ? 'Switch to PDF view' : editOfficeEditorText) | translate: locale.language"
           (click)="toggleToOffice()"
         />
       }
