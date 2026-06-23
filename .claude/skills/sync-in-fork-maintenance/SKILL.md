@@ -152,8 +152,17 @@ Always run:
 ```bash
 rtk proxy npm --prefix frontend run build   # Angular TS / template check
 rtk proxy npm --prefix frontend run lint    # catches duplicate JSON keys as warnings; prettier errors
-rtk proxy npm --prefix backend run build    # NestJS compile
+rtk proxy npm --prefix backend run build    # NestJS compile (type errors against @sync-in-server/backend)
+rtk proxy npm --prefix backend test         # vitest — the only check that catches stale runtime test mocks
 ```
+
+**The backend build is necessary but NOT sufficient — run the backend test suite too.** When an Adapt changes the *shape* of something the fork's tests construct by hand — config singletons (`vi.mock('config.environment', …)`), DTO fixtures, mock payloads — `nest build`'s type-check passes (the mock is an untyped object literal) but the test throws at runtime. The 2.4.0 sync hit this exactly: the `files.onlyoffice` → `files.editors.onlyoffice` regrouping was fixed in the source, the build went green, but two `custom-mobile-compat` specs still built `configuration` with the old shape, so `files.editors` was `undefined` and 4 tests threw `Cannot read properties of undefined (reading 'onlyoffice')`. CI caught it *after* the PR was already open — a wasted round-trip. Grep the specs for the old shape whenever you adapt a config/DTO path:
+
+```bash
+git grep -l "<old.path.fragment>" -- 'backend/src/**/*.spec.ts'   # e.g. "files.onlyoffice"
+```
+
+This is the mirror image of the standing "run nest build before push" rule (build catches type errors vitest's `--no-typecheck` path misses); here vitest catches a runtime-shape error the build misses. You need **both** green locally before pushing — Test Workflow gates the merge on the test suite, not the build.
 
 Fix anything new that surfaces, then commit the merge and push.
 
@@ -215,6 +224,19 @@ A small wrinkle worth knowing (not a bug): GitHub's "Create a merge commit" prod
 
 Triggered when upstream's diff touches backend files that our `custom-v2/` (v2/v3) frontend might call into, or when the user asks what needs adapting after a sync.
 
+### Governing principle: Adapt vs Port — two separate jobs
+
+Every upstream sync produces two distinct kinds of custom-UI work, and they must never be conflated:
+
+- **Adapt (in the sync PR).** Changes needed so custom-v2 *keeps compiling and its existing features keep working* against the new backend contracts — renamed config paths, changed DTO shapes, new required fields. These are **breakages**; fix them inside the sync branch so the merge lands green. The `npm run build` for backend + frontend is what surfaces them (a clean Test/Build is not enough — type errors against `@sync-in-server/backend` only show in a real build; see the "run nest build before pushing" rule).
+- **Port (separate backlog issues).** New *user-facing features* upstream shipped to the classic UI that v2 simply doesn't have yet — a new editor option, a new dialog exposing new choices, a new screen. These have **no compile impact** (v2 keeps building without them), so they are NOT the sync's job. **File one GitHub issue per missing feature and leave them out of the sync PR.**
+
+**Why the split is load-bearing:** the sync PR merges with a *merge commit* to keep upstream lineage legible (per CLAUDE.md). Bundling feature ports into it bloats that commit with unrelated work and muddies the "what did upstream change vs what did we build" boundary. Feature ports are normal fork work — they belong on `feat/` branches that squash-merge, picked up via the `tackle-issues` flow, after the sync is in.
+
+When you finish the Adapt work, **explicitly enumerate the Port gaps** (don't let "it builds" imply "we have everything"). If the user confirms, open the issues; default to filing rather than porting inline. Distinguish from features that need *no* v2 work at all: backend-only changes (e.g. multilingual full-text search — v2 search benefits automatically) and session/config-level changes (auth hardening, token renewal) have no v2 UI surface — say so and don't file noise.
+
+Worked example — the 2026-06-23 sync (2.4.0, PR #283): two contract changes were **adapted** in the sync PR (`files.onlyoffice` → `files.editors.onlyoffice` regrouping broke 4 fork sites; `CompressFileDto` dropped `tgz` for `'tar'|'zip'` + `compression:boolean`, broke 2 v2 call sites). Two new user-facing features were **filed as issues, not ported**: the Euro-Office editor option (#284) and the v2 archive compression dialog (#285).
+
 ### Phase 1 — Inventory upstream commits
 
 ```bash
@@ -240,7 +262,7 @@ Skip purely-upstream-frontend diffs (non-`custom-v2`) and pure dep bumps unless 
 git show <sha> -- <backend-file>
 ```
 
-Classify each change into one of three buckets:
+Classify each change into one of these buckets:
 
 | Bucket | Meaning | Custom-UI impact |
 |---|---|---|
@@ -248,6 +270,7 @@ Classify each change into one of three buckets:
 | **Internal refactor, signature change** | Service method signature changed (e.g. `foo(user, url: string)` → `foo(user, dto: FooDto)`) but HTTP surface unchanged | **Doesn't affect frontend.** Note in report, skip. |
 | **Behaviour change** | Same contract, new validation / error codes / side effects (e.g. "Content-Length now required", "quota now checked pre-download") | **Probably compatible; verify error handling.** Check we surface the new error paths. |
 | **New component / styles in classic UI** | New `.component.ts`, `.html`, `.scss` or inline styles for a feature classic ships and we may want to mirror in v2 (e.g. upstream's TipTap markdown viewer) | **No automatic impact** — `custom-v2/` has its own preview pipeline. But if the user wants v2 to gain visual parity, see [Style token translation](#style-token-translation-when-porting-classic-ui-into-custom-v2) — upstream's CSS uses a different token set than `.v2-root` and a literal copy-paste introduces invisible bugs. |
+| **New user-facing feature in classic UI** | A new capability classic now exposes that v2 lacks — a new editor option, a new dialog with new choices, a new action/screen (e.g. 2.4.0's Euro-Office editor and the tar/zip compression dialog) | **No compile impact — this is a Port, not an Adapt.** Do NOT build it into the sync PR. File a backlog issue per the Adapt-vs-Port principle above. The *contract* side may still need an Adapt (e.g. the `CompressFileDto` change broke v2's hardcoded call even though the *dialog* is a separate port). |
 
 Behaviour changes often have subtle consequences — read the diff carefully. New `throw new HttpException(...)` paths mean new 4xx/5xx responses callers might not handle.
 
@@ -279,6 +302,34 @@ When a wire contract actually changed, **write out the exact edit** the user nee
 
 Present the patches as a list the user can accept or reject — don't silently apply them during an upstream-sync investigation. The goal is to give the user a punch list.
 
+For a sync you're actively resolving (not a standalone investigation), the Adapt patches go *into the sync branch* — the build won't go green otherwise — so apply them there and list them in the PR body. The accept/reject framing above is for the read-only investigation mode.
+
+### Phase 4b — File Port gaps as issues (don't bundle into the sync)
+
+For each **New user-facing feature** bucket entry (a Port, not an Adapt), open one GitHub issue rather than building it into the sync PR. Confirm with the user first, then:
+
+```bash
+gh issue create --repo zjean/server \
+  --title "v2: <feature> (parity with classic, upstream <version>)" \
+  --body "$(cat <<'EOF'
+## Background
+<which upstream commit shipped it (sha + subject); what classic gained>
+<note that the sync only adapted the contract, not the feature>
+
+## Current v2 state
+<file:line showing what v2 hardcodes / lacks>
+
+## Ground truth to mirror (classic UI)
+<the classic component/service to read first — classic-UI-as-ground-truth>
+
+## Acceptance
+<what "done" looks like + verify via v2-dev-loop-verify>
+EOF
+)"
+```
+
+Keep the issue body anchored to concrete `file:line` and the classic component to mirror — these become the punch list when the feature is later picked up via `tackle-issues`. Always `--repo zjean/server`.
+
 ### Phase 5 — Report
 
 Structure the final report like this:
@@ -299,13 +350,20 @@ Structure the final report like this:
 ### Behaviour changes (verify error handling)
 (per-change bullets with what to watch for)
 
+### New upstream features — v2 parity gaps (Port, filed as issues)
+(per-feature bullet: what classic gained + the issue number filed; or "none")
+
+### No v2 work needed (backend/transparent)
+(terse list — backend-only or session/config-level changes with no v2 UI surface)
+
 ### Recommended follow-ups
-- [ ] Apply patch to <file>:<line> — <one-liner>
+- [ ] Apply patch to <file>:<line> — <one-liner>  (Adapt — into the sync branch)
 - [ ] Add i18n key "<backend error string>" to en/nl (low priority)
+- [ ] Issue #<n> filed for <feature> (Port — separate feat/ branch later)
 - ...
 ```
 
-Keep it scannable. If nothing needs adapting, say "No impact" explicitly and stop.
+Keep it scannable. If nothing needs adapting, say "No impact" explicitly and stop. Always close the loop on Port gaps explicitly — "no new user-facing features" is a valid and useful finding; silently omitting the section reads as "checked, nothing there" only if you say so.
 
 ## Style token translation (when porting classic UI into `custom-v2`)
 
