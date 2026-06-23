@@ -5,8 +5,10 @@ vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: {
-        onlyoffice: {
-          enabled: false
+        editors: {
+          onlyoffice: {
+            enabled: false
+          }
         }
       }
     }
@@ -116,18 +118,18 @@ describe('ncCapabilities', () => {
     // Advertised only when applications.files.onlyoffice.enabled === true so
     // we don't lie about a feature the operator hasn't configured.
     afterEach(() => {
-      mockConfig.applications.files.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.onlyoffice.enabled = false
     })
 
     it('omits the block when onlyoffice is disabled', () => {
-      mockConfig.applications.files.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.onlyoffice.enabled = false
       const c = ncCapabilities('https://sync-in.example.test')
       const files = (c.capabilities as Record<string, Record<string, unknown>>).files
       expect(files.onlyoffice).toBeUndefined()
     })
 
     it('advertises mimetypes + templates when enabled', () => {
-      mockConfig.applications.files.onlyoffice.enabled = true
+      mockConfig.applications.files.editors.onlyoffice.enabled = true
       const c = ncCapabilities('https://sync-in.example.test')
       const files = (c.capabilities as Record<string, Record<string, unknown>>).files
       const oo = files.onlyoffice as { version: string; mimetypes: string[]; templates: string[] }

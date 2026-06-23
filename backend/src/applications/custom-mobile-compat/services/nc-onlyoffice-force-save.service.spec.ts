@@ -3,11 +3,13 @@ vi.mock('../../../configuration/config.environment', () => ({
   configuration: {
     applications: {
       files: {
-        onlyoffice: {
-          enabled: true,
-          externalServer: 'https://docs.example.test',
-          secret: 'test-secret',
-          verifySSL: false
+        editors: {
+          onlyoffice: {
+            enabled: true,
+            externalServer: 'https://docs.example.test',
+            secret: 'test-secret',
+            verifySSL: false
+          }
         }
       }
     }
@@ -32,7 +34,7 @@ describe('NcOnlyOfficeForceSaveService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    mockConfig.applications.files.onlyoffice.externalServer = 'https://docs.example.test'
+    mockConfig.applications.files.editors.onlyoffice.externalServer = 'https://docs.example.test'
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,7 +54,7 @@ describe('NcOnlyOfficeForceSaveService', () => {
   }
 
   it('returns { ok: false, "doc server not configured" } when externalServer is unset', async () => {
-    mockConfig.applications.files.onlyoffice.externalServer = null
+    mockConfig.applications.files.editors.onlyoffice.externalServer = null
     const out = await service.forceSave(fakeSpace)
     expect(out).toEqual({ ok: false, reason: 'doc server not configured' })
     expect(axiosRefMock).not.toHaveBeenCalled()
