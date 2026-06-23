@@ -39,6 +39,7 @@ import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/c
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { LinkDialogService } from '../../components/link-dialog.service'
+import { CompressDialogService } from '../../components/compress-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
@@ -54,7 +55,6 @@ import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { FileThumbComponent } from '../../components/file-thumb.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
-import { TAR_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
@@ -115,6 +115,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly treePicker = inject(TreePickerService)
   private readonly promptDialog = inject(PromptDialogService)
+  private readonly compressDialog = inject(CompressDialogService)
   private readonly linkDialog = inject(LinkDialogService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
@@ -551,21 +552,18 @@ export class PersonalComponent implements OnInit, OnDestroy {
   private async startArchiveDownload(files: FileProps[]): Promise<void> {
     const parentSegs = this.pathSegments().map((s) => s.path)
     const defaultName = parentSegs.length ? parentSegs[parentSegs.length - 1] : 'personal'
-    const name = await this.promptDialog.open({
-      title: 'Download archive',
-      placeholder: 'Archive name',
-      submitLabel: 'Download',
+    const archive = await this.compressDialog.open({
       initialValue: defaultName,
-      selectionRange: 'all',
+      fileCount: files.length,
       validate: (v) => (v.trim() ? null : 'Name is required')
     })
-    if (!name) return
+    if (!archive) return
     this.filesService.currentRoute = this.currentUploadRoute()
     this.filesService.compress({
-      name: name.trim(),
-      compressInDirectory: false,
-      compression: true,
-      extension: TAR_EXTENSION,
+      name: archive.name,
+      compressInDirectory: archive.compressInDirectory,
+      compression: archive.compression,
+      extension: archive.extension,
       files: files.map((f) => {
         const stub = this.buildFileStub(f)
         return { name: stub.name, rootAlias: SPACE_ALIAS.PERSONAL, path: stub.path }
