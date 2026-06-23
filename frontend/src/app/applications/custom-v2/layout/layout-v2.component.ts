@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
+import { CompressDialogComponent } from '../components/compress-dialog.component'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
@@ -42,6 +43,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     ConfirmDialogComponent,
     TreePickerComponent,
     PromptDialogComponent,
+    CompressDialogComponent,
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
