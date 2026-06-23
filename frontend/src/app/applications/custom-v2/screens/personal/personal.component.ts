@@ -553,9 +553,6 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const parentSegs = this.pathSegments().map((s) => s.path)
     const defaultName = parentSegs.length ? parentSegs[parentSegs.length - 1] : 'personal'
     const archive = await this.compressDialog.open({
-      title: 'Download archive',
-      placeholder: 'Archive name',
-      submitLabel: 'Download',
       initialValue: defaultName,
       fileCount: files.length,
       validate: (v) => (v.trim() ? null : 'Name is required')
@@ -564,7 +561,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
     this.filesService.currentRoute = this.currentUploadRoute()
     this.filesService.compress({
       name: archive.name,
-      compressInDirectory: false,
+      compressInDirectory: archive.compressInDirectory,
       compression: archive.compression,
       extension: archive.extension,
       files: files.map((f) => {

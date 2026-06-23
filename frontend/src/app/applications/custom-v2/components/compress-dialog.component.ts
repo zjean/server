@@ -5,10 +5,10 @@ import { ButtonComponent } from './button.component'
 import { CheckboxComponent } from './checkbox.component'
 import { CompressDialogService, CompressExtension } from './compress-dialog.service'
 
-// Archive dialog for v2 bulk download. Mirrors the classic
-// files-compression-dialog (name + tar/zip + compression toggle) but renders
-// under .v2-root with the v2 design tokens, and is download-only (no
-// "save in current directory" option — v2's archive action always downloads).
+// Archive dialog for v2 bulk archiving. Full parity with the classic
+// files-compression-dialog (name + tar/zip + compression toggle + save-in-place
+// vs download), rendered under .v2-root with the v2 design tokens. The title
+// flips with the save-in-place choice exactly like classic.
 @Component({
   selector: 'app-v2-compress-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,10 +17,12 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
     @if (pending(); as p) {
       <div class="compress-dialog__backdrop" (click)="cancel()"></div>
       <form class="compress-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
-        <div class="compress-dialog__title">{{ p.title | translate: locale.language }}</div>
-        @if (p.message) {
-          <div class="compress-dialog__message">{{ p.message | translate: locale.language }}</div>
-        }
+        <div class="compress-dialog__head">
+          <div class="compress-dialog__title">
+            {{ (inDirectory() ? 'Compress and Save' : 'Compress and Download') | translate: locale.language }}
+          </div>
+          <div class="compress-dialog__count">{{ p.fileCount }} {{ (p.fileCount > 1 ? 'items' : 'item') | translate: locale.language }}</div>
+        </div>
         <div class="compress-dialog__row">
           <input
             #input
@@ -28,7 +30,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
             class="compress-dialog__input"
             [value]="name()"
             (input)="onInput($event)"
-            [placeholder]="p.placeholder ?? '' | translate: locale.language"
+            [placeholder]="'Archive name' | translate: locale.language"
           />
           <select class="compress-dialog__select" [value]="extension()" (change)="onExtensionChange($event)">
             @for (ext of extensions; track ext) {
@@ -44,13 +46,23 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
           <span>{{ 'Enable compression' | translate: locale.language }}</span>
           <small>{{ '(this may take longer)' | translate: locale.language }}</small>
         </div>
+        @if (p.allowSaveInPlace !== false) {
+          <div class="compress-dialog__check" (click)="toggleInDirectory()">
+            <app-v2-checkbox
+              [state]="inDirectory() ? 'checked' : 'unchecked'"
+              ariaLabel="Save in the current directory"
+              (toggled)="toggleInDirectory()"
+            />
+            <span>{{ 'Save in the current directory' | translate: locale.language }}</span>
+          </div>
+        }
         <div class="compress-dialog__actions">
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
-            {{ p.cancelLabel ?? 'Cancel' | translate: locale.language }}
+            {{ 'Cancel' | translate: locale.language }}
           </app-v2-btn>
           <button type="submit" hidden aria-hidden="true"></button>
           <app-v2-btn kind="primary" size="sm" [disabled]="!canSubmit()" (click)="submit()">
-            {{ p.submitLabel | translate: locale.language }}
+            {{ 'Confirm' | translate: locale.language }}
           </app-v2-btn>
         </div>
       </form>
@@ -81,17 +93,22 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         border-radius: 10px;
         box-shadow: var(--si-shadow3);
       }
+      .compress-dialog__head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
       .compress-dialog__title {
         font-size: 15px;
         font-weight: 600;
         color: var(--si-fg);
-        margin-bottom: 8px;
       }
-      .compress-dialog__message {
-        font-size: 13px;
+      .compress-dialog__count {
+        font-size: 12px;
         color: var(--si-fg-muted);
-        line-height: 1.45;
-        margin-bottom: 10px;
+        white-space: nowrap;
       }
       .compress-dialog__row {
         display: flex;
@@ -139,7 +156,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-top: 14px;
+        margin-top: 12px;
         font-size: 13px;
         color: var(--si-fg);
         cursor: pointer;
@@ -169,6 +186,7 @@ export class CompressDialogComponent {
   protected readonly name = signal('')
   protected readonly extension = signal<CompressExtension>(TAR_EXTENSION)
   protected readonly compression = signal(true)
+  protected readonly inDirectory = signal(false)
   protected readonly errorMsg = signal<string | null>(null)
 
   constructor() {
@@ -179,6 +197,7 @@ export class CompressDialogComponent {
           this.name.set(p.initialValue ?? '')
           this.extension.set(TAR_EXTENSION)
           this.compression.set(true)
+          this.inDirectory.set(false)
           this.errorMsg.set(null)
           queueMicrotask(() => this.focusInput())
         } else {
@@ -215,6 +234,10 @@ export class CompressDialogComponent {
     this.compression.update((v) => !v)
   }
 
+  protected toggleInDirectory(): void {
+    this.inDirectory.update((v) => !v)
+  }
+
   protected onSubmit(ev: Event): void {
     ev.preventDefault()
     this.submit()
@@ -229,7 +252,12 @@ export class CompressDialogComponent {
       this.errorMsg.set(err)
       return
     }
-    this.service.resolve({ name, extension: this.extension(), compression: this.compression() })
+    this.service.resolve({
+      name,
+      extension: this.extension(),
+      compression: this.compression(),
+      compressInDirectory: this.inDirectory()
+    })
   }
 
   protected cancel(): void {

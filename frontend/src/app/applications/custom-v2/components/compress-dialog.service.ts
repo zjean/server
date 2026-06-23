@@ -4,14 +4,12 @@ import { TAR_EXTENSION, ZIP_EXTENSION } from '@sync-in-server/backend/src/applic
 export type CompressExtension = typeof TAR_EXTENSION | typeof ZIP_EXTENSION
 
 export interface CompressDialogOptions {
-  title: string
-  message?: string
-  placeholder?: string
-  initialValue?: string
-  submitLabel: string
-  cancelLabel?: string
   // Shown in the header (e.g. "3 items"); the caller already knows the count.
-  fileCount?: number
+  fileCount: number
+  initialValue?: string
+  // When false, the dialog hides the "save in this folder" toggle and forces
+  // download — matches classic's disableInDirCompression.
+  allowSaveInPlace?: boolean
   validate?: (value: string) => string | null
 }
 
@@ -19,6 +17,7 @@ export interface CompressDialogResult {
   name: string
   extension: CompressExtension
   compression: boolean
+  compressInDirectory: boolean
 }
 
 interface PendingCompress extends CompressDialogOptions {
@@ -27,8 +26,9 @@ interface PendingCompress extends CompressDialogOptions {
 
 // Mirrors PromptDialogService: a single pending request held in a signal, the
 // host component renders from it and resolves the Promise. Unlike the prompt
-// dialog, this returns the full archive choice (name + tar/zip + compression)
-// so callers build the CompressFileDto without a second round-trip.
+// dialog, this returns the full archive choice (name + tar/zip + compression +
+// save-in-place) so callers build the CompressFileDto without a second
+// round-trip. Parity target: the classic files-compression-dialog.
 @Injectable({ providedIn: 'root' })
 export class CompressDialogService {
   readonly pending = signal<PendingCompress | null>(null)

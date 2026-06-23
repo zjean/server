@@ -525,9 +525,6 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const parentSegs = this.pathSegments().map((s) => s.path)
     const defaultName = parentSegs.length ? parentSegs[parentSegs.length - 1] : this.spaceName() || this.currentAlias()
     const archive = await this.compressDialog.open({
-      title: 'Download archive',
-      placeholder: 'Archive name',
-      submitLabel: 'Download',
       initialValue: defaultName,
       fileCount: files.length,
       validate: (v) => (v.trim() ? null : 'Name is required')
@@ -537,7 +534,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     const alias = this.currentAlias()
     this.filesService.compress({
       name: archive.name,
-      compressInDirectory: false,
+      compressInDirectory: archive.compressInDirectory,
       compression: archive.compression,
       extension: archive.extension,
       files: files.map((f) => {
