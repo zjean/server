@@ -59,7 +59,7 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
 import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
-import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isArchiveMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { validHttpSchemaRegexp } from '../../../../common/utils/regexp'
 import { buildNewEntryMenu, buildNewEntrySheetItems, NewEntryId } from '../files/new-entry-menu'
 
@@ -238,6 +238,11 @@ export class PersonalComponent implements OnInit, OnDestroy {
         disabledReason: f.isDir ? 'Coming soon' : undefined,
         action: () => this.downloadFile(f)
       },
+      // Decompress: single archive file only (mirrors classic's
+      // `decompressFile` gate — single selection, file is an archive).
+      ...(!f.isDir && isArchiveMime(f.mime)
+        ? [{ id: 'decompress', label: 'Decompress', icon: 'archive' as IconV2Name, action: () => this.decompressEntry(f) }]
+        : []),
       { id: 'rename', label: 'Rename', icon: 'pencil', action: () => this.renameEntry(f) },
       {
         id: 'size',
@@ -571,6 +576,15 @@ export class PersonalComponent implements OnInit, OnDestroy {
     })
     this.toast.success('v2_archiving_n_progress', { nb: files.length })
     this.clearSelection()
+  }
+
+  protected decompressEntry(file: FileProps): void {
+    // Mirrors classic `decompressFile`: set currentRoute to the target folder,
+    // then POST to the decompress task endpoint. Listing refreshes when the
+    // task completes via the shared filesOnEvent subscription (see ngOnInit).
+    this.filesService.currentRoute = this.currentUploadRoute()
+    this.filesService.decompress(this.buildFileStub(file))
+    this.toast.success('v2_decompressing_progress', { name: file.name })
   }
 
   protected async bulkCopyOrMove(op: FILE_OPERATION.COPY | FILE_OPERATION.MOVE): Promise<void> {

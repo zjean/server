@@ -67,6 +67,7 @@
   "v2_moving_to_trash_one_progress": "Moving \"{{ name }}\" to trash…",
   "v2_moving_to_trash_n_progress": "Moving {{ nb }} items to trash…",
   "v2_archiving_n_progress": "Archiving {{ nb }} items…",
+  "v2_decompressing_progress": "Extracting \"{{ name }}\"…",
   "v2_moving_one_progress": "Moving \"{{ name }}\"…",
   "v2_copying_one_progress": "Copying \"{{ name }}\"…",
   "v2_moving_n_progress": "Moving {{ nb }} items…",

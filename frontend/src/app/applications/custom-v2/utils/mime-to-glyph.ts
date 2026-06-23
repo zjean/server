@@ -58,6 +58,22 @@ export function isTextViewerMime(mime: string | null | undefined): boolean {
   )
 }
 
+// Archive MIME types Sync-in can decompress (mirrors the classic
+// `decompressFile` gate). Single source of truth for both the file glyph and
+// the v2 "Decompress" context-menu gate.
+const ARCHIVE_MIMES = new Set([
+  'application/zip',
+  'application/x-7z-compressed',
+  'application/x-tar',
+  'application/x-rar-compressed',
+  'application/gzip',
+  'application/x-bzip2'
+])
+
+export function isArchiveMime(mime: string | null | undefined): boolean {
+  return ARCHIVE_MIMES.has(normalizeMime(mime))
+}
+
 // Map a MIME type to one of the v2 FileGlyph categories.
 // Unknown mimes fall through to 'default', which the FileGlyph renders as a
 // neutral document glyph.
@@ -85,14 +101,7 @@ export function mimeToGlyph(mime: string | null | undefined): FileGlyphType {
     return 'deck'
   }
 
-  if (
-    m === 'application/zip' ||
-    m === 'application/x-7z-compressed' ||
-    m === 'application/x-tar' ||
-    m === 'application/x-rar-compressed' ||
-    m === 'application/gzip' ||
-    m === 'application/x-bzip2'
-  ) {
+  if (isArchiveMime(m)) {
     return 'archive'
   }
 
