@@ -869,12 +869,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
     const dirPath = this.currentUploadRoute()
     const name = this.uniqueName('Untitled', ext)
     const fullPath = `${dirPath}/${name}`
-    const onlyOfficeOn = this.store.server().files.editors.onlyoffice
+    const officeEditorOn = this.store.server().files.editors.onlyoffice || this.store.server().files.editors.eurooffice
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
         this.toast.success('v2_item_created', { name })
         this.refresh()
-        if (onlyOfficeOn) {
+        if (officeEditorOn) {
           this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fullPath } }).catch(console.error)
         }
       },

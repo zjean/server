@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { FILE_MODE } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
-import { ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
+import { EURO_OFFICE_APP_LOCK, ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
 import type { OnlyOfficeReqDto } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.dtos'
 import { API_ONLY_OFFICE_SETTINGS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.routes'
 import { OnlyOfficeComponent } from '../../files/components/utils/only-office.component'
@@ -170,7 +170,7 @@ export class OfficeViewComponent implements OnDestroy {
       const u = this.store.user.getValue()
       stub.createLock({
         owner: { login: u?.login ?? '', fullName: u?.fullName ?? '', email: u?.email ?? '' },
-        app: ONLY_OFFICE_APP_LOCK,
+        app: this.store.server().files.editors.onlyoffice ? ONLY_OFFICE_APP_LOCK : EURO_OFFICE_APP_LOCK,
         isExclusive: false
       })
     }

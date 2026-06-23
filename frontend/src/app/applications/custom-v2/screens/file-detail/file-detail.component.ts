@@ -43,6 +43,7 @@ import { TextCodeViewComponent } from '../../preview/text-code-view.component'
 import { MarkdownViewComponent } from '../../preview/markdown-view.component'
 import { DiagramViewComponent } from '../../preview/diagram-view.component'
 import { CloseGuardService } from '../../preview/close-guard.service'
+import { StoreService } from '../../../../store/store.service'
 
 type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
 
@@ -83,6 +84,7 @@ export class FileDetailComponent implements OnInit {
   private readonly shareDialog = inject(ShareDialogService)
   private readonly destroyRef = inject(DestroyRef)
   private readonly layoutV2 = inject(LayoutV2Service)
+  private readonly store = inject(StoreService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
@@ -229,6 +231,12 @@ export class FileDetailComponent implements OnInit {
 
   protected toggleToOffice(): void {
     this.pdfStage.update((s) => (s === 'pdf' ? 'office' : 'pdf'))
+  }
+
+  // "Edit in OnlyOffice" / "Edit in Euro-Office" depending on the enabled
+  // provider — mirrors classic FilesViewerDialogComponent.editOfficeEditorText.
+  protected get editOfficeEditorText(): string {
+    return this.store.server().files.editors.onlyoffice ? 'Edit in OnlyOffice' : 'Edit in Euro-Office'
   }
 
   protected fullscreen(): void {
