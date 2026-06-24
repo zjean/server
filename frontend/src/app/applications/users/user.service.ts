@@ -69,6 +69,8 @@ import { UserOnlineModel } from './models/user-online.model'
 import { myAvatarUrl } from './user.functions'
 import type { LoginResponseDto } from '@sync-in-server/backend/src/authentication/dto/login-response.dto'
 
+type Auth2FaVerifyDialogResult = false | HttpHeaders | undefined
+
 @Injectable({ providedIn: 'root' })
 export class UserService {
   private readonly http = inject(HttpClient)
@@ -212,8 +214,8 @@ export class UserService {
     return this.http.put<void>(API_USERS_MY_AVATAR, formData).pipe(tap(() => this.refreshAvatar()))
   }
 
-  changePassword(userPasswordDto: UserUpdatePasswordDto, twoFaHeaders: HttpHeaders): Observable<any> {
-    return this.http.put(API_USERS_MY_PASSWORD, userPasswordDto, { headers: twoFaHeaders })
+  changePassword(userPasswordDto: UserUpdatePasswordDto, twoFaHeaders: HttpHeaders | undefined): Observable<any> {
+    return this.http.put(API_USERS_MY_PASSWORD, userPasswordDto, twoFaHeaders ? { headers: twoFaHeaders } : undefined)
   }
 
   changeLanguage(userLanguageDto: UserLanguageDto): Observable<any> {
@@ -304,16 +306,16 @@ export class UserService {
     }
   }
 
-  listAppPasswords(twoFaHeaders: HttpHeaders): Observable<Omit<UserAppPassword, 'password'>[]> {
-    return this.http.get<Omit<UserAppPassword, 'password'>[]>(API_USERS_MY_APP_PASSWORDS, { headers: twoFaHeaders })
+  listAppPasswords(): Observable<Omit<UserAppPassword, 'password'>[]> {
+    return this.http.get<Omit<UserAppPassword, 'password'>[]>(API_USERS_MY_APP_PASSWORDS)
   }
 
   generateAppPassword(userAppPasswordDto: UserAppPasswordDto, twoFaHeaders: HttpHeaders): Observable<UserAppPassword> {
     return this.http.post<UserAppPassword>(API_USERS_MY_APP_PASSWORDS, userAppPasswordDto, { headers: twoFaHeaders })
   }
 
-  deleteAppPassword(name: string): Observable<void> {
-    return this.http.delete<void>(`${API_USERS_MY_APP_PASSWORDS}/${name}`)
+  deleteAppPassword(name: string, twoFaHeaders: HttpHeaders): Observable<void> {
+    return this.http.delete<void>(`${API_USERS_MY_APP_PASSWORDS}/${name}`, { headers: twoFaHeaders })
   }
 
   init2Fa(): Observable<TwoFaSetup> {
@@ -332,15 +334,19 @@ export class UserService {
     return this.http.post<TwoFaVerifyResult>(`${API_TWO_FA_ADMIN_RESET_USER}/${userId}`, null, { headers: twoFaHeaders })
   }
 
-  async auth2FaVerifyDialog(withPassword = false): Promise<false | HttpHeaders> {
+  async auth2FaVerifyDialog(withPassword: true, passwordFallback?: boolean): Promise<false | HttpHeaders>
+  async auth2FaVerifyDialog(withPassword: false, passwordFallback: true): Promise<false | HttpHeaders>
+  async auth2FaVerifyDialog(withPassword?: false, passwordFallback?: false): Promise<Auth2FaVerifyDialogResult>
+  async auth2FaVerifyDialog(withPassword = false, passwordFallback = false): Promise<Auth2FaVerifyDialogResult> {
     // returns: false (dialog closed), undefined (no check), `HttpHeaders` (code and/or password to check)
     const TwoFaEnabled = this.store.server().twoFaEnabled && this.user.twoFaEnabled
-    if (withPassword || TwoFaEnabled) {
+    const requirePassword = withPassword || (passwordFallback && !TwoFaEnabled)
+    if (requirePassword || TwoFaEnabled) {
       return new Promise((resolve) => {
         const modalRef: BsModalRef<UserAuth2FaVerifyDialogComponent> = this.layout.openDialog(
           UserAuth2FaVerifyDialogComponent,
           'xs',
-          { initialState: { withPassword: withPassword, withTwoFaEnabled: TwoFaEnabled } },
+          { initialState: { withPassword: requirePassword, withTwoFaEnabled: TwoFaEnabled } },
           { keyboard: false }
         )
         modalRef.content.isValid = (result: false | HttpHeaders) => {

@@ -34,6 +34,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
       <app-files-onlyoffice-document
         class="office-view__doc"
         [id]="docId()"
+        [editorName]="officeEditorName"
         [documentServerUrl]="cfg.documentServerUrl"
         [config]="cfg.config"
         (wasSaved)="onSave()"
@@ -79,6 +80,12 @@ export class OfficeViewComponent implements OnDestroy {
   protected readonly loading = signal(false)
   protected readonly error = signal<string | null>(null)
   protected readonly docId = computed(() => `v2-preview-doc-${this.file()?.id ?? 'none'}`)
+  // Editor label shown in OnlyOfficeComponent's load/init error messages.
+  // Mirrors classic FilesViewerOnlyOfficeComponent.officeEditorName — picks
+  // OnlyOffice vs Euro-Office based on the server's configured editor.
+  // Upstream 2.4.1 made `editorName` a required input on OnlyOfficeComponent
+  // (commit 98031da3, dynamic editor naming).
+  protected readonly officeEditorName = this.store.server().files.editors.onlyoffice ? ONLY_OFFICE_APP_LOCK : EURO_OFFICE_APP_LOCK
 
   // FileModel stub — bridges to classic services (lock-aware) for the
   // duration of this view. Held outside signals so destroy can release the
