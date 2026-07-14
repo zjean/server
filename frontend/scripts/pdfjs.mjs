@@ -60,6 +60,10 @@ async function updatePdfjs() {
   console.log('pdfjs - downloading pinned version:', pinnedDownloadURL)
   const tmpZip = path.join(os.tmpdir(), 'pdfjs-pinned.zip')
   const response = await fetch(pinnedDownloadURL)
+  if (!response.ok) {
+    console.error('pdfjs - unable to download:', response.status, response.statusText, pinnedDownloadURL)
+    return
+  }
   await fs.writeFile(tmpZip, Readable.fromWeb(response.body))
   console.log('pdfjs - downloaded:', tmpZip)
   await fs.rm(pdfjsAssetsDirectory, { recursive: true, force: true })
@@ -148,6 +152,10 @@ export async function checkPdfjs() {
     response = await fetch(releaseURL)
   } catch (e) {
     console.error('pdfjs -', e.message, releaseURL)
+    return
+  }
+  if (!response.ok) {
+    console.error('pdfjs - unable to check version:', response.status, response.statusText, releaseURL)
     return
   }
   let data
