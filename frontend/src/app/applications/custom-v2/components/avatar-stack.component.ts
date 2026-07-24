@@ -134,7 +134,11 @@ export class AvatarStackComponent {
   readonly extraFontSize = computed(() => Math.round(this.size() * 0.4 * 10) / 10)
 
   // Names surfaced in the hover tooltip — only the identities we actually have.
-  readonly labels = computed(() => this.users().map((u) => u.label?.trim()).filter((l): l is string => !!l))
+  readonly labels = computed(() =>
+    this.users()
+      .map((u) => u.label?.trim())
+      .filter((l): l is string => !!l)
+  )
   // Members counted in `total` for which we hold no named identity (e.g. a
   // Space card knows the member count but only joins manager names).
   readonly hiddenCount = computed(() => {
