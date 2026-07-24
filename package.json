@@ -1,7 +1,7 @@
 {
   "productName": "Sync-in",
   "name": "sync-in-server",
-  "version": "2.4.2-custom.1",
+  "version": "2.4.3-custom.1",
   "description": "The secure, open-source platform for file storage, sharing, collaboration, and syncing",
   "keywords": [
     "self-hosted",
@@ -78,6 +78,7 @@
     "release:build": "npm run build && node scripts/build/release.mjs",
     "release:clean": "rm -rf release",
     "bump:version": "npm run test && commit-and-tag-version",
+    "bump:version:patch": "npm run test && commit-and-tag-version --release-as patch",
     "bump:version:dry": "npm run test && commit-and-tag-version --dry-run",
     "lint": "npm --ws run lint",
     "lint:staged": "npm --ws run lint:staged",
@@ -98,7 +99,7 @@
     "dev:frontend": "npm -w frontend start"
   },
   "devDependencies": {
-    "commit-and-tag-version": "^12.7.3",
+    "commit-and-tag-version": "^13.1.0",
     "husky": "^9.1.7",
     "noop3": "^1000.0.0",
     "prettier": "^3.8.3"
@@ -114,8 +115,6 @@
     }
   },
   "allowScripts": {
-    "@parcel/watcher@2.5.6": true,
-    "@swc/core@1.15.43": true,
     "core-js@3.49.0": true,
     "fsevents@2.3.3": true,
     "lmdb@3.5.1": true,
@@ -124,6 +123,8 @@
     "esbuild@0.27.7": true,
     "esbuild@0.18.20": true,
     "esbuild@0.25.12": true,
-    "esbuild@0.28.1": true
+    "esbuild@0.28.1": true,
+    "@parcel/watcher@2.6.0": true,
+    "@swc/core@1.15.46": true
   }
 }

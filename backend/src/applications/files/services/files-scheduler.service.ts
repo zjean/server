@@ -125,8 +125,9 @@ export class FilesScheduler {
           DELETE
           FROM ${filesRecents}
           WHERE ${fk} IS NOT NULL
-            AND id NOT IN (SELECT id
-                           FROM (SELECT id,
+            AND (${fk}, ${filesRecents.id}) NOT IN (SELECT repositoryId, id
+                           FROM (SELECT ${fk} AS repositoryId,
+                                        id,
                                         ROW_NUMBER() OVER (PARTITION BY ${fk} ORDER BY ${filesRecents.mtime} DESC) AS rn
                                  FROM ${filesRecents}
                                  WHERE ${fk} IS NOT NULL) AS ranked
@@ -144,7 +145,7 @@ export class FilesScheduler {
   async indexContentFiles(): Promise<void> {
     // queue a full content indexing request, it will be consumed by the minute scheduler
     if (await this.filesContentIndexer.requestFullIndexing()) {
-      this.logger.log({ tag: this.indexContentFiles.name, msg: 'REQUESTED' })
+      this.logger.verbose({ tag: this.indexContentFiles.name, msg: 'full indexing requested' })
     }
   }
 
