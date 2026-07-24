@@ -4,6 +4,7 @@ import type { ShareProps } from '@sync-in-server/backend/src/applications/shares
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { userAvatarUrl } from '../../users/user.functions'
+import { SPACES_PERMISSIONS_TEXT } from '../../spaces/spaces.constants'
 import { StoreService } from '../../../store/store.service'
 import {
   createShare,
@@ -62,11 +63,24 @@ interface RowMember extends ShareMemberInput {
                       <div class="sd__member-desc">{{ m.description }}</div>
                     }
                   </div>
-                  <select class="sd__preset" [value]="m.preset" (change)="onPresetChange(m, $event)">
-                    <option value="viewer">{{ 'v2_share_preset_viewer' | translate: locale.language }}</option>
-                    <option value="editor">{{ 'v2_share_preset_editor' | translate: locale.language }}</option>
-                    <option value="manager">{{ 'v2_share_preset_manager' | translate: locale.language }}</option>
-                  </select>
+                  <span class="sd__perm">
+                    <select class="sd__preset" [value]="m.preset" (change)="onPresetChange(m, $event)">
+                      <option value="viewer">{{ 'v2_share_preset_viewer' | translate: locale.language }}</option>
+                      <option value="editor">{{ 'v2_share_preset_editor' | translate: locale.language }}</option>
+                      <option value="manager">{{ 'v2_share_preset_manager' | translate: locale.language }}</option>
+                    </select>
+                    <span class="sd__perm-tip" role="tooltip">
+                      @if (permTexts(m.permissions); as texts) {
+                        @if (texts.length) {
+                          @for (t of texts; track t) {
+                            <span class="sd__perm-row">{{ t | translate: locale.language }}</span>
+                          }
+                        } @else {
+                          <span class="sd__perm-row">{{ 'No permissions' | translate: locale.language }}</span>
+                        }
+                      }
+                    </span>
+                  </span>
                   <button type="button" class="sd__remove" (click)="removeMember(m)" [attr.title]="'Remove' | translate: locale.language">×</button>
                 </div>
               }
@@ -210,6 +224,10 @@ interface RowMember extends ShareMemberInput {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      .sd__perm {
+        position: relative;
+        display: inline-flex;
+      }
       .sd__preset {
         font: inherit;
         font-size: 12.5px;
@@ -218,6 +236,44 @@ interface RowMember extends ShareMemberInput {
         color: var(--si-fg);
         border: 1px solid var(--si-border);
         border-radius: 5px;
+      }
+      .sd__perm-tip {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        right: 0;
+        z-index: 80;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: max-content;
+        max-width: 220px;
+        padding: 7px 10px;
+        background: var(--si-bg0);
+        color: var(--si-fg);
+        border: 1px solid var(--si-border);
+        border-radius: var(--si-r1);
+        box-shadow: var(--si-shadow2);
+        font-size: 12px;
+        line-height: 1.35;
+        text-align: left;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(2px);
+        transition:
+          opacity 0.12s ease,
+          transform 0.12s ease,
+          visibility 0.12s;
+        pointer-events: none;
+      }
+      .sd__perm:hover .sd__perm-tip {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+      .sd__perm-row {
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .sd__remove {
         width: 26px;
@@ -359,6 +415,18 @@ export class ShareDialogComponent {
 
   protected isGroupType(t: MEMBER_TYPE): boolean {
     return t === MEMBER_TYPE.GROUP || t === MEMBER_TYPE.PGROUP
+  }
+
+  // Groups the granular operations a member's permission string grants into a
+  // single hover tooltip on the preset selector — parity with the classic
+  // badge-permissions tooltip (upstream dd8647ef). The stored permission
+  // string concatenates SPACE_OPERATION tokens ('a', 'm', 'd', 'si', 'so'),
+  // already reflecting the file-vs-dir preset expansion; an empty string means
+  // read-only, rendered as "No permissions" like classic.
+  private readonly permOrder = ['a', 'm', 'd', 'si', 'so'] as const
+  protected permTexts(permissions: string): string[] {
+    const perms = permissions ?? ''
+    return this.permOrder.filter((op) => perms.includes(op)).map((op) => SPACES_PERMISSIONS_TEXT[op].text)
   }
 
   protected onPick(picked: PickedMember): void {

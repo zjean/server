@@ -104,7 +104,9 @@ export class SpacesComponent implements OnInit {
       // constructor; surfacing it here means the same user renders with
       // the same backend-generated PNG in the user-card and the manager
       // stack — gradient + initials only kick in when no login is set.
-      imageUrl: m.avatarUrl ?? null
+      imageUrl: m.avatarUrl ?? null,
+      // Drives the avatar-stack hover tooltip (member-name parity, #295).
+      label: m.name ?? m.login ?? ''
     }))
   }
 

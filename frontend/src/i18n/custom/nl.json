@@ -33,6 +33,7 @@
   "v2_share_updated": "Deling bijgewerkt",
   "v2_share_revoked": "Deling verwijderd",
   "v2_share_n_items_subject": "{{ nb }} items",
+  "v2_and_n_more": "+{{ nb }} meer",
   "v2_delete_comment": "Deze opmerking verwijderen? Dit kan niet ongedaan worden gemaakt.",
   "v2_delete_user": "Gebruiker <b>{{ login }}</b> verwijderen? Dit kan niet ongedaan worden gemaakt.",
   "v2_delete_group": "Groep <b>{{ name }}</b> verwijderen? Dit kan niet ongedaan worden gemaakt.",
