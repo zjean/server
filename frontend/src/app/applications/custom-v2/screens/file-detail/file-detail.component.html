@@ -73,12 +73,26 @@
         } @else if (isPdf() && pdfSafeUrl(); as url) {
           <iframe class="detail__iframe" [src]="url" [title]="f.name"></iframe>
         } @else if (isVideo() && previewUrl()) {
-          <video class="detail__video" [src]="previewUrl()" controls playsinline preload="metadata"></video>
+          <video
+            class="detail__video"
+            [src]="previewUrl()"
+            controls
+            controlsList="nodownload noplaybackrate noremoteplayback"
+            disablePictureInPicture
+            playsinline
+            preload="metadata"
+          ></video>
         } @else if (isAudio() && previewUrl()) {
           <div class="detail__audio-wrap">
             <app-v2-icon name="audio" [size]="72" class="detail__audio-glyph" />
             <div class="detail__audio-name">{{ f.name }}</div>
-            <audio class="detail__audio" [src]="previewUrl()" controls preload="metadata"></audio>
+            <audio
+              class="detail__audio"
+              [src]="previewUrl()"
+              controls
+              controlsList="nodownload noplaybackrate noremoteplayback"
+              preload="metadata"
+            ></audio>
           </div>
         } @else if (isDiagram() && diagramPath()) {
           <app-v2-preview-diagram-view [path]="diagramPath()" (closeRequested)="close()" />
