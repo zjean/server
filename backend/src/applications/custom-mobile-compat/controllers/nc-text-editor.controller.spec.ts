@@ -297,9 +297,7 @@ describe(NcTextEditorController.name, () => {
       return {
         method: 'PUT',
         headers: { 'content-type': 'text/plain', 'content-length': '7', ...extraHeaders },
-        raw: {
-          /* would be a Readable in production */
-        } as never
+        raw: {/* would be a Readable in production */} as never
       } as unknown as FastifyRequest
     }
 
