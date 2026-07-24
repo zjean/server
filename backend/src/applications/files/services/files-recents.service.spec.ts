@@ -3,16 +3,22 @@ import { convertHumanTimeToMs } from '../../../common/functions'
 import { currentTimeStamp } from '../../../common/shared'
 import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
+import { USER_PERMISSION } from '../../users/constants/user'
 import { FilesQueries } from './files-queries.service'
 import { FilesRecents } from './files-recents.service'
-import { Mock } from 'vitest'
+import type { Mock } from 'vitest'
+import * as filesUtils from '../utils/files'
 
 describe(FilesRecents.name, () => {
   let service: FilesRecents
   let filesQueries: {
     getRecentsFromUser: Mock
     getRecentsFromLocation: Mock
+    deleteRecents: Mock
+    replaceRecents: Mock
     updateRecents: Mock
+    getSpaceFileId: Mock
+    upsertRecent: Mock
   }
   let spacesQueries: {
     spaceIds: Mock
@@ -25,7 +31,11 @@ describe(FilesRecents.name, () => {
     filesQueries = {
       getRecentsFromUser: vi.fn().mockResolvedValue([]),
       getRecentsFromLocation: vi.fn().mockResolvedValue([]),
-      updateRecents: vi.fn().mockResolvedValue(undefined)
+      deleteRecents: vi.fn().mockResolvedValue(undefined),
+      replaceRecents: vi.fn().mockResolvedValue(undefined),
+      updateRecents: vi.fn().mockResolvedValue(undefined),
+      getSpaceFileId: vi.fn().mockResolvedValue(undefined),
+      upsertRecent: vi.fn().mockResolvedValue(undefined)
     }
     spacesQueries = {
       spaceIds: vi.fn().mockResolvedValue([])
@@ -50,12 +60,17 @@ describe(FilesRecents.name, () => {
   })
 
   afterEach(() => {
-    vi.clearAllMocks()
+    vi.restoreAllMocks()
   })
 
-  it('should be defined', () => {
-    expect(service).toBeDefined()
-  })
+  const userWithPermissions = (applications: USER_PERMISSION[] = [], props: Record<string, any> = {}) =>
+    ({
+      id: 7,
+      isAdmin: false,
+      applications,
+      havePermission: (permission: USER_PERMISSION) => Boolean(props.isAdmin) || applications.includes(permission),
+      ...props
+    }) as any
 
   it('should load recents from user accessible spaces and shares', async () => {
     const recents = [{ id: 1, name: 'a.txt' }]
@@ -63,7 +78,10 @@ describe(FilesRecents.name, () => {
     sharesQueries.shareIds.mockResolvedValueOnce([20])
     filesQueries.getRecentsFromUser.mockResolvedValueOnce(recents)
 
-    const result = await service.getRecents({ id: 7, isAdmin: true } as any, 25)
+    const result = await service.getRecents(
+      userWithPermissions([USER_PERMISSION.PERSONAL_SPACE, USER_PERMISSION.SPACES, USER_PERMISSION.SHARES], { isAdmin: true }),
+      25
+    )
 
     expect(spacesQueries.spaceIds).toHaveBeenCalledWith(7)
     expect(sharesQueries.shareIds).toHaveBeenCalledWith(7, 1)
@@ -71,11 +89,177 @@ describe(FilesRecents.name, () => {
     expect(result).toBe(recents)
   })
 
+  it('should only load personal recents when user only has personal space permission', async () => {
+    await service.getRecents(userWithPermissions([USER_PERMISSION.PERSONAL_SPACE]), 10)
+
+    expect(spacesQueries.spaceIds).not.toHaveBeenCalled()
+    expect(sharesQueries.shareIds).not.toHaveBeenCalled()
+    expect(filesQueries.getRecentsFromUser).toHaveBeenCalledWith(7, [], [], 10)
+  })
+
+  it('should only load space recents when user only has spaces permission', async () => {
+    spacesQueries.spaceIds.mockResolvedValueOnce([10])
+
+    await service.getRecents(userWithPermissions([USER_PERMISSION.SPACES]), 10)
+
+    expect(spacesQueries.spaceIds).toHaveBeenCalledWith(7)
+    expect(sharesQueries.shareIds).not.toHaveBeenCalled()
+    expect(filesQueries.getRecentsFromUser).toHaveBeenCalledWith(undefined, [10], [], 10)
+  })
+
+  it('should only load share recents when user only has shares permission', async () => {
+    sharesQueries.shareIds.mockResolvedValueOnce([20])
+
+    await service.getRecents(userWithPermissions([USER_PERMISSION.SHARES]), 10)
+
+    expect(spacesQueries.spaceIds).not.toHaveBeenCalled()
+    expect(sharesQueries.shareIds).toHaveBeenCalledWith(7, 0)
+    expect(filesQueries.getRecentsFromUser).toHaveBeenCalledWith(undefined, [], [20], 10)
+  })
+
+  it('should not load any recents source without matching permission', async () => {
+    await service.getRecents(userWithPermissions(), 10)
+
+    expect(spacesQueries.spaceIds).not.toHaveBeenCalled()
+    expect(sharesQueries.shareIds).not.toHaveBeenCalled()
+    expect(filesQueries.getRecentsFromUser).toHaveBeenCalledWith(undefined, [], [], 10)
+  })
+
   it('should ignore updateRecents when browsing trash repository', async () => {
     await service.updateRecents({ id: 5 } as any, { inTrashRepository: true, url: 'trash/personal' } as any, [])
 
     expect(filesQueries.getRecentsFromLocation).not.toHaveBeenCalled()
     expect(filesQueries.updateRecents).not.toHaveBeenCalled()
+  })
+
+  it('should normalize and map recent deletions to their repositories', async () => {
+    await service.deleteRecents([
+      { userId: 5, spaceId: 0, inPersonalSpace: true, inSharesRepository: false, path: 'files/personal/docs/../old.txt' },
+      { userId: 5, spaceId: 9, inPersonalSpace: false, inSharesRepository: false, path: 'files/project/archive' },
+      { userId: 5, spaceId: 12, inPersonalSpace: false, inSharesRepository: true, path: 'shares/project/report.pdf' }
+    ])
+
+    expect(filesQueries.deleteRecents).toHaveBeenCalledWith([
+      { ownerId: 5, path: 'files/personal/old.txt' },
+      { spaceId: 9, path: 'files/project/archive' },
+      { shareId: 12, path: 'shares/project/report.pdf' }
+    ])
+  })
+
+  it('should stat and upsert one recent file after an editor update', async () => {
+    const now = currentTimeStamp(null, true)
+    const file = {
+      id: -123,
+      path: 'docs',
+      name: 'report.txt',
+      isDir: false,
+      size: 42,
+      ctime: now,
+      mtime: now,
+      mime: 'text/plain'
+    }
+    const user = { id: 5 } as any
+    const space = {
+      id: 9,
+      url: 'files/project/docs/report.txt',
+      dbFile: { spaceId: 9, path: 'docs/report.txt', inTrash: false },
+      inTrashRepository: false,
+      inSharesList: false,
+      inPersonalSpace: false,
+      inSharesRepository: false
+    } as any
+    vi.spyOn(filesUtils, 'getProps').mockResolvedValueOnce(file as any)
+    filesQueries.getSpaceFileId.mockResolvedValueOnce(321)
+
+    await service.updateRecentFromEditor(user, space, '/data/project/docs/report.txt')
+
+    expect(filesUtils.getProps).toHaveBeenCalledWith('/data/project/docs/report.txt', 'docs/report.txt')
+    expect(filesQueries.getSpaceFileId).toHaveBeenCalledWith(file, space.dbFile, { withDir: false })
+    expect(filesQueries.upsertRecent).toHaveBeenCalledWith(
+      { spaceId: 9, path: 'files/project/docs' },
+      { id: 321, spaceId: 9, path: 'files/project/docs', name: 'report.txt', mtime: now, mime: 'text/plain' }
+    )
+  })
+
+  it('should ignore an old file after an editor update', async () => {
+    vi.spyOn(filesUtils, 'getProps').mockResolvedValueOnce({
+      id: -123,
+      path: 'docs',
+      name: 'old.txt',
+      isDir: false,
+      size: 42,
+      ctime: 0,
+      mtime: currentTimeStamp(null, true) - convertHumanTimeToMs('30d'),
+      mime: 'text/plain'
+    } as any)
+
+    await service.updateRecentFromEditor(
+      { id: 5 } as any,
+      {
+        id: 0,
+        url: 'files/personal/docs/old.txt',
+        dbFile: { ownerId: 5, path: 'docs/old.txt', inTrash: false },
+        inTrashRepository: false,
+        inSharesList: false,
+        inPersonalSpace: true,
+        inSharesRepository: false
+      } as any,
+      '/data/users/john/files/docs/old.txt'
+    )
+
+    expect(filesQueries.getSpaceFileId).not.toHaveBeenCalled()
+    expect(filesQueries.upsertRecent).not.toHaveBeenCalled()
+  })
+
+  // fork fix #163: FS-only files carry a negative inode id. getRecentsFromUser reads filesRecents.id
+  // with no join against files, so storing a negative id makes preview / NC recommendations 404.
+  it('should not upsert an editor recent that has no database id (negative inode)', async () => {
+    const now = currentTimeStamp(null, true)
+    vi.spyOn(filesUtils, 'getProps').mockResolvedValueOnce({
+      id: -123,
+      path: 'docs',
+      name: 'report.txt',
+      isDir: false,
+      size: 42,
+      ctime: now,
+      mtime: now,
+      mime: 'text/plain'
+    } as any)
+    // file is not yet in the database → getSpaceFileId resolves undefined, id stays negative
+    filesQueries.getSpaceFileId.mockResolvedValueOnce(undefined)
+
+    await service.updateRecentFromEditor(
+      { id: 5 } as any,
+      {
+        id: 9,
+        url: 'files/project/docs/report.txt',
+        dbFile: { spaceId: 9, path: 'docs/report.txt', inTrash: false },
+        inTrashRepository: false,
+        inSharesList: false,
+        inPersonalSpace: false,
+        inSharesRepository: false
+      } as any,
+      '/data/project/docs/report.txt'
+    )
+
+    expect(filesQueries.getSpaceFileId).toHaveBeenCalled()
+    expect(filesQueries.upsertRecent).not.toHaveBeenCalled()
+  })
+
+  // fork fix #163: the browse path (toRecents) must also skip negative-inode ids.
+  it('should exclude fs-only files (negative inode id) from browse recents', async () => {
+    const now = currentTimeStamp(null, true)
+    const location = { ownerId: 5, path: 'files/personal/docs' }
+    const fsFiles = [
+      { id: -999, name: 'fs-only.txt', isDir: false, size: 100, mtime: now, mime: 'text-plain' },
+      { id: 103, name: 'add-me.txt', isDir: false, size: 200, mtime: now, mime: 'text-plain' }
+    ]
+    filesQueries.getRecentsFromLocation.mockResolvedValueOnce([])
+
+    await service.updateRecents({ id: 5 } as any, { inTrashRepository: false, inPersonalSpace: true, url: location.path } as any, fsFiles as any)
+
+    const [, toAdd] = filesQueries.updateRecents.mock.calls[0]
+    expect(toAdd).toEqual([{ id: 103, name: 'add-me.txt', mtime: now, mime: 'text-plain', ...location }])
   })
 
   it('should skip persistence when filtered fs recents and db recents are both empty', async () => {
@@ -96,12 +280,12 @@ describe(FilesRecents.name, () => {
     const now = currentTimeStamp(null, true)
     const location = { ownerId: 5, path: 'files/personal/docs' }
     const dbRecents = [
-      { id: 1, name: 'old-name.txt', mtime: now - 1000, mime: 'text-plain' },
-      { id: 2, name: 'remove-me.txt', mtime: now - 1000, mime: 'text-plain' }
+      { id: 101, name: 'old-name.txt', mtime: now - 1000, mime: 'text-plain', ...location },
+      { id: 102, name: 'remove-me.txt', mtime: now - 1000, mime: 'text-plain', ...location }
     ]
     const fsFiles = [
-      { id: 1, name: 'new-name.txt', isDir: false, size: 100, mtime: now, mime: 'text-plain' },
-      { id: 3, name: 'add-me.txt', isDir: false, size: 200, mtime: now, mime: 'text-plain' }
+      { id: 101, name: 'new-name.txt', isDir: false, size: 100, mtime: now, mime: 'application-pdf' },
+      { id: 103, name: 'add-me.txt', isDir: false, size: 200, mtime: now, mime: 'text-plain' }
     ]
     filesQueries.getRecentsFromLocation.mockResolvedValueOnce(dbRecents)
 
@@ -109,38 +293,31 @@ describe(FilesRecents.name, () => {
 
     expect(filesQueries.getRecentsFromLocation).toHaveBeenCalledWith(location)
     expect(filesQueries.updateRecents).toHaveBeenCalledTimes(1)
-    const [loc, toAdd, toUpdate, toRemove] = filesQueries.updateRecents.mock.calls[0]
-    expect(loc).toEqual(location)
-    expect(toAdd).toEqual([{ id: 3, name: 'add-me.txt', mtime: now, mime: 'text-plain', ...location }])
-    expect(toUpdate).toEqual([{ name: 'new-name.txt', mtime: now, object: fsFiles[0] }])
-    expect(toRemove).toEqual([2])
+    const [actualLocation, toAdd, toUpdate, toRemove] = filesQueries.updateRecents.mock.calls[0]
+    expect(actualLocation).toEqual(location)
+    expect(toAdd).toEqual([{ id: 103, name: 'add-me.txt', mtime: now, mime: 'text-plain', ...location }])
+    expect(toUpdate).toEqual([{ id: 101, name: 'new-name.txt', mtime: now, mime: 'application-pdf' }])
+    expect(toRemove).toEqual([102])
   })
 
-  it('should use share location list and per-file share id when browsing shares list', async () => {
+  it('should replace the shares snapshot and deduplicate by file id', async () => {
     const now = currentTimeStamp(null, true)
+    const space = { inTrashRepository: false, inSharesList: true, inSharesRepository: false, inPersonalSpace: false, id: 0, url: 'shares' } as any
     const files = [
-      { id: 10, name: 'a.txt', isDir: false, size: 5, mtime: now, mime: 'text-plain', root: { id: 101 } },
-      { id: 11, name: 'b.txt', isDir: false, size: 5, mtime: now, mime: 'text-plain', root: { id: 102 } }
+      { id: 10, name: 'report.pdf', isDir: false, size: 5, mtime: now, mime: 'application-pdf', root: { id: 101 } },
+      { id: 10, name: 'report.pdf', isDir: false, size: 5, mtime: now, mime: 'application-pdf', root: { id: 102 } }
     ]
-    filesQueries.getRecentsFromLocation.mockResolvedValueOnce([])
+    await service.updateRecents({ id: 5 } as any, space, files as any)
 
-    await service.updateRecents(
-      { id: 5 } as any,
-      { inTrashRepository: false, inSharesList: true, inSharesRepository: false, inPersonalSpace: false, id: 0, url: 'shares' } as any,
-      files as any
-    )
-
-    const [location, toAdd] = filesQueries.updateRecents.mock.calls[0]
-    expect(location).toEqual({ shareId: [101, 102], path: 'shares' })
-    expect(toAdd).toEqual([
-      { id: 10, name: 'a.txt', mtime: now, mime: 'text-plain', path: 'shares', shareId: 101 },
-      { id: 11, name: 'b.txt', mtime: now, mime: 'text-plain', path: 'shares', shareId: 102 }
+    expect(filesQueries.getRecentsFromLocation).not.toHaveBeenCalled()
+    expect(filesQueries.updateRecents).not.toHaveBeenCalled()
+    expect(filesQueries.replaceRecents).toHaveBeenCalledWith({ shareId: [101, 102], path: 'shares' }, [
+      { id: 10, name: 'report.pdf', mtime: now, mime: 'application-pdf', path: 'shares', shareId: 102 }
     ])
   })
 
   it('should use repository share id for a single share location', async () => {
     const now = currentTimeStamp(null, true)
-    filesQueries.getRecentsFromLocation.mockResolvedValueOnce([])
 
     await service.updateRecents(
       { id: 5 } as any,
@@ -153,7 +330,6 @@ describe(FilesRecents.name, () => {
 
   it('should use space id location for regular space repository', async () => {
     const now = currentTimeStamp(null, true)
-    filesQueries.getRecentsFromLocation.mockResolvedValueOnce([])
 
     await service.updateRecents(
       { id: 5 } as any,

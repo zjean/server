@@ -53,5 +53,7 @@
   "No matches": "No matches",
   "preview_counter": "{{ current }} of {{ total }}",
   "preview_counter_one": "1 of 1",
+  "Client deleted": "Client deleted",
+  "Unable to delete client": "Unable to delete client",
   "Cancelled": "Cancelled"
 }
