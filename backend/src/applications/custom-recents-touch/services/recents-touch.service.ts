@@ -34,6 +34,35 @@ import { UserModel } from '../../users/models/user.model'
 // Pure-add: nothing in upstream gets edited. All paths live under
 // custom-recents-touch/, mirroring the nc-sync-log subscriber pattern from
 // custom-mobile-compat.
+//
+// Overlap with upstream `FilesRecents.updateRecentFromEditor` (since 2.4.3,
+// upstream PR #249 / commit 2b87607e, pulled in by the 2026-07-24 sync #293):
+// upstream now reconciles recents from *editor* saves too, wired via
+// files-event-manager.service.ts `processRecentEditorUpdates` — gated on
+// `action === UPDATE && source === 'editor'`. Issue #294 asked whether to slim
+// this module to only the non-editor paths.
+//
+// Decision (#294): KEEP this module as-is. It is a strict superset of upstream:
+//   - fires on ADD + UPDATE from *any* source (upload, WebDAV PUT, Collabora,
+//     editor), not just editor saves;
+//   - materialises the `files` DB row first via ensureDbRow(), so brand-new
+//     files land in recents immediately — upstream's narrower version calls
+//     `getSpaceFileId(...) ?? file.id` and, under the #163 guard, skips files
+//     that lack a DB row.
+// Slimming to non-editor paths would drop the DB-row materialisation guarantee
+// for editor saves and gain nothing (the editor path is already idempotent).
+//
+// Double-write on editor saves is redundant but harmless: both paths upsert by
+// the same logical identity, so the end state is a single row. Our upsert keys
+// on (id, location) [upsertRecent below]; upstream's FilesQueries.upsertRecent
+// keys on (location, name). For a real file (stable id, name, location) both
+// converge on one row — no duplicate, no drift.
+//
+// fix #163 (the `if (fileId <= 0) return` guard in handleFileEvent, mirrored in
+// upstream's updateRecentFromEditor / toRecents): never store FS-only files
+// (negative inode id) in files_recents — getRecentsFromUser reads the id with
+// no join against `files`, so a negative id 404s in preview / file-detail / NC
+// recommendations. This guard must be preserved here on every upstream sync.
 
 // Keep in sync with FilesRecents.keepTime ('14d') in files-recents.service.ts.
 // Pre-filtering here avoids a stat + DB round-trip for events that would be
