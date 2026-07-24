@@ -150,11 +150,22 @@ When resolving, keep both sets of additions wherever possible — a sync should 
 Always run:
 
 ```bash
-rtk proxy npm --prefix frontend run build   # Angular TS / template check
+rtk proxy npm --prefix frontend run build   # Angular TS / template check (NOT in CI, but catches template errors early)
 rtk proxy npm --prefix frontend run lint    # catches duplicate JSON keys as warnings; prettier errors
 rtk proxy npm --prefix backend run build    # NestJS compile (type errors against @sync-in-server/backend)
+rtk proxy npm --prefix backend run lint     # eslint + prettier — CI runs this and it is NOT implied by the build
 rtk proxy npm --prefix backend test         # vitest — the only check that catches stale runtime test mocks
 ```
+
+**Then run the exact command CI runs, as the final gate:**
+
+```bash
+rtk proxy npm run test   # root: == `npm --ws run lint && npm -w backend test` — mirrors Test Workflow exactly
+```
+
+The Test Workflow's only step is root `npm run test`, which expands to **both-workspace lint (backend eslint + frontend `ng lint`) `&&` backend vitest**. There is no frontend unit-test suite. Running the four `--prefix` commands above is good for fast iteration, but they omit `backend run lint` unless you remember it — so finish with root `npm run test` to guarantee you're seeing what CI sees.
+
+**`backend run build` does NOT run eslint/prettier — `backend run lint` is a separate gate CI enforces.** An upstream sync can change `backend/eslint.config.mjs` (or bump prettier), and the new rule then flags a *pre-existing fork file the merge never touched*. The build stays green, the tests stay green, and CI fails at lint after the PR is open — a wasted round-trip. The 2.4.3 sync (PR #293) hit this exactly: upstream tightened the empty-block-comment rule, and a `custom-mobile-compat` spec from PR #201 (untouched by the merge) suddenly violated `prettier/prettier`. Fix with `rtk proxy npm --prefix backend run lint -- --fix` (prettier picks the exact spacing), then re-verify; commit the reformat as a `mod(lint): ...` commit so it's greppable.
 
 **The backend build is necessary but NOT sufficient — run the backend test suite too.** When an Adapt changes the *shape* of something the fork's tests construct by hand — config singletons (`vi.mock('config.environment', …)`), DTO fixtures, mock payloads — `nest build`'s type-check passes (the mock is an untyped object literal) but the test throws at runtime. The 2.4.0 sync hit this exactly: the `files.onlyoffice` → `files.editors.onlyoffice` regrouping was fixed in the source, the build went green, but two `custom-mobile-compat` specs still built `configuration` with the old shape, so `files.editors` was `undefined` and 4 tests threw `Cannot read properties of undefined (reading 'onlyoffice')`. CI caught it *after* the PR was already open — a wasted round-trip. Grep the specs for the old shape whenever you adapt a config/DTO path:
 
@@ -162,7 +173,7 @@ rtk proxy npm --prefix backend test         # vitest — the only check that cat
 git grep -l "<old.path.fragment>" -- 'backend/src/**/*.spec.ts'   # e.g. "files.onlyoffice"
 ```
 
-This is the mirror image of the standing "run nest build before push" rule (build catches type errors vitest's `--no-typecheck` path misses); here vitest catches a runtime-shape error the build misses. You need **both** green locally before pushing — Test Workflow gates the merge on the test suite, not the build.
+This is the mirror image of the standing "run nest build before push" rule (build catches type errors vitest's `--no-typecheck` path misses); here vitest catches a runtime-shape error the build misses. You need build, **lint**, and test all green locally before pushing — Test Workflow gates the merge on lint + the test suite, not the build (the build never runs in CI at all, so a build-only regression won't be caught there — that's why `backend run build` stays on the local list).
 
 Fix anything new that surfaces, then commit the merge and push.
 
