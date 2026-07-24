@@ -29,7 +29,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
     @if (loading()) {
       <div class="office-view__state" l10nTranslate>Loading editor…</div>
     } @else if (error(); as err) {
-      <div class="office-view__error">{{ err | translate: locale.language }}</div>
+      <div class="office-view__error">{{ err | translate: locale.language : { editor: officeEditorName } }}</div>
     } @else if (config(); as cfg) {
       <app-files-onlyoffice-document
         class="office-view__doc"
@@ -136,7 +136,7 @@ export class OfficeViewComponent implements OnDestroy {
             next: (cfg) => {
               this.loading.set(false)
               if (!cfg) {
-                this.error.set('OnlyOffice settings are missing.')
+                this.error.set('v2_office_settings_missing')
                 this.config.set(null)
                 return
               }
@@ -146,9 +146,7 @@ export class OfficeViewComponent implements OnDestroy {
             error: (e: HttpErrorResponse) => {
               this.loading.set(false)
               this.config.set(null)
-              this.error.set(
-                e.status === 404 ? 'OnlyOffice is not available on this server.' : (e.error?.message ?? 'Failed to load OnlyOffice editor.')
-              )
+              this.error.set(e.status === 404 ? 'v2_office_unavailable' : (e.error?.message ?? 'v2_office_load_failed'))
             }
           })
       })
