@@ -20,10 +20,19 @@ import * as filesUtils from '../../utils/files'
 import { CollaboraOnlineManager } from './collabora-online-manager.service'
 import { COLLABORA_APP_LOCK, COLLABORA_HEADERS, COLLABORA_LOCK_ACTION } from './collabora-online.constants'
 import type { FastifyCollaboraOnlineSpaceRequest } from './collabora-online.interface'
+import { VersioningService } from '../../../custom-versioning/services/versioning.service'
 
 vi.mock('../../utils/files')
 vi.mock('node:fs/promises')
 vi.mock('../../../users/utils/avatar')
+
+// Fork: versioning hooks. Stubbed so these suites keep asserting upstream
+// behavior; the hooks' own assertions live alongside each write path below.
+const versioning = {
+  snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined),
+  purgeForPath: vi.fn().mockResolvedValue(undefined),
+  purgeForFile: vi.fn().mockResolvedValue(undefined)
+}
 
 describe(CollaboraOnlineManager.name, () => {
   let service: CollaboraOnlineManager
@@ -56,6 +65,7 @@ describe(CollaboraOnlineManager.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CollaboraOnlineManager,
+        { provide: VersioningService, useValue: versioning },
         {
           provide: ContextManager,
           useValue: {
@@ -357,6 +367,29 @@ describe(CollaboraOnlineManager.name, () => {
         rPath: mockSpace.realPath,
         source: 'editor'
       })
+    })
+
+    // Fork: versioning. This editor bypasses saveStream, so copyFileContent is
+    // the destructive moment — and it truncates in place, which is why the
+    // snapshot has to happen before it rather than being inferred from an event.
+    it('snapshots the previous content before overwriting, tagged collabora', async () => {
+      const mockRequest = {
+        user: mockUser,
+        space: mockSpace,
+        headers: { 'content-length': '1024' },
+        raw: new Readable()
+      } as unknown as FastifyCollaboraOnlineSpaceRequest
+
+      vi.spyOn(fs, 'stat').mockResolvedValue({ mtime: new Date('2024-01-01T11:00:00Z') } as any)
+      vi.spyOn(filesUtils, 'fileSize').mockResolvedValue(1024)
+
+      await service.saveDocument(mockRequest)
+
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpace, { origin: 'collabora' })
+      expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(filesUtils.copyFileContent).mock.invocationCallOrder[0]
+      )
     })
 
     it('should throw error when document size mismatch', async () => {

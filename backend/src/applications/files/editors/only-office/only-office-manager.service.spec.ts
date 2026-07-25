@@ -20,11 +20,20 @@ import { FilesLockManager } from '../../services/files-lock-manager.service'
 import * as filesUtils from '../../utils/files'
 import { OnlyOfficeManager } from './only-office-manager.service'
 import { ONLY_OFFICE_APP_LOCK } from './only-office.constants'
+import { VersioningService } from '../../../custom-versioning/services/versioning.service'
 
 vi.mock('../../utils/files')
 vi.mock('../../../users/utils/avatar', () => ({
   getAvatarBase64: vi.fn().mockResolvedValue('data:image/png;base64,iVBORw0KGgo=')
 }))
+
+// Fork: versioning hooks. Stubbed so these suites keep asserting upstream
+// behavior; the hooks' own assertions live alongside each write path below.
+const versioning = {
+  snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined),
+  purgeForPath: vi.fn().mockResolvedValue(undefined),
+  purgeForFile: vi.fn().mockResolvedValue(undefined)
+}
 
 describe(OnlyOfficeManager.name, () => {
   let service: OnlyOfficeManager
@@ -74,6 +83,7 @@ describe(OnlyOfficeManager.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         OnlyOfficeManager,
+        { provide: VersioningService, useValue: versioning },
         {
           provide: Cache,
           useValue: {
@@ -311,6 +321,34 @@ describe(OnlyOfficeManager.name, () => {
       const rewrittenPathUrl =
         'https://office.example.com/cache/files/document.docx?md5=abc123&expires=1739400549&shardkey=-33120641&filename=document.docx'
       await expectSuccessfulSaveCallback(rewrittenPathUrl)
+    })
+
+    // Fork: versioning. This editor bypasses saveStream, so copyFileContent is
+    // the destructive moment. The acting user arrives as a parameter here
+    // rather than on a request.
+    it('snapshots the previous content before a save callback, tagged onlyoffice', async () => {
+      await expectSuccessfulSaveCallback('http://onlyoffice/document.docx?md5=abc123&expires=1739400549&shardkey=-33120641&filename=document.docx')
+
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice' })
+    })
+
+    it('does not snapshot when the document closed with no changes (status 2, notmodified)', async () => {
+      jwtService.verifyAsync.mockResolvedValue({ status: 2, actions: [], users: [], notmodified: true })
+
+      await service.callBack(mockUser, mockSpaceEnv, mockToken)
+
+      expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+    })
+
+    it('does not snapshot on a status 1 connect/disconnect callback', async () => {
+      // Status 1 never saves, so it must never version — this is why editor
+      // coalescing rarely fires for OnlyOffice.
+      jwtService.verifyAsync.mockResolvedValue({ status: 1, actions: [{ type: 1, userid: '1' }], users: ['1'] })
+
+      await service.callBack(mockUser, mockSpaceEnv, mockToken)
+
+      expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
     })
 
     it('should handle status 2 (document closed without changes)', async () => {

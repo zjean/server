@@ -27,6 +27,7 @@ import { FileLockOptions } from '../../interfaces/file-lock.interface'
 import { FileLockProps } from '../../interfaces/file-props.interface'
 import { LockConflict } from '../../models/file-lock-error'
 import { FilesLockManager } from '../../services/files-lock-manager.service'
+import { VersioningService } from '../../../custom-versioning/services/versioning.service'
 import {
   copyFileContent,
   fileSize,
@@ -93,7 +94,9 @@ export class OnlyOfficeManager {
     private readonly contextManager: ContextManager,
     private readonly cache: Cache,
     private readonly jwt: JwtService,
-    private readonly filesLockManager: FilesLockManager
+    private readonly filesLockManager: FilesLockManager,
+    // Fork: file versioning (no-op while files.versions.enabled is false)
+    private readonly versioning: VersioningService
   ) {}
 
   async getSettings(user: UserModel, space: SpaceEnv, req: FastifySpaceRequest): Promise<OnlyOfficeReqDto> {
@@ -404,6 +407,11 @@ export class OnlyOfficeManager {
     } else if (contentLength === 0) {
       this.logger.warn({ tag: this.saveDocument.name, msg: `content length is 0 : ${space.url}` })
     }
+    /* Fork: versioning. This editor bypasses saveStream entirely, so the copy
+       below — not any moveFiles — is the destructive moment. The acting user
+       arrives as a parameter here (there is no req), and this runs only from
+       callback statuses 2/3/6/7, never on a keystroke autosave. */
+    await this.versioning.snapshotBeforeOverwrite(user, space, { origin: 'onlyoffice' })
     // copy contents to avoid inode changes (`file.id` in some cases)
     try {
       await copyFileContent(tmpFilePath, space.realPath)
