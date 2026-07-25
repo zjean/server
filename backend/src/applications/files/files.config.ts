@@ -8,8 +8,10 @@ import {
   IsInt,
   IsNotEmpty,
   IsNotEmptyObject,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateIf,
   ValidateNested
@@ -62,6 +64,59 @@ export class FilesTrashRetentionConfig {
   spaces: number | false = false
 }
 
+// Fork-owned. Mirrors FilesTrashRetentionConfig above, including its
+// `0 -> false` Transform idiom, so that `0` means "off" rather than
+// "expire everything immediately".
+export class FilesVersionsRetentionConfig {
+  @Transform(({ value }) => (value === 0 ? false : value))
+  @ValidateIf((o: FilesVersionsRetentionConfig) => o.users !== false)
+  @IsInt()
+  @Min(1)
+  users: number | false = false
+
+  @Transform(({ value }) => (value === 0 ? false : value))
+  @ValidateIf((o: FilesVersionsRetentionConfig) => o.spaces !== false)
+  @IsInt()
+  @Min(1)
+  spaces: number | false = false
+}
+
+// Fork-owned file versioning. See docs/plans/2026-07-25-file-versioning-design.md.
+// Disabled by default: every hook site is a one-line call that no-ops while
+// `enabled` is false.
+export class FilesVersionsConfig {
+  @IsBoolean()
+  enabled: boolean = false
+
+  @Transform(({ value }) => (value === 0 ? false : value))
+  @ValidateIf((o: FilesVersionsConfig) => o.maxVersionsPerFile !== false)
+  @IsInt()
+  @Min(1)
+  maxVersionsPerFile: number | false = 20
+
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => FilesVersionsRetentionConfig)
+  retentionDays: FilesVersionsRetentionConfig = new FilesVersionsRetentionConfig()
+
+  // Max fraction of a space's quota that version history may consume. Enforced
+  // eagerly inside the snapshot path (oldest unlabeled evicted first), not just
+  // by the scheduler. Versions DO count toward quota — see ADR §7 for why
+  // excluding them was rejected, and why this feature cannot promise that a
+  // save is never blocked.
+  @Transform(({ value }) => (value === 0 ? false : value))
+  @ValidateIf((o: FilesVersionsConfig) => o.quotaShare !== false)
+  @IsNumber()
+  @Min(0.01)
+  @Max(1)
+  quotaShare: number | false = 0.5
+
+  // Coalescing window per (fileId, authorId, origin). 0 disables coalescing.
+  @IsInt()
+  @Min(0)
+  minIntervalSeconds: number = 60
+}
+
 export class FilesEditorsConfig {
   @IsNotEmptyObject()
   @ValidateNested()
@@ -108,6 +163,11 @@ export class FilesConfig {
   @ValidateNested()
   @Type(() => FilesTrashRetentionConfig)
   trashRetention: FilesTrashRetentionConfig = new FilesTrashRetentionConfig()
+
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => FilesVersionsConfig)
+  versions: FilesVersionsConfig = new FilesVersionsConfig()
 
   @IsBoolean()
   showHiddenFiles: boolean = false
