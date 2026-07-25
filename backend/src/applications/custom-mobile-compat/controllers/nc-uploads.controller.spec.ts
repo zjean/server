@@ -1,4 +1,5 @@
-import { buildUploadDirPropfindBody, parseOcTotalLength } from './nc-uploads.controller'
+import * as filesUtils from '../../files/utils/files'
+import { buildUploadDirPropfindBody, NcUploadsController, parseOcTotalLength } from './nc-uploads.controller'
 
 // OC-Total-Length is part of the NC chunked-upload protocol — clients are
 // expected to send it on the assembly MOVE, but Android NextcloudKit may
@@ -100,5 +101,72 @@ describe('buildUploadDirPropfindBody', () => {
     const body = buildUploadDirPropfindBody('/remote.php/dav/uploads/alice/A&B', [])
     expect(body).toContain('<d:href>/remote.php/dav/uploads/alice/A&amp;B</d:href>')
     expect(body).not.toContain('<d:href>/remote.php/dav/uploads/alice/A&B</d:href>')
+  })
+})
+
+// Fork: versioning hook on the assembly MOVE.
+//
+// NC chunked uploads bypass saveStream entirely — they assemble chunks to a
+// sibling tmp file and moveFiles it into place — so without a hook here every
+// large-file overwrite from an NC mobile client would be unversioned. This is
+// the only unit coverage of the controller itself; the rest of this file
+// exercises the pure helpers.
+describe('NcUploadsController assembly versioning', () => {
+  const user = { id: 7, login: 'alice' } as any
+
+  function buildController(destinationExists: boolean) {
+    const versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
+    const space = {
+      realPath: '/data/users/alice/files/big.zip',
+      dbFile: { ownerId: 7, path: 'big.zip', inTrash: false },
+      envPermissions: 'a:m:d',
+      url: 'files/personal/big.zip'
+    }
+    const staging = {
+      concatenate: vi.fn().mockResolvedValue(1024),
+      remove: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockReturnValue(true),
+      ensureDir: vi.fn()
+    }
+    const resolver = { resolve: vi.fn().mockReturnValue({ repository: 'files', spaceAlias: 'personal', relativePath: 'big.zip' }) }
+    const spacesManager = { spaceEnv: vi.fn().mockResolvedValue(space) }
+
+    vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(destinationExists)
+    vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
+    vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
+
+    const controller = new NcUploadsController(staging as any, resolver as any, spacesManager as any, versioning as any)
+    return { controller, versioning, space }
+  }
+
+  const moveReq = () =>
+    ({
+      user,
+      method: 'MOVE',
+      url: '/remote.php/dav/uploads/alice/up-1/.file',
+      headers: { destination: '/remote.php/dav/files/alice/big.zip', 'oc-total-length': '1024' }
+    }) as any
+
+  const res = () => ({ status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), send: vi.fn() }) as any
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('snapshots the existing destination before the assembly move, tagged nc-chunked', async () => {
+    const { controller, versioning, space } = buildController(true)
+
+    await controller.chunkHandler('alice', 'up-1', moveReq(), res())
+
+    expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
+    expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(user, space, { origin: 'nc-chunked' })
+    expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(filesUtils.moveFiles).mock.invocationCallOrder[0])
+  })
+
+  it('does not snapshot when the upload creates a new file', async () => {
+    const { controller, versioning } = buildController(false)
+
+    await controller.chunkHandler('alice', 'up-1', moveReq(), res())
+
+    expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).toHaveBeenCalled()
   })
 })

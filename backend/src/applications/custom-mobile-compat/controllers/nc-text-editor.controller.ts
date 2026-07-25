@@ -204,7 +204,9 @@ export class NcTextEditorController {
     ;(req as unknown as { raw: Readable }).raw = newRaw
 
     try {
-      await this.filesManager.saveStream(user, space, req as Parameters<FilesManager['saveStream']>[2], {})
+      // versionOrigin: this call is indistinguishable from a plain web save by
+      // saveStream's own options (no dav, no tmpPath), so it labels itself.
+      await this.filesManager.saveStream(user, space, req as Parameters<FilesManager['saveStream']>[2], { versionOrigin: 'nc-text' })
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'save failed'
       throw new HttpException(msg, HttpStatus.INTERNAL_SERVER_ERROR)
