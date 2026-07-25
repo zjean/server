@@ -54,7 +54,9 @@ Sibling placement grants the isolation trash already enjoys, with zero exclusion
 
 ## 3. DB model — one global table, **id-keyed** on a *guaranteed* `files.id`
 
-**Decision.** A single global `files_versions` table (Drizzle-managed, not per-root like `files_trash_*`), keyed on `fileId` → `files.id`, NOT NULL.
+**Decision.** A single global **`custom_files_versions`** table (Drizzle-managed, not per-root like `files_trash_*`), keyed on `fileId` → `files.id`, NOT NULL.
+
+**The `custom_` prefix is deliberate, not cosmetic.** Upstream left the versioning TODOs, so them shipping their own `files_versions` is a live possibility rather than a hypothetical — and a table-name collision during an upstream sync would be a migration failure at deploy time. This follows the precedent already set by `custom_files_favorites`, whose schema comment records the same reasoning.
 
 Per-root was rejected: versions need joins against `files` for API queries and for descendant purge, and — unlike trash, which is reconciled by a filesystem scan (`files-trash-retention.service.ts:181`, ids derived from `stats.ino` at :207) — versions have no FS-scan source of truth to reconcile against.
 
@@ -259,11 +261,11 @@ i18n goes in `frontend/src/i18n/custom/{en,nl}.json` only — `v2_*` prefix for 
 
 **Decision.** A plain rename or move is **not** an overwrite and creates **no version**. It also requires **no code**.
 
-**Rationale (verified).** `filesQueries.moveFiles(srcProps, dstProps, isDir)` (`files-manager.service.ts:506` → `files-queries.service.ts:235`) regexp-updates `files.path` while **`files.id` is unchanged**. Because version rows key on `fileId` (§3.1), they follow the file automatically. Under the rejected path-keyed alternative, every rename would have needed a parallel regexp repath of `files_versions` — and any miss would orphan an entire file's history.
+**Rationale (verified).** `filesQueries.moveFiles(srcProps, dstProps, isDir)` (`files-manager.service.ts:506` → `files-queries.service.ts:235`) regexp-updates `files.path` while **`files.id` is unchanged**. Because version rows key on `fileId` (§3.1), they follow the file automatically. Under the rejected path-keyed alternative, every rename would have needed a parallel regexp repath of `custom_files_versions` — and any miss would orphan an entire file's history.
 
 **This is a reason *for* the anchor choice, not an afterthought.** E2E-19 exists to make it enforceable: it fails loudly if anyone re-keys versions on path.
 
-**Cross-space moves.** `moveFiles(srcProps, dstProps)` moves the row's scope, so the **denormalized scope columns on `files_versions` go stale**.
+**Cross-space moves.** `moveFiles(srcProps, dstProps)` moves the row's scope, so the **denormalized scope columns on `custom_files_versions` go stale**.
 
 **Decision: the denormalized scope columns are a non-authoritative cache.** They exist to avoid a join when resolving a versions root, never to make an authorization decision. Authoritative scope is always the `files` row plus the space env the caller already resolved — which is how every other permission check in the codebase works. Consequences:
 
@@ -281,10 +283,10 @@ i18n goes in `frontend/src/i18n/custom/{en,nl}.json` only — `v2_*` prefix for 
 
 1. **Write-path completeness.** Any code path that overwrites live file content gains a snapshot hook **and** an E2E case before merge. On every upstream sync, grep for new `writeFromStream` / `copyFileContent` / `moveFiles(..., true)` / `createEmptyFile` call sites and extend the plan's §7.9 table.
 2. **Inode stability.** No code in this feature may replace a live file's inode. Restores and any live-content replacement use `copyFileContent` (§9).
-3. **Anchor invariant.** Version rows key on `files.id`, never on path. Any change adding a path column or path-based lookup to `files_versions` must first explain how rename/move repathing is handled (§15).
+3. **Anchor invariant.** Version rows key on `files.id`, never on path. Any change adding a path column or path-based lookup to `custom_files_versions` must first explain how rename/move repathing is handled (§15).
 4. **Quota honesty.** Never document or claim that versioning cannot cause a failed save (§7).
 5. **Store isolation is placement-dependent.** The indexer has no dotfolder exclusion (`files-content-indexer.service.ts:321`). A test proves the versions directory is not indexed, not present in a WebDAV PROPFIND of the space root, and not in a sync diff — as a regression guard against "simplifying" the store back inside the files root.
-6. **Migrations via tooling only.** Every schema change goes through `npm -w backend run db:generate` → generated SQL + `meta/` snapshot → `db:check`. No hand-written or hand-edited migration files, ever. (`files_trash_*` is a scan-managed raw-SQL exception owned by upstream; `files_versions` is a normal Drizzle table.)
+6. **Migrations via tooling only.** Every schema change goes through `npm -w backend run db:generate` → generated SQL + `meta/` snapshot → `db:check`. No hand-written or hand-edited migration files, ever. (`files_trash_*` is a scan-managed raw-SQL exception owned by upstream; `custom_files_versions` is a normal Drizzle table.)
 7. **`npm run build -w backend` must pass before pushing.** vitest's type check does not catch service↔real-class type errors.
 
 ## 18. Upstream-sync watch list
@@ -297,7 +299,7 @@ Upstream left versioning TODOs and may ship their own implementation. The contai
 | `files/editors/collabora-online/collabora-online-manager.service.ts` | before `copyFileContent` (:137) |
 | `files/editors/only-office/only-office-manager.service.ts` | before `copyFileContent` (:409) |
 | `files/files.config.ts` | `FilesVersionsConfig` registration |
-| `infrastructure/database/schema.ts` | `files_versions` export |
+| `infrastructure/database/schema.ts` | `custom_files_versions` export |
 | `files/services/files-event-manager.service.ts` | the replaced `todo` comment (:20) |
 
 Fork-owned, no `mod()` needed: `custom-mobile-compat/controllers/nc-uploads.controller.ts` (:212).
@@ -309,3 +311,19 @@ Merge with the flag **OFF** → enable on staging → soak against real Collabor
 **Task B0 ships independently of the flag and must soak first** — it refactors load-bearing NC PROPFIND code, where a regression breaks iOS previews.
 
 **Release-note requirements (blockers, not nice-to-haves):** enabling this feature silently reduces every user's effective quota by up to `quotaShare`. The release note must say so in the §7 wording, and the C2 usage display must ship with it. Deployment docs must add the per-home `versions/` directories to the backup set alongside `files/`, `trash/`, and the database.
+
+## 20. The nightly orphan sweep — an interaction found during implementation
+
+Not in the implementation plan; discovered while wiring the schema (B1) and load-bearing enough to record here.
+
+**`FilesScheduler.deleteOrphanFiles` (`files-scheduler.service.ts:154`, `@Cron EVERY_DAY_AT_4AM`) deletes every `files` row that is not referenced by any table carrying a `fileId` column.** It discovers those tables *by reflection* over `infrastructure/database/schema.ts`, via `getTablesWithFileIdColumn()` (`infrastructure/database/utils.ts:93`), and unions their distinct `fileId`s.
+
+This cuts two ways.
+
+**It is why the ensurer's rows survive.** Versioning materializes `files` rows for files with no other reference — an uploaded, never-shared, never-commented file. Because `custom_files_versions` has a `fileId` column *and* is exported from `schema.ts`, its rows join the protected union automatically. No code needed.
+
+**It is also a silent-data-loss trap**, because both halves of that contract are implicit. Rename the column away from `fileId`, or drop the `schema.ts` export, and the 4 AM sweep starts deleting exactly those rows — at which point the `ON DELETE CASCADE` from §3.2 takes **every version of every affected file** with them. Nightly, silently, with no error. `files-versions.schema.spec.ts` asserts both halves for this reason; treat a failure there as a data-loss bug, not a style nit.
+
+**Accepted consequence: `fileId` is not eternal for files with no other reference.** When retention prunes a file's *last* version, its `files` row may become unreferenced and be swept that night. The next snapshot then materializes a *new* row with a *new* id. This is harmless — no version rows exist to orphan — and matches how upstream already treats favorites- and comments-only rows. But it means "the id is stable" holds *while history exists*, not forever. Nothing in this design depends on the stronger claim.
+
+**Note for `custom-mobile-compat`:** the same sweep already applies to rows `NcFileRowEnsurer` materializes, so an `oc:fileid` for an FS-only, unreferenced file is not stable across nights. That is pre-existing behavior, out of scope here, and recorded only so it is not later misdiagnosed as a versioning regression.
