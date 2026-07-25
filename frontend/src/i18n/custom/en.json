@@ -33,6 +33,7 @@
   "v2_share_updated": "Share updated",
   "v2_share_revoked": "Share removed",
   "v2_share_n_items_subject": "{{ nb }} items",
+  "v2_and_n_more": "+{{ nb }} more",
   "v2_delete_comment": "Delete this comment? This cannot be undone.",
   "v2_delete_user": "Delete user <b>{{ login }}</b>? This cannot be undone.",
   "v2_delete_group": "Delete group <b>{{ name }}</b>? This cannot be undone.",
