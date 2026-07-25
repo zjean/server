@@ -37,12 +37,31 @@ Three facts about the codebase shape every decision that follows, and each has b
 
 Sibling placement grants the isolation trash already enjoys, with zero exclusion logic to maintain. **This isolation exists *only* because of the sibling placement** — see §17 (guardrail) for the regression test that pins it.
 
-**Hardlink caveat — likely, not guaranteed.** Snapshotting hardlinks the live file into the blob store when possible and falls back to a streamed copy on `EXDEV`. Cross-device is a **normal, expected case**, not an exotic edge:
+### 1.1 Blobs are CoW-cloned or copied — **never hardlinked**
 
-- `dataPath`, `usersPath`, `spacesPath`, `tmpPath` are four independently configurable settings (`files.config.ts:85-97`) and may be separate mounts.
-- External roots (`spaceExternalRootId` / `shareExternalId`) point at arbitrary paths; `realPathFromSpace` returns `space.root.externalPath` directly (`spaces/utils/paths.ts:39-47`) while `realTrashPathFromSpace` resolves into a `usersPath`/`spacesPath` home (:80-89). These are routinely different devices.
+**The implementation plan's hardlink-first design is retracted. It was a correctness bug, not an optimization.** This was caught by a failing test during B2, not by review, so the reasoning is recorded here in full.
 
-`isCrossDevice(srcPath, dstPath)` already exists (`files/utils/files.ts:65`) and is reused rather than reinvented. Same-device is the *expected deployment*, and the code may **not** assume it. Both paths are measured (§6 of the plan).
+A hardlinked blob **shares the live file's inode**. Three of the seven write paths (§4) then truncate that inode *in place* rather than replacing it:
+
+| Path | Destructive call | Effect on a hardlinked blob |
+|---|---|---|
+| `saveStream` direct branch | `writeFromStream(realPath, …)`, flag `'w'` (`files/utils/files.ts:253`) | **blob overwritten with the new bytes** |
+| Collabora / OnlyOffice `saveDocument` | `copyFileContent` — which is `writeFromStream`, same flag | **blob overwritten** |
+| `mkFile(overwrite=true)` | `copyFileContent`, or `createEmptyFile`'s `fs.writeFile(rPath, '')` | **blob truncated to zero bytes** |
+
+Only the `moveFiles`-based paths (sync tmpPath, multipart PUT/PATCH, NC chunked assembly) would have been safe, because a rename swaps the inode. So a hardlink store would have silently produced version rows whose content equals the *new* file — the exact opposite of the feature — for editor saves, WebDAV PUTs and sync `make`.
+
+The bitter irony: **the repo's deliberate inode-stability is what makes hardlink snapshotting unsound.** §9 relies on that same property for restore. The two facts are the same fact read from opposite ends, and the plan applied it in only one direction.
+
+**Decision: `fs.copyFile(realPath, blobPath, COPYFILE_FICLONE)`.**
+
+- `COPYFILE_FICLONE` (not `_FORCE`) requests a reflink and **silently degrades to a full copy** when the filesystem can't clone. On APFS/btrfs/XFS this is nearly as cheap as a hardlink; elsewhere it is an honest copy.
+- A CoW clone is **independent**: a later in-place write splits the shared blocks instead of corrupting the copy. That is the property the store actually requires.
+- It also removes the cross-device special case entirely — no `EXDEV` branch, no `isCrossDevice` call. Cross-device remains a **normal** case (`dataPath`/`usersPath`/`spacesPath`/`tmpPath` are independently configurable, `files.config.ts:85-97`; external roots point anywhere, `spaces/utils/paths.ts:39-47`), and `copyFile` handles it without the code knowing.
+
+**Staging is required, not optional.** The copy writes to `<blobPath>.<uuid>.part` and then renames. Because the store is content-addressed, the dedup check is "does this digest already exist" — so a *truncated* file left at the final path by a crash would be trusted as a complete blob forever. A rename within one directory is atomic, and the random suffix keeps concurrent snapshots of the same digest from staging over each other.
+
+**Cost, stated honestly:** a snapshot is one streamed read for the checksum plus one clone-or-copy. On a cloning filesystem the second part is near-free; otherwise a full copy. The plan's "O(1)-ish when hardlink succeeds" performance claim no longer applies, and §6 of the plan should measure the clone and copy cases rather than hardlink vs copy.
 
 ## 2. Checksum algorithm — `sha512-256`
 
@@ -282,7 +301,7 @@ i18n goes in `frontend/src/i18n/custom/{en,nl}.json` only — `v2_*` prefix for 
 ## 17. Guardrails (enforced in review)
 
 1. **Write-path completeness.** Any code path that overwrites live file content gains a snapshot hook **and** an E2E case before merge. On every upstream sync, grep for new `writeFromStream` / `copyFileContent` / `moveFiles(..., true)` / `createEmptyFile` call sites and extend the plan's §7.9 table.
-2. **Inode stability.** No code in this feature may replace a live file's inode. Restores and any live-content replacement use `copyFileContent` (§9).
+2. **Inode stability, read in both directions.** No code in this feature may replace a live file's inode — restores and any live-content replacement use `copyFileContent` (§9). And *because* writes truncate in place, no blob may ever share an inode with a live file: blobs are cloned or copied, never hardlinked (§1.1). Anyone "optimizing" the store back to `fs.link` reintroduces silent history corruption; `versioning.service.spec.ts` has the test that fails.
 3. **Anchor invariant.** Version rows key on `files.id`, never on path. Any change adding a path column or path-based lookup to `custom_files_versions` must first explain how rename/move repathing is handled (§15).
 4. **Quota honesty.** Never document or claim that versioning cannot cause a failed save (§7).
 5. **Store isolation is placement-dependent.** The indexer has no dotfolder exclusion (`files-content-indexer.service.ts:321`). A test proves the versions directory is not indexed, not present in a WebDAV PROPFIND of the space root, and not in a sync diff — as a regression guard against "simplifying" the store back inside the files root.
