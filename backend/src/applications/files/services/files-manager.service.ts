@@ -69,6 +69,8 @@ import { FilesTasksTransfer } from './tasks/files-tasks-transfer.service'
 import { createTar } from '../utils/tar-file'
 import { createZip } from '../utils/zip-file'
 import { FILE_ERROR } from '../constants/errors'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
+import type { VersionOrigin } from '../../custom-versioning/interfaces/version.interface'
 
 @Injectable()
 export class FilesManager {
@@ -82,11 +84,37 @@ export class FilesManager {
     private readonly contextManager: ContextManager,
     private readonly notificationsManager: NotificationsManager,
     public readonly filesLockManager: FilesLockManager,
-    private readonly filesTasksTransfer: FilesTasksTransfer
+    private readonly filesTasksTransfer: FilesTasksTransfer,
+    // Fork: file versioning. Every call below is a no-op while
+    // files.versions.enabled is false, and never throws into a save path.
+    private readonly versioning: VersioningService
   ) {}
 
   sendFileFromSpace(space: SpaceEnv, downloadName = ''): SendFile {
     return new SendFile(space.realPath, downloadName)
+  }
+
+  /* Fork: versioning helpers. Kept together here so the hook sites stay
+     one-liners and the whole surface is greppable. */
+
+  // Labels the version a saveStream snapshot creates. Derived so that upstream
+  // callers need no change: WebDAV is the only caller passing `dav`, and sync
+  // the only one passing `tmpPath`. An explicit `versionOrigin` wins, which is
+  // how the NC text editor identifies itself.
+  private versionOrigin(options?: SaveStreamOptions): VersionOrigin {
+    if (options?.versionOrigin) return options.versionOrigin
+    if (options?.dav) return 'webdav'
+    if (options?.tmpPath) return 'sync'
+    return 'web'
+  }
+
+  // Per-part view of the space for multipart writes. One request can carry
+  // several parts, each with its own destination, and for a POST folder upload
+  // space.realPath is the PARENT directory — so the snapshot must target the
+  // part's own path and dbFile. The prototype is preserved so the result is a
+  // real SpaceEnv rather than a plain object.
+  private partSpace(space: SpaceEnv, realPath: string, dbFile: FileDBProps): SpaceEnv {
+    return Object.assign(Object.create(Object.getPrototypeOf(space)) as SpaceEnv, space, { realPath, dbFile })
   }
 
   async saveStream(
@@ -150,7 +178,16 @@ export class FilesManager {
         }
       }
       // todo: check file in db to update
-      // todo : versioning here
+      /* Fork: versioning — direct-write branch.
+         The destructive moment is the FIRST BYTE: writeFromStream opens the
+         live file with flag 'w' when startRange is 0 (utils/files.ts:253).
+         Gated on startRange === 0 because a resumed content-range request sees
+         fExists true while the file already holds PARTIAL NEW content —
+         snapshotting there would store a half-written file. The tmpPath branch
+         has its own hook below, at its own destructive moment. */
+      if (fExists && !options?.tmpPath && startRange === 0) {
+        await this.versioning.snapshotBeforeOverwrite(user, space, { origin: this.versionOrigin(options) })
+      }
       let checksum: string
       if (options?.checksumAlg) {
         checksum = await writeFromStreamAndChecksum(options?.tmpPath || space.realPath, req.raw, startRange, options.checksumAlg)
@@ -162,6 +199,14 @@ export class FilesManager {
         try {
           // ensure parent path exists
           await makeDir(path.dirname(space.realPath), true)
+          /* Fork: versioning — tmpPath branch.
+             The move is the destructive moment. This runs once per COMPLETED
+             upload rather than once per ranged request: validateTmpFile above
+             rejects a tmp file whose size does not match the declared size, so
+             intermediate chunks never reach this line. */
+          if (fExists) {
+            await this.versioning.snapshotBeforeOverwrite(user, space, { origin: this.versionOrigin(options) })
+          }
           // move the uploaded file to destination
           await moveFiles(options.tmpPath, space.realPath, true)
           fileWritten = true
@@ -289,6 +334,19 @@ export class FilesManager {
             if (!(await isPathExists(dstDir))) {
               await makeDir(dstDir, true)
             }
+            /* Fork: versioning — multipart PUT *and* PATCH.
+               Gated on (overwrite || patchMethod), NOT on overwrite alone:
+               `overwrite` is PUT-only (:205), but tmpFile is also set for PATCH
+               (:241) and PATCH requires an existing destination (:237-239), so
+               both reach this same moveFiles. PATCH is the web text-editor save
+               — gating on overwrite alone would leave that common flow
+               unversioned. dstIsDir is excluded: replacing a directory with a
+               file has no previous file content to keep. */
+            if (dstExists && !dstIsDir) {
+              await this.versioning.snapshotBeforeOverwrite(user, this.partSpace(space, dstFile, dbFile), {
+                origin: patchMethod ? 'web-patch' : 'web'
+              })
+            }
             await moveFiles(tmpFile, dstFile, true)
           }
           fileWritten = true
@@ -353,6 +411,15 @@ export class FilesManager {
     }
     if (checkLocks) {
       await this.filesLockManager.checkConflicts(space.dbFile, DEPTH.RESOURCE, { userId: user.id })
+    }
+    /* Fork: versioning — mkFile(overwrite=true) destroys content.
+       Easy to miss because "make a file" does not sound destructive, but with
+       overwrite the two branches below either replace the file with a template
+       (copyFileContent) or TRUNCATE IT TO ZERO BYTES (createEmptyFile ->
+       fs.writeFile(rPath, '')). One hook here covers both. The only caller
+       passing overwrite is sync's make(). */
+    if (overwrite) {
+      await this.versioning.snapshotBeforeOverwrite(user, space, { origin: 'sync-make' })
     }
     // use sample documents when possible
     const fileExtension = path.extname(space.realPath).slice(1)
@@ -587,6 +654,19 @@ export class FilesManager {
     }
     for (const lock of await this.filesLockManager.getLocksByPath(space.dbFile)) {
       this.filesLockManager.removeLock(lock.key).catch((e: Error) => this.logger.error({ tag: this.delete.name, msg: `${e}` }))
+    }
+    /* Fork: versioning — purge on PERMANENT delete only.
+       Trashing keeps the `files` row (inTrash = true) with a stable id, so
+       versions must survive it; only a permanent delete purges them.
+       Two branches reach here permanently: space.inTrashRepository (the COMMON
+       path — emptying the trash, where forceDeleteInDB stays false) and the
+       forceDeleteInDB fallback. Hooking only the latter would miss almost
+       every real purge.
+       This MUST run before deleteFiles: the FK ordering needs it, and
+       deleteFiles removes every descendant row in one regexp query, after
+       which the child ids are unresolvable and their history would leak. */
+    if (space.inTrashRepository || forceDeleteInDB) {
+      await this.versioning.purgeForPath(space.dbFile, isDir)
     }
     // Keep the database aligned with the published trash copy before reporting a residual source.
     await this.filesQueries.deleteFiles(space.dbFile, isDir, forceDeleteInDB)

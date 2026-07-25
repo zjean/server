@@ -31,10 +31,19 @@ import { FilesQueries } from './files-queries.service'
 import { FilesTasksTransfer } from './tasks/files-tasks-transfer.service'
 import { Mock } from 'vitest'
 import { FILE_ERROR } from '../constants/errors'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 vi.mock('node:dns/promises', () => ({
   lookup: vi.fn()
 }))
+
+// Fork: versioning hooks. Stubbed so these suites keep asserting upstream
+// behavior; the hooks' own assertions live alongside each write path below.
+const versioning = {
+  snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined),
+  purgeForPath: vi.fn().mockResolvedValue(undefined),
+  purgeForFile: vi.fn().mockResolvedValue(undefined)
+}
 
 describe(FilesManager.name, () => {
   let service: FilesManager
@@ -174,6 +183,7 @@ describe(FilesManager.name, () => {
         { provide: HttpService, useValue: http },
         { provide: FilesLockManager, useValue: filesLockManager },
         { provide: FilesTasksTransfer, useValue: filesTasksTransfer },
+        { provide: VersioningService, useValue: versioning },
         FilesManager
       ]
     }).compile()
@@ -1529,6 +1539,251 @@ describe(FilesManager.name, () => {
 
       await expect(service.getSize(space)).resolves.toBe(500)
       await expect(service.getSize(space)).resolves.toBe(20)
+    })
+  })
+
+  /* Fork: versioning write-path hooks.
+     Seven destructive entry points must each snapshot exactly once, and
+     nothing else may. These assertions are the executable form of the
+     completeness invariant — a new overwrite path added upstream without a
+     hook should show up as a gap here. */
+  describe('versioning hooks', () => {
+    const snapshots = () => versioning.snapshotBeforeOverwrite.mock.calls.map((c: any[]) => c[2].origin)
+
+    describe('saveStream', () => {
+      it('snapshots once before a direct overwrite, tagged webdav for a DAV write', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['new']) } as any, {
+          dav: { depth: DEPTH.RESOURCE, lockTokens: [] }
+        })
+
+        expect(snapshots()).toEqual(['webdav'])
+        // Ordering is the whole point: the snapshot must precede the write
+        // that destroys the bytes.
+        expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(filesUtils.writeFromStream).mock.invocationCallOrder[0]
+        )
+      })
+
+      it('does not snapshot when the file is being created', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['new']) } as any)
+
+        expect(snapshots()).toEqual([])
+      })
+
+      it('does not snapshot a resumed content-range chunk', async () => {
+        // startRange > 0 means the live file ALREADY holds partial new content;
+        // a snapshot here would store a half-written file.
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+
+        await service.saveStream(
+          user,
+          space,
+          { method: 'PUT', headers: { 'content-range': 'bytes 100-199/200' }, raw: Readable.from(['chunk']) } as any,
+          { dav: { depth: DEPTH.RESOURCE, lockTokens: [] } }
+        )
+
+        expect(snapshots()).toEqual([])
+      })
+
+      it('snapshots at the move for a tmpPath (sync) upload, not at the tmp write', async () => {
+        const space = makeSpace()
+        const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [tmpPath]: true }, true)
+
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['chunk']) } as any, { tmpPath })
+
+        expect(snapshots()).toEqual(['sync'])
+        expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(filesUtils.moveFiles).mock.invocationCallOrder[0]
+        )
+      })
+
+      it('does not snapshot a tmpPath upload when the destination does not exist yet', async () => {
+        const space = makeSpace()
+        const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true, [tmpPath]: true }, false)
+
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['chunk']) } as any, { tmpPath })
+
+        expect(snapshots()).toEqual([])
+      })
+
+      it('honours an explicit versionOrigin (the NC text editor)', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['x']) } as any, {
+          versionOrigin: 'nc-text'
+        })
+
+        expect(snapshots()).toEqual(['nc-text'])
+      })
+    })
+
+    describe('saveMultipart', () => {
+      const multipartReq = (method: string, filename: string) => ({
+        method,
+        files: async function* () {
+          yield { filename, file: Readable.from(['content']) }
+        }
+      })
+
+      it('snapshots a PUT overwrite as web', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [user.tmpPath]: true }, false)
+        vi.mocked(filesUtils.isPathIsDir).mockImplementation(async (p: string) => p === path.dirname(space.realPath))
+
+        await service.saveMultipart(user, space, multipartReq('PUT', path.basename(space.realPath)) as any)
+
+        expect(snapshots()).toEqual(['web'])
+      })
+
+      it('snapshots a PATCH save as web-patch — the web text-editor path', async () => {
+        // Gating on `overwrite` alone would miss this: overwrite is PUT-only,
+        // but PATCH also reaches the same moveFiles.
+        const space = makeSpace({ realPath: '/data/users/john/files/report.txt', dbFile: { ownerId: 7, path: 'report.txt' } })
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [user.tmpPath]: true }, false)
+        vi.mocked(filesUtils.isPathIsDir).mockImplementation(async (p: string) => p === path.dirname(space.realPath))
+
+        await service.saveMultipart(user, space, multipartReq('PATCH', 'ignored-on-patch.txt') as any)
+
+        expect(snapshots()).toEqual(['web-patch'])
+      })
+
+      it('targets the part path, not space.realPath', async () => {
+        const space = makeSpace()
+        const dstFile = path.join(path.dirname(space.realPath), 'other.txt')
+        setPathExists({ [dstFile]: true, [path.dirname(space.realPath)]: true, [user.tmpPath]: true }, false)
+        vi.mocked(filesUtils.isPathIsDir).mockImplementation(async (p: string) => p === path.dirname(space.realPath))
+
+        await service.saveMultipart(user, space, multipartReq('PUT', 'other.txt') as any)
+
+        const [, partSpace] = versioning.snapshotBeforeOverwrite.mock.calls[0]
+        expect(partSpace.realPath).toBe(dstFile)
+        expect(partSpace.dbFile.path).toBe('other.txt')
+      })
+
+      it('does not snapshot a POST create', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+        vi.mocked(filesUtils.isPathIsDir).mockImplementation(async (p: string) => p === path.dirname(space.realPath))
+
+        await service.saveMultipart(user, space, multipartReq('POST', 'brand-new.txt') as any)
+
+        expect(snapshots()).toEqual([])
+      })
+
+      it('does not snapshot when a directory is being replaced by a file', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [user.tmpPath]: true }, false)
+        // Destination itself is a directory: there is no previous file content.
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(true)
+        vi.mocked(spacesManager.spaceEnv).mockResolvedValue(makeSpace() as any)
+
+        await service.saveMultipart(user, space, multipartReq('PUT', path.basename(space.realPath)) as any)
+
+        expect(snapshots()).toEqual([])
+      })
+    })
+
+    describe('mkFile', () => {
+      it('snapshots before truncating an existing file to zero bytes', async () => {
+        // createEmptyFile is fs.writeFile(rPath, '') — "make a file" destroys
+        // content when overwrite is set.
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true }, true)
+
+        await service.mkFile(user, space, true)
+
+        expect(snapshots()).toEqual(['sync-make'])
+        expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(filesUtils.createEmptyFile).mock.invocationCallOrder[0]
+        )
+      })
+
+      it('snapshots before overwriting with a sample document', async () => {
+        const space = makeSpace({ realPath: '/data/users/john/files/doc.docx' })
+        setPathExists({ [space.realPath]: true }, true)
+
+        await service.mkFile(user, space, true, true, true)
+
+        expect(snapshots()).toEqual(['sync-make'])
+      })
+
+      it('does not snapshot a plain create', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false }, false)
+
+        await service.mkFile(user, space, false)
+
+        expect(snapshots()).toEqual([])
+      })
+    })
+
+    describe('purge on delete', () => {
+      it('purges when emptying the trash (the common permanent-delete path)', async () => {
+        const space = makeSpace({ inTrashRepository: true, realPath: '/data/users/john/trash/old.txt' })
+        vi.mocked(filesUtils.isPathExists).mockResolvedValueOnce(true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValueOnce(false)
+
+        await service.delete(user, space)
+
+        expect(versioning.purgeForPath).toHaveBeenCalledWith(space.dbFile, false)
+        // Must precede deleteFiles: FK ordering, and afterwards descendant ids
+        // are unresolvable.
+        expect(versioning.purgeForPath.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(filesQueries.deleteFiles).mock.invocationCallOrder[0])
+      })
+
+      it('passes isDir so descendants are resolved and purged too', async () => {
+        const space = makeSpace({ inTrashRepository: true, realPath: '/data/users/john/trash/folder' })
+        vi.mocked(filesUtils.isPathExists).mockResolvedValueOnce(true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValueOnce(true)
+
+        await service.delete(user, space)
+
+        expect(versioning.purgeForPath).toHaveBeenCalledWith(space.dbFile, true)
+      })
+
+      it('purges on the force-delete fallback when no trash path resolves', async () => {
+        const space = makeSpace({ realPath: '/data/users/john/files/no-trash.txt', inTrashRepository: false })
+        vi.mocked(filesUtils.isPathExists).mockResolvedValueOnce(true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValueOnce(false)
+        vi.mocked(spacesPathUtils.realTrashPathFromSpace).mockReturnValueOnce(null)
+
+        await service.delete(user, space)
+
+        expect(versioning.purgeForPath).toHaveBeenCalledWith(space.dbFile, false)
+      })
+
+      it('does NOT purge when a file is merely moved to the trash', async () => {
+        // Trashing keeps the files row (inTrash = true) with a stable id, so
+        // history must survive and be there again after a restore.
+        const space = makeSpace({ realPath: '/data/users/john/files/doc.txt', inTrashRepository: false })
+        vi.mocked(filesUtils.isPathExists).mockResolvedValue(true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValueOnce(false)
+
+        await service.delete(user, space)
+
+        expect(versioning.purgeForPath).not.toHaveBeenCalled()
+      })
+    })
+
+    it('does not snapshot on copyMove overwrite — trash already covers it', async () => {
+      const srcSpace = makeSpace({ realPath: '/data/users/john/files/src.txt', dbFile: { ownerId: 7, path: 'src.txt', inTrash: false } })
+      const dstSpace = makeSpace({ realPath: '/data/users/john/files/dst.txt', dbFile: { ownerId: 7, path: 'dst.txt', inTrash: false } })
+      prepareFileTransfer(srcSpace.realPath, dstSpace.realPath, true)
+      vi.mocked(spacesPathUtils.realTrashPathFromSpace).mockReturnValue('/data/users/john/trash')
+
+      await service.copyMove(user, srcSpace, dstSpace, true, true)
+
+      expect(snapshots()).toEqual([])
     })
   })
 })
