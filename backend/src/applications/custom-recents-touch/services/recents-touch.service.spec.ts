@@ -271,6 +271,26 @@ describe(RecentsTouchService.name, () => {
     expect(inserts[0]).toMatchObject({ id: 555, ownerId: 7 })
   })
 
+  it('fix #163: skips the upsert when the materialised files-row id is not positive', async () => {
+    // ensureDbRow can only return a real (>0) id in practice, but the id <= 0
+    // guard in handleFileEvent is the fork's #163 protection against writing
+    // FS-only (negative inode) ids into files_recents — those 404 on
+    // click-through because getRecentsFromUser never joins against `files`.
+    // Assert the guard holds so an upstream sync can't silently drop it.
+    filesQueriesMock.getUserFileByPath.mockResolvedValueOnce(null)
+    filesQueriesMock.getOrCreateUserFile.mockResolvedValueOnce(0)
+
+    await service.handleFileEvent({
+      user: { id: 7 } as never,
+      space: personalSpace as never,
+      action: ACTION.UPDATE,
+      rPath: '/data/7/files/personal/folder/foo.txt'
+    })
+
+    expect(inserts).toHaveLength(0)
+    expect(updates).toHaveLength(0)
+  })
+
   it('UPDATE in a non-personal space for an existing recents row → updates, no insert', async () => {
     // Catches the symmetric branch to the personal-space update test: the
     // WHERE clause for the upsert builds spaceId vs ownerId, so a regression
