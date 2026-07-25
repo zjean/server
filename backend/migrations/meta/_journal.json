@@ -50,6 +50,13 @@
       "when": 1781114595380,
       "tag": "0006_harsh_rogue",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1785002129318,
+      "tag": "0007_light_dakota_north",
+      "breakpoints": true
     }
   ]
 }
