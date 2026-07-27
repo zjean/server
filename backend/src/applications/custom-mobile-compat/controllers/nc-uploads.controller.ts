@@ -8,6 +8,7 @@ import { HTTP_METHOD } from '../../applications.constants'
 import { isPathExists, makeDir, moveFiles } from '../../files/utils/files'
 import { SPACE_OPERATION } from '../../spaces/constants/spaces'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
 import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
@@ -38,7 +39,8 @@ export class NcUploadsController {
   constructor(
     private readonly staging: NcChunkedUploadsService,
     private readonly resolver: NcPathResolverService,
-    private readonly spacesManager: SpacesManager
+    private readonly spacesManager: SpacesManager,
+    private readonly versioning: VersioningService
   ) {}
 
   @All('remote.php/dav/uploads/:user/:uploadId')
@@ -208,6 +210,13 @@ export class NcUploadsController {
       if (expectedTotal !== null && expectedTotal !== total) {
         await fs.unlink(tmpPath).catch(() => undefined)
         throw new HttpException(`assembled size ${total} != OC-Total-Length ${expectedTotal}`, HttpStatus.BAD_REQUEST)
+      }
+      // Versioning: NC chunked uploads bypass saveStream entirely, so without a
+      // hook here every large-file overwrite from NC mobile would be
+      // unversioned. `existed` was already computed above for the permission
+      // check — the move is the destructive moment.
+      if (existed) {
+        await this.versioning.snapshotBeforeOverwrite(req.user, space, { origin: 'nc-chunked' })
       }
       await moveFiles(tmpPath, space.realPath, true)
     } finally {

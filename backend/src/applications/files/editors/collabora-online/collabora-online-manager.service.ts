@@ -18,6 +18,7 @@ import { FileLockOptions } from '../../interfaces/file-lock.interface'
 import { FileLockProps } from '../../interfaces/file-props.interface'
 import { LockConflict } from '../../models/file-lock-error'
 import { FilesLockManager } from '../../services/files-lock-manager.service'
+import { VersioningService } from '../../../custom-versioning/services/versioning.service'
 import {
   copyFileContent,
   fileName,
@@ -54,7 +55,9 @@ export class CollaboraOnlineManager {
   constructor(
     private readonly contextManager: ContextManager,
     private readonly jwt: JwtService,
-    private readonly filesLockManager: FilesLockManager
+    private readonly filesLockManager: FilesLockManager,
+    // Fork: file versioning (no-op while files.versions.enabled is false)
+    private readonly versioning: VersioningService
   ) {}
 
   async getSettings(user: UserModel, space: SpaceEnv): Promise<CollaboraOnlineReqDto> {
@@ -132,6 +135,11 @@ export class CollaboraOnlineManager {
     } else if (contentLength === 0) {
       this.logger.warn({ tag: this.saveDocument.name, msg: `content length is 0 : ${req.space.url}` })
     }
+    /* Fork: versioning. This editor bypasses saveStream entirely, so the copy
+       below — not any moveFiles — is the destructive moment. Note it truncates
+       the live file IN PLACE (deliberately, to keep the inode), which is also
+       why version blobs are copied rather than hardlinked. */
+    await this.versioning.snapshotBeforeOverwrite(req.user, req.space, { origin: 'collabora' })
     // copy contents to avoid inode changes (dbFileHash in some cases)
     try {
       await copyFileContent(tmpFilePath, req.space.realPath)
