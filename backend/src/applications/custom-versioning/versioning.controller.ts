@@ -24,15 +24,11 @@ import { SpaceEnv } from '../spaces/models/space-env.model'
 import { GetUser } from '../users/decorators/user.decorator'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_ROUTE } from './constants/routes'
-import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
+import { VERSIONS_DISABLED_MESSAGE, VERSIONS_MAX_DIFF_BYTES, VERSIONS_TEXTUAL_MIMES } from './constants/versioning'
 import { DeleteVersionDto, SetVersionLabelDto, VersionDiffDto } from './dto/version.dto'
 import { VersionProps, VersionsUsage } from './interfaces/version.interface'
 import { VersioningService } from './services/versioning.service'
 import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
-
-// Text-only, and capped: a diff of a 200 MB binary is neither renderable nor
-// worth the memory. 2 MB per side is generous for anything a human reads.
-const MAX_DIFF_BYTES = 2 * 1024 * 1024
 
 // Version endpoints for the v2 UI.
 //
@@ -152,7 +148,7 @@ export class VersioningController {
 
   private async readVersionText(user: UserModel, space: SpaceEnv, versionId: number): Promise<{ text: string; label: string }> {
     const { stream, version } = await this.versioning.getVersionStream(user, space, versionId)
-    if (version.size > MAX_DIFF_BYTES) {
+    if (version.size > VERSIONS_MAX_DIFF_BYTES) {
       stream.destroy()
       throw new HttpException('This revision is too large to diff', HttpStatus.PAYLOAD_TOO_LARGE)
     }
@@ -165,7 +161,7 @@ export class VersioningController {
   private async readLiveText(space: SpaceEnv): Promise<string> {
     this.requireTextual(space)
     const { stream, size } = await this.versioning.liveContent(space)
-    if (size > MAX_DIFF_BYTES) {
+    if (size > VERSIONS_MAX_DIFF_BYTES) {
       stream.destroy()
       throw new HttpException('This file is too large to diff', HttpStatus.PAYLOAD_TOO_LARGE)
     }
@@ -179,7 +175,7 @@ export class VersioningController {
   // honest error.
   private requireTextual(space: SpaceEnv): void {
     const mime = getMimeType(space.realPath, false)
-    if (!mime.startsWith('text') && !TEXTUAL_MIMES.has(mime)) {
+    if (!mime.startsWith('text') && !VERSIONS_TEXTUAL_MIMES.has(mime)) {
       throw new HttpException('Only text files can be diffed', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
     }
   }
@@ -194,14 +190,3 @@ export class VersioningController {
     }
   }
 }
-
-// Mime is stored with the first `/` replaced by `-` (e.g. `text-plain`), so
-// these are matched in that stored form.
-const TEXTUAL_MIMES = new Set([
-  'application-json',
-  'application-xml',
-  'application-javascript',
-  'application-x-sh',
-  'application-x-yaml',
-  'application-yaml'
-])

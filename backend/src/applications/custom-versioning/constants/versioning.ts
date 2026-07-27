@@ -34,3 +34,27 @@ export const VERSIONS_ROOT_SPACE_PREFIX = 'space:'
 // ambiguous, so the frontend matches on this constant — which it imports from
 // here, so the two never drift.
 export const VERSIONS_DISABLED_MESSAGE = 'Versioning is not enabled'
+
+// What the diff endpoint accepts, and how much of it.
+//
+// Both live here rather than in the controller because the v2 UI decides
+// whether to OFFER a compare action from the same two facts. Duplicating them
+// in the frontend would drift, and the drift is silent in the worst direction:
+// a button that always 415s, or a missing button for a file that diffs fine.
+// The endpoint remains the authority — the UI pre-gates, it does not assume.
+//
+// Mime is matched in its STORED form, with the first `/` replaced by `-`
+// (`text-plain`, `application-json`). Anything under `text` is textual; these
+// are the rest.
+export const VERSIONS_TEXTUAL_MIMES: ReadonlySet<string> = new Set([
+  'application-json',
+  'application-xml',
+  'application-javascript',
+  'application-x-sh',
+  'application-x-yaml',
+  'application-yaml'
+])
+
+// Per side. A diff of a 200 MB file is neither renderable nor worth the memory;
+// 2 MB is generous for anything a human reads.
+export const VERSIONS_MAX_DIFF_BYTES = 2 * 1024 * 1024

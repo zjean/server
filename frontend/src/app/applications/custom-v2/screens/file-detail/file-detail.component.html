@@ -120,7 +120,7 @@
           </div>
         </div>
         <div class="detail__tabs">
-          @for (t of tabs; track t.id) {
+          @for (t of tabs(); track t.id) {
             <button
               type="button"
               class="detail__tab"
@@ -177,6 +177,15 @@
                 [filePath]="currentPath()"
                 [fileId]="f.id"
                 (hasCommentsChange)="onHasCommentsChange($event)"
+              />
+            }
+            @case ('versions') {
+              <app-v2-versions-panel
+                [filePath]="currentPath()"
+                [fileId]="f.id"
+                [mime]="f.mime"
+                [size]="f.size"
+                (restored)="onVersionRestored()"
               />
             }
             @case ('activity') {

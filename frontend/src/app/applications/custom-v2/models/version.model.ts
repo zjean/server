@@ -1,3 +1,4 @@
+import { VERSIONS_MAX_DIFF_BYTES, VERSIONS_TEXTUAL_MIMES } from '@sync-in-server/backend/src/applications/custom-versioning/constants/versioning'
 import type {
   VersionOrigin,
   VersionProps,
@@ -120,4 +121,22 @@ export function toVersionModels(list: VersionApiProps[]): VersionModel[] {
 export function versionsUsageRatio(usage: VersionsUsage | null): number | null {
   if (!usage || !usage.ceiling) return null
   return Math.min(1, Math.max(0, usage.used / usage.ceiling))
+}
+
+/**
+ * Whether offering a text comparison for this file is worth doing.
+ *
+ * Both facts come from the backend's own constants, so the button appears
+ * exactly when the endpoint would answer: it 415s a non-text mime and 413s
+ * anything over the per-side cap. This only decides whether to OFFER the
+ * action — the endpoint stays the authority, and the panel still renders the
+ * 415/413 outcomes as ordinary states rather than errors, because a size can
+ * change between the check and the click.
+ *
+ * `mime` is the stored form, with the first `/` replaced by `-` (`text-plain`),
+ * which is what `FileProps.mime` carries.
+ */
+export function isDiffableFile(mime: string | null | undefined, size: number): boolean {
+  if (!mime || size > VERSIONS_MAX_DIFF_BYTES) return false
+  return mime.startsWith('text') || VERSIONS_TEXTUAL_MIMES.has(mime)
 }
