@@ -2,6 +2,7 @@ import path from 'node:path'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpaceModel } from '../../spaces/models/space.model'
 import { UserModel } from '../../users/models/user.model'
+import { isSafePathSegment } from '../../users/utils/login'
 import { VERSIONS_REPOSITORY, VERSIONS_ROOT_SPACE_PREFIX, VERSIONS_ROOT_USER_PREFIX, VERSIONS_SHARD_LENGTH } from '../constants/versioning'
 
 // Resolves WHICH versions root a given space env maps to, as the discriminator
@@ -72,17 +73,31 @@ export function spaceVersionsRoot(alias: string): string {
 // and link users entirely (ADR §8) — so this asymmetry is unreachable, and is
 // documented here so nobody "fixes" it by passing the flags through.
 //
-// Returns null for an unrecognized discriminator.
+// Returns null — never throws — for an unrecognized discriminator or an unsafe
+// login/alias. Every caller is written for null (skip versioning, or 404 the
+// version); letting UserModel.getHomePath's "login must be a single path
+// segment" error escape instead turned a bad row into a raw 500 on the download
+// and restore endpoints.
+//
+// The alias is validated here explicitly because SpaceModel.getHomePath, unlike
+// UserModel.getHomePath, does no checking of its own. The real defence is
+// sanitizeName on the space DTO, but that is three layers away, and this
+// function turns a database value into a filesystem path — the last place that
+// should be trusting it.
 export function versionsPathFromRoot(versionsRoot: string): string | null {
-  if (versionsRoot.startsWith(VERSIONS_ROOT_USER_PREFIX)) {
-    const login = versionsRoot.slice(VERSIONS_ROOT_USER_PREFIX.length)
-    if (!login) return null
-    return path.join(UserModel.getHomePath(login), VERSIONS_REPOSITORY)
-  }
-  if (versionsRoot.startsWith(VERSIONS_ROOT_SPACE_PREFIX)) {
-    const alias = versionsRoot.slice(VERSIONS_ROOT_SPACE_PREFIX.length)
-    if (!alias) return null
-    return path.join(SpaceModel.getHomePath(alias), VERSIONS_REPOSITORY)
+  try {
+    if (versionsRoot.startsWith(VERSIONS_ROOT_USER_PREFIX)) {
+      const login = versionsRoot.slice(VERSIONS_ROOT_USER_PREFIX.length)
+      if (!isSafePathSegment(login)) return null
+      return path.join(UserModel.getHomePath(login), VERSIONS_REPOSITORY)
+    }
+    if (versionsRoot.startsWith(VERSIONS_ROOT_SPACE_PREFIX)) {
+      const alias = versionsRoot.slice(VERSIONS_ROOT_SPACE_PREFIX.length)
+      if (!isSafePathSegment(alias)) return null
+      return path.join(SpaceModel.getHomePath(alias), VERSIONS_REPOSITORY)
+    }
+  } catch {
+    return null
   }
   return null
 }

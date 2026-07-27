@@ -406,6 +406,18 @@ describe(VersioningService.name, () => {
     expect(queries.rows).toHaveLength(2)
   })
 
+  // A restore's safety snapshot is the ONLY record of the pre-restore content,
+  // so coalescing it would leave a second restore inside the window with
+  // nothing to go back to — breaking the "a restore is never destructive"
+  // promise. Restores are rare and deliberate; there is no autosave storm here.
+  it('never coalesces a restore snapshot, even back-to-back', async () => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'restore' })
+    await fs.writeFile(filePath, 'changed between restores')
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'restore' })
+
+    expect(queries.rows.filter((r) => r.origin === 'restore')).toHaveLength(2)
+  })
+
   it('coalescing is disabled by minIntervalSeconds = 0', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
@@ -633,6 +645,23 @@ describe(VersioningService.name, () => {
     expect(version.origin).toBe('web')
   })
 
+  // A stored versionsRoot is a database value, so it is still untrusted at the
+  // point it becomes a filesystem path. It used to reach
+  // UserModel.getHomePath's "login must be a single path segment" throw, which
+  // escaped as a raw 500 on the download and restore endpoints; the path helper
+  // now returns null and callers turn that into an honest 404.
+  it.each([
+    ['a traversal attempt in the login', 'user:../../etc'],
+    ['a separator in the alias', 'space:a/b'],
+    ['an unrecognized discriminator', 'nonsense:x']
+  ])('404s rather than 500s when a row has %s', async (_label, badRoot) => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    queries.rows[0].versionsRoot = badRoot
+
+    await expect(service.getVersionStream(user, personalSpace(), queries.rows[0].id)).rejects.toThrow(FileError)
+    await expect(service.restoreVersion(user, personalSpace(), queries.rows[0].id)).rejects.toThrow(FileError)
+  })
+
   it('404s a version id belonging to a different file', async () => {
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     queries.rows[0].fileId = 999999
@@ -746,6 +775,25 @@ describe(VersioningService.name, () => {
     // Reads stay allowed for a read-only member.
     await expect(service.listVersions(user, readOnly)).resolves.toHaveLength(1)
     await expect(service.getVersionStream(user, readOnly, id)).resolves.toBeDefined()
+  })
+
+  // The trash is read-only — space.guard.ts enforces that for every ADD/MODIFY
+  // request, and using canModifySpaceEnv here states the rule once rather than
+  // restating half of it. Nothing is lost: permanently deleting the file from
+  // the trash purges its versions anyway.
+  it('refuses restore, label and delete in the trash even with MODIFY permission', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const id = queries.rows[0].id
+    const inTrash = personalSpace({ inTrashRepository: true, envPermissions: 'a:m:d' })
+
+    await expect(service.restoreVersion(user, inTrash, id)).rejects.toThrow(FileError)
+    await expect(service.setLabel(user, inTrash, id, 'x')).rejects.toThrow(FileError)
+    await expect(service.deleteVersion(user, inTrash, id)).rejects.toThrow(FileError)
+    expect(queries.rows).toHaveLength(1)
+
+    // Reading history of a trashed file is still fine.
+    await expect(service.listVersions(user, inTrash)).resolves.toHaveLength(1)
   })
 
   /* ------------------------------------------------------------ label / delete */

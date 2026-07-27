@@ -18,9 +18,8 @@ import { FilesLockManager } from '../../files/services/files-lock-manager.servic
 import { FilesQueries } from '../../files/services/files-queries.service'
 import type { FilesVersionsConfig } from '../../files/files.config'
 import { checksumFile, dirName, fileName, getMimeType, isPathExists, makeDir, removeFiles, writeFromStream } from '../../files/utils/files'
-import { SPACE_OPERATION } from '../../spaces/constants/spaces'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
-import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
+import { canModifySpaceEnv } from '../../spaces/utils/permissions'
 import { SYNC_CHECKSUM_ALG } from '../../sync/constants/sync'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
@@ -163,6 +162,12 @@ export class VersioningService {
   // time. A labeled newest version never coalesces: suppressing here would let
   // a named revision silently swallow the next real change.
   private async isCoalesced(fileId: number, authorId: number | null, options: SnapshotOptions): Promise<boolean> {
+    // A restore's safety snapshot is never coalesced. It is the only record of
+    // the pre-restore content, so suppressing it would leave a second restore
+    // inside the window with nothing to go back to — and §9's promise that a
+    // restore is never destructive would stop holding. Restores are rare and
+    // deliberate; there is no autosave storm to protect against.
+    if (options.origin === 'restore') return false
     const window = this.config.minIntervalSeconds
     if (!window || window <= 0) return false
     const newest = await this.queries.newestForTuple(fileId, authorId ?? null, options.origin)
@@ -510,8 +515,12 @@ export class VersioningService {
     return version
   }
 
+  // canModifySpaceEnv rather than a bare MODIFY check: it also refuses the trash
+  // repository, which is read-only (space.guard.ts enforces the same rule for
+  // every ADD/MODIFY request). Using the existing helper states the rule once
+  // instead of restating half of it here.
   private requireModifyPermission(space: SpaceEnv): void {
-    if (!haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY)) {
+    if (!canModifySpaceEnv(space)) {
       throw new FileError(HttpStatus.FORBIDDEN, 'Permission denied')
     }
   }
