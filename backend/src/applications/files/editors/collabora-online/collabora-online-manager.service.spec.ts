@@ -392,6 +392,40 @@ describe(CollaboraOnlineManager.name, () => {
       )
     })
 
+    /* Fork: versioning — task D4, the Collabora half.
+       Unlike OnlyOffice, whose cadence is knowable from its callback statuses,
+       Collabora's is driven by the COOL container's own timers: coolwsd.xml
+       defaults idlesave_duration_secs to 30 and autosave_duration_secs to 300,
+       so a PutFile can arrive as often as every 30 seconds of edit-then-pause.
+
+       The hook does NOT rate-limit any of that: EVERY PutFile calls
+       snapshotBeforeOverwrite, unconditionally. That is deliberate — the hook's
+       job is "capture the bytes about to be destroyed", and whether a version is
+       actually minted is decided one layer down by
+       VersioningService.isCoalesced against minIntervalSeconds.
+
+       This test is what makes that split explicit, so nobody looks for the rate
+       limit here (or, worse, adds a second one). The window's own behaviour is
+       covered in custom-versioning/services/versioning.service.spec.ts. */
+    it('snapshots on EVERY PutFile — rate limiting is the coalescing window’s job, not the hook’s', async () => {
+      const mockRequest = () =>
+        ({
+          user: mockUser,
+          space: mockSpace,
+          headers: { 'content-length': '1024' },
+          raw: new Readable()
+        }) as unknown as FastifyCollaboraOnlineSpaceRequest
+
+      vi.spyOn(fs, 'stat').mockResolvedValue({ mtime: new Date('2024-01-01T11:00:00Z') } as any)
+      vi.spyOn(filesUtils, 'fileSize').mockResolvedValue(1024)
+
+      await service.saveDocument(mockRequest())
+      await service.saveDocument(mockRequest())
+      await service.saveDocument(mockRequest())
+
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(3)
+    })
+
     it('should throw error when document size mismatch', async () => {
       const mockRequest = {
         user: mockUser,

@@ -351,6 +351,43 @@ describe(OnlyOfficeManager.name, () => {
       expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
     })
 
+    /* Fork: versioning — task D4, the OnlyOffice half.
+       ADR §5 asserts the cadence from source rather than measuring it: only
+       statuses 2 (modified), 3, 6 and 7 reach saveDocument, and there is NO
+       autosave-per-keystroke path, so coalescing is expected to rarely fire for
+       this editor. That claim was prose. This is the exhaustive form of it, and
+       it is exhaustive on purpose: a new status arm added upstream that saves
+       shows up here as a surprise, which is the only way the "cadence is known"
+       claim can stay true across a sync. */
+    describe('the complete set of statuses that version (D4)', () => {
+      const SAVING_STATUSES = [
+        [2, { notmodified: false }, 'closed with unsaved changes'],
+        [3, {}, 'save error, retried'],
+        [6, {}, 'forcesave'],
+        [7, {}, 'forcesave error, retried']
+      ] as const
+
+      const NON_SAVING_STATUSES = [
+        [1, { actions: [{ type: 1, userid: '1' }], users: ['1'] }, 'users connect / disconnect'],
+        [2, { notmodified: true }, 'closed with no changes'],
+        [4, { actions: [] }, 'closed with no changes']
+      ] as const
+
+      it.each(SAVING_STATUSES)('status %i (%s) versions exactly once', async (status, extra) => {
+        await expectSuccessfulSaveCallback(mockDocumentUrl, { status, ...extra })
+        expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
+        expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice' })
+      })
+
+      it.each(NON_SAVING_STATUSES)('status %i (%s) never versions', async (status, extra) => {
+        jwtService.verifyAsync.mockResolvedValue({ status, actions: [], users: [], ...extra })
+
+        await service.callBack(mockUser, mockSpaceEnv, mockToken)
+
+        expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+      })
+    })
+
     it('should handle status 2 (document closed without changes)', async () => {
       jwtService.verifyAsync.mockResolvedValue({
         status: 2,
