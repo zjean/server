@@ -60,6 +60,17 @@ jobs:
           sed -i "s|dataPath: /home/|dataPath: /tmp/|" environment/environment.yaml
           # Point at the service container.
           sed -i "s|url: 'mysql://user:MySQLPassword@localhost:3306/database'|url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+          # Enable OnlyOffice. NOT so documents can be edited — no document server
+          # runs here. FilesModule imports OnlyOfficeModule CONDITIONALLY at
+          # module-definition time, so with the flag off `app.get(OnlyOfficeManager)`
+          # throws and the editor write-path case (E2E-11) cannot resolve the
+          # service. That case signs its own callback JWT with the secret already in
+          # the dist file and serves the document from a throwaway local HTTP server;
+          # host validation only applies when `externalServer` is set, which it isn't.
+          #
+          # Scoped to the editors.onlyoffice block by a line range, so it cannot
+          # flip some other `enabled: false` elsewhere in the file.
+          sed -i '/^      onlyoffice:$/,/^      eurooffice:$/ s/^        enabled: false$/        enabled: true/' environment/environment.yaml
 
       - name: Apply migrations
         run: npm run dev:migrate

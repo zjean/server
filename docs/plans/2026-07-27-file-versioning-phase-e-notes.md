@@ -1,7 +1,7 @@
 # File Versioning — Phase E notes
 
 - **Date:** 2026-07-27
-- **Status:** 18 of the 20 planned cases are implemented and green. Two are owed; §3 says which and why.
+- **Status:** 19 of the 20 planned cases are implemented and green. One is owed; §3 says why it is the one left.
 - **Run it:** `npm -w backend run test:e2e` (needs `npm run dev:db` + `npm run dev:migrate` first).
 
 Phase E is the e2e suite from the implementation plan's §5. It matters more than a test count suggests: **every
@@ -56,7 +56,7 @@ Three traps the suite hit while being written, all now called out in comments:
 ## 2. What is covered
 
 `versions-lifecycle.e2e-spec.ts` (14), `versions-write-paths.e2e-spec.ts` (15), `versions-policy.e2e-spec.ts` (15),
-`versions-nc-compat.e2e-spec.ts` (17), `versions-permissions.e2e-spec.ts` (8).
+`versions-nc-compat.e2e-spec.ts` (17), `versions-permissions.e2e-spec.ts` (8), `versions-editors.e2e-spec.ts` (12).
 
 | Case | Covers | Notable assertion |
 |---|---|---|
@@ -70,6 +70,7 @@ Three traps the suite hit while being written, all now called out in comments:
 | **E2E-8** | retention | `maxVersionsPerFile` prunes oldest-first; `retentionDays` expires; **a named version survives both, and the orphan-blob GC collects debris** |
 | **E2E-9** | dedup / refcount | identical content → one blob, two rows; the blob outlives the first delete and goes on the last |
 | **E2E-10** | NC versions tree | all three wire facts against a running server; MOVE-restore keeps the inode; a bad MOVE 400s; PROPPATCH labels; DELETE removes a named version; the `files.versioning` capability tracks the flag; the main password is refused |
+| **E2E-11** | editor callbacks | a real OnlyOffice callback (self-signed JWT + a throwaway local HTTP document source): the pre-save content versioned as `onlyoffice` with the acting author, **the live file's inode preserved**, the 2/3/6/7-only status set, coalescing inside the editor window holding the PRE-SESSION bytes, and the save still succeeding when the snapshot fails |
 | **E2E-12** | quota (ADR §7 rewrite) | usage stays under `quota * quotaShare`; a labeled version is never evicted; no quota → no cap; a dedup hit evicts nothing |
 | **E2E-13** | flag off | no versions, no blob-store writes, all seven endpoints 404, history intact when it returns |
 | **E2E-14** | concurrency | **re-hashes every stored blob and requires its own name back** — no strict version count, per ADR §4 |
@@ -100,6 +101,29 @@ accepted cost of that identity, upstream cannot represent two versions in a seco
 the row id) still shows both. Getting this wrong looks like a lost version rather than a protocol limit, which is why it
 is written down twice.
 
+### The config change E2E-11 required
+
+`FilesModule` imports `OnlyOfficeModule` **conditionally at module-definition time** (`files.module.ts:28`), so with
+`files.editors.onlyoffice.enabled` false, `app.get(OnlyOfficeManager)` throws and the case cannot resolve the service at
+all. Enabling it is therefore a prerequisite of the *test*, not a product change — and it is on in
+`environment.dev.dist.yaml`, in the e2e workflow, and explained in `docs/dev-setup.md`, each time with that reason next
+to the flag. **No document server is needed:** the case signs its own callback JWT with the configured secret and serves
+the document from a throwaway `node:http` server, legitimate because host validation only applies when `externalServer`
+is set.
+
+Both files also moved from the deprecated flat `applications.files.onlyoffice` key to
+`applications.files.editors.onlyoffice`, which silences a deprecation warning that was firing on every boot and in every
+e2e run.
+
+Two traps inside that case, both of which produced a silent wrong answer first:
+
+- **`callBack` catches everything and returns `{ error: <message> }`.** A test checking only side effects reports "no
+  version was created" for a callback that never ran. The helper asserts the `{ error: 0 }` acknowledgement, which is
+  what turned an opaque failure into a one-line diagnosis.
+- **The download url's query params are load-bearing.** `saveDocument` reads `filename` to compare the remote extension
+  against the local one and to name its temp file, so a url without it dies on `path.extname(null)` — swallowed into
+  that same `{ error: … }`.
+
 ### One fix this phase forced
 
 `webdav.e2e-spec.ts` authenticated as `Basic am86cGFzc3dvcmQ=` — `jo:password`, **a user nothing creates.** The seed
@@ -108,14 +132,16 @@ makes `sync-in` plus faker-random logins, and CI runs migrations without seeding
 creates its own user. That was not optional: with those failures the new CI workflow would have been red from its
 first run and worth nothing.
 
-## 3. The two cases still owed
+## 3. The one case still owed
 
-None is blocked; each needs setup the others did not.
-
-| Case | What it needs |
+| Case | Why it is the one left |
 |---|---|
-| **E2E-11** editor callbacks | Collabora and OnlyOffice are **disabled in the dev config**, and `FilesModule` imports their modules conditionally at module-definition time — so `app.get(CollaboraOnlineManager)` fails unless the environment file enables them before the process starts. Beyond that, Collabora wants a WOPI-shaped request and OnlyOffice a signed callback plus an HTTP source to download from. The hooks' ordering is already unit-tested; what e2e would add is the live-file inode surviving a real save |
-| **E2E-14** DAV concurrency half | the non-DAV half is done; the DAV case wants parallel unlocked PUTs, which needs care to stay non-flaky |
+| **E2E-14** DAV concurrency half | The non-DAV half is done. The DAV half can only assert **no corruption** — DAV writes hold no server lock (ADR §4), so a strict version count would encode a guarantee the design does not make, and the non-DAV case already re-hashes every blob and requires its own name back. What is genuinely missing is parallel *unlocked* PUTs, and making that non-flaky is the whole difficulty. Low yield: it would restate an existing assertion under a harder-to-stabilise setup. |
+
+**Collabora is deliberately NOT covered.** OnlyOffice is enabled in dev and CI; Collabora is not. The two share the
+snapshot hook and the `copyFileContent` write, so the inode and origin claims are already proven by E2E-11 — what
+Collabora would add is its own WOPI request shape, which is transport, not versioning. Its cadence question was settled
+from `coolwsd.xml` in D4.2 rather than by measurement.
 
 **On E2E-7, one thing worth keeping:** the ADR matrix is asymmetric on purpose — `GET` carries no required
 permission, matching the live file, so a read-only member gets the **read** half of history and is refused the write
