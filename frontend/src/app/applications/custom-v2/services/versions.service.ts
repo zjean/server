@@ -114,9 +114,12 @@ export class VersionsService {
    * Replaces the live file's content with this version's.
    *
    * Not destructive: the backend snapshots the current content first (as origin
-   * `restore`), so the state being replaced stays restorable in turn. It also
-   * takes a server lock, so this can fail with 409 when someone else holds one —
-   * worth surfacing distinctly from a generic error.
+   * `restore`), so the state being replaced stays restorable in turn.
+   *
+   * It also takes a server lock, so this answers **423 LOCKED** when someone
+   * else is editing the file — the repo's convention for a lock conflict. Your
+   * own lock does not block you, which matters because the editor holds one on
+   * any file open in the very screen that offers this.
    */
   restore(spacePath: string, versionId: number): Observable<void> {
     return this.http.post<void>(`${API_VERSIONS_RESTORE}/${versionId}/${encodeUrl(spacePath)}`, null)

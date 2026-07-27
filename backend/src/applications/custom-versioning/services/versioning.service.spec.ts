@@ -35,6 +35,7 @@ import { Mock } from 'vitest'
 import { configuration } from '../../../configuration/config.environment'
 import { FileRowEnsurer } from '../../custom-shared/services/file-row-ensurer.service'
 import { FileError } from '../../files/models/file-error'
+import { LockConflict } from '../../files/models/file-lock-error'
 import { FilesLockManager } from '../../files/services/files-lock-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
@@ -116,7 +117,7 @@ describe(VersioningService.name, () => {
   let queries: FakeQueries
   let ensurer: { ensureFileId: Mock }
   let filesQueries: { getUserFileByPath: Mock; getSpaceFileId: Mock; updateFile: Mock }
-  let lockManager: { create: Mock; removeLock: Mock }
+  let lockManager: { create: Mock; createOrRefresh: Mock; removeLock: Mock }
   let tmpRoot: string
   let filePath: string
   let loggedErrors: Mock
@@ -159,7 +160,15 @@ describe(VersioningService.name, () => {
       getSpaceFileId: vi.fn().mockResolvedValue(FILE_ID),
       updateFile: vi.fn().mockResolvedValue(undefined)
     }
-    lockManager = { create: vi.fn().mockResolvedValue([true, { key: 'lock-1' }]), removeLock: vi.fn().mockResolvedValue(undefined) }
+    // createOrRefresh mirrors the real manager: [true, lock] when it created one,
+    // [false, existingLock] when the CALLER already held it, and a thrown
+    // LockConflict when someone else does. Stubbing only `create` — which cannot
+    // express the second case — is what hid the restore bug.
+    lockManager = {
+      create: vi.fn().mockResolvedValue([true, { key: 'lock-1' }]),
+      createOrRefresh: vi.fn().mockResolvedValue([true, { key: 'lock-1' }]),
+      removeLock: vi.fn().mockResolvedValue(undefined)
+    }
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -776,18 +785,39 @@ describe(VersioningService.name, () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await service.restoreVersion(user, personalSpace(), queries.rows[0].id)
-    expect(lockManager.create).toHaveBeenCalledTimes(1)
+    expect(lockManager.createOrRefresh).toHaveBeenCalledTimes(1)
     expect(lockManager.removeLock).toHaveBeenCalledWith('lock-1')
   })
 
-  it('restore refuses on a lock conflict and does not touch the file', async () => {
+  it('restore refuses when SOMEONE ELSE holds the lock, and does not touch the file', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await fs.writeFile(filePath, 'someone else is editing')
-    lockManager.create.mockResolvedValue([false, { key: 'other' }])
+    lockManager.createOrRefresh.mockRejectedValue(new LockConflict({ key: 'other' } as any, 'Conflicting lock'))
 
-    await expect(service.restoreVersion(user, personalSpace(), queries.rows[0].id)).rejects.toThrow()
+    await expect(service.restoreVersion(user, personalSpace(), queries.rows[0].id)).rejects.toThrow(LockConflict)
     expect(await fs.readFile(filePath, 'utf8')).toBe('someone else is editing')
+  })
+
+  // The bug this replaced: restore used `create`, which treats ANY existing lock
+  // as a conflict — including the caller's own. The v2 editor takes a lock on
+  // every file it opens, and that is the same screen that offers Restore, so
+  // restoring a file you had open failed 100% of the time with an opaque 500.
+  it('restores a file the CALLER already has locked, and leaves that lock in place', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'edited in the editor')
+    // What createOrRefresh returns when the lock is already yours: not created,
+    // no conflict.
+    lockManager.createOrRefresh.mockResolvedValue([false, { key: 'editor-lock' }])
+
+    await service.restoreVersion(user, personalSpace(), queries.rows[0].id)
+
+    // The snapshotted content is back, so the restore ran rather than being
+    // refused by the caller's own lock.
+    expect(await fs.readFile(filePath, 'utf8')).toBe('the content that is about to be destroyed')
+    // Releasing it would silently unlock a file still open in the editor.
+    expect(lockManager.removeLock).not.toHaveBeenCalled()
   })
 
   // Regression, and the worst bug found in review: restore used to resolve the

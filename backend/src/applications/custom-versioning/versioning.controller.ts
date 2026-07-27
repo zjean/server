@@ -12,6 +12,7 @@ import {
   Query,
   Res,
   StreamableFile,
+  UseFilters,
   UseGuards
 } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
@@ -26,6 +27,7 @@ import { UserModel } from '../users/models/user.model'
 import { VERSIONS_ROUTE } from './constants/routes'
 import { VERSIONS_DISABLED_MESSAGE, VERSIONS_MAX_DIFF_BYTES, VERSIONS_TEXTUAL_MIMES } from './constants/versioning'
 import { DeleteVersionDto, SetVersionLabelDto, VersionDiffDto } from './dto/version.dto'
+import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
 import { VersionProps, VersionsUsage } from './interfaces/version.interface'
 import { VersioningService } from './services/versioning.service'
 import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
@@ -43,6 +45,10 @@ import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
 // list and download history but not restore, label or delete it.
 @Controller(VERSIONS_ROUTE.BASE)
 @UseGuards(SpaceGuard)
+// Without this the service's FileError / LockConflict — permission denied,
+// version not found, the named-delete 409, a locked file — all arrive as 500s,
+// because neither type extends HttpException. See the filter for the full list.
+@UseFilters(VersioningExceptionsFilter)
 export class VersioningController {
   constructor(private readonly versioning: VersioningService) {}
 
