@@ -615,4 +615,117 @@ describe(SyncManager.name, () => {
       expect(String(out[1])).toContain('checksum fail')
     })
   })
+
+  /* Fork: file versioning — task D3, the desktop-sync interplay.
+     The versioning hooks and the restore path are tested in their own suites;
+     what is unproven from there is how the SYNC side reads the result. Both
+     claims below are properties of this service, so they belong here.
+
+     Neither test knows anything about versioning. That is the point: D3's claim
+     is that versioning needs no sync-side code, and a test that had to reach
+     into the versioning module to demonstrate it would be evidence against. */
+  describe('file versioning interplay (D3)', () => {
+    // The suite above replaces the private checkSumFile with a rejecting stub,
+    // and this file's only reset is clearAllMocks — which clears call records but
+    // NOT implementations. Without this, every case here would silently take the
+    // F_SPECIAL_STAT.ERROR branch and assert against undefined.
+    beforeEach(() => vi.restoreAllMocks())
+
+    const base = '/data/users/john/files'
+    const makeDirent = (name: string, parentPath: string, kind: 'dir' | 'file') => ({
+      name,
+      parentPath,
+      isDirectory: () => kind === 'dir',
+      isFile: () => kind === 'file'
+    })
+
+    const ctxWithSnapshot = (snapshot: Map<string, any>) => ({
+      regexBasePath: new RegExp('^' + base),
+      syncDiff: { defaultFilters: new Set<string>(), pathFilters: undefined, secureDiff: true, firstSync: false, snapshot }
+    })
+
+    // A restore replaces content through copyFileContent, so the inode SURVIVES
+    // (ADR §9 — trash retention keys on inodes). The question D3 asks is whether
+    // the client then sees a normal remote update, and the answer is in
+    // checkSumFile: it reuses the client's cached checksum only when mtime AND
+    // size AND ino all match. A restore changes mtime and size, so the reuse
+    // guard fails, the checksum is recomputed from the restored bytes, and the
+    // client receives a changed (size, mtime, checksum) at a stable inode.
+    //
+    // Worth being precise about what the inode does NOT do here: it is not what
+    // makes this a modify rather than a delete+create for SYNC — the mtime
+    // change alone would do that. The inode matters to trash retention. Sync is
+    // simply indifferent, which is the property being pinned.
+    it('reports a restore as a modification: new size/mtime/checksum at an unchanged inode', async () => {
+      const INODE = 17634938
+      const preRestore = [false, 500, 1_700_000_000, INODE, 'checksum-of-the-clobbered-content']
+      fsPromises.readdir.mockImplementation(async (dir: string) => (dir === base ? [makeDirent('report.txt', base, 'file')] : []))
+      fsPromises.stat.mockResolvedValue({
+        isDirectory: () => false,
+        isFile: () => true,
+        // The restored revision is a different length, written at a new time…
+        size: 320,
+        mtime: new Date(1_700_009_999 * 1000),
+        // …into the same inode.
+        ino: INODE
+      })
+      vi.mocked(checksumFile).mockResolvedValue('checksum-of-the-restored-content')
+
+      const results = await collect<Record<string, any>>((service as any).parseFiles(base, ctxWithSnapshot(new Map([['/report.txt', preRestore]]))))
+
+      const stats = results[0]['/report.txt']
+      expect(stats[F_STAT.INO]).toBe(INODE)
+      expect(stats[F_STAT.SIZE]).toBe(320)
+      expect(stats[F_STAT.MTIME]).toBe(1_700_009_999)
+      // The cached checksum was NOT reused — this is the assertion that makes it
+      // a propagated update rather than a silent no-op.
+      expect(stats[F_STAT.CHECKSUM]).toBe('checksum-of-the-restored-content')
+      expect(checksumFile).toHaveBeenCalledTimes(1)
+    })
+
+    // And the control: a file the restore did not touch keeps its cached
+    // checksum, so a restore does not force a re-hash of the whole tree.
+    it('leaves an untouched sibling’s cached checksum alone', async () => {
+      const unchanged = [false, 500, 1_700_000_000, 99, 'cached']
+      fsPromises.readdir.mockImplementation(async (dir: string) => (dir === base ? [makeDirent('other.txt', base, 'file')] : []))
+      fsPromises.stat.mockResolvedValue({ isDirectory: () => false, isFile: () => true, size: 500, mtime: new Date(1_700_000_000 * 1000), ino: 99 })
+
+      const results = await collect<Record<string, any>>((service as any).parseFiles(base, ctxWithSnapshot(new Map([['/other.txt', unchanged]]))))
+
+      expect(results[0]['/other.txt'][F_STAT.CHECKSUM]).toBe('cached')
+      expect(checksumFile).not.toHaveBeenCalled()
+    })
+
+    // The version blob store is <home>/versions, a SIBLING of <home>/files. The
+    // diff walk starts at space.realPath (inside files/) and only ever recurses
+    // into directories it read there, so the store is unreachable — there is no
+    // filter, and there is no filter anywhere else either (ADR §1: the content
+    // indexer has no dotfolder exclusion). Sibling placement is the whole
+    // mechanism, so what is asserted is the walk's SCOPE.
+    it('never walks outside the space’s files root, which is why the versions store is invisible to sync', async () => {
+      const home = '/data/users/john'
+      fsPromises.readdir.mockImplementation(async (dir: string) => {
+        if (dir === base) return [makeDirent('docs', base, 'dir')]
+        if (dir === `${base}/docs`) return [makeDirent('report.txt', `${base}/docs`, 'file')]
+        // If the walk ever asked for these, the test below would catch it.
+        if (dir === `${home}/versions` || dir === home) return [makeDirent('ab', `${home}/versions`, 'dir')]
+        return []
+      })
+      fsPromises.stat.mockResolvedValue({ isDirectory: () => false, isFile: () => true, size: 1, mtime: new Date(0), ino: 1 })
+
+      const results = await collect<Record<string, any>>(
+        (service as any).parseFiles(base, {
+          regexBasePath: new RegExp('^' + base),
+          syncDiff: { defaultFilters: new Set<string>(), pathFilters: undefined, secureDiff: false, firstSync: true, snapshot: new Map() }
+        })
+      )
+
+      const visited = fsPromises.readdir.mock.calls.map((c: any[]) => c[0] as string)
+      expect(visited.every((dir) => dir === base || dir.startsWith(`${base}/`))).toBe(true)
+      expect(visited).not.toContain(`${home}/versions`)
+      expect(visited).not.toContain(home)
+      // And nothing named `versions` was emitted to the client.
+      expect(results.map((r) => Object.keys(r)[0])).toEqual(['/docs', '/docs/report.txt'])
+    })
+  })
 })

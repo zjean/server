@@ -836,6 +836,47 @@ describe(VersioningService.name, () => {
     expect(filesQueries.updateFile).toHaveBeenCalledWith(FILE_ID, { size: CONTENT.length, mtime: expect.any(Number) })
   })
 
+  // Task D3, the filesystem half. The test above pins the inode; this pins the
+  // three fields the desktop sync client actually diffs on.
+  //
+  // sync-manager's diff tuple is [isDir, size, mtime(s), ino, checksum], and it
+  // reuses the client's cached checksum only when size AND mtime AND ino all
+  // match (sync-manager.service.ts::checkSumFile). So a restore has to move at
+  // least one of size/mtime for the client to notice at all — and it moves both,
+  // while ino holds. Together with the sync-side test in
+  // sync/services/sync-manager.service.spec.ts ("file versioning interplay
+  // (D3)"), that is the whole propagation claim: no sync-side code needed.
+  it('changes the size, mtime and content hash the sync diff keys on, while the inode holds', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+
+    // A clobbering write of a DIFFERENT length, so size alone would be enough
+    // to distinguish it — and then the restore has to move it back.
+    await fs.writeFile(filePath, 'a much longer clobbering write than the original content was')
+    // fs mtime resolution is coarse enough on some filesystems that two writes
+    // in the same millisecond compare equal; hold the clobbered state at a
+    // distinctly older mtime so the assertion cannot pass by accident.
+    const clobberedAt = new Date(Date.now() - 60_000)
+    await fs.utimes(filePath, clobberedAt, clobberedAt)
+    const before = await fs.stat(filePath)
+    const hashOf = async () =>
+      crypto
+        .createHash('sha512-256')
+        .update(await fs.readFile(filePath))
+        .digest('hex')
+    const hashBefore = await hashOf()
+
+    await service.restoreVersion(user, personalSpace(), versionId)
+
+    const after = await fs.stat(filePath)
+    expect(after.ino).toBe(before.ino)
+    expect(after.size).not.toBe(before.size)
+    expect(after.size).toBe(CONTENT.length)
+    expect(after.mtimeMs).toBeGreaterThan(before.mtimeMs)
+    expect(await hashOf()).not.toBe(hashBefore)
+  })
+
   it('restore holds a server lock and releases it', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
