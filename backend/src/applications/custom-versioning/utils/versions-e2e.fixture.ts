@@ -11,6 +11,7 @@ import type { FilesVersionsConfig } from '../../files/files.config'
 import { FilesManager } from '../../files/services/files-manager.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
+import { NcAppPasswordService } from '../../custom-mobile-compat/services/nc-app-password.service'
 import { USER_PERMISSION, USER_PERMS_SEP, USER_ROLE } from '../../users/constants/user'
 import { UserModel } from '../../users/models/user.model'
 import { AdminUsersManager } from '../../users/services/admin-users-manager.service'
@@ -91,6 +92,15 @@ export interface VersionsE2EContext {
   versionsOf: (rel: string) => Promise<VersionProps[]>
 
   api: VersionsApi
+  /**
+   * Authorization header for the NC-compat route tree.
+   *
+   * NcBasicAuthGuard accepts ONLY app-passwords scoped to AUTH_SCOPE.MOBILE_NC
+   * and deliberately rejects the user's main login password — matching
+   * Nextcloud's own posture. So an NC-route test cannot reuse the Basic header
+   * that works for WebDAV; it needs a minted credential.
+   */
+  ncAuth: string
   restoreConfig: () => void
   teardown: () => Promise<void>
 }
@@ -183,8 +193,14 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
     }
   }
 
+  // Mint the NC app-password up front so NC-route specs have a working
+  // credential without each one rediscovering that the main password is refused.
+  const minted = await app.get(NcAppPasswordService).mintMobileAppPassword(user, 'versions-e2e')
+  const ncAuth = `Basic ${Buffer.from(`${user.login}:${minted.password}`).toString('base64')}`
+
   return {
     app,
+    ncAuth,
     db: app.get<DBSchema>(DB_TOKEN_PROVIDER),
     user,
     versioning,
