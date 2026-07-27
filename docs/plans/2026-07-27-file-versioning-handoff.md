@@ -2,7 +2,9 @@
 
 - **Date:** 2026-07-27
 - **Audience:** whoever picks this up next, with no memory of the sessions that built it
-- **Status:** Phase A + Phase B complete and merged to `main`. Feature flag **off**. Phases C, D, E not started.
+- **Status:** Phases A, B and C complete and merged to `main`. Feature flag **off**. Phases D and E not started.
+
+> **Starting Phase D?** Read [`2026-07-27-file-versioning-phase-d-handoff.md`](2026-07-27-file-versioning-phase-d-handoff.md) instead — it supersedes this document's §5 per-task notes for D, and carries the verified dev-stack recipe. This file remains the record of the Phase A/B design corrections, which are still current.
 
 Read this first, then the ADR. The implementation plan is still accurate for *what* is left; this document records *what changed under it* and *what will bite you*.
 
@@ -33,9 +35,20 @@ Eight PRs, #310–#317, in this order:
 
 **Nothing is user-visible yet.** `files.versions.enabled` defaults to `false` (`files/files.config.ts`), checked inside `VersioningService`, so all seven hooks are no-ops and every REST endpoint 404s.
 
+### Since this file was first written
+
+Three more PRs landed, and the state above is Phase A/B only:
+
+| PR | What |
+|---|---|
+| #320 | **C1** — the `custom-v2` service and typed models |
+| #321 | **C2** — the version-history UI, a Versions tab in the file-detail inspector |
+| #322 | Fixes found by browser-verifying C2: restore was impossible (`create` vs `createOrRefresh` on the caller's own lock) and every domain error returned 500 (`FileError` is not an `HttpException`). Both are written up in the Phase D handoff §4 |
+
+`main` at `7880d052`, **2003 tests passing**. The feature is verified working end to end in a browser as of #322 — so the browser-verification gate this file recorded as owed is **satisfied**.
+
 ### Left to do
 
-- **C1 / C2** — the `custom-v2` frontend: service + models, then the version-history UI.
 - **D1** — WebDAV correctness verification (mostly assertions; no new code expected).
 - **D2** — Nextcloud client compatibility. **Read §5 before touching this.**
 - **D3** — desktop sync interplay: verification only.
@@ -126,9 +139,8 @@ Both are worth internalising before you write tests here.
   - **Rows are labeled with `mtime`**, framed as "restore it to how it was on…". `createdAt` is in the row's tooltip.
   - Supporting notes: the tab is hidden until `VersionsService.probe()` settles availability (the panel cannot drive its own tab's visibility — it only mounts once the tab is open), and `VERSIONS_TEXTUAL_MIMES` / `VERSIONS_MAX_DIFF_BYTES` moved into `constants/versioning.ts` so the UI decides whether to offer Compare from the same facts the endpoint enforces.
   - **Deferred, and why:** non-text compare. The plan wanted the old revision opened read-only in the v2 viewer, but `GET versions/content` is `Content-Disposition: attachment` by deliberate design (rendering an old revision inline where the current file is expected is misleading — see the controller). Inline preview needs a backend opt-in, which is a product decision, not a UI detail. Non-text rows offer download.
-  - **Not verified in a browser.** The dev stack was not up; per CLAUDE.md that gate is still owed on this work.
-- **ADR §7 makes the versions-usage display a release blocker**, not a nice-to-have: enabling this feature silently reduces every user's effective quota by up to `quotaShare`, and the UI is the only place that becomes visible.
-- Browser-verify with the `v2-dev-loop-verify` skill before claiming done; v2 has rendering failure modes (design-token white-on-white) that only show in the running dev server.
+  - **Browser-verified in #322**, which is where the two real bugs turned up. Full recipe in the Phase D handoff §2 — the "no Chrome / `ng serve` binding" blockers recorded elsewhere are stale.
+- **ADR §7 makes the versions-usage display a release blocker**, not a nice-to-have: enabling this feature silently reduces every user's effective quota by up to `quotaShare`, and the UI is the only place that becomes visible. Shipped in C2; note the figure is **root-scoped, not per-file**, and its ceiling reads through a one-day quota cache.
 
 **D2 (NC compat) — the highest-risk remaining task.** CLAUDE.md mandates reading upstream Nextcloud source *before* designing any endpoint, and a previous compat feature shipped broken because that step was skipped. Fetch the `nextcloud/files_versions` app (routes, DAV plugin, `lib/Capabilities.php`) plus the `NextcloudKit` parser for the wire format. The NC `fileId` maps directly to our `files.id`, so reuse `FileRowEnsurer` exactly as nc-dav already does. Apply the storage quirks: mime `image-jpeg` → `image/jpeg`, mtime ms → seconds, real DB ids, **strong** ETags.
 

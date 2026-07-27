@@ -159,19 +159,26 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 
 ## File versioning (`custom-versioning`)
 
-Shipped behind `files.versions.enabled`, **default off**. Backend is complete; the `custom-v2` UI, NC compat and the
-e2e suite are not.
+Shipped behind `files.versions.enabled`, **default off**. Backend and the `custom-v2` UI are complete and
+browser-verified; NC client compat (Phase D) and the e2e suite (Phase E) are not.
 
-**Read [`docs/plans/2026-07-27-file-versioning-handoff.md`](docs/plans/2026-07-27-file-versioning-handoff.md) before
-touching any of it.** Three documents describe this feature and they do not all agree:
+**Read the handoff for whatever phase you're touching before touching it.** Four documents describe this feature and
+they do not all agree:
 
 | Document | Status |
 |---|---|
-| `2026-07-27-file-versioning-handoff.md` | **Entry point.** Current state, the corrections, the traps. |
+| `2026-07-27-file-versioning-phase-d-handoff.md` | **Entry point for Phase D / E.** Current state, the verified dev-stack recipe, per-task requirements. |
+| `2026-07-27-file-versioning-handoff.md` | The Phase A/B record: five design corrections and why. Still current on those. |
 | `2026-07-25-file-versioning-design.md` | **The authority** on design. Corrected three times during implementation. |
-| `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phases C/D/E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
+| `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phases D/E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
 
 Where the plan and the ADR disagree, the ADR is right.
+
+**Two error-shape traps in this area, both of which produced 500s in shipped code:** `FileError` and `LockConflict`
+extend `Error`, not `HttpException` — a controller that lets one escape returns 500, so it needs a translation layer
+(`custom-versioning/filters/versioning-exception.filter.ts`, or `files-methods.service.ts::handleError` in the files
+feature). And `filesLockManager.create` treats the **caller's own** lock as a conflict; use `createOrRefresh` for any
+path that writes a file the user may have open.
 
 Four invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
 suite:
