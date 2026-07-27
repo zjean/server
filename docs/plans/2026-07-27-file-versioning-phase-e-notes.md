@@ -1,7 +1,7 @@
 # File Versioning — Phase E notes
 
 - **Date:** 2026-07-27
-- **Status:** 17 of the 20 planned cases are implemented and green. Three are owed; §3 says which and why.
+- **Status:** 18 of the 20 planned cases are implemented and green. Two are owed; §3 says which and why.
 - **Run it:** `npm -w backend run test:e2e` (needs `npm run dev:db` + `npm run dev:migrate` first).
 
 Phase E is the e2e suite from the implementation plan's §5. It matters more than a test count suggests: **every
@@ -39,18 +39,24 @@ missed both. Service-level for *producing* writes, because the seven destructive
 transports and fabricating each one would test the transport rather than the hook. WebDAV is the exception — it gets
 real HTTP requests, because D1's claim is specifically about the DAV request shape.
 
-Two traps the suite hit while being written, both now called out in comments:
+Three traps the suite hit while being written, all now called out in comments:
 
 - **Blob assertions must be identity-based, not counts.** The store is root-scoped: it holds every file's history for
   the user, so `expect(blobs()).toHaveLength(1)` only passes while its case happens to run first.
 - **Test content must be unique per case.** The store is content-addressed and refcounted per (checksum, root), so two
   cases seeding `'v1'` share a blob — and a delete that "should" remove it correctly does not. E2E-9 asserts that
   behaviour on purpose; everywhere else it is a confusing failure.
+- **`updateSpace` recomputes the alias from `name` and MOVES the space on disk** when it changes. Passing the alias
+  back as the name renames the space out from under every path the test has already built, and the symptom is a 404 on
+  a request that worked a moment earlier. Pass the original name verbatim.
+- **A spec that imports decorated modules before the fixture needs `import 'reflect-metadata'` first.** Every other
+  e2e spec happens to import `@nestjs/platform-fastify` before anything decorated, which loads the shim as a side
+  effect; relying on that accident yields `Reflect.getMetadata is not a function` at collection time.
 
 ## 2. What is covered
 
 `versions-lifecycle.e2e-spec.ts` (14), `versions-write-paths.e2e-spec.ts` (15), `versions-policy.e2e-spec.ts` (15),
-`versions-nc-compat.e2e-spec.ts` (17).
+`versions-nc-compat.e2e-spec.ts` (17), `versions-permissions.e2e-spec.ts` (8).
 
 | Case | Covers | Notable assertion |
 |---|---|---|
@@ -60,6 +66,7 @@ Two traps the suite hit while being written, both now called out in comments:
 | **E2E-4** | sync `tmpPath` | one version at the final move, `sync` |
 | **E2E-5** | NC chunked upload | MKCOL → three chunk PUTs → `MOVE .file`: **one** version tagged `nc-chunked`, not one per chunk; none when the upload lands on a new path |
 | **E2E-6** | trash | rows and blobs survive a move to trash, keyed on the stable `files.id` |
+| **E2E-7** | permission matrix | a read-only member **can** list/download/diff and **cannot** restore/label/delete (403, not 404 — they can see the file); a non-member cannot reach the endpoints at all; no session is refused before any of it; a member granted MODIFY **can** restore, so the refusal is provably about the permission; a space file's history lives under `space:<alias>` |
 | **E2E-8** | retention | `maxVersionsPerFile` prunes oldest-first; `retentionDays` expires; **a named version survives both, and the orphan-blob GC collects debris** |
 | **E2E-9** | dedup / refcount | identical content → one blob, two rows; the blob outlives the first delete and goes on the last |
 | **E2E-10** | NC versions tree | all three wire facts against a running server; MOVE-restore keeps the inode; a bad MOVE 400s; PROPPATCH labels; DELETE removes a named version; the `files.versioning` capability tracks the flag; the main password is refused |
@@ -101,15 +108,20 @@ makes `sync-in` plus faker-random logins, and CI runs migrations without seeding
 creates its own user. That was not optional: with those failures the new CI workflow would have been red from its
 first run and worth nothing.
 
-## 3. The three cases still owed
+## 3. The two cases still owed
 
 None is blocked; each needs setup the others did not.
 
 | Case | What it needs |
 |---|---|
-| **E2E-7** permissions matrix | a **second user** plus a shared space at read-only, to assert the ADR matrix (list/download yes; restore/label/delete no) and that a public link cannot reach the endpoints at all |
-| **E2E-11** editor callbacks | a WOPI-shaped Collabora request and an OnlyOffice callback token; the hooks' ordering is unit-tested, so what e2e adds is the live-file inode surviving a real save |
+| **E2E-11** editor callbacks | Collabora and OnlyOffice are **disabled in the dev config**, and `FilesModule` imports their modules conditionally at module-definition time — so `app.get(CollaboraOnlineManager)` fails unless the environment file enables them before the process starts. Beyond that, Collabora wants a WOPI-shaped request and OnlyOffice a signed callback plus an HTTP source to download from. The hooks' ordering is already unit-tested; what e2e would add is the live-file inode surviving a real save |
 | **E2E-14** DAV concurrency half | the non-DAV half is done; the DAV case wants parallel unlocked PUTs, which needs care to stay non-flaky |
+
+**On E2E-7, one thing worth keeping:** the ADR matrix is asymmetric on purpose — `GET` carries no required
+permission, matching the live file, so a read-only member gets the **read** half of history and is refused the write
+half. Asserting only the refusals would let a regression that broke *reading* pass unnoticed, so both halves are
+there, plus a member granted MODIFY who *can* restore — which is what proves the refusal is about the permission
+rather than about something incidental.
 
 Also still open from Phase D, unchanged: the **ADR §19 soak** against real Collabora, OnlyOffice and NC clients, and
 the two unwritten release blockers (the quota-reduction release note, and adding per-home `versions/` to the documented
