@@ -65,6 +65,27 @@ npm run dev:frontend
 docker exec -it sync-in-dev-mariadb mariadb -usync_in -pdev sync_in
 ```
 
+## Editors (OnlyOffice / Collabora)
+
+`environment.dev.dist.yaml` ships with **OnlyOffice enabled and Collabora
+disabled**, under the current `applications.files.editors.*` keys (the flat
+`applications.files.onlyoffice` form still works but logs a deprecation warning
+on every boot).
+
+**OnlyOffice is on even though no document server runs locally**, and the reason
+is structural rather than convenience: `FilesModule` imports `OnlyOfficeModule`
+*conditionally at module-definition time*, so with the flag off
+`app.get(OnlyOfficeManager)` throws — and the versioning e2e case for the editor
+write path (E2E-11) cannot resolve the service at all. That case signs its own
+callback JWT with `secret` and serves the "saved" document from a throwaway local
+HTTP server, which is allowed because host validation only applies when
+`externalServer` is set.
+
+So: leave it enabled unless you have a reason not to. Turning it off does not
+break the app, but it silently skips E2E-11's suite. Actually editing documents
+needs a reachable document server in `externalServer` (or the Docker Compose
+Nginx service).
+
 ## Troubleshooting
 
 - **Backend can't reach DB** — confirm `npm run dev:db` reported `Healthy`, and
@@ -75,3 +96,11 @@ docker exec -it sync-in-dev-mariadb mariadb -usync_in -pdev sync_in
   `environment/environment.yaml` in lockstep.
 - **Schema drift after upstream sync** — `npm run dev:migrate` picks up any
   new migrations; `npm run dev:db:reset` for a clean slate.
+- **`Nest can't resolve OnlyOfficeManager` in a test** — `applications.files
+  .editors.onlyoffice.enabled` is false. See the Editors section above; the module
+  is imported conditionally, so the flag is a hard prerequisite, not a preference.
+- **e2e specs 403 with "You are not allowed to access to this repository"** — a
+  test user was created with the derived `applications` array instead of the
+  `permissions` column. See
+  `backend/src/applications/custom-versioning/utils/versions-e2e.fixture.ts`,
+  which documents this and three other e2e environment facts.
