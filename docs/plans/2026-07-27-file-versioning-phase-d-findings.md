@@ -407,11 +407,9 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
 
 ### Owed work, already scoped elsewhere
 
-- **Phase E**, cases E2E-1..20 in the plan's §5. Now better specified in two places: **E2E-3** should assert the
-  resumed-PUT shape D1.1 documents (a sequence cannot open with `bytes 0-…` against an existing non-empty file), and
-  **E2E-10** should assert the three NC wire facts from D2.0 — the mandatory self entry, revision id == `mtime`
-  seconds agreeing with `d:getlastmodified`, and the empty `d:resourcetype`. Those three are what silently break a
-  client, and none of them is visible from a passing unit test of the builder alone.
+- **Phase E**, cases E2E-1..20 in the plan's §5. **15 of the 20 are done** — see
+  [`2026-07-27-file-versioning-phase-e-notes.md`](2026-07-27-file-versioning-phase-e-notes.md) for what each covers,
+  the four environment facts the harness encodes, and the five cases still owed.
 - **The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on. D4.2's recipe
   belongs to it.
 - **Two release blockers from ADR §7/§19 are still unwritten:** the release note stating that enabling versioning

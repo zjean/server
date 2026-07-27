@@ -1,19 +1,45 @@
 import { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { appBootstrap } from '../../app.bootstrap'
+import { USER_PERMISSION, USER_PERMS_SEP, USER_ROLE } from '../users/constants/user'
+import { UserModel } from '../users/models/user.model'
+import { AdminUsersManager } from '../users/services/admin-users-manager.service'
+import { generateUserTest } from '../users/utils/test'
 import { XML_CONTENT_TYPE } from './constants/webdav'
 
 const XML_VERSION_STR = '<?xml version="1.0" encoding="utf-8" standalone="yes"?>'
 
 describe('WebDAV (e2e)', () => {
   let app: NestFastifyApplication
+  let adminUsersManager: AdminUsersManager
+  let userTest: UserModel
+  // Built from the user created below rather than hard-coded. The previous value
+  // was `Basic am86cGFzc3dvcmQ=` — 'jo:password' — a user NOTHING creates: the
+  // seed makes 'sync-in' plus faker-random logins, and CI runs migrations without
+  // seeding at all. So every request that actually needed authorization 401'd,
+  // and the two PROPFINDs below only passed because they do not.
+  //
+  // Note `permissions` (the comma-joined column), not `applications` (the array
+  // UserModel derives from it). generateUserTest sets the latter, which is not a
+  // column, so a user created straight from it has no permissions and WebDAV
+  // answers 403 'Missing permission'.
+  let auth: string
 
   beforeAll(async () => {
     app = await appBootstrap()
     await app.init()
     await app.getHttpAdapter().getInstance().ready()
+    adminUsersManager = app.get<AdminUsersManager>(AdminUsersManager)
+    userTest = await adminUsersManager.createUserOrGuest(
+      { ...generateUserTest(false), permissions: Object.values(USER_PERMISSION).join(USER_PERMS_SEP) } as never,
+      USER_ROLE.USER
+    )
+    auth = `Basic ${Buffer.from(`${userTest.login}:password`).toString('base64')}`
   })
 
   afterAll(async () => {
+    if (userTest?.id) {
+      await adminUsersManager.deleteUserOrGuest(userTest.id, userTest.login, { deleteSpace: true, isGuest: false } as never)
+    }
     await app.close()
   })
 
@@ -25,7 +51,7 @@ describe('WebDAV (e2e)', () => {
     const res = await app.inject({
       method: 'PROPFIND',
       url: '/webdav',
-      headers: { authorization: 'Basic am86cGFzc3dvcmQ=', 'content-type': XML_CONTENT_TYPE, Depth: '1' },
+      headers: { authorization: auth, 'content-type': XML_CONTENT_TYPE, Depth: '1' },
       body: `${XML_VERSION_STR}
        <propfind xmlns:D="DAV:">
          <allprop/>
@@ -38,7 +64,7 @@ describe('WebDAV (e2e)', () => {
     const res = await app.inject({
       method: 'PROPFIND',
       url: '/webdav',
-      headers: { authorization: 'Basic am86cGFzc3dvcmQ=', 'content-type': XML_CONTENT_TYPE, Depth: '1' },
+      headers: { authorization: auth, 'content-type': XML_CONTENT_TYPE, Depth: '1' },
       body: `${XML_VERSION_STR}
         <D:propfind xmlns:D="DAV:">
         <D:prop>
@@ -57,7 +83,6 @@ describe('WebDAV (e2e)', () => {
 
   describe('PUT with non-XML Content-Types (stream preservation)', () => {
     const testFilePath = '/webdav/personal/test-content-type.txt'
-    const auth = 'Basic am86cGFzc3dvcmQ='
 
     afterEach(async () => {
       // Cleanup: delete the test file if it exists

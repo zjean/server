@@ -1,0 +1,72 @@
+name: E2E Workflow
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Separate from the `test` workflow ON PURPOSE.
+#
+# `test` is the check branch protection requires, and it must stay fast and
+# hermetic. These specs need a real MariaDB and a real filesystem, which is
+# exactly what makes them worth running — the versioning bugs that reached a
+# green unit suite (a lock stub that could not express "the lock is already
+# yours"; a retention db stub that always answered "no quota", leaving 19 green
+# tests over a destructive branch that never ran) are all invisible without one.
+#
+# This check is therefore ADVISORY: a failure shows up on the PR but does not
+# block the merge. Promote it into the required set once it has run green for a
+# while — the reason to wait is that a DB-backed suite has failure modes (service
+# startup, migration drift) that a unit suite does not, and discovering them as a
+# hard merge block is a bad first experience.
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: dev_root
+          MARIADB_DATABASE: sync_in
+          MARIADB_USER: sync_in
+          MARIADB_PASSWORD: dev
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy environment file
+        run: |
+          cp environment/environment.dist.yaml environment/environment.yaml
+          # Storage roots under /tmp — the suite writes real files and reads them
+          # back, so it needs a writable data path.
+          sed -i "s|dataPath: /home/|dataPath: /tmp/|" environment/environment.yaml
+          # Point at the service container.
+          sed -i "s|url: 'mysql://user:MySQLPassword@localhost:3306/database'|url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+
+      - name: Apply migrations
+        run: npm run dev:migrate
+
+      # The suite sets `files.versions.enabled` itself in each spec's beforeEach
+      # rather than relying on the environment file, so no flag flipping is
+      # needed here. That is deliberate: a suite whose result depends on a
+      # gitignored local file is a suite that passes on one machine.
+      - name: Run e2e tests
+        run: npm -w backend run test:e2e
