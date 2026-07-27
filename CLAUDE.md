@@ -173,6 +173,7 @@ they do not all agree:
 
 | Document | Status |
 |---|---|
+| `2026-07-27-nc-android-versioning-soak.md` | The real-device soak: versioning confirmed working in stock NC Android 34.1.0, the capability bug it found, and how to reproduce (incl. the 16 KB page-size emulator crash). |
 | `2026-07-27-file-versioning-phase-e-notes.md` | The e2e suite: what the 19 cases cover, the four environment facts the harness encodes, the one case still owed. |
 | `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
 | `2026-07-27-file-versioning-phase-d-handoff.md` | Still authoritative on the **dev-stack recipe** and the four lessons. Its per-task §3 is superseded, and two of its D2 instructions are wrong (the findings say where). |
@@ -181,6 +182,12 @@ they do not all agree:
 | `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phase E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
 
 Where the plan and the ADR disagree, the ADR is right.
+
+**Emitting an NC capability block? Emit EVERY key its consumers dereference.** NC Android reads
+`user_status.supports_emoji` with `getBoolean()` and no `has()` guard, and the resulting `JSONException` is caught at the
+top of `parseResponse` — so one missing key makes the client discard the WHOLE capability object and persist nothing.
+Every capability-gated feature then reads back `UNKNOWN`, and the symptom surfaces in an unrelated feature (it was the
+file-detail version list). A partially-specified block is worse than an absent one. See the soak doc.
 
 **Two error-shape traps in this area, both of which produced 500s in shipped code:** `FileError` and `LockConflict`
 extend `Error`, not `HttpException` — a controller that lets one escape returns 500, so it needs a translation layer
