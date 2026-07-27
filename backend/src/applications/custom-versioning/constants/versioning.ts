@@ -25,3 +25,12 @@ export const VERSIONS_STAGING_DIR = '.staging'
 // file's current space no longer matches where its blobs live (ADR §15).
 export const VERSIONS_ROOT_USER_PREFIX = 'user:'
 export const VERSIONS_ROOT_SPACE_PREFIX = 'space:'
+
+// The message every endpoint 404s with while `files.versions.enabled` is false.
+//
+// Exported because the v2 UI needs to tell "the feature is off" apart from the
+// other 404 these routes can produce: SpaceGuard answers 404 'Space not found'
+// for a path the caller cannot reach (space.guard.ts:82). Status alone is
+// ambiguous, so the frontend matches on this constant — which it imports from
+// here, so the two never drift.
+export const VERSIONS_DISABLED_MESSAGE = 'Versioning is not enabled'
