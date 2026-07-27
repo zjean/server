@@ -30,7 +30,7 @@ import { NcVersionsService, ncContentType, ncRevisionOf } from './nc-versions.se
 
 const USER = { id: 7, login: 'alice' } as UserModel
 
-// 2026-07-20T10:00:00.000Z and 09:50:00.000Z
+// 2025-07-20T10:00:00.000Z and 09:50:00.000Z
 const NEWER_MS = 1_753_005_600_000
 const OLDER_MS = 1_753_005_000_000
 

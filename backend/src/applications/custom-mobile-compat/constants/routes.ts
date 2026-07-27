@@ -28,6 +28,12 @@ export const NC_ROUTE = {
   OCS_USERS_V2: '/ocs/v2.php/cloud/users/:userid',
   OCS_APP_PASSWORD: '/ocs/v2.php/core/apppassword',
 
+  // OCS activity feed. Deliberately NOT advertised in capabilities — see
+  // controllers/nc-activity.controller.ts for why serving it is what makes NC
+  // Android's file-detail list (versions included) render at all.
+  OCS_ACTIVITY: '/ocs/v2.php/apps/activity/api/v2/activity',
+  OCS_ACTIVITY_FILTER: '/ocs/v2.php/apps/activity/api/v2/activity/filter',
+
   // Avatar + preview
   AVATAR: '/index.php/avatar/:user/:size',
   PREVIEW: '/index.php/core/preview',

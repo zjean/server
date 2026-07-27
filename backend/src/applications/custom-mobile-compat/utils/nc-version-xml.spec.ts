@@ -18,7 +18,7 @@ import {
 const LOGIN = 'alice'
 const FILE_ID = 4242
 
-// 2026-07-20T10:00:00Z
+// 2025-07-20T10:00:00Z
 const MTIME_MS = 1_753_005_600_000
 const REVISION = Math.floor(MTIME_MS / 1000)
 

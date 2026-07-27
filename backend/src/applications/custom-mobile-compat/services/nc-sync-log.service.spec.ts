@@ -10,6 +10,13 @@ import { Mock } from 'vitest'
 // currentToken, prune) build Drizzle filter objects whose evaluation
 // requires either a real DB or a heavy filter-tree interpreter. Those are
 // covered by the integration smoke at phase 4.
+//
+// The two display readers added for the activity feed (`recent`,
+// `recentForPath`) are tested below for QUERY SHAPE rather than filter
+// semantics: the ordering and the limit are what a caller's correctness depends
+// on, and both are observable without evaluating the filter tree. Getting the
+// order wrong would make `limit` truncate to the OLDEST events instead of the
+// newest — a silent wrong-answer bug rather than an error.
 
 describe(NcSyncLogService.name, () => {
   let moduleRef: TestingModule
@@ -52,6 +59,81 @@ describe(NcSyncLogService.name, () => {
   afterEach(async () => {
     await moduleRef.close()
     FileEvent.removeAllListeners('event')
+  })
+
+  // A chainable select fake that records what was asked for. Returns `rows`
+  // from the terminal .limit() call, mirroring Drizzle's builder shape.
+  const captureSelect = (rows: Record<string, unknown>[]) => {
+    const calls: { orderBy: number; limit?: number } = { orderBy: 0 }
+    fakeDb.select = vi.fn(() => ({
+      from: () => ({
+        where: () => ({
+          orderBy: (...args: unknown[]) => {
+            calls.orderBy = args.length
+            return {
+              limit: (n: number) => {
+                calls.limit = n
+                return Promise.resolve(rows)
+              }
+            }
+          }
+        })
+      })
+    }))
+    return calls
+  }
+
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: 5,
+    ownerId: 7,
+    repository: 'files',
+    spaceAlias: 'personal',
+    path: 'docs/report.txt',
+    type: 'update',
+    ts: 1000,
+    ...over
+  })
+
+  describe('display readers for the activity feed', () => {
+    // NEWEST FIRST, and the limit therefore truncates the tail rather than the
+    // head. With ascending order, `limit: 50` on a busy account would return the
+    // 50 OLDEST events and the feed would look frozen.
+    it('recentForPath orders and limits, defaulting to 50', async () => {
+      const calls = captureSelect([row()])
+      const events = await service.recentForPath({ ownerId: 7, spaceAlias: 'personal', path: 'docs/report.txt' })
+
+      expect(calls.orderBy).toBe(1)
+      expect(calls.limit).toBe(50)
+      expect(events).toEqual([{ id: 5, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'docs/report.txt', type: 'update', ts: 1000 }])
+    })
+
+    it('recentForPath honours an explicit limit', async () => {
+      const calls = captureSelect([])
+      await service.recentForPath({ ownerId: 7, spaceAlias: 'personal', path: 'a.txt', limit: 5 })
+      expect(calls.limit).toBe(5)
+    })
+
+    it('recent orders and limits, defaulting to 50', async () => {
+      const calls = captureSelect([row()])
+      const events = await service.recent({ ownerId: 7 })
+
+      expect(calls.orderBy).toBe(1)
+      expect(calls.limit).toBe(50)
+      expect(events).toHaveLength(1)
+    })
+
+    // The bigint columns come back as strings on some driver versions, so the
+    // Number() coercions in toSyncEvent are load-bearing: a string id would
+    // serialize into the activity payload as a quoted value and break the
+    // client's Int field.
+    it('coerces the bigint columns a driver may hand back as strings', async () => {
+      captureSelect([row({ id: '9', ownerId: '7', ts: '1700000000000' })])
+      const [event] = await service.recent({ ownerId: 7 })
+
+      expect(event.id).toBe(9)
+      expect(event.ownerId).toBe(7)
+      expect(event.ts).toBe(1_700_000_000_000)
+    })
   })
 
   it('append() inserts a row with the given fields', async () => {
