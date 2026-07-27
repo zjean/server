@@ -1,7 +1,7 @@
 # File Versioning — Phase E notes
 
 - **Date:** 2026-07-27
-- **Status:** 15 of the 20 planned cases are implemented and green. Five are owed; §3 says which and why.
+- **Status:** 17 of the 20 planned cases are implemented and green. Three are owed; §3 says which and why.
 - **Run it:** `npm -w backend run test:e2e` (needs `npm run dev:db` + `npm run dev:migrate` first).
 
 Phase E is the e2e suite from the implementation plan's §5. It matters more than a test count suggests: **every
@@ -49,7 +49,8 @@ Two traps the suite hit while being written, both now called out in comments:
 
 ## 2. What is covered
 
-`versions-lifecycle.e2e-spec.ts` (14), `versions-write-paths.e2e-spec.ts` (15), `versions-policy.e2e-spec.ts` (15).
+`versions-lifecycle.e2e-spec.ts` (14), `versions-write-paths.e2e-spec.ts` (15), `versions-policy.e2e-spec.ts` (15),
+`versions-nc-compat.e2e-spec.ts` (17).
 
 | Case | Covers | Notable assertion |
 |---|---|---|
@@ -57,9 +58,11 @@ Two traps the suite hit while being written, both now called out in comments:
 | **E2E-2** | restore | bytes return, **inode preserved**, pre-restore content becomes its own version, restore twice, CSRF required, cross-file version id 404s |
 | **E2E-3** | WebDAV | first PUT no version; later PUT one, `webdav`; **a resumed content-range sequence yields exactly ONE version holding the full pre-upload content**; the store never appears in a PROPFIND |
 | **E2E-4** | sync `tmpPath` | one version at the final move, `sync` |
+| **E2E-5** | NC chunked upload | MKCOL → three chunk PUTs → `MOVE .file`: **one** version tagged `nc-chunked`, not one per chunk; none when the upload lands on a new path |
 | **E2E-6** | trash | rows and blobs survive a move to trash, keyed on the stable `files.id` |
 | **E2E-8** | retention | `maxVersionsPerFile` prunes oldest-first; `retentionDays` expires; **a named version survives both, and the orphan-blob GC collects debris** |
 | **E2E-9** | dedup / refcount | identical content → one blob, two rows; the blob outlives the first delete and goes on the last |
+| **E2E-10** | NC versions tree | all three wire facts against a running server; MOVE-restore keeps the inode; a bad MOVE 400s; PROPPATCH labels; DELETE removes a named version; the `files.versioning` capability tracks the flag; the main password is refused |
 | **E2E-12** | quota (ADR §7 rewrite) | usage stays under `quota * quotaShare`; a labeled version is never evicted; no quota → no cap; a dedup hit evicts nothing |
 | **E2E-13** | flag off | no versions, no blob-store writes, all seven endpoints 404, history intact when it returns |
 | **E2E-14** | concurrency | **re-hashes every stored blob and requires its own name back** — no strict version count, per ADR §4 |
@@ -75,6 +78,21 @@ query string**. Bound to `@Query()` the value arrives as the string `'true'`, an
 conversion, so `@IsBoolean()` rejected it with a 400 and a named version was undeletable. Only a request through the
 real pipe catches that.
 
+### Two things the NC cases needed that nothing else did
+
+**An app-password, not the login password.** `NcBasicAuthGuard` accepts only credentials scoped to
+`AUTH_SCOPE.MOBILE_NC` and rejects the user's main password on purpose, matching Nextcloud's own posture. The fixture
+mints one with `NcAppPasswordService.mintMobileAppPassword` and exposes it as `ncAuth`; a case asserts that the main
+password really is refused, so the constraint is pinned rather than tribal.
+
+**Distinct mtimes between generations.** A version is identified on the NC surface by its `mtime` in whole SECONDS —
+forced by the client, which derives the restore MOVE source from the parsed `d:getlastmodified` and never from the
+href. So two overwrites in the same wall-clock second produce two rows that collapse to **one** NC entry. The helper
+spaces each generation's mtime deliberately, and **one case asserts the collapse on purpose** — it is the documented,
+accepted cost of that identity, upstream cannot represent two versions in a second either, and the v2 UI (which keys on
+the row id) still shows both. Getting this wrong looks like a lost version rather than a protocol limit, which is why it
+is written down twice.
+
 ### One fix this phase forced
 
 `webdav.e2e-spec.ts` authenticated as `Basic am86cGFzc3dvcmQ=` — `jo:password`, **a user nothing creates.** The seed
@@ -83,15 +101,13 @@ makes `sync-in` plus faker-random logins, and CI runs migrations without seeding
 creates its own user. That was not optional: with those failures the new CI workflow would have been red from its
 first run and worth nothing.
 
-## 3. The five cases still owed
+## 3. The three cases still owed
 
 None is blocked; each needs setup the others did not.
 
 | Case | What it needs |
 |---|---|
-| **E2E-5** NC chunked upload | the `nc-uploads` assemble-and-MOVE flow driven over HTTP, which needs an NC app password (`NcBasicAuthGuard`) rather than the user's own credentials |
 | **E2E-7** permissions matrix | a **second user** plus a shared space at read-only, to assert the ADR matrix (list/download yes; restore/label/delete no) and that a public link cannot reach the endpoints at all |
-| **E2E-10** NC compat | same app-password setup as E2E-5, and it should assert the three wire facts from the findings' D2.0 — the mandatory self entry, revision id == `mtime` seconds agreeing with `d:getlastmodified`, and the empty `d:resourcetype`. **Those three are what silently break a client, and none is visible from a passing unit test of the XML builder alone** |
 | **E2E-11** editor callbacks | a WOPI-shaped Collabora request and an OnlyOffice callback token; the hooks' ordering is unit-tested, so what e2e adds is the live-file inode surviving a real save |
 | **E2E-14** DAV concurrency half | the non-DAV half is done; the DAV case wants parallel unlocked PUTs, which needs care to stay non-flaky |
 
