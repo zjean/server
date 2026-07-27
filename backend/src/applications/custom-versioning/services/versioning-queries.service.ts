@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, asc, count, desc, eq, inArray, isNull, lt, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -86,14 +86,24 @@ export class VersioningQueries {
     return Number(row?.n ?? 0)
   }
 
-  // SUM(size) for the eager quota cap — an indexed aggregate, deliberately NOT
-  // a dirSize walk of the store (ADR §7).
-  async usageByRoot(versionsRoot: string): Promise<{ used: number; count: number }> {
+  // SUM(size) for the quota cap — an indexed aggregate, deliberately NOT a
+  // dirSize walk of the store (ADR §7).
+  //
+  // `labeledBytes` is what makes the cap safe: labeled versions are never
+  // evictable, so an eviction loop that does not know how much of `used` is
+  // unevictable can chase a ceiling it can never reach and destroy every
+  // unlabeled version trying. Both callers need that number, so it is computed
+  // in the same pass over the (versionsRoot, label, createdAt) index.
+  async usageByRoot(versionsRoot: string): Promise<{ used: number; labeledBytes: number; count: number }> {
     const [row] = await this.db
-      .select({ used: sum(customFilesVersions.size), n: count() })
+      .select({
+        used: sum(customFilesVersions.size),
+        labeled: sum(sql`CASE WHEN ${customFilesVersions.label} IS NULL THEN 0 ELSE ${customFilesVersions.size} END`),
+        n: count()
+      })
       .from(customFilesVersions)
       .where(eq(customFilesVersions.versionsRoot, versionsRoot))
-    return { used: Number(row?.used ?? 0), count: Number(row?.n ?? 0) }
+    return { used: Number(row?.used ?? 0), labeledBytes: Number(row?.labeled ?? 0), count: Number(row?.n ?? 0) }
   }
 
   // Eviction candidate for the quota cap: oldest UNLABELED version in the root.
@@ -168,19 +178,55 @@ export class VersioningQueries {
   }
 
   // Oldest-first, unlabeled only — the trim order for maxVersionsPerFile.
-  async unlabeledByFileIdOldestFirst(fileId: number): Promise<VersionRow[]> {
+  // Oldest-first trim candidates for one file WITHIN one root — see
+  // fileIdsExceeding for why the root filter belongs in the query rather than in
+  // a caller-side .filter() over a global list.
+  async unlabeledByFileIdOldestFirst(versionsRoot: string, fileId: number, limit: number): Promise<VersionRow[]> {
     return this.db
       .select()
       .from(customFilesVersions)
-      .where(and(eq(customFilesVersions.fileId, fileId), isNull(customFilesVersions.label)))
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId), isNull(customFilesVersions.label)))
       .orderBy(asc(customFilesVersions.createdAt), asc(customFilesVersions.id))
+      .limit(limit)
   }
 
-  async unlabeledOlderThan(versionsRoot: string, cutoff: Date): Promise<VersionRow[]> {
+  // Paged: the FIRST run after enabling retention on a populated install can
+  // match a very large number of rows, and each one costs a DELETE, a refcount
+  // COUNT and possibly an unlink. The caller loops until a page comes back
+  // short. `limit` matches FilesTrashRetention's own batch size on purpose.
+  async unlabeledOlderThan(versionsRoot: string, cutoff: Date, limit: number): Promise<VersionRow[]> {
     return this.db
       .select()
       .from(customFilesVersions)
       .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), isNull(customFilesVersions.label), lt(customFilesVersions.createdAt, cutoff)))
+      .orderBy(asc(customFilesVersions.createdAt), asc(customFilesVersions.id))
+      .limit(limit)
+  }
+
+  // Every root that currently holds versions. Read from the versions table
+  // rather than by enumerating users and spaces: a root with no history needs
+  // no retention work, and this also naturally covers a root whose user or
+  // space is gone.
+  async distinctRoots(): Promise<string[]> {
+    const rows = await this.db.selectDistinct({ versionsRoot: customFilesVersions.versionsRoot }).from(customFilesVersions)
+    return rows.map((r) => r.versionsRoot)
+  }
+
+  // Files with more than `keep` versions IN THIS ROOT, returned with that count.
+  //
+  // The count comes back with the id on purpose. A file whose versions span two
+  // roots (it was moved between spaces) has a different total per root, and
+  // mixing a per-root candidate list with a global total silently over-deletes
+  // in one root while under-enforcing in the other. Gate, count and trim all
+  // have to agree on scope, and the sweep's scope is one root.
+  async fileIdsExceeding(versionsRoot: string, keep: number): Promise<{ fileId: number; count: number }[]> {
+    const rows = await this.db
+      .select({ fileId: customFilesVersions.fileId, n: count() })
+      .from(customFilesVersions)
+      .where(eq(customFilesVersions.versionsRoot, versionsRoot))
+      .groupBy(customFilesVersions.fileId)
+      .having(gt(count(), keep))
+    return rows.map((r) => ({ fileId: r.fileId, count: Number(r.n) }))
   }
 
   async distinctFileIdsByRoot(versionsRoot: string): Promise<number[]> {

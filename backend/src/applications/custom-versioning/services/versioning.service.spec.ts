@@ -85,7 +85,11 @@ class FakeQueries {
   }
   async usageByRoot(versionsRoot: string) {
     const rows = this.rows.filter((r) => r.versionsRoot === versionsRoot)
-    return { used: rows.reduce((n, r) => n + r.size, 0), count: rows.length }
+    return {
+      used: rows.reduce((n, r) => n + r.size, 0),
+      labeledBytes: rows.filter((r) => r.label).reduce((n, r) => n + r.size, 0),
+      count: rows.length
+    }
   }
   async oldestUnlabeledByRoot(versionsRoot: string) {
     return [...this.rows]
@@ -540,6 +544,81 @@ describe(VersioningService.name, () => {
     // The pre-existing personal version is untouched: 90 + new > 50 would have
     // evicted it under the old, mismatched calculation.
     expect(queries.rows.find((r) => r.fileId === 999)).toBeDefined()
+  })
+
+  // C2 regression, at the seam where the bug lived. Labeled versions are never
+  // evictable, so if labeled bytes ALONE exceed the ceiling no sequence of
+  // evictions can reach it — and a `while (used > ceiling)` loop then deletes
+  // every unlabeled version in the root, including every other file's, and still
+  // finishes over the ceiling. Maximum destruction, zero benefit.
+  it('evicts nothing when labeled versions alone exceed the ceiling', async () => {
+    for (const [i, fileId] of [10, 11, 12].entries()) {
+      await queries.insertVersion({
+        fileId,
+        versionsRoot: 'user:alice',
+        checksum: `${i}`.repeat(64).slice(0, 64),
+        size: 10,
+        mtime: 1,
+        origin: 'web'
+      } as VersionInsert)
+    }
+    await queries.insertVersion({
+      fileId: 13,
+      versionsRoot: 'user:alice',
+      checksum: 'f'.repeat(64),
+      size: 1200,
+      mtime: 1,
+      origin: 'web'
+    } as VersionInsert)
+    queries.rows[3].label = 'a huge named revision'
+
+    // Ceiling 500; labeled alone is 1200, so nothing can help.
+    const removed = await service.evictUntilUnderCeiling('user:alice', 500)
+
+    expect(removed).toBe(0)
+    // Every other file's unlabeled history survives.
+    expect(queries.rows).toHaveLength(4)
+  })
+
+  it('evicts oldest-unlabeled-first until under the ceiling when that is achievable', async () => {
+    for (const [i, size] of [100, 100, 100].entries()) {
+      await queries.insertVersion({
+        fileId: 20 + i,
+        versionsRoot: 'user:alice',
+        checksum: `${i}`.repeat(64).slice(0, 64),
+        size,
+        mtime: 1,
+        origin: 'web'
+      } as VersionInsert)
+      queries.rows[i].createdAt = new Date(Date.now() - (10 - i) * 1000)
+    }
+
+    const removed = await service.evictUntilUnderCeiling('user:alice', 150)
+
+    expect(removed).toBe(2)
+    // The two oldest went; the newest survived.
+    expect(queries.rows.map((r) => r.fileId)).toEqual([22])
+  })
+
+  it('terminates when a victim reports zero size, rather than looping forever', async () => {
+    // A zero-size row does not reduce `used`, so a loop that only exits on
+    // "used <= ceiling" must still make progress by consuming rows.
+    for (const [i, size] of [0, 100].entries()) {
+      await queries.insertVersion({
+        fileId: 30 + i,
+        versionsRoot: 'user:alice',
+        checksum: `${i}`.repeat(64).slice(0, 64),
+        size,
+        mtime: 1,
+        origin: 'web'
+      } as VersionInsert)
+      queries.rows[i].createdAt = new Date(Date.now() - (10 - i) * 1000)
+    }
+
+    const removed = await service.evictUntilUnderCeiling('user:alice', 50)
+
+    expect(removed).toBe(2)
+    expect(queries.rows).toHaveLength(0)
   })
 
   it('skips the cap entirely for a space with no quota', async () => {
