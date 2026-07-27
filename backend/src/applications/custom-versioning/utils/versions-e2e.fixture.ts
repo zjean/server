@@ -101,8 +101,28 @@ export interface VersionsE2EContext {
    * that works for WebDAV; it needs a minted credential.
    */
   ncAuth: string
+  /** The fixture user's own browser session, for building extra bound APIs. */
+  session: { cookie: string; csrf: string }
+  /** Bind a VersionsApi to any session and any space prefix (e.g. `files/<alias>`). */
+  makeApiFor: (session: { cookie: string; csrf: string }, spacePrefix: string) => VersionsApi
+  /**
+   * Create a second (third, …) authenticated user for the multi-actor cases.
+   *
+   * Returns the user plus an `api` bound to THEIR session, so a case can ask
+   * "what can this person do to that file" without rebuilding the cookie/CSRF
+   * dance. Cleaned up by teardown().
+   */
+  addUser: (opts?: { permissions?: string }) => Promise<VersionsActor>
   restoreConfig: () => void
   teardown: () => Promise<void>
+}
+
+export interface VersionsActor {
+  user: UserModel
+  cookie: string
+  csrf: string
+  /** Same shape as the fixture's own api, but for a space path (files/<alias>/…). */
+  spaceApi: VersionsApi
 }
 
 export interface VersionsApi {
@@ -156,40 +176,87 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
 
   const spaceEnv = (rel: string) => spacesManager.spaceEnv(user, ['files', 'personal', ...rel.split('/').filter(Boolean)])
 
-  // See note (3): the constants already carry the prefix.
-  const url = (base: string, rel: string, versionId?: number) =>
-    versionId === undefined ? `${base}/files/personal/${rel}` : `${base}/${versionId}/files/personal/${rel}`
+  // Builds a VersionsApi bound to one session and one space prefix.
+  //
+  // `spacePrefix` is the repository path the endpoints' trailing wildcard
+  // resolves — 'files/personal' for a user's own home, 'files/<alias>' for a
+  // space. Parameterizing it is what lets the permission cases ask the same
+  // seven questions as somebody else, about a file in a shared space.
+  //
+  // See note (3): the route constants already carry the /api/app/spaces prefix.
+  const makeApi = (session: { cookie: string; csrf: string }, spacePrefix: string): VersionsApi => {
+    const url = (base: string, rel: string, versionId?: number) =>
+      versionId === undefined ? `${base}/${spacePrefix}/${rel}` : `${base}/${versionId}/${spacePrefix}/${rel}`
 
-  // See note (2): non-safe methods need the csrf header as well as the cookie.
-  const write = async (method: 'POST' | 'PATCH' | 'DELETE', target: string, body?: unknown, opts?: { csrf?: boolean }) => {
-    const res = await app.inject({
-      method,
-      url: target,
-      headers: { cookie, ...(opts?.csrf === false ? {} : { 'sync-in-csrf': csrf }) },
-      ...(body === undefined ? {} : { body })
-    } as never)
-    return { status: res.statusCode, body: res.body }
+    // See note (2): non-safe methods need the csrf header as well as the cookie.
+    const write = async (method: 'POST' | 'PATCH' | 'DELETE', target: string, body?: unknown, opts?: { csrf?: boolean }) => {
+      const res = await app.inject({
+        method,
+        url: target,
+        headers: { cookie: session.cookie, ...(opts?.csrf === false ? {} : { 'sync-in-csrf': session.csrf }) },
+        ...(body === undefined ? {} : { body })
+      } as never)
+      return { status: res.statusCode, body: res.body }
+    }
+
+    return {
+      async list(rel) {
+        const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_LIST, rel), headers: { cookie: session.cookie } } as never)
+        return { status: res.statusCode, body: res.statusCode === 200 ? (res.json() as VersionProps[]) : [] }
+      },
+      async usage(rel) {
+        const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_USAGE, rel), headers: { cookie: session.cookie } } as never)
+        return { status: res.statusCode, body: res.statusCode === 200 ? res.json() : { used: 0, ceiling: null, count: 0 } }
+      },
+      async content(versionId, rel) {
+        const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_CONTENT, rel, versionId), headers: { cookie: session.cookie } } as never)
+        return { status: res.statusCode, body: res.body, headers: res.headers as Record<string, unknown> }
+      },
+      restore: (versionId, rel, opts) => write('POST', url(API_VERSIONS_RESTORE, rel, versionId), undefined, opts),
+      label: (versionId, rel, label) => write('PATCH', url(API_VERSIONS_LABEL, rel, versionId), { label }),
+      remove: (versionId, rel, query) => write('DELETE', `${url(API_VERSIONS_DELETE, rel, versionId)}${query ?? ''}`),
+      async diff(versionId, rel, query) {
+        const res = await app.inject({
+          method: 'GET',
+          url: `${url(API_VERSIONS_DIFF, rel, versionId)}${query ?? ''}`,
+          headers: { cookie: session.cookie }
+        } as never)
+        return { status: res.statusCode, body: res.body }
+      }
+    }
   }
 
-  const api: VersionsApi = {
-    async list(rel) {
-      const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_LIST, rel), headers: { cookie } } as never)
-      return { status: res.statusCode, body: res.statusCode === 200 ? (res.json() as VersionProps[]) : [] }
-    },
-    async usage(rel) {
-      const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_USAGE, rel), headers: { cookie } } as never)
-      return { status: res.statusCode, body: res.statusCode === 200 ? res.json() : { used: 0, ceiling: null, count: 0 } }
-    },
-    async content(versionId, rel) {
-      const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_CONTENT, rel, versionId), headers: { cookie } } as never)
-      return { status: res.statusCode, body: res.body, headers: res.headers as Record<string, unknown> }
-    },
-    restore: (versionId, rel, opts) => write('POST', url(API_VERSIONS_RESTORE, rel, versionId), undefined, opts),
-    label: (versionId, rel, label) => write('PATCH', url(API_VERSIONS_LABEL, rel, versionId), { label }),
-    remove: (versionId, rel, query) => write('DELETE', `${url(API_VERSIONS_DELETE, rel, versionId)}${query ?? ''}`),
-    async diff(versionId, rel, query) {
-      const res = await app.inject({ method: 'GET', url: `${url(API_VERSIONS_DIFF, rel, versionId)}${query ?? ''}`, headers: { cookie } } as never)
-      return { status: res.statusCode, body: res.body }
+  const api = makeApi({ cookie, csrf }, 'files/personal')
+  const makeApiFor = makeApi
+
+  // Extra actors, tracked so teardown removes them.
+  const extraUsers: UserModel[] = []
+  const addUser = async (opts: { permissions?: string } = {}): Promise<VersionsActor> => {
+    const extra = await admin.createUserOrGuest(
+      {
+        ...generateUserTest(false),
+        permissions: opts.permissions ?? Object.values(USER_PERMISSION).join(USER_PERMS_SEP)
+      } as never,
+      USER_ROLE.USER
+    )
+    extraUsers.push(extra)
+    const res = await app.inject({ method: 'POST', url: API_AUTH_LOGIN, body: { login: extra.login, password: 'password' } })
+    if (res.statusCode !== 201) throw new Error(`versions e2e fixture: extra login failed with ${res.statusCode}`)
+    const jar = res.headers['set-cookie'] as string[]
+    const extraCookie = jar.map((c) => c.split(';')[0]).join('; ')
+    const extraCsrf = jar
+      .find((c) => c.startsWith('sync-in-csrf='))!
+      .split(';')[0]
+      .split('=')
+      .slice(1)
+      .join('=')
+    return {
+      user: extra,
+      cookie: extraCookie,
+      csrf: extraCsrf,
+      // Bound lazily by the caller via makeApiFor below when the space alias is
+      // known; this default targets the actor's own personal space.
+      spaceApi: makeApi({ cookie: extraCookie, csrf: extraCsrf }, 'files/personal')
     }
   }
 
@@ -201,6 +268,9 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
   return {
     app,
     ncAuth,
+    session: { cookie, csrf },
+    addUser,
+    makeApiFor,
     db: app.get<DBSchema>(DB_TOKEN_PROVIDER),
     user,
     versioning,
@@ -249,6 +319,9 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
     },
     async teardown() {
       Object.assign(config, JSON.parse(JSON.stringify(configSnapshot)))
+      for (const extra of extraUsers) {
+        await admin.deleteUserOrGuest(extra.id, extra.login, { deleteSpace: true, isGuest: false } as never).catch(() => undefined)
+      }
       if (user?.id) {
         await admin.deleteUserOrGuest(user.id, user.login, { deleteSpace: true, isGuest: false } as never)
       }
