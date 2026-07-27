@@ -157,8 +157,31 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         'background-plain': true,
         'background-default': true
       },
+      // MUST carry `supports_emoji`, even though user status is disabled.
+      //
+      // NC Android reads BOTH keys inside this block with getBoolean() and NO
+      // has() guard (GetCapabilitiesRemoteOperation.java:710-716), so a missing
+      // `supports_emoji` throws org.json.JSONException — and that exception is
+      // caught at the TOP of parseResponse, which abandons the ENTIRE capability
+      // object. The app then persists nothing: its `capabilities` table stays
+      // empty and every capability-gated feature reads back UNKNOWN.
+      //
+      // Found on a real device. The symptom is not "user status misbehaves" — it
+      // is that the file-detail version list never appears, because
+      // FileDetailActivitiesFragment gates it on
+      // capability.getFilesVersioning().isTrue() and that value never made it to
+      // disk. `files.versioning: true` was in the payload and was parsed
+      // correctly; the parse died three blocks later.
+      //
+      // Shape mirrors upstream's apps/user_status/lib/Capabilities.php, which
+      // emits all four keys. We report the feature as disabled but describe it
+      // completely — a partially-specified block is worse than an absent one,
+      // because the client walks into it.
       user_status: {
-        enabled: false
+        enabled: false,
+        restore: false,
+        supports_emoji: false,
+        supports_busy: false
       },
       // checksums advertised with an empty supportedTypes list. The NC iOS
       // client reads this to decide whether to send OC-Checksum upload

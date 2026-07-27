@@ -49,6 +49,51 @@ describe('ncCapabilities', () => {
     })
   })
 
+  // THE REGRESSION THAT COST AN EVENING ON A REAL DEVICE.
+  //
+  // NC Android reads BOTH keys in this block with getBoolean() and NO has()
+  // guard (GetCapabilitiesRemoteOperation.java:710-716). A missing
+  // `supports_emoji` throws org.json.JSONException, which is caught at the top
+  // of parseResponse and abandons the ENTIRE capability object — so the client
+  // persists NOTHING and every capability-gated feature reads back UNKNOWN.
+  //
+  // The symptom is not "user status misbehaves". On device it was: the
+  // file-detail version list never appeared, because
+  // FileDetailActivitiesFragment gates it on
+  // capability.getFilesVersioning().isTrue() and that value never reached disk.
+  // `files.versioning: true` was in the payload and parsed correctly; the parse
+  // died three blocks later.
+  describe('user_status block', () => {
+    it('carries every key NC Android dereferences, even though the feature is off', () => {
+      const block = (caps.capabilities as Record<string, Record<string, unknown>>).user_status
+      // Shape mirrors upstream's apps/user_status/lib/Capabilities.php.
+      for (const key of ['enabled', 'restore', 'supports_emoji', 'supports_busy']) {
+        expect(block).toHaveProperty(key)
+        expect(typeof block[key]).toBe('boolean')
+      }
+    })
+
+    it('reports the feature as disabled, since this fork does not implement it', () => {
+      const block = (caps.capabilities as Record<string, Record<string, unknown>>).user_status
+      expect(block.enabled).toBe(false)
+    })
+  })
+
+  // A partially-specified block is worse than an absent one: the client walks
+  // into it and dereferences what it expects to find. This guards the whole
+  // family rather than just the one key that bit us.
+  it('never emits a capability block that is present but incomplete for its known consumers', () => {
+    const c = caps.capabilities as Record<string, Record<string, unknown>>
+    // user_status: both booleans Android reads unconditionally.
+    expect(Object.keys(c.user_status)).toEqual(expect.arrayContaining(['enabled', 'supports_emoji']))
+    // files.directEditing: iOS reads url + etag + supportsFileId.
+    expect(Object.keys((c.files as Record<string, Record<string, unknown>>).directEditing)).toEqual(
+      expect.arrayContaining(['url', 'etag', 'supportsFileId'])
+    )
+    // checksums: iOS reads both, and an absent supportedTypes is a null list.
+    expect(Object.keys(c.checksums)).toEqual(expect.arrayContaining(['preferredUploadType', 'supportedTypes']))
+  })
+
   it('still does NOT advertise notifications / activity (intentional — see code comment)', () => {
     expect((caps.capabilities as Record<string, unknown>).notifications).toBeUndefined()
     expect((caps.capabilities as Record<string, unknown>).activity).toBeUndefined()
