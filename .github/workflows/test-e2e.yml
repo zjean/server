@@ -64,6 +64,25 @@ jobs:
       - name: Apply migrations
         run: npm run dev:migrate
 
+      # app.e2e-spec.ts ("AppStaticFiles") asserts that GET / serves the SPA
+      # entry point out of STATIC_PATH, which in a test env resolves to
+      # dist/static. A stub is enough and is deliberately preferred over
+      # `npm run -w frontend build`:
+      #
+      #   - the assertion the BACKEND owns is "static middleware is wired and the
+      #     root route serves the entry point", and a one-line index.html
+      #     exercises exactly that;
+      #   - the frontend's prebuild step downloads pdf.js at build time (it is
+      #     always-latest and gitignored — see PR #272), so building it here would
+      #     make a database-backed e2e suite depend on a third-party download.
+      #
+      # Whether the real bundle builds is the build job's business, not this
+      # suite's.
+      - name: Stub the static bundle
+        run: |
+          mkdir -p dist/static
+          echo '<!doctype html><title>e2e</title>' > dist/static/index.html
+
       # The suite sets `files.versions.enabled` itself in each spec's beforeEach
       # rather than relying on the environment file, so no flag flipping is
       # needed here. That is deliberate: a suite whose result depends on a

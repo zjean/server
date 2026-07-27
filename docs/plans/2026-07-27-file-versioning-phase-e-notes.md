@@ -110,3 +110,12 @@ time as a hard merge block is a bad trade. Promote it into the required set once
 
 The suite sets `files.versions.enabled` itself in each spec rather than reading it from the environment file. That is
 deliberate: a suite whose result depends on a gitignored local file is a suite that passes on one machine.
+
+**One non-obvious workflow step, found by the first CI run.** `app.e2e-spec.ts` ("AppStaticFiles") asserts that `GET /`
+serves the SPA entry point out of `STATIC_PATH`, which in a test env is `dist/static`. It passes locally only because a
+previous frontend build left one there — a textbook passes-on-one-machine dependency, and exactly the class of failure
+this workflow is meant to surface. The workflow writes a **stub `index.html`** rather than building the frontend,
+because the assertion the backend owns is "static middleware is wired and the root route serves the entry point", and
+because the frontend's prebuild downloads pdf.js at build time (always-latest and gitignored — PR #272), which would
+make a database-backed suite depend on a third-party download. Whether the real bundle builds is the build job's
+business.
