@@ -84,6 +84,12 @@ export class FilesVersionsRetentionConfig {
 // Fork-owned file versioning. See docs/plans/2026-07-25-file-versioning-design.md.
 // Disabled by default: every hook site is a one-line call that no-ops while
 // `enabled` is false.
+//
+// Configured through the environment/yaml only — there is deliberately no admin
+// screen. `trashRetention` above, the closest precedent, is also env-only
+// (it appears nowhere under applications/admin), and inventing a UI for
+// versions alone would put this fork ahead of upstream's own config surface for
+// no benefit. Match the precedent; don't invent.
 export class FilesVersionsConfig {
   @IsBoolean()
   enabled: boolean = false
