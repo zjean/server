@@ -17,7 +17,18 @@ export class FilesEventManager implements OnModuleDestroy {
       - reconcile recents after deletions and editor saves
       - store cached events for storage usage updates
       - store indexing events for full-text index updates
-      - todo: handle versioning
+
+     Versioning deliberately does NOT hang off this bus. A version has to
+     capture the bytes a write is about to destroy, and this buffer is async
+     (up to MAX_BUFFER_DELAY_MS, or MAX_BUFFER_SIZE events) — by the time an
+     event is flushed the old content is already gone. Snapshots are therefore
+     taken synchronously at each destructive call site instead; see
+     custom-versioning and the write-path table in
+     docs/plans/2026-07-25-file-versioning-design.md §4.
+
+     Post-write events remain useful to versioning for bookkeeping only
+     (metrics, notifications) — the editors' `source: 'editor'` field makes a
+     cheap origin signal. Nothing here may create a version.
   */
   private readonly MAX_BUFFER_SIZE = 1_000
   private readonly MAX_BUFFER_DELAY_MS = 30_000
