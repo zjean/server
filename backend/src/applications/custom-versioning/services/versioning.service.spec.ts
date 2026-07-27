@@ -38,8 +38,10 @@ import { FileError } from '../../files/models/file-error'
 import { LockConflict } from '../../files/models/file-lock-error'
 import { FilesLockManager } from '../../files/services/files-lock-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
+import { genEtag } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
+import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
@@ -248,6 +250,59 @@ describe(VersioningService.name, () => {
     // no exclusion logic — sibling placement is the entire isolation mechanism.
     expect(blob.startsWith(filesRoot)).toBe(false)
     expect(blob.startsWith(path.join(tmpRoot, 'users', 'alice', 'versions'))).toBe(true)
+  })
+
+  /* ------------------------------------------------- WebDAV interop (task D1) */
+
+  // A PROPFIND must be indistinguishable before and after a snapshot.
+  //
+  // Both props are derived purely from the live file's stat — getetag is
+  // genEtag(size, mtime) (files/utils/files.ts) and getlastmodified is
+  // new Date(mtime).toUTCString() — so this holds only while snapshotting
+  // never touches the live file. It does not: stageBlob copies OUT of
+  // space.realPath with fs.copyFile and hashes the STAGED copy, so the source
+  // is opened read-only and its mtime is never rewritten.
+  //
+  // The failure this guards against is not hypothetical for a versioning
+  // implementation: a design that `touch`ed the live file to mark it versioned,
+  // or that hashed in place with an open-for-update handle, would change the
+  // ETag and make every DAV and NC client re-download an unmodified file.
+  it('leaves the live file’s ETag and getlastmodified untouched, so a PROPFIND cannot tell versions exist', async () => {
+    const davProps = async () => {
+      const stats = await fs.stat(filePath)
+      const f = new WebDAVFile(
+        { id: 0, name: 'report.txt', isDir: false, size: stats.size, ctime: stats.ctimeMs, mtime: stats.mtimeMs, mime: 'text-plain' } as any,
+        'personal/docs'
+      )
+      return { etag: f.getetag, lastModified: f.getlastmodified, size: f.getcontentlength }
+    }
+    const before = await davProps()
+
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'webdav' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(await davProps()).toEqual(before)
+    // And the ETag really is a function of size+mtime alone, which is why the
+    // equality above is the whole claim rather than a sample of it.
+    expect(before.etag).toBe(genEtag({ size: CONTENT.length, mtime: (await fs.stat(filePath)).mtimeMs }))
+  })
+
+  // The other half of "PROPFIND is unchanged": nothing new appears INSIDE the
+  // tree PROPFIND enumerates. Sibling placement is asserted structurally in
+  // utils/paths.spec.ts; this asserts it against a real snapshot on a real
+  // filesystem, which is the form that survives a refactor of the path helpers.
+  it('adds nothing inside the served files tree, so the versions store cannot surface in a PROPFIND', async () => {
+    const filesRoot = path.join(tmpRoot, 'users', 'alice', 'files')
+    const listFilesTree = async () => (await fs.readdir(filesRoot, { recursive: true })).sort()
+    const before = await listFilesTree()
+
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'webdav' })
+
+    expect(await blobFiles()).toHaveLength(1)
+    expect(await listFilesTree()).toEqual(before)
+    // The staging directory is inside the versions root, not the files root —
+    // a temp dir under files/ would be PROPFINDable for the length of a copy.
+    expect(await fs.readdir(versionsDir())).toContain('.staging')
   })
 
   // THE load-bearing property of the blob store, and the one a hardlink

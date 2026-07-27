@@ -1592,6 +1592,41 @@ describe(FilesManager.name, () => {
         expect(snapshots()).toEqual([])
       })
 
+      /* D1. The single-chunk case above proves the GATE; this proves the
+         PROPERTY the gate exists for.
+
+         A DAV client resuming an overwrite issues a whole sequence against the
+         same path: one plain PUT that truncates and writes the head, then one
+         PUT per remaining chunk carrying `content-range`. Sync-in validates
+         `startRange === <current size>` (:147-150), so only the first request
+         can ever see startRange 0 — which is exactly the one request that still
+         has the pre-upload bytes in front of it.
+
+         The two assertions together are the D1 claim. "Exactly one" comes from
+         the count; "the full pre-upload content, never a partial" comes from
+         the ordering — the snapshot precedes the FIRST write of the sequence,
+         so there is no chunk it could have been interleaved with. */
+      it('produces exactly ONE version across a resumed content-range PUT sequence, taken before the first byte lands', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+        const dav = { dav: { depth: DEPTH.RESOURCE, lockTokens: [] } }
+        // The live file grows by one chunk per accepted request, and saveStream
+        // rejects any offset that does not match the current size.
+        vi.mocked(filesUtils.fileSize).mockResolvedValueOnce(100).mockResolvedValueOnce(200)
+
+        // Request 1: plain PUT — truncates the live file and writes the head.
+        await service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['head']) } as any, dav)
+        // Requests 2..n: resumed chunks, each offered at the current size.
+        for (const range of ['bytes 100-199/300', 'bytes 200-299/300']) {
+          await service.saveStream(user, space, { method: 'PUT', headers: { 'content-range': range }, raw: Readable.from(['chunk']) } as any, dav)
+        }
+
+        expect(snapshots()).toEqual(['webdav'])
+        expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(filesUtils.writeFromStream).mock.invocationCallOrder[0]
+        )
+      })
+
       it('snapshots at the move for a tmpPath (sync) upload, not at the tmp write', async () => {
         const space = makeSpace()
         const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
