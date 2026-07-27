@@ -164,6 +164,22 @@ The destructive moment differs per path, and each hook targets it exactly (§B3 
 
 Collabora's cadence is genuinely unknown from source (the WOPI host is driven by the Collabora container's own autosave timer) and is measured in D4 to tune the default.
 
+### 5.1 AMENDED after D4 — the window is per-origin
+
+The single scalar above was wrong, and D4 is what showed it. **Superseded:** `minIntervalSeconds` alone. **Now:** a scalar fallback plus per-origin overrides, `FilesVersionsOriginIntervalsConfig`, defaulting `collabora` and `onlyoffice` to **300** while the scalar stays **60**.
+
+**The correction, and why one number cannot serve both writers.** The window is a **rate limit, not a session collapser** — a fact the original plan's D4 expectation ("N autosaves in five minutes → expect ONE version") assumed away. Versions minted during a session are roughly `session_length / max(window, save_interval)`, and a session is unbounded, so no window value produces one-version-per-session. What a window can do is bound the rate, and the two kinds of writer need different bounds:
+
+- **An editor's cadence is set by the document server, not by a human.** Collabora's own `coolwsd.xml` defaults are `idlesave_duration_secs: 30` and `autosave_duration_secs: 300`, so a PutFile can arrive every 30 seconds of edit-then-pause. At a 60-second window, an hour of active editing mints ~10 versions — and **with `maxVersionsPerFile` at 20 that evicts about half of the file's genuinely distinct older revisions.** Autosave noise consuming the retention budget is the real harm; the row count is only the symptom. 300 matches `autosave_duration_secs`, so a continuously-edited document mints at most one version per autosave cycle.
+- **An interactive write is a human pressing Save.** Each one is a decision, and collapsing four of them leaves the intermediate states unrecoverable. 60 seconds is right for `web`, `web-patch`, `webdav`, `sync`, `sync-make`, `nc-chunked` and `nc-text`.
+
+**Two constraints on the lookup, both load-bearing:**
+
+- **`0` is a meaningful value** — "never coalesce this origin" — and must be distinguishable from "not configured". The resolution tests `typeof configured === 'number'`; a `??` or a truthiness check silently promotes `0` back to the scalar. Same class of trap as this config's own `0 → false` Transform idiom (§6), read from the other side.
+- **An origin with no override falls back to the scalar**, and an `environment.yaml` predating the block leaves it `undefined`, in which case the scalar is the whole rule exactly as before. Adding an origin to the config is therefore a purely additive change.
+
+`onlyoffice` gets 300 for symmetry rather than out of need: it saves only from callback statuses 2/3/6/7 and has no autosave path, so coalescing there is expected to rarely fire either way.
+
 ## 6. Retention — mirror the trash retention config shape
 
 **Decision.** `FilesVersionsConfig`, added to `files/files.config.ts`, mirroring `FilesTrashRetentionConfig` (:51-63) **including its `0 → false` Transform + `ValidateIf` idiom** so `0` means "off" rather than "immediately expire everything":
@@ -174,7 +190,8 @@ class FilesVersionsConfig {
   maxVersionsPerFile: number | false = 20
   retentionDays: { users: number | false; spaces: number | false }   // split, exactly like trashRetention
   quotaShare: number | false = 0.5              // §7; NC's default is 50%
-  minIntervalSeconds: number = 60               // §5
+  minIntervalSeconds: number = 60               // §5 — the fallback, for interactive origins
+  minIntervalSecondsByOrigin: { collabora: number; onlyoffice: number }   // §5.1, added after D4
 }
 ```
 

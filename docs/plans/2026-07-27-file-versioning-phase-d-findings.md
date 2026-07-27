@@ -335,6 +335,12 @@ tuning, so shipping it as a side effect of D4 would be the wrong call.
 `onlyoffice`, 60 s for the interactive origins — and keep a single scalar as the fallback. That needs an ADR §5
 amendment, so it is recorded here rather than done here. The default stays **60**.
 
+> **RESOLVED.** The maintainer accepted the per-origin window; it shipped as **ADR §5.1** and
+> `FilesVersionsOriginIntervalsConfig`. The scalar `minIntervalSeconds` stays 60 as the fallback for interactive
+> origins, and `collabora` / `onlyoffice` default to 300. The paragraph above is left as the record of the reasoning.
+> The decisive argument turned out to be the one about `maxVersionsPerFile`, not the row count: at 60 seconds an hour
+> of active editing mints ~10 versions and evicts about half of that file's genuinely distinct older revisions.
+
 **What is still owed, and is a soak item either way.** ADR §19 already requires a soak against real Collabora and
 OnlyOffice before the flag defaults on. The empirical confirmation of D4.1/D4.2 belongs to that soak. Recipe, for
 whoever runs it:
@@ -359,8 +365,7 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
 
 ### Open decisions — these need the maintainer, not a session
 
-1. **The coalescing window (D4.3).** `minIntervalSeconds` stays at 60 and the per-origin proposal is unimplemented.
-   Nothing is broken; the number is simply not tuned, and tuning it globally has a cost on the interactive origins.
+1. ~~**The coalescing window (D4.3).**~~ **Resolved** — the per-origin window shipped as ADR §5.1. See D4.3.
 2. **A minimal Activity OCS endpoint (D2.5).** Without it the NC versions tree is correct and unreachable from stock
    Android. Worth its own issue; the endpoint is `/ocs/v2.php/apps/activity/api/v2/activity` and the capability key is
    `activity` — which `constants/capabilities.ts` currently omits *on purpose*, so that comment needs revisiting rather

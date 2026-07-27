@@ -66,8 +66,23 @@ applications:
     # hidden while this is false, because the API 404s and the UI probes for it.
     # A version is only created when a file is OVERWRITTEN, so a fresh file shows
     # an empty history until you save over it.
-    # minIntervalSeconds: 0 defeats the 60s coalescing window, which otherwise
+    # minIntervalSeconds: 0 defeats the coalescing window, which otherwise
     # merges successive test saves into a single version.
+    #
+    # The window is per-origin (ADR §5). minIntervalSeconds is the fallback for
+    # every INTERACTIVE origin — a human pressing Save, where 60s is the right
+    # granularity in production. minIntervalSecondsByOrigin overrides it for the
+    # editors, whose cadence is set by the document server rather than by a
+    # person: Collabora's own defaults save after 30 idle seconds and every 300
+    # seconds of continuous typing, so 300 keeps an hour of editing from minting
+    # ~10 versions and evicting half the file's distinct history via
+    # maxVersionsPerFile.
+    #
+    # Zero everything for development. Measuring an editor's real cadence needs
+    # 0 here too, or you measure the window instead of the editor.
     versions:
       enabled: false
       minIntervalSeconds: 0
+      minIntervalSecondsByOrigin:
+        collabora: 0
+        onlyoffice: 0

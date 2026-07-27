@@ -16,7 +16,12 @@ vi.mock('../../../configuration/config.environment', () => ({
           maxVersionsPerFile: 20,
           retentionDays: { users: false, spaces: false },
           quotaShare: 0.5,
-          minIntervalSeconds: 60
+          minIntervalSeconds: 60,
+          // Present in the mock ON PURPOSE, with the real defaults. A mock that
+          // omitted it would send every origin down the scalar fallback, so no
+          // test would ever exercise the per-origin lookup — the same shape of
+          // gap as the retention spec whose db stub always answered "no quota".
+          minIntervalSecondsByOrigin: { collabora: 300, onlyoffice: 300 }
         }
       }
     }
@@ -140,6 +145,7 @@ describe(VersioningService.name, () => {
 
     versionsConfig.enabled = true
     versionsConfig.minIntervalSeconds = 60
+    versionsConfig.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 }
     versionsConfig.quotaShare = 0.5
     versionsConfig.maxVersionsPerFile = 20
 
@@ -486,19 +492,106 @@ describe(VersioningService.name, () => {
     expect(queries.rows.filter((r) => r.origin === 'restore')).toHaveLength(2)
   })
 
-  it('coalescing is disabled by minIntervalSeconds = 0', async () => {
+  it('coalescing is disabled by minIntervalSeconds = 0 for the origins the scalar governs', async () => {
     versionsConfig.minIntervalSeconds = 0
-    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
-    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(queries.rows).toHaveLength(2)
   })
 
   it('takes a new version once the window has elapsed', async () => {
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
-    queries.rows[0].createdAt = new Date(Date.now() - 61_000)
+    // 301s: collabora's own window is 300, not the 60 the scalar carries.
+    queries.rows[0].createdAt = new Date(Date.now() - 301_000)
     await fs.writeFile(filePath, 'much later')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
     expect(queries.rows).toHaveLength(2)
+  })
+
+  /* ------------------------------------------- the per-origin window (ADR §5) */
+
+  // The window is per-origin because the two kinds of writer have cadences two
+  // orders of magnitude apart: an editor's is set by the document server
+  // (Collabora saves after 30 idle seconds), an interactive save is a human
+  // decision. One scalar cannot serve both — at 60 an hour of editing mints ~10
+  // versions and, with maxVersionsPerFile at 20, evicts half the file's
+  // genuinely distinct older revisions.
+  describe('per-origin coalescing window', () => {
+    // THE test: the same elapsed time, two origins, two answers.
+    it('coalesces an editor save that an interactive save of the same age would not', async () => {
+      const hundredSecondsAgo = () => new Date(Date.now() - 100_000)
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      expect(queries.rows).toHaveLength(2)
+      for (const row of queries.rows) row.createdAt = hundredSecondsAgo()
+
+      await fs.writeFile(filePath, 'a later autosave')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      // 100s < collabora's 300 -> suppressed. 100s > web's 60 -> a new version.
+      expect(queries.rows.filter((r) => r.origin === 'collabora')).toHaveLength(1)
+      expect(queries.rows.filter((r) => r.origin === 'web')).toHaveLength(2)
+    })
+
+    it.each(['onlyoffice', 'collabora'] as const)('gives %s the editor window rather than the scalar', async (origin) => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin })
+      queries.rows[0].createdAt = new Date(Date.now() - 120_000)
+      await fs.writeFile(filePath, 'two minutes later')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin })
+
+      // Two minutes is past the 60s scalar but inside the 300s editor window.
+      expect(queries.rows).toHaveLength(1)
+    })
+
+    it.each(['web', 'web-patch', 'webdav', 'sync', 'sync-make', 'nc-chunked', 'nc-text'] as const)(
+      'falls back to the scalar for %s, which has no override',
+      async (origin) => {
+        await service.snapshotBeforeOverwrite(user, personalSpace(), { origin })
+        queries.rows[0].createdAt = new Date(Date.now() - 61_000)
+        await fs.writeFile(filePath, 'just over a minute later')
+        await service.snapshotBeforeOverwrite(user, personalSpace(), { origin })
+
+        expect(queries.rows).toHaveLength(2)
+      }
+    )
+
+    // 0 is a MEANINGFUL value, not "unset". A `?? fallback` or a truthiness
+    // check would silently promote it back to the scalar's 60.
+    it('treats a per-origin 0 as "never coalesce this origin", even with a non-zero scalar', async () => {
+      versionsConfig.minIntervalSeconds = 60
+      versionsConfig.minIntervalSecondsByOrigin = { collabora: 0, onlyoffice: 300 }
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+
+      expect(queries.rows).toHaveLength(2)
+    })
+
+    it('lets a per-origin override coalesce an origin the scalar would have released', async () => {
+      versionsConfig.minIntervalSeconds = 0
+      versionsConfig.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 }
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+
+      // The scalar says "never coalesce"; collabora's own override still does.
+      expect(queries.rows).toHaveLength(1)
+    })
+
+    // An environment.yaml written before this block existed leaves it undefined.
+    // The scalar must then be the whole rule, exactly as it was before.
+    it('falls back to the scalar for every origin when the block is absent', async () => {
+      versionsConfig.minIntervalSecondsByOrigin = undefined
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      queries.rows[0].createdAt = new Date(Date.now() - 61_000)
+      await fs.writeFile(filePath, 'just over the scalar window')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+
+      expect(queries.rows).toHaveLength(2)
+    })
   })
 
   /* -------------------------------------------------------------- quota share */
