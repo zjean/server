@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, asc, count, desc, eq, inArray, isNull, lt, sum } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, isNull, lt, sum } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -181,6 +181,49 @@ export class VersioningQueries {
       .select()
       .from(customFilesVersions)
       .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), isNull(customFilesVersions.label), lt(customFilesVersions.createdAt, cutoff)))
+  }
+
+  // Every root that currently holds versions. Read from the versions table
+  // rather than by enumerating users and spaces: a root with no history needs
+  // no retention work, and this also naturally covers a root whose user or
+  // space is gone.
+  async distinctRoots(): Promise<string[]> {
+    const rows = await this.db.selectDistinct({ versionsRoot: customFilesVersions.versionsRoot }).from(customFilesVersions)
+    return rows.map((r) => r.versionsRoot)
+  }
+
+  // Files with more than `keep` versions, so the trim only touches what needs it.
+  async fileIdsExceeding(versionsRoot: string, keep: number): Promise<number[]> {
+    const rows = await this.db
+      .select({ fileId: customFilesVersions.fileId, n: count() })
+      .from(customFilesVersions)
+      .where(eq(customFilesVersions.versionsRoot, versionsRoot))
+      .groupBy(customFilesVersions.fileId)
+      .having(gt(count(), keep))
+    return rows.map((r) => r.fileId)
+  }
+
+  // Version rows for files sitting in the trash, older than `cutoff`.
+  //
+  // This is the rule ADR §10 was corrected to require. The obvious approach —
+  // wait for the version row to become "dangling" because its `files` row went
+  // away — CANNOT work: trash retention never touches the `files` table, and
+  // our own version rows keep that row alive against the nightly orphan sweep.
+  // So the row never disappears and nothing would ever be reclaimed. Keying on
+  // `inTrash` plus age is what actually frees the space.
+  async unlabeledInTrashOlderThan(versionsRoot: string, cutoff: Date): Promise<VersionRow[]> {
+    return this.db
+      .select({ ...columnsOf() })
+      .from(customFilesVersions)
+      .innerJoin(files, eq(files.id, customFilesVersions.fileId))
+      .where(
+        and(
+          eq(customFilesVersions.versionsRoot, versionsRoot),
+          eq(files.inTrash, true),
+          isNull(customFilesVersions.label),
+          lt(customFilesVersions.createdAt, cutoff)
+        )
+      )
   }
 
   async distinctFileIdsByRoot(versionsRoot: string): Promise<number[]> {

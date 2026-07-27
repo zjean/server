@@ -485,6 +485,15 @@ export class VersioningService {
     this.logger.log({ tag: this.purgeForFileIds.name, msg: `purged ${rows.length} versions for ${fileIds.length} file(s)` })
   }
 
+  // Retention's entry point for removing a version. Deliberately a named
+  // method rather than making dropVersion public: retention is the only caller
+  // outside this class, and routing it through a documented seam keeps the
+  // refcount-aware blob removal in one place instead of letting the scheduler
+  // delete rows and blobs itself.
+  async dropVersionForRetention(version: VersionRow): Promise<void> {
+    return this.dropVersion(version)
+  }
+
   // Deletes one version row and its blob if nothing else references it.
   private async dropVersion(version: VersionRow): Promise<void> {
     await this.queries.deleteById(version.id)

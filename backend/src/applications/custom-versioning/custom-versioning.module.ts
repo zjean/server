@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common'
 import { CustomSharedModule } from '../custom-shared/custom-shared.module'
 import { FilesModule } from '../files/files.module'
 import { VersioningQueries } from './services/versioning-queries.service'
+import { VersionsRetention } from './services/versions-retention.service'
 import { VersioningController } from './versioning.controller'
 import { VersioningService } from './services/versioning.service'
 
@@ -26,7 +27,7 @@ import { VersioningService } from './services/versioning.service'
 @Module({
   imports: [FilesModule, CustomSharedModule],
   controllers: [VersioningController],
-  providers: [VersioningService, VersioningQueries],
+  providers: [VersioningService, VersioningQueries, VersionsRetention],
   exports: [VersioningService]
 })
 export class CustomVersioningModule {}
