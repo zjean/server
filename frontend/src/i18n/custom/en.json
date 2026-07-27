@@ -166,5 +166,12 @@
   "Star a file or folder from the file browser and it will show up here.": "Star a file or folder from the file browser and it will show up here.",
   "No spaces yet": "No spaces yet",
   "Nothing here yet": "Nothing here yet",
-  "Find files by name or content across your spaces.": "Find files by name or content across your spaces."
+  "Find files by name or content across your spaces.": "Find files by name or content across your spaces.",
+  "Web": "Web",
+  "WebDAV": "WebDAV",
+  "Desktop sync": "Desktop sync",
+  "Mobile app": "Mobile app",
+  "Mobile editor": "Mobile editor",
+  "Collabora": "Collabora",
+  "OnlyOffice": "OnlyOffice"
 }

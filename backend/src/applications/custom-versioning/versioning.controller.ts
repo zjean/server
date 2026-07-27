@@ -24,6 +24,7 @@ import { SpaceEnv } from '../spaces/models/space-env.model'
 import { GetUser } from '../users/decorators/user.decorator'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_ROUTE } from './constants/routes'
+import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
 import { DeleteVersionDto, SetVersionLabelDto, VersionDiffDto } from './dto/version.dto'
 import { VersionProps, VersionsUsage } from './interfaces/version.interface'
 import { VersioningService } from './services/versioning.service'
@@ -184,10 +185,12 @@ export class VersioningController {
   }
 
   // Every endpoint 404s while the feature is off, so the v2 UI can probe once
-  // and hide the whole panel rather than special-casing each call.
+  // and hide the whole panel rather than special-casing each call. The message
+  // is a shared constant because the UI matches on it to tell this 404 apart
+  // from SpaceGuard's 'Space not found'.
   private requireEnabled(): void {
     if (!this.versioning.enabled) {
-      throw new HttpException('Versioning is not enabled', HttpStatus.NOT_FOUND)
+      throw new HttpException(VERSIONS_DISABLED_MESSAGE, HttpStatus.NOT_FOUND)
     }
   }
 }

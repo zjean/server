@@ -166,5 +166,12 @@
   "Star a file or folder from the file browser and it will show up here.": "Markeer een bestand of map met een ster in de bestandsverkenner, dan verschijnt het hier.",
   "No spaces yet": "Nog geen spaces",
   "Nothing here yet": "Nog niks hier",
-  "Find files by name or content across your spaces.": "Vind bestanden op naam of inhoud in al je spaces."
+  "Find files by name or content across your spaces.": "Vind bestanden op naam of inhoud in al je spaces.",
+  "Web": "Web",
+  "WebDAV": "WebDAV",
+  "Desktop sync": "Desktopsynchronisatie",
+  "Mobile app": "Mobiele app",
+  "Mobile editor": "Mobiele editor",
+  "Collabora": "Collabora",
+  "OnlyOffice": "OnlyOffice"
 }
