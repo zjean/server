@@ -11,6 +11,33 @@ Audience: orchestration agent dispatching subagent tasks. Each task has an ID, d
 5. **Frontend target resolved:** `custom-v2` only (ADR §14).
 6. **Hardlink-same-device downgraded** from guarantee to likely-but-config-dependent.
 
+---
+
+> ## ⚠️ STATUS (2026-07-27): Phases A and B are BUILT AND MERGED. Parts of this plan are SUPERSEDED.
+>
+> **Start here instead:** [`2026-07-27-file-versioning-handoff.md`](2026-07-27-file-versioning-handoff.md), then
+> [`2026-07-25-file-versioning-design.md`](2026-07-25-file-versioning-design.md) (the ADR).
+>
+> **The ADR is the authority.** Where this plan and the ADR disagree, the ADR is right — it was corrected three
+> times during implementation, by failing tests and by review. This plan was not.
+>
+> Phases A and B (tasks A1, B0–B6) shipped as PRs #310–#317. This document remains accurate for **Phases C, D and E**.
+> Its Phase-A/B task bodies are kept as a record of what was planned, **not as instructions**.
+>
+> **Several designs in here are wrong and would destroy data if implemented as written.** Each is marked inline where
+> it appears. Do not act on a Phase-A/B instruction without checking for a `SUPERSEDED` note beside it.
+>
+> Drift that is merely out of date (following it gets you a compile error, not data loss):
+>
+> | This plan says | Reality |
+> |---|---|
+> | table `files_versions` | **`custom_files_versions`** — the `custom_` prefix avoids collision if upstream ships its own (ADR §3) |
+> | `realVersionsPathFromSpace(user, space)` | `versionsRootFromSpace()` + `versionsPathFromRoot()` in `custom-versioning/utils/paths.ts` |
+> | `purgeForDescendants(scopeProps, path)` | `purgeForPath(props, isDir)` |
+> | scope columns "refreshed lazily from `files` on read" | refreshed on the file's next snapshot via `refreshScope`; never authoritative (ADR §15) |
+> | snapshot is "O(1)-ish when hardlink succeeds" | retracted — there is no hardlink; cost is one clone-or-copy plus one hash of the staged copy (ADR §1.2) |
+> | B5 "dangling-row GC (row whose blob is missing…)" | not implemented; implementing it literally is dangerous — see the handoff's "known gaps" |
+
 Non-negotiable constraints derived from verified codebase behavior: editors replace live content via `copyFileContent`, never `moveFiles` (inode stability is deliberate; restore must honor it); there are **six** overwrite paths, including NC chunked uploads and `saveMultipart` PATCH which bypass or are easily missed under `saveStream`-centric thinking; **`files` rows are lazily materialized and `space.dbFile` has no `id`, so every snapshot must ensure a row first**; the repo checksum standard is `sha512-256`; the blob store lives as a sibling of the files repository (like trash), never inside it; quota is computed by `dirSize` over the whole home path, so versions count toward quota **and the pre-flight upload guard is synchronous off a 1-day cache**; the direct-write branch of `saveStream` destroys the file at the first byte, so its snapshot gate is `fExists && startRange === 0`; WebDAV writes hold no server lock; permanent-delete purging must cover the `inTrashRepository` branch and directory descendants; `copyMove` overwrite already trashes the destination and needs no snapshot; all database migrations are generated via drizzle-kit tooling, never hand-written.
 
 ---
@@ -81,6 +108,10 @@ Depends on: nothing. Blocks: everything.
 Decide and record, with rationale:
 
 1. **Storage layout.** Content-addressed store as a SIBLING of the files repository, exactly like trash: `<home>/versions/<digest[0:2]>/<digest>` where `<home>` is `UserModel.getHomePath(login)` or `SpaceModel.getHomePath(alias)`, resolved by a `realVersionsPathFromSpace()` helper modeled 1:1 on `realTrashPathFromSpace` (`spaces/utils/paths.ts:76`) covering personal / space / external-root / share cases. Rationale (verified): a store inside the files root would be listed by WebDAV PROPFIND and browse, synced down by the desktop client, walked by the content indexer (no dotfolder exclusion exists — verified at `files-content-indexer.service.ts:321`), and counted twice in intent by `dirSize`. Sibling placement gets the isolation trash already gets. Record explicitly that `versions` is **not** added to `SPACE_REPOSITORY` / `SPACE_ALIAS` and is never URL-reachable or browsable — unlike `trash`, which is.
+   > **SUPERSEDED — ADR §1.1. DO NOT HARDLINK.** A hardlinked blob shares the live file's inode, and three of the
+   > seven write paths truncate that inode *in place*, so the "saved" version ends up holding the NEW content. Blobs
+   > are copied with `fs.copyFile` + `COPYFILE_FICLONE`. `versioning.service.spec.ts` fails if `fs.link` comes back.
+
    **`[R2]` Hardlink caveat, downgraded from the draft's guarantee.** `usersPath`/`spacesPath`/`tmpPath`/`dataPath` are independently configurable (`files.config.ts:85-97`) and may be separate mounts; and guest/link homes sit under `tmpPath` while `getTrashPath` resolves into `usersPath` (`user.model.ts:135-156`). So treat **hardlink-then-copy-on-`EXDEV` as the normal contract**, not an external-root edge case. Measure both. Record that same-device is the expected deployment but not an invariant the code may assume.
 2. **Checksum algorithm.** `sha512-256`, reusing `checksumFile` / `SYNC_CHECKSUM_ALG` (NOT sha256 — the repo standard is sha512-256, `sync/constants/sync.ts:5`). Digest is 64 hex chars. Path sharding is `<digest[0:2]>`; algorithm-neutral naming everywhere (column named `checksum`, no algorithm baked into paths or DTOs). Record the algorithm in the ADR so a future change is an explicit migration.
 3. **`[R2]` DB model — anchor resolved: id-keyed, ensurer-guaranteed.** Single global `files_versions` table (NOT per-root like trash; versions need joins with `files` for API queries, and unlike trash there is no FS-scan reconciliation).
@@ -109,6 +140,12 @@ Decide and record, with rationale:
     - The `space.inTrashRepository` branch (`files-manager.service.ts:539-541`) — this is the COMMON permanent-delete path (`forceDeleteInDB` remains false there).
     - The `forceDeleteInDB` fallback branch (:572-581).
     - Directory deletes: `deleteFiles` removes ALL descendant rows in one regexp query, so `purgeForFile(fileId)` alone misses children. **`[R2]` Under the id-keyed anchor the purge is clean:** resolve descendant ids first — `SELECT id FROM files WHERE <scope> AND childFilesFindRegexp(path)` reusing the exported helper from `files.schema.ts` — then delete `files_versions` rows for those ids, **before** `filesQueries.deleteFiles` runs (FK ordering per §3). API shape: `purgeForFile(fileId)` and `purgeForDescendants(scopeProps, path)`.
+    > **SUPERSEDED — ADR §10.** The dangling-row GC **cannot** absorb this case: trash retention never touches the
+    > `files` table, and version rows *pin* that row against `deleteOrphanFiles`, so it never disappears and nothing is
+    > ever reclaimed. The replacement rule (purge `inTrash` versions older than the trash window) was ALSO wrong and
+    > destroyed restorable history — a version's `createdAt` is when the file was overwritten, not when it was trashed,
+    > and no trashed-at timestamp is addressable by `files.id`. **There is no trash-age rule.** Read ADR §10 first.
+
     - Trash retention scheduler: it is FS-scan/inode based and does not hold `files.id` (verified). **Decision: do NOT attempt a record→`files` mapping there.** Let trash retention simply trigger the B5 dangling-row GC ("version row whose `files` row is gone"), which absorbs the case without the fragile inode↔id join the draft budgeted as real work.
 11. **copyMove overwrite.** Verified: the destination is already moved to TRASH via `this.delete(user, dstSpace)` (:488-489) before the move/copy, so its content is recoverable and its versions travel with the trashed row. The delete is also deferred via callback for task transfers (:496, :516), so a single inline hook would miss that path anyway. Decision for v1: NO snapshot in `copyMove`; document that trash covers overwrite-by-move/copy. Revisit only if trash retention windows prove too short.
 12. **Module placement.** New module `backend/src/applications/custom-versioning/` (fork isolation) exporting `VersioningService`, consumed via small `mod()` hooks in upstream files (`files-manager.service.ts`, both editor managers) and one direct import in the fork-owned `nc-uploads.controller.ts` (already a `custom-*` path, no `mod()` needed). **`[R2]` Plus `backend/src/applications/custom-shared/` for the `FileRowEnsurer` (B0)**, consumed by both `custom-versioning` and `custom-mobile-compat` — versioning must not be a dependency of mobile-compat, since versioning is feature-flagged off by default and mobile-compat needs the ensurer unconditionally. Contributing upstream is **not** pursued for v1; record that.
@@ -146,6 +183,12 @@ Depends: A1. Branch `feat/versioning-schema`.
 **Task B2 — VersioningService (core)**
 Depends: B0, B1. Branch `feat/versioning-service`.
 - `custom-versioning/services/versioning.service.ts` with API:
+  > **SUPERSEDED in two ways — ADR §1.1 and §1.2.** (a) No hardlink, ever (see above). (b) The digest must come from
+  > the STAGED COPY, not the live file: hashing the live file in a separate pass leaves a window in which the two
+  > disagree, and in a content-addressed store one mis-named blob is then served for every later file with that
+  > content. Real sequence: copy to `.staging/<uuid>.part` → hash the stage → publish by rename (always, even on a
+  > dedup hit).
+
   - `snapshotBeforeOverwrite(user, space, opts: { origin }): Promise<void>` — sequence: feature-flag check → **`[R2]` guest/link skip (ADR §8)** → checksum current file via `checksumFile(path, SYNC_CHECKSUM_ALG)` → **`[R2]` `fileId = await ensureFileId(...)` (B0); abort quietly if 0** → coalescing policy → **`[R2]` eager `quotaShare` eviction (ADR §7)** → hardlink-or-copy into the blob store (hardlink first; fall back to copy on `EXDEV`, a **normal** case per ADR §1) → insert row. Blob path via `realVersionsPathFromSpace()` (new util in `custom-versioning/utils/`, modeled on `realTrashPathFromSpace`). Crash-safe ordering: blob before DB row; orphan blobs are GC'd by B5. NEVER throws into the caller's save path: catch, log error, return (ADR-recorded durability-vs-availability tradeoff).
   - `listVersions(user, space): VersionDto[]` (permission-checked via the same space env the caller resolved)
   - `getVersionStream(user, space, versionId)` (download)
@@ -155,7 +198,7 @@ Depends: B0, B1. Branch `feat/versioning-service`.
   - `purgeForFile(fileId)` and **`[R2]` `purgeForDescendants(scopeProps, path)`** — resolves descendant ids via `SELECT id FROM files WHERE <scope> AND childFilesFindRegexp(path)` (reuse the exported helper from `files.schema.ts`), then purges by id. Called on permanent delete per ADR §10.
   - **`[R2]` `versionsUsage(versionsRoot): Promise<number>`** — `SUM(size)`, backing the eager quota cap and the C2 usage display.
 - Config class `FilesVersionsConfig` added to `files/files.config.ts` (`mod(files)`, follow the `FilesTrashRetentionConfig` shape at :51, incl. the `0 → false` Transform + `ValidateIf` idiom).
-- Unit tests (vitest; tmpdir integration style like existing files specs): snapshot creates blob + row; **`[R2]` snapshot on a file with no `files` row materializes exactly one row and reuses it on the second snapshot**; dedup within one versions root (same content twice = one blob); coalescing window respected; labeled version never coalesced; **`[R2]` eager quota cap evicts oldest unlabeled and never evicts labeled**; **`[R2]` guest/link user = no-op**; restore snapshots current first AND preserves the live file's inode (assert `stat().ino` unchanged); hardlink fallback on cross-device (failure injection); purge decrements/deletes blobs; descendant purge covers children; disabled flag = all methods no-op; snapshot failure does not throw into the caller; permission denial for read-only user.
+- Unit tests (vitest; tmpdir integration style like existing files specs): snapshot creates blob + row; **`[R2]` snapshot on a file with no `files` row materializes exactly one row and reuses it on the second snapshot**; dedup within one versions root (same content twice = one blob); coalescing window respected; labeled version never coalesced; **`[R2]` eager quota cap evicts oldest unlabeled and never evicts labeled**; **`[R2]` guest/link user = no-op**; restore snapshots current first AND preserves the live file's inode (assert `stat().ino` unchanged); <!-- SUPERSEDED: no hardlink exists, so there is no hardlink-fallback test. Assert instead that a blob is INDEPENDENT of a later in-place write, and that a blob's name is the hash of its own bytes (ADR §1.1, §1.2). --> purge decrements/deletes blobs; descendant purge covers children; disabled flag = all methods no-op; snapshot failure does not throw into the caller; permission denial for read-only user.
 - Acceptance: ≥90% line coverage on the service; no imports from `custom-versioning` into upstream files except via the B3 hooks; `npm run build -w backend` clean.
 
 **Task B3 — Write-path hooks (SIX paths; `mod()` where upstream, direct where fork-owned)**
@@ -170,6 +213,9 @@ Depends: B2. Branch `mod/versioning-hooks`.
 - **`[R2]` `mkFile`** (`mod(files)`, `files-manager.service.ts:348`): when `overwrite === true` and the path exists and is a file, snapshot before the destructive write — both the `copyFileContent(srcSample, ...)` branch (:365) and the `createEmptyFile(...)` branch (:369, which truncates to zero bytes via `fs.writeFile(rPath, '')`). Origin `sync-make` (the only current caller with `overwrite=true` is `sync-manager.service.ts:98`). This closes the sixth path and satisfies §7.9.
 - **`copyMove`: NO hook** (ADR §11 — destination goes to trash already; task transfers defer the delete via callback and would dodge an inline hook anyway).
 - **`[R2]` Move/rename: NO hook** (ADR §15 — `filesQueries.moveFiles` repaths `files` and the `fileId` anchor is unaffected). Covered by regression test E2E-19, not by code.
+> **Partly SUPERSEDED — ADR §10.** The purge hooks themselves are correct and shipped. The final clause — "merely
+> trigger the B5 dangling-row GC" — is not: see the note under A1 §10 above. Nothing is hooked into trash retention.
+
 - **Purge hooks** (`mod(files)`): in `FilesManager.delete`, call the purge API in BOTH permanent branches — the `inTrashRepository` branch (:539-541, the common path) and the `forceDeleteInDB` fallback (:572-581) — using `purgeForDescendants` when `isDir`, **BEFORE** `filesQueries.deleteFiles` (FK ordering per ADR §3/§10, and required so descendant ids are still resolvable). In `files-trash-retention.service.ts`: **`[R2]` no record→`files` mapping** — merely trigger the B5 dangling-row GC (ADR §10).
 - Unit tests: extend `files-manager.service.spec.ts`, both editor manager specs, and the nc-uploads controller spec — every hook fires exactly once per overwrite; **`[R2]` PATCH multipart fires**; **`[R2]` `mkFile(overwrite=true)` on an existing file fires**; never on create; never on POST; never on resumed chunks; never when flag disabled; never for directories; purge fires on permanent delete from trash and covers directory children.
 - Acceptance: upstream diffs small and greppable; one atomic `mod(files):` / `mod(editors):` commit per upstream file; nc-uploads change is a normal fork commit; `npm run build -w backend` clean.
@@ -184,9 +230,13 @@ Depends: B2 (parallel with B3). Branch `feat/versioning-api`.
 
 **Task B5 — Scheduler + retention**
 Depends: B2. Branch `feat/versioning-retention`.
+> **SUPERSEDED in part — ADR §10 and §7.** As shipped: no trash-age rule (see A1 §10 above), and the quota eviction is
+> NOT reimplemented here — it calls `VersioningService.evictUntilUnderCeiling`, the single place that decides when
+> eviction is allowed. Duplicating that decision produced the same data-loss bug twice.
+
 - `custom-versioning/services/versions-retention.service.ts` modeled on `files-trash-retention.service.ts` and registered via `infrastructure/scheduler` the same way: enforce `retentionDays`, `maxVersionsPerFile`, `quotaShare` as a **backstop** to B2's eager cap (oldest unlabeled first, per versions root, using `versionsUsage()` — not a `dirSize` walk), orphan-blob GC (blob with zero rows and mtime older than 24h), and dangling-row GC (row whose blob is missing, or — per ADR §10 — whose `files` row no longer exists → log + delete row + refcount fix).
 - **`[R2]` The GC must not treat a cross-space-moved file's blob as orphaned** — match on the `versionsRoot` column recorded at snapshot time, not on the file's current space (ADR §15).
-- Unit tests: each rule in isolation; labeled versions survive `retentionDays` and `maxVersions` but count toward `quotaShare`; GC idempotent; scheduler no-ops when disabled; dangling-row GC handles the trash-retention-purged case; **`[R2]` GC leaves a moved file's blob alone**.
+- Unit tests: each rule in isolation; labeled versions survive `retentionDays` and `maxVersions` but count toward `quotaShare`; GC idempotent; scheduler no-ops when disabled; <!-- SUPERSEDED: there is no trash-retention-purged case for the dangling-row GC to handle (ADR §10); assert the opposite, that history is NOT reclaimed merely because a file sits in the trash --> a case where labeled bytes alone exceed the quota ceiling must evict NOTHING (the bug that shipped twice); **`[R2]` GC leaves a moved file's blob alone**.
 
 **Task B6 — Events, indexing, recents, admin config**
 Depends: B3. Branch `feat/versioning-glue`.
