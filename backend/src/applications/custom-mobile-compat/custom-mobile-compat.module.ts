@@ -3,6 +3,7 @@ import { AUTH_PROVIDER } from '../../authentication/providers/auth-providers.con
 import { AuthProviderOIDCModule } from '../../authentication/providers/oidc/auth-provider-oidc.module'
 import { CommentsModule } from '../comments/comments.module'
 import { CustomFavoritesModule } from '../custom-favorites/custom-favorites.module'
+import { CustomSharedModule } from '../custom-shared/custom-shared.module'
 import { configuration } from '../../configuration/config.environment'
 import { FilesModule } from '../files/files.module'
 import { SharesModule } from '../shares/shares.module'
@@ -66,6 +67,8 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
   // CustomFavoritesModule exports FavoritesManager — reused by NcPropfindService,
   // NcSyncReportService, and NcFavoritesReportService to surface per-user
   // favorites to the stock NC clients (star / toggle / Favorites tab).
+  // CustomSharedModule exports FileRowEnsurer — the lookup-then-insert core
+  // NcFileRowEnsurer wraps, shared with custom-versioning.
   imports: [
     UsersModule,
     FilesModule,
@@ -74,6 +77,7 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     SharesModule,
     CommentsModule,
     CustomFavoritesModule,
+    CustomSharedModule,
     ...(oidcEnabled ? [AuthProviderOIDCModule] : [])
   ],
   controllers: [
