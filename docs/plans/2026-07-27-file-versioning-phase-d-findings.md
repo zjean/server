@@ -8,6 +8,10 @@
 Phase D is integration work. Three of its four tasks are verification rather than new code, so this file is the
 deliverable for those three: it says what was asserted, where the assertion lives, and what turned out to be untrue.
 
+**Phase D is complete.** If you are picking this up, read §5 first — it is the short list of what is left and which
+two items need a decision rather than a session. Two of the handoff's per-task instructions turned out to be wrong;
+both are in D2, and both are called out where they matter.
+
 ---
 
 ## D1 — WebDAV correctness
@@ -100,6 +104,116 @@ feature's blast radius. Not attempted.
 Confirmed still out of scope for v1, per the plan. Nothing consumes it: Sync-in's own clients use the REST API, and
 the NC mobile clients use the NC versions DAV tree (see D2), not DeltaV. Implementing RFC 3253 would add a protocol
 surface with no reader.
+
+---
+
+## D2 — Nextcloud client compatibility
+
+Branch `feat/versioning-nc-compat`. The one Phase D task that is real code: `NcVersionsController`,
+`NcVersionsService`, `utils/nc-version-xml.ts`, and the capability block.
+
+### D2.0 Reading upstream first changed three decisions
+
+This is the task CLAUDE.md's NC-source-as-ground-truth rule exists for, and it earned its keep three times. Each of
+these would have been wrong if inferred from server-side convention:
+
+| Inferred | Actually |
+|---|---|
+| a top-level `files_versions` capability block | `files.versioning`, plus `files.version_labeling` and `files.version_deletion` — `files_versions` is the **app id** |
+| version nodes named by our row id | named by the superseded content's **mtime in unix seconds**, and the name must agree with `d:getlastmodified` |
+| the listing contains one entry per version | the **collection itself must be response[0]**, or Android drops the oldest version |
+
+The sources, and the exact lines that settle each:
+
+- `nextcloud/server` → `apps/files_versions/lib/Capabilities.php` (the capability shape),
+  `lib/Sabre/{VersionHome,VersionRoot,VersionCollection,VersionFile,RestoreFolder,Plugin}.php` (the node tree, the
+  props, the MOVE-into-restore semantics), `lib/Storage.php:374` (the revision id **is** `filemtime`).
+- `nextcloud/android-library` → `ReadFileVersionsRemoteOperation.java` (PROPFIND `Depth: 1`, and the
+  `for (int i = 1; …)` loop that discards `response[0]`), `RestoreFileVersionRemoteOperation.java` (the MOVE),
+  `model/FileVersion.java` (the parser), `WebdavUtils.getFileVersionPropSet()` (the requested props),
+  `WebdavEntry.kt:150-173` (how `getlastmodified` and `resourcetype` are read).
+- `nextcloud/NextcloudKit` → `NextcloudKit+Capabilities.swift:294-309` (the three flags being decoded).
+
+**The revision-id decision is the load-bearing one, so it is worth stating why it cannot be our row id.**
+`FileVersion.getFileName()` is `String.valueOf(modifiedTimestamp / 1000)`, computed from the parsed
+`d:getlastmodified`. The href is **never read.** `RestoreFileVersionRemoteOperation` then builds its MOVE source from
+that derived name. So a listing whose node name disagrees with its `getlastmodified` produces a restore request for a
+revision that does not exist — and there is no error anywhere until the user taps Restore and nothing happens.
+
+Of our two timestamps, `mtime` is the one that means what upstream's means (the mtime of the bytes the version holds).
+`createdAt` is when the overwrite retired them, which can be months later.
+
+**Accepted cost: one-second resolution.** Two versions of one file whose mtimes fall in the same second collapse to a
+single NC entry. That is a property of the protocol rather than of our storage — upstream cannot represent them either,
+since both would want the same `.v<ts>` filename. The v2 UI keys on the row id and still shows both. Collisions need
+sub-second-adjacent overwrites that also escaped the coalescing window (different author or origin), so they are rare;
+the newest row wins, deterministically.
+
+### D2.1 What is served
+
+`PROPFIND` of a collection and of a single version, `GET`/`HEAD` of a version, `MOVE` into `restore`, `DELETE`, and
+`PROPPATCH` of `nc:version-label`. Every handler 404s while `files.versions.enabled` is false, checked **before** the
+url-user and id checks so a disabled deployment leaks nothing about which ids exist. The capability is absent in the
+same state, so a client never learns the tree exists.
+
+`restore` needs no route of its own: a WebDAV MOVE is issued against the **source** URL, so a restore arrives on the
+version's own route with the target in `Destination`. Nothing ever addresses the `restore` collection directly.
+
+### D2.2 Two deliberate divergences from upstream
+
+- **`nc:has-preview` is always `false`**, even for images. Upstream emits `true` and backs it with the single route in
+  `apps/files_versions/appinfo/routes.php` (`Preview#getPreview`), which this fork does not serve. Our
+  `/index.php/core/preview` renders the **live** file, so a truthy value would mean either a 404 per row per listing —
+  the exact pattern that got `dav.bulkupload` removed from `constants/capabilities.ts` — or, worse, the current
+  thumbnail displayed beside an old revision.
+- **`DELETE` passes `confirmLabeled: true`.** The REST API requires an explicit flag before deleting a *named* version,
+  because a name exempts it from every automatic pruning rule. NC's protocol has no way to send one, so the 409 would
+  be unresolvable from the client and would read as "deleting versions is broken". A DELETE addressing one specific
+  revision is itself the deliberate act.
+
+### D2.3 One correction to the handoff: `FileRowEnsurer` is not used here
+
+The handoff (§3, D2) says to *"reuse `custom-shared`'s `FileRowEnsurer` exactly as `nc-dav` already does — otherwise a
+version query for a file with no `files` row 404s."* The concern is real; the placement is not. **It would be dead
+code.** A client can only reach this route with a fileId our own PROPFIND of the parent directory handed it, and that
+PROPFIND is where `NcFileRowEnsurer` already runs (`nc-propfind.service.ts:111`). By the time a fileId exists on the
+wire, the `files` row exists. Adding a second, always-no-op call would obscure which layer owns the guarantee.
+
+`CustomVersioningModule` is also **not** imported by `CustomMobileCompatModule`. It is `@Global` and exports
+`VersioningService`, which is how `FilesManager` and both editor managers already reach it, and how `NcVersionsService`
+reaches it here — so mobile-compat's import list stays free of the versioning module, and `FileRowEnsurer` keeps coming
+from `custom-shared` whether versioning is on or off (ADR §12/§13).
+
+### D2.4 The trap the handoff warned about, and the test for it
+
+`VersioningExceptionsFilter` is declared on the controller, **and a spec asserts the declaration**. `FileError` and
+`LockConflict` extend `Error`, so without it every domain error this tree can raise — 403 permission denied, 404
+unknown revision, the 409 blob-size mismatch, a 423 lock conflict — arrives as an opaque 500. That is the bug PR #322
+fixed for the REST API, and a new controller does **not** inherit the filter. The metadata assertion is cheap and is
+the only thing that fails if someone drops the decorator.
+
+### D2.5 It will not light up in a stock client yet — and that is about the clients
+
+Implemented and correct is not the same as user-visible. Two independent client-side gates, both found by reading the
+clients rather than by testing against them:
+
+- **iOS has no file-versions UI at all.** NextcloudKit has no versions endpoint — there is no
+  `NextcloudKit+Versions.swift` — and although `NextcloudKit+Capabilities.swift` *decodes* `versioning`,
+  `version_deletion` and `version_labeling`, it never surfaces `versioning` on its flattened `Capabilities` object.
+  Nothing in `nextcloud/ios` requests `/remote.php/dav/versions/…`.
+- **Android's version list is gated behind an Activity API this fork does not serve.**
+  `FileDetailActivitiesFragment` reads versions only when `capability.getFilesVersioning().isTrue()` (:253) — which we
+  now satisfy — but it fetches activities *and* versions in one task and calls `populateList` only inside
+  `if (result.isSuccess() && result.getData() != null)` on the **activities** result (:347). That call is
+  `GetActivitiesRemoteOperation` → `/ocs/v2.php/apps/activity/api/v2/activity`. We deliberately do not advertise or
+  implement `activity` (see the comment at the end of `constants/capabilities.ts`), so the fetch fails and the list
+  never renders — versions included.
+
+So the Android path needs a minimal Activity OCS endpoint before any of this is visible. That is a separate feature,
+not D2, and it should be filed as its own issue. Until then the surface is reachable by `curl` and by any third-party
+client that implements the NC versions tree, and it is ready for the ADR §19 soak.
+
+**Do not read the empty Android list as a bug in this code.** That inference is the reason this section exists.
 
 ---
 
@@ -235,3 +349,40 @@ whoever runs it:
    `≈ 300 / minIntervalSeconds`.
 
 Step 2 matters: with the window at its default the measurement measures the window, not the editor.
+
+---
+
+## 5. What Phase D leaves for whoever is next
+
+Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). `main` at that point:
+**147 test files, 2124 backend tests passing**, `nest build` clean, backend lint clean. Feature flag still **off**.
+
+### Open decisions — these need the maintainer, not a session
+
+1. **The coalescing window (D4.3).** `minIntervalSeconds` stays at 60 and the per-origin proposal is unimplemented.
+   Nothing is broken; the number is simply not tuned, and tuning it globally has a cost on the interactive origins.
+2. **A minimal Activity OCS endpoint (D2.5).** Without it the NC versions tree is correct and unreachable from stock
+   Android. Worth its own issue; the endpoint is `/ocs/v2.php/apps/activity/api/v2/activity` and the capability key is
+   `activity` — which `constants/capabilities.ts` currently omits *on purpose*, so that comment needs revisiting rather
+   than ignoring.
+
+### Owed work, already scoped elsewhere
+
+- **Phase E**, cases E2E-1..20 in the plan's §5. Now better specified in two places: **E2E-3** should assert the
+  resumed-PUT shape D1.1 documents (a sequence cannot open with `bytes 0-…` against an existing non-empty file), and
+  **E2E-10** should assert the three NC wire facts from D2.0 — the mandatory self entry, revision id == `mtime`
+  seconds agreeing with `d:getlastmodified`, and the empty `d:resourcetype`. Those three are what silently break a
+  client, and none of them is visible from a passing unit test of the builder alone.
+- **The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on. D4.2's recipe
+  belongs to it.
+- **Two release blockers from ADR §7/§19 are still unwritten:** the release note stating that enabling versioning
+  reduces effective quota by up to `quotaShare`, and the deployment-docs change adding per-home `versions/` to the
+  backup set alongside `files/`, `trash/` and the database.
+
+### Two corrections this phase made to the handoff
+
+Both are in D2 and both would have cost a debugging cycle:
+
+- The capability key is **`files.versioning`**, not a top-level `files_versions` block (D2.0).
+- **`FileRowEnsurer` is not needed** in the NC versions controller; it is already applied one layer up, in the PROPFIND
+  that mints the fileId a client arrives with (D2.3).

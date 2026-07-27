@@ -2,7 +2,9 @@
 
 - **Date:** 2026-07-27
 - **Audience:** a fresh session with no memory of Phases A–C
-- **Status:** Phases A, B and C complete and merged. Phase D not started. Feature flag still **off** by default.
+- **Status:** **Phase D is now complete and merged** (#324, #325, #326). Phase E is not started. Feature flag still **off** by default.
+
+> **Read [`2026-07-27-file-versioning-phase-d-findings.md`](2026-07-27-file-versioning-phase-d-findings.md) instead of §3 of this file.** That document is Phase D's deliverable: what was asserted, where each assertion lives, what turned out to be untrue, and what is left. This file remains accurate and useful for the **dev-stack recipe (§2)**, the **four lessons (§4)** and the **repo mechanics (§6)**. Its §3 per-task requirements are superseded, and **two of them were wrong** — see the findings' D2.0 (the capability key) and D2.3 (`FileRowEnsurer`).
 
 Phase D is integration work: proving the feature behaves under WebDAV, the Nextcloud mobile clients, and desktop sync, and measuring the editor coalescing window. Three of the four tasks are verification rather than new code.
 
@@ -15,7 +17,7 @@ Phase D is integration work: proving the feature behaves under WebDAV, the Nextc
 | 3 | [`2026-07-25-file-versioning-design.md`](2026-07-25-file-versioning-design.md) | **The ADR — the authority on design.** Where it and the plan disagree, the ADR wins |
 | 4 | [`2026-07-25-file-versioning-implementation-plan.md`](2026-07-25-file-versioning-implementation-plan.md) | Task list. Accurate for D and E; its Phase-A/B bodies contain superseded designs, marked inline |
 
-Also read the **File versioning** section of `CLAUDE.md` for the four invariants. They are short, and each one exists because a bug reached a green test suite.
+Also read the **File versioning** section of `CLAUDE.md` for the five invariants. They are short, and each one exists because a bug reached a green test suite — except the fifth, which exists because reading upstream Nextcloud stopped one.
 
 ## 1. What is merged
 
@@ -25,8 +27,11 @@ Also read the **File versioning** section of `CLAUDE.md` for the four invariants
 | #320 | Phase C1: the `custom-v2` service and typed models |
 | #321 | Phase C2: the version-history UI — a Versions tab in the file-detail inspector |
 | #322 | Fixes found by browser-verifying C2 — see §4, they matter to you |
+| #324 | **D1** — the WebDAV/versioning contract, pinned with tests. No production code |
+| #325 | **D2** — the Nextcloud file-versions DAV tree + capability. The only Phase D code |
+| #326 | **D3/D4** — sync interplay and editor cadence. No production code |
 
-`main` at `7880d052`: **2003 backend tests passing**, `nest build` clean, backend and frontend lint clean.
+`main` after #326: **147 test files, 2124 backend tests passing**, `nest build` clean, backend lint clean.
 
 The feature is **verified working end to end in a browser** as of #322: list, name, compare, restore and delete all round-trip; restore preserves the inode and creates its own `restore`-origin version of the bytes it replaced.
 
@@ -87,7 +92,9 @@ curl -u sync-in:password -T v2.txt http://localhost:8080/webdav/personal/demo.tx
 
 **The quota cache will confuse you.** Version quota ceilings read through a one-day cache (`quota-user-<id>` in the `cache` table). Changing `users.storageQuota` by SQL leaves the ceiling stale — `DELETE FROM cache WHERE \`key\` LIKE 'quota%'` to force a recompute. This is pre-existing behaviour, not a versioning bug, but it makes the usage display look wrong.
 
-## 3. The four Phase D tasks
+## 3. The four Phase D tasks — DONE; superseded by the findings doc
+
+Kept as the record of what was asked. What was actually found, and the two places this section was wrong, are in [`2026-07-27-file-versioning-phase-d-findings.md`](2026-07-27-file-versioning-phase-d-findings.md).
 
 ### D1 — WebDAV correctness. Branch `mod/versioning-webdav`. Mostly assertions; no new code expected.
 
@@ -114,9 +121,9 @@ Use `gh api repos/<org>/<repo>/contents/<path>`. The six-step recipe is in CLAUD
 
 Then implement in `custom-mobile-compat`:
 
-- Advertise `files_versions` in `constants/capabilities.ts` and the OCS capabilities response, **gated on the feature flag** (absent when off).
+- Advertise `files_versions` in `constants/capabilities.ts` and the OCS capabilities response, **gated on the feature flag** (absent when off). **← WRONG.** `files_versions` is the app id; the capability key is `files.versioning`, plus `files.version_labeling` and `files.version_deletion` (findings D2.0).
 - The NC versions DAV surface: `PROPFIND /remote.php/dav/versions/{user}/versions/{fileId}`, `GET` of a version, and `MOVE` to `.../versions/{user}/restore/target` for NC's restore semantics.
-- Reuse `VersioningService`. **NC `fileId` maps directly to our `files.id`** under the id-keyed anchor, so reuse `custom-shared`'s `FileRowEnsurer` exactly as `nc-dav` already does — otherwise a version query for a file with no `files` row 404s.
+- Reuse `VersioningService`. **NC `fileId` maps directly to our `files.id`** under the id-keyed anchor, so reuse `custom-shared`'s `FileRowEnsurer` exactly as `nc-dav` already does — otherwise a version query for a file with no `files` row 404s. **← the ensurer is NOT needed here.** A client can only arrive with a fileId our own PROPFIND minted, and that PROPFIND is where the ensurer already runs; a second call would be dead code (findings D2.3).
 - Apply the storage quirks: mime `image-jpeg` → `image/jpeg`, mtime **ms → seconds**, real DB ids (never negative), **strong** ETags.
 
 **Two specific traps for this task:**
@@ -155,11 +162,13 @@ Each cost real debugging time, and #322 is the proof that a green suite is not e
 
 **4. `snapshotBeforeOverwrite` swallows every error by design.** Correct — a failed snapshot must not 500 a working save — but it means a bug *after* the row insert is invisible. A missing method once threw a `TypeError` that 43 green tests never noticed. `versioning.service.spec.ts` spies on `Logger.prototype.error` and asserts happy paths log nothing. **Keep that, and extend it to any new swallowing path.**
 
-## 5. Phase E, after D
+## 5. Phase E, after D — now the only phase left
 
 The E2E suite, cases E2E-1..20 in the plan's §5, run with `npm -w backend run test:e2e`. Now unblocked: the dev stack works (§2) and the environment blockers recorded in earlier notes were stale. E2E-1..20 would have caught the restore bug, which makes it a better investment than it looked before #322.
 
 Two corrections to the plan's E list: note E2E-6's trash expectations and the trash-age discussion in the Phase A/B handoff §3.4 — **there is no trash-age rule and there cannot be one**, and the plan's E list predates that.
+
+Phase D added two more, both in the findings' §5: **E2E-3** should assert the resumed-PUT shape D1.1 documents, and **E2E-10** should assert the three NC wire facts from D2.0. Those three NC facts are the ones that silently break a client, and none is visible from a passing unit test of the XML builder alone.
 
 ## 6. Repo mechanics that cost time
 

@@ -159,18 +159,20 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 
 ## File versioning (`custom-versioning`)
 
-Shipped behind `files.versions.enabled`, **default off**. Backend and the `custom-v2` UI are complete and
-browser-verified; NC client compat (Phase D) and the e2e suite (Phase E) are not.
+Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
+(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E (the e2e suite) is not done**, and neither is
+the ADR §19 soak against live editors and NC clients.
 
-**Read the handoff for whatever phase you're touching before touching it.** Four documents describe this feature and
+**Read the handoff for whatever phase you're touching before touching it.** Five documents describe this feature and
 they do not all agree:
 
 | Document | Status |
 |---|---|
-| `2026-07-27-file-versioning-phase-d-handoff.md` | **Entry point for Phase D / E.** Current state, the verified dev-stack recipe, per-task requirements. |
+| `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
+| `2026-07-27-file-versioning-phase-d-handoff.md` | Still authoritative on the **dev-stack recipe** and the four lessons. Its per-task §3 is superseded, and two of its D2 instructions are wrong (the findings say where). |
 | `2026-07-27-file-versioning-handoff.md` | The Phase A/B record: five design corrections and why. Still current on those. |
 | `2026-07-25-file-versioning-design.md` | **The authority** on design. Corrected three times during implementation. |
-| `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phases D/E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
+| `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phase E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
 
 Where the plan and the ADR disagree, the ADR is right.
 
@@ -180,8 +182,8 @@ extend `Error`, not `HttpException` — a controller that lets one escape return
 feature). And `filesLockManager.create` treats the **caller's own** lock as a conflict; use `createOrRefresh` for any
 path that writes a file the user may have open.
 
-Four invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
-suite:
+Five invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
+suite (the fifth from reading upstream Nextcloud rather than from a bug — see below):
 
 1. **Never hardlink a version blob.** It shares the live file's inode, and three of the seven write paths truncate that
    inode in place — the "saved" version would hold the new content. Blobs are cloned or copied (ADR §1.1).
@@ -191,6 +193,12 @@ suite:
    lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9).
 4. **Version rows key on `files.id`, never on path**, and `files` rows are lazily materialized — use
    `custom-shared`'s `FileRowEnsurer` (ADR §3).
+5. **On the NC versions DAV tree, a version's node name is its `mtime` in unix SECONDS — never the row id — and it must
+   agree with `d:getlastmodified`.** NC Android never reads the href: it derives the restore MOVE source from the parsed
+   `getlastmodified`, so a disagreement makes every restore target a revision that does not exist, silently. Two other
+   NC facts in the same family: the collection's own entry must be `response[0]` (Android discards it and would
+   otherwise lose the oldest version), and `d:resourcetype` must be an EMPTY element (any value makes Android treat the
+   version as a directory). All three are in `utils/nc-version-xml.ts` with their upstream citations.
 
 Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
