@@ -61,3 +61,13 @@ applications:
       secret: dev-onlyoffice-secret
     collabora:
       enabled: false
+    # Fork-owned file versioning (docs/plans/2026-07-25-file-versioning-design.md).
+    # Ships off. Set enabled: true to exercise the v2 Versions tab — the tab stays
+    # hidden while this is false, because the API 404s and the UI probes for it.
+    # A version is only created when a file is OVERWRITTEN, so a fresh file shows
+    # an empty history until you save over it.
+    # minIntervalSeconds: 0 defeats the 60s coalescing window, which otherwise
+    # merges successive test saves into a single version.
+    versions:
+      enabled: false
+      minIntervalSeconds: 0

@@ -12,7 +12,6 @@ import { FileProps } from '../../files/interfaces/file-props.interface'
 import { FileDBProps } from '../../files/interfaces/file-db-props.interface'
 import { FileLock } from '../../files/interfaces/file-lock.interface'
 import { FileError } from '../../files/models/file-error'
-import { LockConflict } from '../../files/models/file-lock-error'
 import { FileEvent } from '../../files/events/file-events'
 import { FilesLockManager } from '../../files/services/files-lock-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -432,10 +431,14 @@ export class VersioningService {
 
       // A restore is always app-initiated, never a DAV write, so unlike the
       // webdav save path it always runs under a real server lock.
-      const [ok, lock] = await this.filesLockManager.create(user, space.dbFile, SERVER_NAME, DEPTH.RESOURCE)
-      if (!ok) {
-        throw new LockConflict(lock, 'Conflicting lock')
-      }
+      //
+      // `createOrRefresh`, NOT `create`. `create` treats ANY existing lock as a
+      // conflict — including the caller's own — and the v2 text editor holds one
+      // on every file it opens, which is the same screen that offers Restore. So
+      // restoring a file you had open failed every time. `createOrRefresh`
+      // refreshes your own lock and throws LockConflict only for someone else's,
+      // which is why `files-manager.service.ts` uses it for its own write paths.
+      const [created, lock] = await this.filesLockManager.createOrRefresh(user, space.dbFile, SERVER_NAME, DEPTH.RESOURCE)
       try {
         await this.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
         // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
@@ -445,7 +448,12 @@ export class VersioningService {
         await this.updateFileRow(user, space, stats.size, stats.mtimeMs)
         FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
       } finally {
-        await this.releaseLock(lock)
+        // Only release a lock this call took. A pre-existing one belongs to an
+        // editor session that is still open — removing it would silently unlock
+        // a file someone is editing.
+        if (created) {
+          await this.releaseLock(lock)
+        }
       }
     } finally {
       await handle.close().catch(() => undefined)

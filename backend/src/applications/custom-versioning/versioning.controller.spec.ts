@@ -1,4 +1,5 @@
 import { HttpException, HttpStatus, ValidationPipe } from '@nestjs/common'
+import { EXCEPTION_FILTERS_METADATA } from '@nestjs/common/constants'
 import { Reflector } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { Readable } from 'node:stream'
@@ -10,6 +11,7 @@ import { SpaceEnv } from '../spaces/models/space-env.model'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
 import { DeleteVersionDto } from './dto/version.dto'
+import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
 import { VersioningService } from './services/versioning.service'
 import { VersioningController } from './versioning.controller'
 
@@ -96,6 +98,16 @@ describe(VersioningController.name, () => {
   it('normalizes an omitted label to null (clearing it)', async () => {
     await controller.label(user, textSpace(), 5, {})
     expect(versioning.setLabel).toHaveBeenCalledWith(user, expect.anything(), 5, null)
+  })
+
+  // The handlers below call the service directly, so nothing here exercises how
+  // its errors become HTTP responses — which is how "every FileError is a 500"
+  // shipped green. The filter's own spec covers the mapping; this asserts the
+  // controller still declares it, because losing the decorator restores the bug
+  // silently.
+  it('declares the exception filter that maps FileError and LockConflict', () => {
+    const filters = new Reflector().get(EXCEPTION_FILTERS_METADATA, VersioningController)
+    expect(filters).toContain(VersioningExceptionsFilter)
   })
 
   /* ------------------------------------------------------------- query dtos */

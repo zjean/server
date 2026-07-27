@@ -21,10 +21,18 @@ interface DiffLine {
 @Component({
   selector: 'app-v2-versions-diff',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  // NOT a <pre>. Each line is its own block with `white-space: pre`, so
+  // indentation is preserved without the container preserving the template's own
+  // newlines — inside a <pre> the newline between two block spans renders as an
+  // extra blank line, which double-spaced the whole diff. In a normal container
+  // that whitespace generates no box at all, so the markup can stay readable.
   template: `
     <div class="vd" role="group">
-      <pre class="vd__body"><code>@for (l of lines(); track l.n) {<span class="vd__line" [class]="'vd__line--' + l.kind">{{ l.text }}</span>
-}</code></pre>
+      <div class="vd__body">
+        @for (l of lines(); track l.n) {
+          <span class="vd__line" [class]="'vd__line--' + l.kind">{{ l.text }}</span>
+        }
+      </div>
     </div>
   `,
   styles: [
@@ -55,6 +63,8 @@ interface DiffLine {
       .vd__line {
         display: block;
         padding: 0 10px;
+        /* Preserves the diff's own indentation. Deliberately on the line, not on
+           the container — see the template comment. */
         white-space: pre;
 
         &--add {
