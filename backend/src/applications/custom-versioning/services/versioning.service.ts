@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import { Readable } from 'node:stream'
 import { constants as fsConstants, createReadStream } from 'node:fs'
 import { randomUUID } from 'node:crypto'
@@ -16,7 +17,7 @@ import { FileEvent } from '../../files/events/file-events'
 import { FilesLockManager } from '../../files/services/files-lock-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import type { FilesVersionsConfig } from '../../files/files.config'
-import { checksumFile, copyFileContent, dirName, fileName, getMimeType, isPathExists, makeDir, removeFiles } from '../../files/utils/files'
+import { checksumFile, dirName, fileName, getMimeType, isPathExists, makeDir, removeFiles, writeFromStream } from '../../files/utils/files'
 import { SPACE_OPERATION } from '../../spaces/constants/spaces'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
@@ -24,7 +25,8 @@ import { SYNC_CHECKSUM_ALG } from '../../sync/constants/sync'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
 import { SnapshotOptions, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
-import { blobPathFromRoot, versionsRootFromSpace } from '../utils/paths'
+import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from '../utils/paths'
+import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersioningQueries } from './versioning-queries.service'
 
 // File versioning. See docs/plans/2026-07-25-file-versioning-design.md.
@@ -105,28 +107,54 @@ export class VersioningService {
       return
     }
 
-    const checksum = await checksumFile(space.realPath, SYNC_CHECKSUM_ALG)
     const scope = this.scopeOf(space.dbFile)
+    // Copy first, then hash what was copied — see stageBlob for why the digest
+    // must not come from the live file.
+    const staged = await this.stageBlob(space.realPath, versionsRoot)
+    try {
+      const blobPath = blobPathFromRoot(versionsRoot, staged.checksum)
+      if (!blobPath) {
+        throw new Error(`unable to resolve a blob path in ${versionsRoot}`)
+      }
+      // A restore's own safety snapshot is exempt from the cap: it is a net
+      // rather than new growth, and letting it evict would allow it to delete
+      // the very version being restored.
+      if (options.origin !== 'restore') {
+        const deduped = await isPathExists(blobPath)
+        await this.enforceQuotaShare(user, space, versionsRoot, deduped ? 0 : staged.size)
+      }
 
-    await this.enforceQuotaShare(space, versionsRoot, stats.size)
+      // Blob first, row second. A crash between the two leaves an orphan blob,
+      // which the retention GC sweeps; the reverse order would leave a version
+      // row pointing at nothing — a visible, un-downloadable entry.
+      await this.publishBlob(staged.stagePath, blobPath)
 
-    // Blob first, row second. A crash between the two leaves an orphan blob,
-    // which the retention GC sweeps; the reverse order would leave a version
-    // row pointing at nothing — a visible, un-downloadable entry.
-    await this.writeBlob(space.realPath, versionsRoot, checksum)
-
-    await this.queries.insertVersion({
-      fileId,
-      ...scope,
-      versionsRoot,
-      checksum,
-      size: stats.size,
-      mtime: Math.floor(stats.mtimeMs),
-      authorId: user.id ?? null,
-      origin: options.origin,
-      label: null
+      await this.queries.insertVersion({
+        fileId,
+        ...scope,
+        versionsRoot,
+        checksum: staged.checksum,
+        size: staged.size,
+        mtime: Math.floor(stats.mtimeMs),
+        authorId: user.id ?? null,
+        origin: options.origin,
+        label: null
+      })
+    } catch (e) {
+      await removeFiles(staged.stagePath).catch(() => undefined)
+      throw e
+    }
+    // Keeps the denormalized scope columns of this file's OTHER rows current
+    // after a move. They are never authoritative (ADR §15), so this is a cache
+    // refresh with its OWN error boundary: it runs after the version is safely
+    // committed, and must never turn a successful snapshot into a logged
+    // failure. It is here because the ADR promises the refresh happens on the
+    // next snapshot, and a comment that lies is a defect in a fork that lives
+    // by its comments.
+    await this.queries.refreshScope(fileId, scope).catch((e: unknown) => {
+      this.logger.warn({ tag: this.snapshot.name, msg: `unable to refresh scope columns for file ${fileId}: ${e}` })
     })
-    this.logger.verbose({ tag: this.snapshot.name, msg: `versioned ${space.url} (${options.origin}) ${checksum.slice(0, 12)}` })
+    this.logger.verbose({ tag: this.snapshot.name, msg: `versioned ${space.url} (${options.origin}) ${staged.checksum.slice(0, 12)}` })
   }
 
   // Skips the snapshot when the newest version for (fileId, authorId, origin)
@@ -150,10 +178,27 @@ export class VersioningService {
   // consume, and it does NOT promise the user's save will succeed — the
   // pre-flight guard in space.guard.ts runs long before any of this and reads a
   // day-old cached dirSize. Never claim otherwise.
-  private async enforceQuotaShare(space: SpaceEnv, versionsRoot: string, incomingSize: number): Promise<void> {
+  private async enforceQuotaShare(user: UserModel, space: SpaceEnv, versionsRoot: string, incomingSize: number): Promise<void> {
     const share = this.config.quotaShare
-    if (!share || !space.storageQuota) return
-    const ceiling = space.storageQuota * share
+    // A dedup hit costs zero disk bytes, so it must not evict anything.
+    if (!share || !incomingSize) return
+    const quota = this.rootQuota(user, space, versionsRoot)
+    if (!quota) return
+    const ceiling = quota * share
+
+    // No amount of eviction makes room for a version that alone exceeds the
+    // ceiling, so evicting even one would be pure loss. Without this guard the
+    // loop below cannot satisfy its own condition and runs until it has deleted
+    // EVERY unlabeled version in the root — including other files' — and then
+    // inserts anyway, ending up over the ceiling regardless. Refusing to
+    // version this one write is the correct trade; the caller degrades to
+    // "no version" and the save proceeds.
+    if (incomingSize > ceiling) {
+      throw new FileError(
+        HttpStatus.INSUFFICIENT_STORAGE,
+        `version of ${incomingSize} bytes exceeds the versions ceiling (${Math.floor(ceiling)}) for ${versionsRoot}`
+      )
+    }
 
     let { used } = await this.queries.usageByRoot(versionsRoot)
     while (used + incomingSize > ceiling) {
@@ -203,31 +248,59 @@ export class VersioningService {
   // clone is cheap AND independent: writing to the live file afterwards splits
   // the shared blocks instead of corrupting the copy.
   //
-  // Dedup is free: an existing blob is byte-identical by construction, so
-  // there is nothing to write.
-  private async writeBlob(realPath: string, versionsRoot: string, checksum: string): Promise<void> {
-    const blobPath = blobPathFromRoot(versionsRoot, checksum)
-    if (!blobPath) {
-      throw new Error(`unable to resolve a blob path in ${versionsRoot}`)
+  // The digest is taken from the STAGED COPY, never from the live file, and the
+  // copy is published by rename. That ordering is what makes the store's one
+  // invariant — "the filename is the hash of the bytes under it" — actually
+  // true rather than merely asserted:
+  //
+  //   - Hashing the live file in a separate pass from the copy leaves a window
+  //     in which the file changes between the two reads. WebDAV writes hold no
+  //     server lock (ADR §4 admits the path is best-effort), so that window is
+  //     reachable. The blob would then be stored under a digest that does not
+  //     describe it — and because the store is content-addressed, EVERY later
+  //     snapshot of the genuinely-matching content would dedup against that
+  //     mis-named blob and silently serve the wrong bytes. The one corruption
+  //     that escapes its own row.
+  //   - Publishing by rename means a crash mid-copy leaves a `.part` file, not
+  //     a TRUNCATED file at the content-addressed path, which the dedup check
+  //     would otherwise trust as complete forever.
+  //   - Renaming unconditionally (rather than skipping the copy when the blob
+  //     already exists) also closes a race: between an existence check and the
+  //     row insert, a concurrent eviction or purge could unlink the blob,
+  //     leaving a brand-new row pointing at nothing. Rename is atomic and the
+  //     content is identical by construction, so replacing is always safe. The
+  //     cost is one copy we could sometimes have skipped; the alternative is
+  //     versions that list but can never be downloaded.
+  private async stageBlob(realPath: string, versionsRoot: string): Promise<{ stagePath: string; checksum: string; size: number }> {
+    const versionsPath = versionsPathFromRoot(versionsRoot)
+    if (!versionsPath) {
+      throw new Error(`unable to resolve a versions path for ${versionsRoot}`)
     }
-    if (await isPathExists(blobPath)) return
+    const stageDir = path.join(versionsPath, VERSIONS_STAGING_DIR)
+    await makeDir(stageDir, true)
+    const stagePath = path.join(stageDir, `${randomUUID()}.part`)
+    await fs.copyFile(realPath, stagePath, fsConstants.COPYFILE_FICLONE)
+    const [checksum, stats] = await Promise.all([checksumFile(stagePath, SYNC_CHECKSUM_ALG), fs.stat(stagePath)])
+    return { stagePath, checksum, size: stats.size }
+  }
+
+  private async publishBlob(stagePath: string, blobPath: string): Promise<void> {
     await makeDir(dirName(blobPath), true)
-    // Stage then rename: a crash mid-copy must not leave a TRUNCATED file at
-    // the content-addressed path, because the existence check above would then
-    // trust it as a complete blob forever. Rename within one directory is
-    // atomic, and the random suffix keeps concurrent snapshots of the same
-    // digest from staging over each other.
-    const stagePath = `${blobPath}.${randomUUID()}.part`
-    try {
-      await fs.copyFile(realPath, stagePath, fsConstants.COPYFILE_FICLONE)
-      await fs.rename(stagePath, blobPath)
-    } catch (e) {
-      await removeFiles(stagePath).catch(() => undefined)
-      // Another snapshot of the same content won the race — that blob is
-      // byte-identical, so this is success, not failure.
-      if ((e as NodeJS.ErrnoException)?.code === 'EEXIST' && (await isPathExists(blobPath))) return
-      throw e
-    }
+    await fs.rename(stagePath, blobPath)
+  }
+
+  // The ceiling must be sized against the SAME scope the versions root belongs
+  // to. space.storageQuota is the CURRENT env's allowance, and the two can
+  // diverge: for a share with an external path, versionsRootFromSpace resolves
+  // to the acting user's own root while the env's quota belongs to the share.
+  // Using the env's quota there would evict the user's PERSONAL history to fit
+  // a write into someone else's small share. When the scopes do not line up we
+  // skip the eager cap entirely and leave it to the retention backstop.
+  private rootQuota(user: UserModel, space: SpaceEnv, versionsRoot: string): number | null {
+    if (!space.storageQuota) return null
+    if (space.inPersonalSpace && versionsRoot === userVersionsRoot(user.login)) return space.storageQuota
+    if (space.alias && versionsRoot === spaceVersionsRoot(space.alias)) return space.storageQuota
+    return null
   }
 
   /* ------------------------------------------------------------------ reads */
@@ -288,29 +361,53 @@ export class VersioningService {
   // consumers depend on inode stability. copyFileContent truncates in place via
   // flag 'w' (files/utils/files.ts:253,293), preserving the inode; moveFiles
   // would replace it. Do not "optimize" this into a rename (ADR §9).
+  //
+  // THE BLOB IS OPENED BEFORE ANYTHING ELSE RUNS, and the live file is written
+  // from that descriptor rather than from the path. An earlier version resolved
+  // the path, checked it existed, and only then took the snapshot — a
+  // check-then-act that lost data: the snapshot's own quota eviction picks the
+  // oldest unlabeled version, which is very often exactly the old revision the
+  // user asked to restore. It unlinked the blob, and the write then truncated
+  // the live file to zero bytes before failing to read its source. An open
+  // descriptor keeps the bytes alive across an unlink, so eviction can no
+  // longer pull them away mid-restore.
   async restoreVersion(user: UserModel, space: SpaceEnv, versionId: number): Promise<void> {
     const version = await this.requireVersionFor(user, space, versionId)
     this.requireModifyPermission(space)
 
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
-    if (!blobPath || !(await isPathExists(blobPath))) {
+    const handle = blobPath ? await fs.open(blobPath, 'r').catch(() => null) : null
+    if (!handle) {
       throw new FileError(HttpStatus.NOT_FOUND, 'Version content not found')
     }
-
-    // A restore is always app-initiated, never a DAV write, so unlike the
-    // webdav save path it always runs under a real server lock.
-    const [ok, lock] = await this.filesLockManager.create(user, space.dbFile, SERVER_NAME, DEPTH.RESOURCE)
-    if (!ok) {
-      throw new LockConflict(lock, 'Conflicting lock')
-    }
     try {
-      await this.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
-      await copyFileContent(blobPath, space.realPath)
-      const stats = await fs.stat(space.realPath)
-      await this.updateFileRow(user, space, stats.size, stats.mtimeMs)
-      FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
+      // Verify the blob before touching the live file: writeFromStream
+      // truncates the destination as soon as the stream opens, so a short or
+      // corrupt source must be caught while the live content is still intact.
+      const blobStats = await handle.stat()
+      if (blobStats.size !== version.size) {
+        throw new FileError(HttpStatus.CONFLICT, 'Version content does not match its recorded size')
+      }
+
+      // A restore is always app-initiated, never a DAV write, so unlike the
+      // webdav save path it always runs under a real server lock.
+      const [ok, lock] = await this.filesLockManager.create(user, space.dbFile, SERVER_NAME, DEPTH.RESOURCE)
+      if (!ok) {
+        throw new LockConflict(lock, 'Conflicting lock')
+      }
+      try {
+        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
+        // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
+        // but sourced from the pinned descriptor.
+        await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))
+        const stats = await fs.stat(space.realPath)
+        await this.updateFileRow(user, space, stats.size, stats.mtimeMs)
+        FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
+      } finally {
+        await this.releaseLock(lock)
+      }
     } finally {
-      await this.releaseLock(lock)
+      await handle.close().catch(() => undefined)
     }
   }
 

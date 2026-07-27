@@ -40,7 +40,12 @@ export function versionsRootFromSpace(user: UserModel, space: SpaceEnv): string 
     // space root is linked to a file in a personal space
     return userVersionsRoot(space.root.owner.login)
   } else if (space.root?.file?.space?.id) {
-    // share linked to a space (with an external path or not)
+    // share linked to a space (with an external path or not).
+    // `id` can be set while `alias` is not; upstream's mirrored trash function
+    // would throw on path.join(undefined) here, whereas returning a root of
+    // 'space:undefined' would quietly write blobs to <spacesPath>/undefined.
+    // Honour this function's contract instead: null means "skip versioning".
+    if (!space.root.file.space.alias) return null
     return spaceVersionsRoot(space.root.file.space.alias)
   } else if (space.alias) {
     // space files (no root)

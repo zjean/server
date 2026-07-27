@@ -25,7 +25,9 @@ vi.mock('../../../configuration/config.environment', () => ({
   exportConfiguration: vi.fn()
 }))
 
+import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -96,6 +98,10 @@ class FakeQueries {
   async deleteByFileIds(fileIds: number[]) {
     this.rows = this.rows.filter((r) => !fileIds.includes(r.fileId))
   }
+  async refreshScope() {
+    this.refreshScopeCalls++
+  }
+  refreshScopeCalls = 0
   async resolveFileIdsForDelete() {
     return this.resolveIds
   }
@@ -109,6 +115,7 @@ describe(VersioningService.name, () => {
   let lockManager: { create: Mock; removeLock: Mock }
   let tmpRoot: string
   let filePath: string
+  let loggedErrors: Mock
 
   const FILE_ID = 4242
   const CONTENT = 'the content that is about to be destroyed'
@@ -132,6 +139,14 @@ describe(VersioningService.name, () => {
     filePath = path.join(tmpRoot, 'users', 'alice', 'files', 'docs', 'report.txt')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
     await fs.writeFile(filePath, CONTENT)
+
+    // snapshotBeforeOverwrite swallows everything by design, so a bug after the
+    // row insert (a missing method on a collaborator, say) shows up as a
+    // logged error and otherwise-passing tests. Capturing errors lets the
+    // happy-path tests assert that nothing was silently eaten — this caught a
+    // real TypeError that 43 green tests had been hiding.
+    loggedErrors = vi.fn()
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(loggedErrors)
 
     queries = new FakeQueries()
     ensurer = { ensureFileId: vi.fn().mockResolvedValue(FILE_ID) }
@@ -255,12 +270,41 @@ describe(VersioningService.name, () => {
     expect(await blobFiles()).toHaveLength(0)
   })
 
-  it('works when the versions store is on another device (copy fallback)', async () => {
-    // COPYFILE_FICLONE degrades to a plain copy rather than failing, so a
-    // separate usersPath/spacesPath mount needs no special handling.
+  // The store's one invariant: a blob's filename IS the hash of the bytes under
+  // it. The digest is therefore taken from the staged copy, never from the live
+  // file — hashing the live file in a separate pass from the copy leaves a
+  // window (WebDAV writes hold no server lock) in which the two disagree, and
+  // because lookups are content-addressed a mis-named blob would then be served
+  // for every later file with that content.
+  it('names each blob after the hash of its own stored bytes', async () => {
+    versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
-    const [blob] = await blobFiles()
-    expect(await fs.readFile(blob, 'utf8')).toBe(CONTENT)
+    await fs.writeFile(filePath, 'a different revision entirely')
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+    const blobs = await blobFiles()
+    expect(blobs).toHaveLength(2)
+    for (const blob of blobs) {
+      const actual = crypto
+        .createHash('sha512-256')
+        .update(await fs.readFile(blob))
+        .digest('hex')
+      expect(path.basename(blob)).toBe(actual)
+      // And the row agrees with the file on disk.
+      expect(queries.rows.map((r) => r.checksum)).toContain(actual)
+    }
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  it('leaves no staging debris behind on success', async () => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect((await blobFiles()).filter((f) => f.includes('.staging'))).toHaveLength(0)
+  })
+
+  it('refreshes the denormalized scope cache after committing, as the ADR promises', async () => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect(queries.refreshScopeCalls).toBe(1)
+    expect(loggedErrors).not.toHaveBeenCalled()
   })
 
   it('never versions a create (no live file) or a directory', async () => {
@@ -424,6 +468,68 @@ describe(VersioningService.name, () => {
     expect((await queries.usageByRoot('user:alice')).used).toBeGreaterThan(50)
   })
 
+  // Regression: the eviction loop's condition is `used + incoming > ceiling`.
+  // With an incoming version larger than the ceiling that can never be
+  // satisfied, so the loop used to evict until nothing unlabeled was left —
+  // destroying every other file's history in the root — and then insert
+  // anyway, still over the ceiling. Maximum destruction, zero benefit.
+  it('refuses to version a single write larger than the ceiling instead of evicting everything', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace({ storageQuota: 100 }) // ceiling 50
+    for (const [i, fileId] of [1000, 1001, 1002].entries()) {
+      await queries.insertVersion({
+        fileId,
+        versionsRoot: 'user:alice',
+        checksum: `${i}`.repeat(64).slice(0, 64),
+        size: 10,
+        mtime: 1,
+        origin: 'web'
+      } as VersionInsert)
+    }
+    await fs.writeFile(filePath, 'x'.repeat(80)) // 80 > ceiling 50
+
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+
+    // Every pre-existing version survives, and no oversized row was inserted.
+    expect(queries.rows).toHaveLength(3)
+    expect(queries.rows.map((r) => r.fileId).sort()).toEqual([1000, 1001, 1002])
+    // Nor is a blob left behind for the write we declined to version.
+    expect(await blobFiles()).toHaveLength(0)
+  })
+
+  // Regression: the ceiling came from space.storageQuota (the CURRENT env)
+  // while eviction targets the recorded root. For a share with an external
+  // path the root is the acting user's own, so a write into someone else's
+  // small share would evict the user's personal history.
+  it('skips the cap when the env quota belongs to a different scope than the versions root', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await queries.insertVersion({
+      fileId: 999,
+      versionsRoot: 'user:alice',
+      checksum: 'c'.repeat(64),
+      size: 90,
+      mtime: 1,
+      origin: 'web'
+    } as VersionInsert)
+
+    // A share with an external path: root resolves to user:alice, but the env
+    // carries the share's small quota.
+    const shareSpace = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      storageQuota: 100,
+      root: { externalPath: '/mnt/external' }
+    })
+
+    await service.snapshotBeforeOverwrite(user, shareSpace, { origin: 'web' })
+
+    // The pre-existing personal version is untouched: 90 + new > 50 would have
+    // evicted it under the old, mismatched calculation.
+    expect(queries.rows.find((r) => r.fileId === 999)).toBeDefined()
+  })
+
   it('skips the cap entirely for a space with no quota', async () => {
     versionsConfig.minIntervalSeconds = 0
     await queries.insertVersion({
@@ -574,6 +680,45 @@ describe(VersioningService.name, () => {
 
     await expect(service.restoreVersion(user, personalSpace(), queries.rows[0].id)).rejects.toThrow()
     expect(await fs.readFile(filePath, 'utf8')).toBe('someone else is editing')
+  })
+
+  // Regression, and the worst bug found in review: restore used to resolve the
+  // blob path, check it existed, and only THEN take its safety snapshot. That
+  // snapshot's quota eviction picks the oldest unlabeled version — very often
+  // exactly the old revision being restored — unlinked the blob, and the write
+  // then truncated the live file to zero bytes before failing to read its
+  // source. Asking to go back destroyed both the file and the thing you asked
+  // to go back to.
+  it('restores at the quota ceiling without destroying the version it is restoring', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    // ceiling 50; the only version present is the oldest unlabeled one, so it
+    // is precisely what eviction would pick.
+    const space = personalSpace({ storageQuota: 100 })
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+    const versionId = queries.rows[0].id
+    expect(queries.rows).toHaveLength(1)
+
+    await fs.writeFile(filePath, 'x'.repeat(45))
+
+    await service.restoreVersion(user, space, versionId)
+
+    expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+    expect(queries.rows.some((r) => r.id === versionId)).toBe(true)
+    expect((await fs.stat(filePath)).size).toBeGreaterThan(0)
+  })
+
+  it('refuses to restore a blob whose size disagrees with its row, leaving the live file intact', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'current live content')
+    // Corrupt the blob: shorter than the recorded size.
+    const [blob] = await blobFiles()
+    await fs.writeFile(blob, 'truncated')
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toThrow(FileError)
+    // The check happens before the write, so the live file is untouched.
+    expect(await fs.readFile(filePath, 'utf8')).toBe('current live content')
   })
 
   it('restore releases the lock even when the copy fails', async () => {

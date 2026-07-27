@@ -14,6 +14,12 @@ export const VERSIONS_REPOSITORY = 'versions'
 // single directory never accumulates every version in a root.
 export const VERSIONS_SHARD_LENGTH = 2
 
+// Where a copy lands before it is hashed and renamed into its shard. It must
+// sit inside the versions root so the publish step is a same-filesystem rename
+// (atomic); a temp dir on another device would silently become a second copy.
+// Leftovers here are crash debris and are safe for the retention GC to remove.
+export const VERSIONS_STAGING_DIR = '.staging'
+
 // Discriminator prefixes for the `versionsRoot` column. Recording which root a
 // blob was written to keeps it resolvable after a cross-space move, when the
 // file's current space no longer matches where its blobs live (ADR §15).
