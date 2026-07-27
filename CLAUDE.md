@@ -160,14 +160,20 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 ## File versioning (`custom-versioning`)
 
 Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
-(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E (the e2e suite) is not done**, and neither is
-the ADR §19 soak against live editors and NC clients.
+(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 15 of its 20 e2e cases in**; the ADR §19
+soak against live editors and NC clients is still owed.
 
-**Read the handoff for whatever phase you're touching before touching it.** Five documents describe this feature and
+**e2e:** `npm -w backend run test:e2e`, after `npm run dev:db` + `npm run dev:migrate`. Read
+`custom-versioning/utils/versions-e2e.fixture.ts` before adding a case — a test user needs the `permissions` column
+(not the derived `applications` array) or every request 403s, and writes need the `sync-in-csrf` header as well as the
+cookie.
+
+**Read the handoff for whatever phase you're touching before touching it.** Six documents describe this feature and
 they do not all agree:
 
 | Document | Status |
 |---|---|
+| `2026-07-27-file-versioning-phase-e-notes.md` | The e2e suite: what the 15 cases cover, the four environment facts the harness encodes, the five cases still owed. |
 | `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
 | `2026-07-27-file-versioning-phase-d-handoff.md` | Still authoritative on the **dev-stack recipe** and the four lessons. Its per-task §3 is superseded, and two of its D2 instructions are wrong (the findings say where). |
 | `2026-07-27-file-versioning-handoff.md` | The Phase A/B record: five design corrections and why. Still current on those. |
