@@ -22,7 +22,7 @@ import { canModifySpaceEnv } from '../../spaces/utils/permissions'
 import { SYNC_CHECKSUM_ALG } from '../../sync/constants/sync'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
-import { SnapshotOptions, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
+import { SnapshotOptions, VersionOrigin, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
 import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from '../utils/paths'
 import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersioningQueries } from './versioning-queries.service'
@@ -156,10 +156,15 @@ export class VersioningService {
   }
 
   // Skips the snapshot when the newest version for (fileId, authorId, origin)
-  // is younger than the window AND unlabeled — the pre-session state is already
-  // captured, so an editor autosaving every 30s does not mint a version each
-  // time. A labeled newest version never coalesces: suppressing here would let
-  // a named revision silently swallow the next real change.
+  // is younger than that ORIGIN's window AND unlabeled — the pre-session state
+  // is already captured, so an editor autosaving every 30s does not mint a
+  // version each time. A labeled newest version never coalesces: suppressing
+  // here would let a named revision silently swallow the next real change.
+  //
+  // The window is per-origin (ADR §5) because the editors' cadence is set by the
+  // document server while an interactive save is a human decision — see
+  // FilesVersionsOriginIntervalsConfig for the numbers and why one scalar cannot
+  // serve both.
   private async isCoalesced(fileId: number, authorId: number | null, options: SnapshotOptions): Promise<boolean> {
     // A restore's safety snapshot is never coalesced. It is the only record of
     // the pre-restore content, so suppressing it would leave a second restore
@@ -167,12 +172,31 @@ export class VersioningService {
     // restore is never destructive would stop holding. Restores are rare and
     // deliberate; there is no autosave storm to protect against.
     if (options.origin === 'restore') return false
-    const window = this.config.minIntervalSeconds
-    if (!window || window <= 0) return false
+    const window = this.coalescingWindow(options.origin)
+    if (window <= 0) return false
     const newest = await this.queries.newestForTuple(fileId, authorId ?? null, options.origin)
     if (!newest || newest.label) return false
     const ageSeconds = (Date.now() - new Date(newest.createdAt).getTime()) / 1000
     return ageSeconds < window
+  }
+
+  // The window for one origin: its own override if configured, otherwise the
+  // scalar fallback (ADR §5).
+  //
+  // TESTS FOR A NUMBER, NOT FOR TRUTHINESS. `0` is a meaningful value — "never
+  // coalesce this origin" — and `?? fallback` or a truthiness check would
+  // silently promote it back to 60. That is the same class of bug as the
+  // config's own `0 -> false` Transform idiom, read from the other side.
+  //
+  // Reads through the config object each call rather than caching, because the
+  // specs mutate `configuration.applications.files.versions` on an
+  // already-constructed service.
+  private coalescingWindow(origin: VersionOrigin): number {
+    const configured = (this.config.minIntervalSecondsByOrigin as Partial<Record<VersionOrigin, number>> | undefined)?.[origin]
+    if (typeof configured === 'number') return configured
+    // An environment.yaml predating the per-origin block leaves it undefined;
+    // the scalar is then the whole rule, exactly as before.
+    return this.config.minIntervalSeconds ?? 0
   }
 
   // Keeps total version bytes in this root at or under quota * quotaShare by

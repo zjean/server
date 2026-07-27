@@ -81,6 +81,45 @@ export class FilesVersionsRetentionConfig {
   spaces: number | false = false
 }
 
+// Fork-owned. Per-origin overrides for the coalescing window (ADR §5).
+//
+// WHY THE EDITORS NEED THEIR OWN NUMBER. The window is a RATE LIMIT, not a
+// session collapser: the versions minted during an editing session are
+// roughly `session_length / max(window, save_interval)`, and a session is
+// unbounded. The two kinds of writer have cadences two orders of magnitude
+// apart, so one scalar cannot serve both:
+//
+//   - An EDITOR's cadence is set by the document server, not by a human.
+//     Collabora's own coolwsd.xml defaults are `idlesave_duration_secs: 30`
+//     and `autosave_duration_secs: 300`, so a PutFile can arrive every 30
+//     seconds of edit-then-pause. At a 60-second window an hour of active
+//     editing mints ~10 versions — which, with `maxVersionsPerFile` at 20,
+//     evicts about half of that file's genuinely distinct older revisions.
+//     Autosave noise consuming the retention budget is the real harm, not the
+//     row count.
+//   - An INTERACTIVE write is a human pressing Save. Each one is a decision,
+//     and collapsing four of them into one leaves the intermediate states
+//     unrecoverable. 60 seconds is right there.
+//
+// 300 matches Collabora's `autosave_duration_secs`, so a continuously-edited
+// document mints at most one version per autosave cycle. OnlyOffice gets the
+// same value for symmetry, though it barely needs one: it saves only from
+// callback statuses 2/3/6/7 and has no autosave-per-keystroke path at all
+// (ADR §5), so coalescing rarely fires there.
+//
+// `0` means "never coalesce this origin" and is distinguishable from "not
+// configured" — the lookup tests for a number, not for truthiness. Any origin
+// without a field here falls back to the scalar `minIntervalSeconds`.
+export class FilesVersionsOriginIntervalsConfig {
+  @IsInt()
+  @Min(0)
+  collabora: number = 300
+
+  @IsInt()
+  @Min(0)
+  onlyoffice: number = 300
+}
+
 // Fork-owned file versioning. See docs/plans/2026-07-25-file-versioning-design.md.
 // Disabled by default: every hook site is a one-line call that no-ops while
 // `enabled` is false.
@@ -118,9 +157,20 @@ export class FilesVersionsConfig {
   quotaShare: number | false = 0.5
 
   // Coalescing window per (fileId, authorId, origin). 0 disables coalescing.
+  //
+  // This is the FALLBACK, applied to any origin without an entry in
+  // `minIntervalSecondsByOrigin` below — i.e. to every interactive write, where
+  // a save is a human decision and 60 seconds is the right granularity.
   @IsInt()
   @Min(0)
   minIntervalSeconds: number = 60
+
+  // Per-origin overrides. See FilesVersionsOriginIntervalsConfig for why the
+  // editors cannot share the interactive number.
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => FilesVersionsOriginIntervalsConfig)
+  minIntervalSecondsByOrigin: FilesVersionsOriginIntervalsConfig = new FilesVersionsOriginIntervalsConfig()
 }
 
 export class FilesEditorsConfig {
