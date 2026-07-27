@@ -24,7 +24,7 @@ Three facts about the codebase shape every decision that follows, and each has b
 
 ## 1. Storage layout — content-addressed blob store, sibling of the files repository
 
-**Decision.** Blobs live at `<home>/versions/<digest[0:2]>/<digest>`, where `<home>` is `UserModel.getHomePath(login)` or `SpaceModel.getHomePath(alias)` — i.e. a **sibling of `files/` and `trash/`**, resolved by a new `realVersionsPathFromSpace(user, space)` helper in `custom-versioning/utils/`, modeled 1:1 on `realTrashPathFromSpace` (`spaces/utils/paths.ts:76-101`) and covering the same four cases: personal, space, external-root, share.
+**Decision.** Blobs live at `<home>/versions/<digest[0:2]>/<digest>`, where `<home>` is `UserModel.getHomePath(login)` or `SpaceModel.getHomePath(alias)` — i.e. a **sibling of `files/` and `trash/`**, resolved by `versionsRootFromSpace(user, space)` + `versionsPathFromRoot(root)` in `custom-versioning/utils/paths.ts`, modeled 1:1 on `realTrashPathFromSpace` (`spaces/utils/paths.ts:76-101`) and covering the same four cases: personal, space, external-root, share.
 
 `versions` is **not** added to `SPACE_REPOSITORY` or `SPACE_ALIAS` (`spaces/constants/spaces.ts:13-24`, verified to be exactly `files|trash|shares`). Unlike `trash`, which *is* URL-reachable and browsable, the versions store is never addressable through a space URL, never browsable, and never appears in any listing.
 
@@ -59,9 +59,17 @@ The bitter irony: **the repo's deliberate inode-stability is what makes hardlink
 - A CoW clone is **independent**: a later in-place write splits the shared blocks instead of corrupting the copy. That is the property the store actually requires.
 - It also removes the cross-device special case entirely — no `EXDEV` branch, no `isCrossDevice` call. Cross-device remains a **normal** case (`dataPath`/`usersPath`/`spacesPath`/`tmpPath` are independently configurable, `files.config.ts:85-97`; external roots point anywhere, `spaces/utils/paths.ts:39-47`), and `copyFile` handles it without the code knowing.
 
-**Staging is required, not optional.** The copy writes to `<blobPath>.<uuid>.part` and then renames. Because the store is content-addressed, the dedup check is "does this digest already exist" — so a *truncated* file left at the final path by a crash would be trusted as a complete blob forever. A rename within one directory is atomic, and the random suffix keeps concurrent snapshots of the same digest from staging over each other.
+### 1.2 The digest is taken from the staged copy, and the copy is published by rename
 
-**Cost, stated honestly:** a snapshot is one streamed read for the checksum plus one clone-or-copy. On a cloning filesystem the second part is near-free; otherwise a full copy. The plan's "O(1)-ish when hardlink succeeds" performance claim no longer applies, and §6 of the plan should measure the clone and copy cases rather than hardlink vs copy.
+Three requirements, all discovered while implementing, that together fix the store's one invariant: **a blob's filename is the hash of the bytes under it.**
+
+**Copy first, then hash what was copied — never hash the live file.** Hashing the live file in a pass separate from the copy leaves a window in which the file changes between the two reads. §4 states outright that WebDAV writes hold **no server lock**, so that window is reachable by design, not by bad luck. The blob would then sit under a digest that does not describe it — and because lookups are content-addressed, *every later snapshot of the genuinely-matching content would dedup against that mis-named blob and silently serve the wrong bytes.* This is the only corruption in the design that escapes its own row, which is what makes it worth the extra care.
+
+**Publish by rename.** A crash mid-copy must leave a `.part` file, never a **truncated file at the content-addressed path** — the existence check would trust that as a complete blob forever. Staging lives in `<versions>/.staging/<uuid>.part` so the publish is a same-filesystem rename (atomic); a stage in the OS temp dir could be on another device and would silently become a second copy.
+
+**Rename unconditionally, even on a dedup hit.** Skipping the copy when the digest already exists reintroduces a check-then-act: between that check and the row insert, a concurrent eviction or purge can unlink the blob, leaving a brand-new row pointing at nothing — a version that lists but can never be downloaded. Rename is atomic and the content is byte-identical by construction, so replacing is always safe. **Accepted cost:** one copy that could sometimes have been skipped. Storage dedup is unaffected (the rename lands on the same path); only the write is repeated.
+
+**Cost, stated honestly:** a snapshot is one clone-or-copy plus one streamed read of the staged copy to hash it. On a cloning filesystem the copy is near-free; elsewhere it is a full copy. The plan's "O(1)-ish when hardlink succeeds" performance claim no longer applies, and §6 of the plan should measure the clone and copy cases rather than hardlink vs copy.
 
 ## 2. Checksum algorithm — `sha512-256`
 
@@ -182,6 +190,13 @@ This section replaces the draft's claim that snapshotting "never blocks the user
 
 1. **Versions count toward quota.** Zero code — `files-quota-manager.service.ts:110` computes usage as `dirSize(UserModel.getHomePath(login))`, and `dirSize` (`files/utils/files.ts:322`) walks everything with no exclusions. Anything under the home path counts automatically. This is consistent with **trash, which counts today**.
 2. **`quotaShare` is enforced eagerly, inside `snapshotBeforeOverwrite`** — not only by the scheduler. Current usage is `SELECT SUM(size) WHERE versionsRoot = ?` (cheap and indexed — explicitly **not** a `dirSize` walk). While `used + newSize > quota * quotaShare`, evict the oldest **unlabeled** version (decrementing blob refcounts) before inserting. Skipped entirely when the space has no `storageQuota` (`willExceedQuota` itself returns false in that case, :137).
+
+   **Four constraints on that loop, all learned from bugs it actually had.** Review found the first two as reproducible data loss; record them so the loop is never "simplified" back:
+
+   - **A write larger than the ceiling is not versioned at all.** The condition `used + incoming > ceiling` is unsatisfiable when `incoming > ceiling`, so an unguarded loop evicts until nothing unlabeled remains — destroying every *other* file's history in the root — and then inserts anyway, still over the ceiling. Maximum destruction, zero benefit. Refusing that one write is correct; the caller degrades to "no version".
+   - **A restore's own safety snapshot is exempt from the cap.** It is a net, not new growth — and worse, eviction picks the oldest unlabeled version, which is very often *exactly the revision being restored*. See §9.
+   - **The ceiling must be sized against the same scope the root belongs to.** `space.storageQuota` is the *current env's* allowance, but for a share with an external path `versionsRootFromSpace` resolves to the acting **user's** root. Using the env's quota there evicts the user's personal history to fit a write into someone else's small share. When the scopes do not line up, skip the eager cap and leave it to the B5 backstop.
+   - **A dedup hit costs zero disk bytes and must not evict anything.**
 3. **`SUM(size)` is *logical* size and over-counts when dedup hits.** The cap is therefore conservative — accepted.
 4. The scheduler (B5) re-checks `quotaShare` as a **backstop** alongside `retentionDays` and `maxVersionsPerFile`.
 5. **Evictions are logged at `log` level, not verbose.** Silently deleting a user's history deserves an audit trail.
@@ -215,6 +230,16 @@ This section replaces the draft's claim that snapshotting "never blocks the user
 
 A restore that swapped the inode would look like a delete+create to trash retention and to any inode-keyed consumer. E2E-2 and E2E-11 assert `stat().ino` is unchanged.
 
+**The blob must be opened before anything else runs.** Review found reproducible data loss here. The first implementation resolved the blob path, checked it existed, and *only then* took the pre-restore snapshot — a check-then-act. That snapshot's quota eviction picks the oldest **unlabeled** version, which is very often **exactly the old revision the user asked to restore**. It unlinked the blob, and the write then truncated the live file to zero bytes before failing to read its source. Asking to go back destroyed both the file and the thing you asked to go back to.
+
+Three fixes, all now in the code:
+
+- **Open the blob first and write the live file from that descriptor**, not from the path. An open descriptor keeps the bytes alive across an `unlink`, so nothing can pull them away mid-restore.
+- **Exempt a restore's own snapshot from the quota cap** (§7) — it is a safety net, not new growth.
+- **Verify the blob's size against its row before touching the live file.** `writeFromStream` truncates the destination the moment the stream opens, so a short or corrupt source has to be caught while the live content is still intact.
+
+The general lesson, worth more than the specific bug: **anything that reads a blob must pin it before running code that can evict.** Eviction and reads share no lock.
+
 The lock is created the way non-DAV `saveStream` does it (`filesLockManager.create`, `files-manager.service.ts:127`) — restore is always an app-initiated action, never a DAV write, so it always runs under a real lock.
 
 ## 10. Trash and delete interplay
@@ -237,9 +262,19 @@ Both converge on `filesQueries.deleteFiles(space.dbFile, isDir, forceDeleteInDB)
 **Directory deletes.** `deleteFiles` removes **all descendant rows in a single regexp query**, so `purgeForFile(fileId)` alone misses children. API is therefore two methods:
 
 - `purgeForFile(fileId)`
-- `purgeForDescendants(scopeProps, path)` — resolves ids with `SELECT id FROM files WHERE <scope> AND childFilesFindRegexp(path)`, reusing the exported helper at `files.schema.ts:52`, then purges by id.
+- `purgeForPath(props, isDir)` — resolves ids with `SELECT id FROM files WHERE <scope> AND childFilesFindRegexp(path)`, reusing the exported helper at `files.schema.ts:52`, then purges by id.
 
-**Trash retention scheduler — deliberately not hooked.** `files-trash-retention.service.ts` is filesystem-scan based: the scan is the source of truth (`readdir` at :181), records not seen in a run are dropped, and ids are inode-derived (:207). **It does not hold `files.id`.** Attempting an inode↔id join there would be fragile and is **rejected**. Instead, trash retention simply lets B5's **dangling-row GC** ("version row whose `files` row no longer exists") absorb the case. This removes a whole class of work the draft had budgeted as real.
+**Trash retention scheduler — deliberately not hooked.** `files-trash-retention.service.ts` is filesystem-scan based: the scan is the source of truth (`readdir` at :181), records not seen in a run are dropped, and ids are inode-derived (:207). **It does not hold `files.id`.** Attempting an inode↔id join there would be fragile and is **rejected**.
+
+**Correction (found in review — the original delegation here was wrong).** This section used to say trash retention "simply lets B5's dangling-row GC absorb the case". **It cannot.** Verified:
+
+1. `files-trash-retention.service.ts` never touches the `files` table at all — only its own `files_trash_*` tables and the filesystem. So when retention permanently removes a trashed file from disk, its `files` row survives with `inTrash = true`.
+2. Before this feature, that row was unreferenced and the nightly orphan sweep (§20) deleted it. **Now our own version rows reference it, so the sweep skips it — permanently.**
+3. `danglingRows` is `LEFT JOIN files … WHERE files.id IS NULL`. Since the `files` row never disappears, it never matches. The absorption mechanism can never fire.
+
+In other words: **version rows *pin* `files` rows against the sweep.** That is the same mechanism §20 relies on to keep ensurer-materialized rows alive, read from the other side — and it disables the reclamation path this section delegated to.
+
+**Revised decision.** B5 must reclaim this case by an explicit rule, not by waiting for a dangling row: **purge version rows whose `files` row has `inTrash = true` and whose age exceeds the trash retention window.** `danglingRows` stays as a backstop for the genuinely-dangling case (a `files` row hard-deleted by `deleteFiles(force)` where the explicit purge was missed), but it is not the mechanism here. Without this rule, and with `retentionDays` defaulting to off, the history of every trash-expired file is retained forever.
 
 ## 11. `copyMove` overwrite — no snapshot
 
@@ -318,6 +353,8 @@ Upstream left versioning TODOs and may ship their own implementation. The contai
 | `files/editors/collabora-online/collabora-online-manager.service.ts` | before `copyFileContent` (:137) |
 | `files/editors/only-office/only-office-manager.service.ts` | before `copyFileContent` (:409) |
 | `files/files.config.ts` | `FilesVersionsConfig` registration |
+| `files/services/files-scheduler.service.ts` | `deleteOrphanFiles` — §20's protection exists only while this cron keeps discovering tables via `getTablesWithFileIdColumn()`. If an upstream sync replaces that with a hard-coded table list, the guard test stays green and the protection is gone. |
+| `infrastructure/database/utils.ts` | `getTablesWithFileIdColumn` — the reflection §20 depends on |
 | `infrastructure/database/schema.ts` | `custom_files_versions` export |
 | `files/services/files-event-manager.service.ts` | the replaced `todo` comment (:20) |
 
@@ -341,7 +378,7 @@ This cuts two ways.
 
 **It is why the ensurer's rows survive.** Versioning materializes `files` rows for files with no other reference — an uploaded, never-shared, never-commented file. Because `custom_files_versions` has a `fileId` column *and* is exported from `schema.ts`, its rows join the protected union automatically. No code needed.
 
-**It is also a silent-data-loss trap**, because both halves of that contract are implicit. Rename the column away from `fileId`, or drop the `schema.ts` export, and the 4 AM sweep starts deleting exactly those rows — at which point the `ON DELETE CASCADE` from §3.2 takes **every version of every affected file** with them. Nightly, silently, with no error. `files-versions.schema.spec.ts` asserts both halves for this reason; treat a failure there as a data-loss bug, not a style nit.
+**It is also a silent-data-loss trap**, because both halves of that contract are implicit. Rename the **TypeScript property** away from `fileId` (the SQL column name is free — both the reflection and the sweep's `table.fileId` go through the property), or drop the `schema.ts` export, and the 4 AM sweep starts deleting exactly those rows — at which point the `ON DELETE CASCADE` from §3.2 takes **every version of every affected file** with them. Nightly, silently, with no error. `files-versions.schema.spec.ts` asserts both halves for this reason; treat a failure there as a data-loss bug, not a style nit.
 
 **Accepted consequence: `fileId` is not eternal for files with no other reference.** When retention prunes a file's *last* version, its `files` row may become unreferenced and be swept that night. The next snapshot then materializes a *new* row with a *new* id. This is harmless — no version rows exist to orphan — and matches how upstream already treats favorites- and comments-only rows. But it means "the id is stable" holds *while history exists*, not forever. Nothing in this design depends on the stronger claim.
 
