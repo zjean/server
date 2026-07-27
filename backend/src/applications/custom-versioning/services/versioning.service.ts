@@ -192,12 +192,9 @@ export class VersioningService {
     const ceiling = quota * share
 
     // No amount of eviction makes room for a version that alone exceeds the
-    // ceiling, so evicting even one would be pure loss. Without this guard the
-    // loop below cannot satisfy its own condition and runs until it has deleted
-    // EVERY unlabeled version in the root — including other files' — and then
-    // inserts anyway, ending up over the ceiling regardless. Refusing to
-    // version this one write is the correct trade; the caller degrades to
-    // "no version" and the save proceeds.
+    // ceiling, so evicting even one would be pure loss. Refusing to version
+    // this one write is the correct trade; the caller degrades to "no version"
+    // and the save proceeds.
     if (incomingSize > ceiling) {
       throw new FileError(
         HttpStatus.INSUFFICIENT_STORAGE,
@@ -205,27 +202,54 @@ export class VersioningService {
       )
     }
 
-    let { used } = await this.queries.usageByRoot(versionsRoot)
-    while (used + incomingSize > ceiling) {
+    // Leave room for the version about to be inserted.
+    await this.evictUntilUnderCeiling(versionsRoot, ceiling - incomingSize)
+  }
+
+  // Evicts oldest-unlabeled-first until this root's version bytes fit under
+  // `ceiling`. Returns how many were removed.
+  //
+  // SHARED ON PURPOSE — this is the one place that decides when eviction is
+  // allowed to happen, and it exists because having that decision in two places
+  // already produced the same data-loss bug twice. The rule:
+  //
+  //   Labeled versions are never evictable. So if labeled bytes ALONE exceed the
+  //   ceiling, no sequence of evictions can reach it — and a `while (used >
+  //   ceiling)` loop will then delete every unlabeled version in the root,
+  //   including every other file's, and still finish over the ceiling. Maximum
+  //   destruction, zero benefit. Detect that up front and keep everything.
+  //
+  // The inverse is also true and is why the check cannot be "did I run out of
+  // victims": by the time victims run out the damage is already done.
+  async evictUntilUnderCeiling(versionsRoot: string, ceiling: number): Promise<number> {
+    let { used, labeledBytes } = await this.queries.usageByRoot(versionsRoot)
+    if (labeledBytes > ceiling) {
+      this.logger.warn({
+        tag: this.evictUntilUnderCeiling.name,
+        msg: `${versionsRoot}: labeled versions alone (${labeledBytes} bytes) exceed the versions ceiling (${Math.floor(ceiling)}), keeping all history`
+      })
+      return 0
+    }
+
+    let removed = 0
+    while (used > ceiling) {
       const victim = await this.queries.oldestUnlabeledByRoot(versionsRoot)
-      if (!victim) {
-        // Everything left is labeled. Labeled versions are never evicted, so
-        // accept the overshoot rather than destroy a named revision.
-        this.logger.warn({
-          tag: this.enforceQuotaShare.name,
-          msg: `${versionsRoot} is at the versions quota ceiling but only labeled versions remain, keeping them`
-        })
-        return
-      }
+      // Unreachable given the guard above (labeledBytes <= ceiling < used means
+      // unlabeled bytes remain), but a defensive exit beats an infinite loop if
+      // sizes and rows ever disagree.
+      if (!victim) return removed
       await this.dropVersion(victim)
       used -= victim.size
-      // Logged at `log`, not verbose: silently deleting a user's history
-      // deserves an audit trail.
+      removed++
+      // Logged at `log`, not verbose, and per victim rather than as a total:
+      // silently deleting a user's history deserves an audit trail that names
+      // what went (ADR §7).
       this.logger.log({
-        tag: this.enforceQuotaShare.name,
-        msg: `evicted version ${victim.id} (${victim.size} bytes) from ${versionsRoot} to stay under the versions quota share`
+        tag: this.evictUntilUnderCeiling.name,
+        msg: `evicted version ${victim.id} of file ${victim.fileId} (${victim.size} bytes) from ${versionsRoot} to stay under the versions quota share`
       })
     }
+    return removed
   }
 
   // Copies the live content into the store, preferring a copy-on-write clone.

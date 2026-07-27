@@ -274,7 +274,21 @@ Both converge on `filesQueries.deleteFiles(space.dbFile, isDir, forceDeleteInDB)
 
 In other words: **version rows *pin* `files` rows against the sweep.** That is the same mechanism §20 relies on to keep ensurer-materialized rows alive, read from the other side — and it disables the reclamation path this section delegated to.
 
-**Revised decision.** B5 must reclaim this case by an explicit rule, not by waiting for a dangling row: **purge version rows whose `files` row has `inTrash = true` and whose age exceeds the trash retention window.** `danglingRows` stays as a backstop for the genuinely-dangling case (a `files` row hard-deleted by `deleteFiles(force)` where the explicit purge was missed), but it is not the mechanism here. Without this rule, and with `retentionDays` defaulting to off, the history of every trash-expired file is retained forever.
+**Revised decision, second attempt — the first one was wrong.** An earlier revision of this section said: *"purge version rows whose `files` row has `inTrash = true` and whose age exceeds the trash retention window."* That was implemented faithfully and **destroyed restorable history**, because "whose age" can only mean the *version's* age and a version's age is unrelated to when its file was trashed:
+
+- A version's `createdAt` is when the file was **overwritten** — arbitrarily long before it was trashed. So `createdAt < now − window` implies nothing at all about how long the file has been in the trash.
+- There is **no trashed-at timestamp addressable by `files.id`**. The `files` row carries only the `inTrash` boolean (`files-queries.service.ts` sets `{ inTrash: true }` and nothing else); the trash sweeper's own `deletedAt` lives in per-root, **inode-keyed** `files_trash_*` tables, which §10 already rejected joining against.
+- Concretely: a document last edited two months ago, trashed today, with `trashRetention.users = 30` — every version is older than the cutoff, so the whole history is deleted on the **first nightly sweep**, while the file itself stays restorable for the full 30 days. That directly contradicts this section's own table row, *"Restored from trash → versions still attached."*
+
+**So there is no trash-age rule.** The reclamation that remains:
+
+- `retentionDays` expires old unlabeled versions **regardless of trash state** — it filters on age alone — so nothing is retained indefinitely merely because a file is in the trash.
+- `quotaShare` bounds total growth per root.
+- Permanently deleting the trash entry runs `purgeForPath`, which reclaims properly.
+
+**Accepted, documented leak:** history of a file whose *trash entry expired on disk* survives until that entry is permanently deleted, because trash retention removes the disk copy without touching the `files` row. A documented leak beats undocumented data loss. Re-adding a trash-age rule requires **first** adding a real trashed-at timestamp (a fork-owned table keyed on `fileId`, which would also join the §20 protected union automatically) — not another proxy.
+
+`danglingRows` stays as a backstop for the genuinely-dangling case (a `files` row hard-deleted where the explicit purge was missed), but per the analysis above it is not the mechanism for anything routine.
 
 ## 11. `copyMove` overwrite — no snapshot
 

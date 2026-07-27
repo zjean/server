@@ -43,7 +43,8 @@ const DAY = 86_400_000
 describe(VersionsRetention.name, () => {
   let service: VersionsRetention
   let queries: Record<string, Mock>
-  let versioning: { dropVersionForRetention: Mock }
+  let versioning: { dropVersionForRetention: Mock; evictUntilUnderCeiling: Mock }
+  let quotaRows: { quota: number }[]
   let tmpRoot: string
   let dropped: VersionRow[]
 
@@ -97,21 +98,24 @@ describe(VersionsRetention.name, () => {
     versioning = {
       dropVersionForRetention: vi.fn().mockImplementation(async (r: VersionRow) => {
         dropped.push(r)
-      })
+      }),
+      evictUntilUnderCeiling: vi.fn().mockResolvedValue(0)
     }
     queries = {
       distinctRoots: vi.fn().mockResolvedValue([ROOT]),
       unlabeledOlderThan: vi.fn().mockResolvedValue([]),
-      unlabeledInTrashOlderThan: vi.fn().mockResolvedValue([]),
       fileIdsExceeding: vi.fn().mockResolvedValue([]),
-      countByFileId: vi.fn().mockResolvedValue(0),
       unlabeledByFileIdOldestFirst: vi.fn().mockResolvedValue([]),
-      usageByRoot: vi.fn().mockResolvedValue({ used: 0, count: 0 }),
+      usageByRoot: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0 }),
       oldestUnlabeledByRoot: vi.fn().mockResolvedValue(undefined),
       danglingRows: vi.fn().mockResolvedValue([]),
       countByBlob: vi.fn().mockResolvedValue(1)
     }
-    const db = { select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve([]) }) }) })) }
+    // Returns a quota so the quota rule actually reaches its destructive path; a
+    // stub that always answered "no quota" is why a data-loss bug in that loop
+    // survived a green suite.
+    quotaRows = [{ quota: 0 }]
+    const db = { select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: () => Promise.resolve(quotaRows) }) }) })) }
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -149,7 +153,7 @@ describe(VersionsRetention.name, () => {
 
     await service.cleanVersions()
 
-    expect(queries.unlabeledOlderThan).toHaveBeenCalledWith(ROOT, expect.any(Date))
+    expect(queries.unlabeledOlderThan).toHaveBeenCalledWith(ROOT, expect.any(Date), expect.any(Number))
     const cutoff = queries.unlabeledOlderThan.mock.calls[0][1] as Date
     // ~30 days ago, within a second of tolerance.
     expect(Math.abs(Date.now() - cutoff.getTime() - 30 * DAY)).toBeLessThan(1000)
@@ -167,44 +171,51 @@ describe(VersionsRetention.name, () => {
     expect(Math.abs(Date.now() - cutoff.getTime() - 90 * DAY)).toBeLessThan(1000)
   })
 
-  /* ------------------------------------------------------- trash-expired rule */
+  /* --------------------------------------------- no trash-age rule (removed) */
 
-  // This is the rule ADR §10 was corrected to require. Waiting for a version
-  // row to become "dangling" cannot work: trash retention never touches the
-  // `files` table, and our own rows keep it alive against the orphan sweep.
-  it('reclaims versions of files the trash has already expired', async () => {
+  // The removed rule keyed on the VERSION's age while claiming to mean "the file
+  // has been in the trash long enough". Those are unrelated: a version's
+  // createdAt is when the file was overwritten. A file last edited months ago
+  // lost its entire history on the first sweep after being trashed, while still
+  // restorable from the trash. There is no trashed-at timestamp addressable by
+  // files.id, so the rule cannot be written correctly and was dropped.
+  it('does not reclaim history just because a file sits in the trash', async () => {
     trashConfig.users = 30
-    queries.unlabeledInTrashOlderThan.mockResolvedValue([row({ id: 9 })])
+    versionsConfig.retentionDays = { users: false, spaces: false }
 
     await service.cleanVersions()
 
-    expect(queries.unlabeledInTrashOlderThan).toHaveBeenCalledWith(ROOT, expect.any(Date))
-    expect(dropped.map((r) => r.id)).toContain(9)
+    expect(dropped).toHaveLength(0)
   })
 
-  it('skips the trash rule when trash retention itself is off', async () => {
+  it('still expires an OLD version of a trashed file via the age rule', async () => {
+    // The age rule filters on age alone, not trash state, so nothing leaks
+    // indefinitely just because a file is in the trash.
+    versionsConfig.retentionDays = { users: 30, spaces: false }
+    queries.unlabeledOlderThan.mockResolvedValueOnce([row({ id: 4 })]).mockResolvedValue([])
+
     await service.cleanVersions()
-    expect(queries.unlabeledInTrashOlderThan).not.toHaveBeenCalled()
+
+    expect(dropped.map((r) => r.id)).toContain(4)
   })
 
   /* --------------------------------------------------- maxVersionsPerFile */
 
   it('trims a file down to the cap, oldest unlabeled first', async () => {
     versionsConfig.maxVersionsPerFile = 3
-    queries.fileIdsExceeding.mockResolvedValue([100])
-    queries.countByFileId.mockResolvedValue(5)
-    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 1 }), row({ id: 2 }), row({ id: 3 }), row({ id: 4 })])
+    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 5 }])
+    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 1 }), row({ id: 2 })])
 
     await service.cleanVersions()
 
-    // 5 total, keep 3 => drop the 2 oldest unlabeled.
+    // 5 in this root, keep 3 => ask for exactly the 2 oldest unlabeled.
+    expect(queries.unlabeledByFileIdOldestFirst).toHaveBeenCalledWith(ROOT, 100, 2)
     expect(dropped.map((r) => r.id)).toEqual([1, 2])
   })
 
   it('keeps every labeled version even when that exceeds the cap', async () => {
     versionsConfig.maxVersionsPerFile = 2
-    queries.fileIdsExceeding.mockResolvedValue([100])
-    queries.countByFileId.mockResolvedValue(5)
+    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 5 }])
     // All five are labeled, so none are candidates.
     queries.unlabeledByFileIdOldestFirst.mockResolvedValue([])
 
@@ -213,25 +224,42 @@ describe(VersionsRetention.name, () => {
     expect(dropped).toHaveLength(0)
   })
 
-  it('never trims a version belonging to another root', async () => {
+  it('scopes the trim to this root, so a file moved between spaces is counted per root', async () => {
+    // Gate, count and candidate list must agree on scope. A per-root gate with a
+    // global count over-deleted in one root and under-enforced in the other.
     versionsConfig.maxVersionsPerFile = 1
-    queries.fileIdsExceeding.mockResolvedValue([100])
-    queries.countByFileId.mockResolvedValue(3)
-    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 1, versionsRoot: 'space:other' }), row({ id: 2 })])
+    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 3 }])
+    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 2 })])
 
     await service.cleanVersions()
 
-    // A file moved between spaces has rows in two roots; this sweep is
-    // per-root, so the other root's rows are not its business.
+    expect(queries.fileIdsExceeding).toHaveBeenCalledWith(ROOT, 1)
+    expect(queries.unlabeledByFileIdOldestFirst).toHaveBeenCalledWith(ROOT, 100, 2)
     expect(dropped.map((r) => r.id)).toEqual([2])
   })
 
   /* --------------------------------------------------------- quotaShare */
 
   it('is a no-op when the root has no quota', async () => {
-    queries.usageByRoot.mockResolvedValue({ used: 10_000, count: 1 })
+    quotaRows = [{ quota: 0 }]
     await service.cleanVersions()
-    expect(queries.oldestUnlabeledByRoot).not.toHaveBeenCalled()
+    expect(versioning.evictUntilUnderCeiling).not.toHaveBeenCalled()
+  })
+
+  it('delegates eviction to the shared helper with quota * quotaShare as the ceiling', async () => {
+    quotaRows = [{ quota: 1000 }]
+    versionsConfig.quotaShare = 0.5
+
+    await service.cleanVersions()
+
+    expect(versioning.evictUntilUnderCeiling).toHaveBeenCalledWith(ROOT, 500)
+  })
+
+  it('skips the quota rule entirely when quotaShare is disabled', async () => {
+    quotaRows = [{ quota: 1000 }]
+    versionsConfig.quotaShare = false
+    await service.cleanVersions()
+    expect(versioning.evictUntilUnderCeiling).not.toHaveBeenCalled()
   })
 
   /* ------------------------------------------------------- dangling rows */
