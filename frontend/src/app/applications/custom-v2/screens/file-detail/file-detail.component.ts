@@ -28,6 +28,8 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ButtonComponent } from '../../components/button.component'
 import { CommentsPanelComponent } from '../../components/comments-panel.component'
+import { VersionsPanelComponent } from '../../components/versions-panel.component'
+import { VersionsService } from '../../services/versions.service'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
@@ -45,7 +47,7 @@ import { DiagramViewComponent } from '../../preview/diagram-view.component'
 import { CloseGuardService } from '../../preview/close-guard.service'
 import { StoreService } from '../../../../store/store.service'
 
-type InspectorTab = 'info' | 'comment' | 'activity' | 'share'
+type InspectorTab = 'info' | 'comment' | 'versions' | 'activity' | 'share'
 
 interface TabDef {
   id: InspectorTab
@@ -64,6 +66,7 @@ interface TabDef {
     FileGlyphComponent,
     ButtonComponent,
     CommentsPanelComponent,
+    VersionsPanelComponent,
     OfficeViewComponent,
     TextCodeViewComponent,
     MarkdownViewComponent,
@@ -85,6 +88,7 @@ export class FileDetailComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef)
   private readonly layoutV2 = inject(LayoutV2Service)
   private readonly store = inject(StoreService)
+  private readonly versions = inject(VersionsService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly pdfjsViewerUrl = `${assetsUrl}/pdfjs/web/viewer.html?file=`
   private readonly imageEl = viewChild<ElementRef<HTMLImageElement>>('imageEl')
@@ -103,12 +107,25 @@ export class FileDetailComponent implements OnInit {
   protected readonly infoOpen = signal(false)
   protected readonly pdfStage = signal<'pdf' | 'office'>('pdf')
 
-  protected readonly tabs: TabDef[] = [
+  // Every tab this screen can address, including ones not currently shown —
+  // `?tab=` is validated against this, so a deep link survives a tab that is
+  // still resolving its availability.
+  private readonly allTabs: TabDef[] = [
     { id: 'info', label: 'Info', icon: 'info' },
     { id: 'comment', label: 'Comments', icon: 'comment' },
+    { id: 'versions', label: 'Versions', icon: 'clock' },
     { id: 'activity', label: 'Activity', icon: 'activity' },
     { id: 'share', label: 'Sharing', icon: 'shareTree' }
   ]
+
+  // Versions is hidden until the server has confirmed the feature exists (it is
+  // off by default and env-only, so there is nothing to ask but the API itself)
+  // and never applies to a directory. Hidden rather than disabled: a tab for a
+  // feature this server does not have is noise, not information.
+  protected readonly tabs = computed<TabDef[]>(() => {
+    const show = this.versions.availability() === 'available' && !!this.file() && !this.file()!.isDir
+    return show ? this.allTabs : this.allTabs.filter((t) => t.id !== 'versions')
+  })
 
   protected readonly glyphType = computed(() => {
     const f = this.file()
@@ -213,7 +230,7 @@ export class FileDetailComponent implements OnInit {
         return
       }
       const tab = params.get('tab') as InspectorTab | null
-      if (tab && this.tabs.some((t) => t.id === tab)) {
+      if (tab && this.allTabs.some((t) => t.id === tab)) {
         this.tab.set(tab)
         this.infoOpen.set(true)
       }
@@ -248,6 +265,14 @@ export class FileDetailComponent implements OnInit {
     if (!f) return
     if (!!f.hasComments === has) return
     this.file.set({ ...f, hasComments: has })
+  }
+
+  // A restore rewrote the live file, so its size, mtime and rendered content are
+  // all stale. Reloading the path is the same work the screen does on entry, and
+  // cheaper to reason about than patching each stale field.
+  protected onVersionRestored(): void {
+    const path = this.currentPath()
+    if (path) this.loadFile(path)
   }
 
   protected onImageLoad(): void {
@@ -393,6 +418,9 @@ export class FileDetailComponent implements OnInit {
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
           this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), ...this.folderTrail(path), { label: match.name }])
+          // Settles whether to offer the Versions tab. No-ops after the first
+          // answer of the session.
+          if (!match.isDir) this.versions.probe(path)
         },
         error: (e: HttpErrorResponse) => {
           this.errorMessage.set(e.status === 403 ? 'You do not have access to this file.' : 'Failed to load file.')

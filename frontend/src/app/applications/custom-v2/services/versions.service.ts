@@ -56,6 +56,22 @@ export class VersionsService {
    */
   readonly availability = signal<VersionsAvailability>('unknown')
 
+  /**
+   * Settles `availability` by making one real call, discarding its result.
+   *
+   * A host that decides whether to show a versions affordance at all cannot wait
+   * for the panel to mount and tell it — the panel lives inside the thing being
+   * shown. So the host probes, once per session: this no-ops as soon as
+   * `availability` is settled, which makes it safe to call on every file open.
+   *
+   * `usage` is the probe because it is a single aggregate query and its answer is
+   * root-scoped, so nothing about it depends on the path being a particular file.
+   */
+  probe(spacePath: string): void {
+    if (this.availability() !== 'unknown') return
+    this.usage(spacePath).subscribe({ next: () => undefined, error: () => undefined })
+  }
+
   list(spacePath: string): Observable<VersionModel[]> {
     return this.http
       .get<VersionApiProps[]>(`${API_VERSIONS_LIST}/${encodeUrl(spacePath)}`)
