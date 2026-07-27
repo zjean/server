@@ -157,6 +157,38 @@ npm run -w backend db:migrate    # applies pending migrations to the database
 
 Creating the SQL file without running `db:generate` leaves `meta/_journal.json` out of sync. `drizzle-kit migrate` reads the journal to decide what to apply — a file not listed there is silently skipped, the table never gets created, and runtime inserts fail with an opaque "Failed query" error.
 
+## File versioning (`custom-versioning`)
+
+Shipped behind `files.versions.enabled`, **default off**. Backend is complete; the `custom-v2` UI, NC compat and the
+e2e suite are not.
+
+**Read [`docs/plans/2026-07-27-file-versioning-handoff.md`](docs/plans/2026-07-27-file-versioning-handoff.md) before
+touching any of it.** Three documents describe this feature and they do not all agree:
+
+| Document | Status |
+|---|---|
+| `2026-07-27-file-versioning-handoff.md` | **Entry point.** Current state, the corrections, the traps. |
+| `2026-07-25-file-versioning-design.md` | **The authority** on design. Corrected three times during implementation. |
+| `2026-07-25-file-versioning-implementation-plan.md` | Task list. Accurate for Phases C/D/E; its Phase-A/B bodies contain **superseded designs that destroy data if implemented as written** — marked inline. |
+
+Where the plan and the ADR disagree, the ADR is right.
+
+Four invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
+suite:
+
+1. **Never hardlink a version blob.** It shares the live file's inode, and three of the seven write paths truncate that
+   inode in place — the "saved" version would hold the new content. Blobs are cloned or copied (ADR §1.1).
+2. **Never replace a live file's inode.** Restores and any live-content replacement go through `copyFileContent`;
+   trash retention keys on inodes (ADR §9). This is the same fact as (1), read from the other end.
+3. **Anything that reads a blob must pin it open before running code that can evict.** Eviction and reads share no
+   lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9).
+4. **Version rows key on `files.id`, never on path**, and `files` rows are lazily materialized — use
+   `custom-shared`'s `FileRowEnsurer` (ADR §3).
+
+Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
+entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
+`moveFiles(..., true)` / `createEmptyFile` call sites on every upstream sync.
+
 ## Tooling note: `rtk` wrapper
 
 The user runs git/gh via the `rtk` proxy (token savings). A few commands don't pass through cleanly and need `rtk proxy` to bypass:
