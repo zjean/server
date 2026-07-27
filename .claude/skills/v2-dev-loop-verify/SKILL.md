@@ -1,6 +1,6 @@
 ---
 name: v2-dev-loop-verify
-description: Browser-verify a custom-v2 frontend change against the local dev server using chrome-devtools MCP. Use this skill whenever the user asks to "test in browser", "verify in the dev server", "load the v2 page and check", "does the rendering look right", "screenshot the change", "smoke-test the v2 viewer/dialog/screen", or when proposing a v2 frontend change that needs visual confirmation before reporting it complete. Also use proactively after editing any file under `frontend/src/app/applications/custom-v2/` if the change is visual or behavioral — the local dev server is the only way to catch v2-specific bugs like the design-token white-on-white from PR #202, which slipped past build and lint. Covers the loopback-hijack workaround, CSRF-authenticated file creation, the `make → PATCH → UNLOCK` dance, Angular debug access for poking signal-based editors, computed-style audits for token bugs, screenshot capture in MCP-allowed paths, and edit-then-save round-trip verification.
+description: Browser-verify a custom-v2 frontend change against the local dev server using the agent-browser CLI (NOT the chrome-devtools MCP — Chrome is not installed on this machine). Use this skill whenever the user asks to "test in browser", "verify in the dev server", "load the v2 page and check", "does the rendering look right", "screenshot the change", "smoke-test the v2 viewer/dialog/screen", or when proposing a v2 frontend change that needs visual confirmation before reporting it complete. Also use proactively after editing any file under `frontend/src/app/applications/custom-v2/` if the change is visual or behavioral — the local dev server is the only way to catch v2-specific bugs like the design-token white-on-white from PR #202, which slipped past build and lint. Covers the loopback-hijack workaround, CSRF-authenticated file creation, the `make → PATCH → UNLOCK` dance, Angular debug access for poking signal-based editors, computed-style audits for token bugs, screenshot capture in MCP-allowed paths, and edit-then-save round-trip verification.
 ---
 
 # Verifying custom-v2 changes against the local dev server
@@ -10,7 +10,38 @@ A v2 frontend change can pass `npm run build` and `npm run lint` and still ship 
 1. **PR #201** — TipTap markdown viewer rendered white text on a white background in v2's dark navy palette, because the skill at the time referenced `var(--si-bg, #fff)` and the `--si-bg` token doesn't exist under `.v2-root`. Build was clean; only browser inspection revealed it.
 2. **Subtle DTO/sentinel-id mismatches** in v2 versus the classic UI's contract (the classic-as-ground-truth note in CLAUDE.md exists because these slip past types — runtime values like `id: -1` for "new" are not encoded in the DTO).
 
-This skill is the recipe for catching both classes by exercising the change end-to-end in a real browser via the `chrome-devtools` MCP. It assumes the dev server is already running on `:8080` — if it isn't, ask the user to start it. Don't try to spin it up yourself; it requires a database and config you may not have.
+This skill is the recipe for catching both classes by exercising the change end-to-end in a real browser.
+
+> ## Read this before Steps 1–2 — the setup below is superseded (2026-07-27)
+>
+> **Use `agent-browser`, not the `chrome-devtools` MCP.** Google Chrome is not installed on this machine, so the MCP
+> cannot launch a browser. `agent-browser` is installed (`/opt/homebrew/bin/agent-browser`) and ships its own Chromium.
+> Start with `agent-browser skills get core`. The core loop is `open <url>` → `snapshot -i` → `click @eN`.
+>
+> **You can start the stack yourself, and it is simpler than Step 1 suggests:**
+>
+> ```bash
+> npm run dev:db && npm run dev:migrate
+> npm run -w frontend build      # → dist/static
+> npm run dev:backend            # :8080 serves the API *and* the built frontend
+> ```
+>
+> The backend serves `dist/static` via `useStaticAssets`, and the app uses hash routing, so **everything is reachable
+> from `http://localhost:8080` on a single origin** — no proxy, no LAN-IP workaround, no `ng serve`. The trade is no
+> HMR: rebuild (~8s) after a frontend change. `localhost` worked fine; the VS Code loopback hijack in Step 1 was not
+> observed.
+>
+> **Two `agent-browser` gotchas that cost real time:**
+> - **Refs go stale the instant the page changes.** Reading a ref from one snapshot and clicking it after another
+>   snapshot opened the *delete* dialog when restore was intended. For destructive actions, click through a scoped
+>   `eval` instead: `document.querySelectorAll('.vp-row')[2].querySelector('button[title="Restore this version"]').click()`.
+> - **Screenshots intermittently fail** with `Resource temporarily unavailable (os error 35)` while `eval` and `get`
+>   keep working; retry after a few seconds. For anything measurable, `eval` beats a screenshot anyway — measuring line
+>   boxes caught a double-spacing bug that eyeballing an image did not.
+>
+> Steps 3–8 below (CSRF fixture creation, the `make → PATCH → UNLOCK` dance, the design-token audit, Angular debug
+> access, round-trip verification) are still accurate — translate `evaluate_script` to `agent-browser eval` and
+> `take_snapshot` to `agent-browser snapshot -i`.
 
 ## Step 1 — Find the dev server and dodge the loopback hijack
 
