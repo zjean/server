@@ -25,6 +25,8 @@ import { NcTextEditorController } from './controllers/nc-text-editor.controller'
 import { NcThemingController } from './controllers/nc-theming.controller'
 import { NcSearchService } from './services/nc-search.service'
 import { NcUploadsController } from './controllers/nc-uploads.controller'
+import { NcVersionsController } from './controllers/nc-versions.controller'
+import { NcVersionsService } from './services/nc-versions.service'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
@@ -69,6 +71,13 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
   // favorites to the stock NC clients (star / toggle / Favorites tab).
   // CustomSharedModule exports FileRowEnsurer — the lookup-then-insert core
   // NcFileRowEnsurer wraps, shared with custom-versioning.
+  //
+  // CustomVersioningModule is deliberately NOT imported. It is @Global and
+  // exports VersioningService, which is how FilesManager and both editor
+  // managers already reach it, and how NcVersionsService reaches it here. That
+  // keeps this module's import list free of the versioning module (ADR §12) —
+  // mobile-compat needs FileRowEnsurer unconditionally, and it must keep
+  // getting it from custom-shared whether versioning is on or off.
   imports: [
     UsersModule,
     FilesModule,
@@ -93,6 +102,11 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     NcTextEditorController,
     NcThemingController,
     NcUploadsController,
+    // The NC file-versions DAV tree. Every handler 404s while
+    // files.versions.enabled is false, and the matching OCS capability is
+    // absent in the same state — so the route is mounted unconditionally and
+    // the flag is read at request time, in one place.
+    NcVersionsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
     ...(onlyofficeEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController] : [])
   ],
@@ -112,6 +126,7 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     NcSyncLogScheduler,
     NcSyncLogService,
     NcSyncReportService,
+    NcVersionsService,
     ...(oidcEnabled ? [NcMobileOidcService] : []),
     ...(onlyofficeEnabled ? [NcOnlyOfficeTranslatorService, NcOnlyOfficeFileResolver, NcOnlyOfficeForceSaveService] : [])
   ]

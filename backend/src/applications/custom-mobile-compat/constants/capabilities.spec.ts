@@ -9,6 +9,9 @@ vi.mock('../../../configuration/config.environment', () => ({
           onlyoffice: {
             enabled: false
           }
+        },
+        versions: {
+          enabled: false
         }
       }
     }
@@ -139,6 +142,63 @@ describe('ncCapabilities', () => {
       expect(oo.mimetypes).toContain('application/vnd.openxmlformats-officedocument.presentationml.presentation')
       expect(oo.templates).toEqual(['docx', 'xlsx', 'pptx'])
       expect(oo.version).toMatch(/^\d+\.\d+\.\d+$/)
+    })
+  })
+
+  // Shape taken verbatim from upstream's apps/files_versions/lib/Capabilities.php:
+  //   ['files' => ['versioning' => true, 'version_labeling' => bool,
+  //                'version_deletion' => bool]]
+  // The key is `files.versioning`, NOT a top-level `files_versions` block — that
+  // is the app id, not the capability. NextcloudKit decodes all three
+  // (NextcloudKit+Capabilities.swift:294-309).
+  describe('files versioning block', () => {
+    afterEach(() => {
+      mockConfig.applications.files.versions.enabled = false
+    })
+
+    const filesBlock = () => (ncCapabilities('https://sync-in.example.test').capabilities as Record<string, Record<string, unknown>>).files
+
+    it('is not a top-level files_versions block — that is the app id, not the capability key', () => {
+      mockConfig.applications.files.versions.enabled = true
+      const c = ncCapabilities('https://sync-in.example.test')
+      expect((c.capabilities as Record<string, unknown>).files_versions).toBeUndefined()
+      expect(((c.capabilities as Record<string, Record<string, unknown>>).files as Record<string, unknown>).versioning).toBe(true)
+    })
+
+    // NC Android gates its ENTIRE version list on this flag being true
+    // (FileDetailActivitiesFragment.java:253) before it PROPFINDs
+    // /remote.php/dav/versions/{user}/versions/{fileId}. So the flag and
+    // NcVersionsController have to agree, and they do — both read
+    // files.versions.enabled.
+    it('advertises all three flags when the feature is enabled', () => {
+      mockConfig.applications.files.versions.enabled = true
+      const files = filesBlock()
+      expect(files.versioning).toBe(true)
+      expect(files.version_labeling).toBe(true)
+      expect(files.version_deletion).toBe(true)
+    })
+
+    // Matches what upstream looks like with the app disabled: absent, not
+    // present-and-false. Advertising a flag whose endpoint 404s is the pattern
+    // that got `dav.bulkupload` removed from this file.
+    it('reports versioning=false and OMITS labeling/deletion while the flag is off', () => {
+      mockConfig.applications.files.versions.enabled = false
+      const files = filesBlock()
+      expect(files.versioning).toBe(false)
+      expect(files.version_labeling).toBeUndefined()
+      expect(files.version_deletion).toBeUndefined()
+    })
+
+    it('defaults to off when the config carries no versions block at all', () => {
+      const saved = mockConfig.applications.files.versions
+      // A deployment on an older environment.yaml: absent must read as off, not
+      // as a crash and not as on.
+      delete (mockConfig.applications.files as Record<string, unknown>).versions
+      try {
+        expect(filesBlock().versioning).toBe(false)
+      } finally {
+        ;(mockConfig.applications.files as Record<string, unknown>).versions = saved
+      }
     })
   })
 })
