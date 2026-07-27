@@ -64,7 +64,7 @@ export class FileRowEnsurer {
   async ensureFileId(user: UserModel, space: SpaceEnv, props: FileProps): Promise<number> {
     try {
       if (space.inPersonalSpace) {
-        const existing = await this.findUserFileByPath(user.id, props)
+        const existing = await this.findUserFileByPath(user.id, props, space.inTrashRepository === true)
         if (existing > 0) return existing
         // Force id to 0 so getOrCreateUserFile does not take its lookup-by-id
         // branch with a placeholder (negative inode) value.
@@ -88,14 +88,27 @@ export class FileRowEnsurer {
 
   // Path-keyed lookup for personal-space files. Mirrors what
   // FilesQueries.getSpaceFileId does for spaces, but scoped by ownerId.
+  //
   // Matches the entry's `isDir` so a file and a directory at the same
   // (path, name) — unlikely but expressible in the schema — don't alias.
+  //
+  // Matches `inTrash` for the same reason, and it matters more than it looks:
+  // trashing a file only sets `inTrash = true` (filesQueries.deleteFiles, the
+  // non-force branch) and leaves `path` and `name` untouched. Without this
+  // predicate a NEW file created at a trashed file's path would resolve to the
+  // TRASHED row — inheriting its version history, and having that history
+  // cascade-deleted when the user later empties the trash. The space branch
+  // gets this for free, because `dbFile.inTrash` flows into convertToWhere;
+  // the personal branch has to say it explicitly.
+  //
   // Returns 0 when not found.
-  private async findUserFileByPath(userId: number, file: FileProps): Promise<number> {
+  private async findUserFileByPath(userId: number, file: FileProps, inTrash: boolean): Promise<number> {
     const [row] = await this.db
       .select({ id: files.id })
       .from(files)
-      .where(and(eq(files.ownerId, userId), eq(files.path, file.path), eq(files.name, file.name), eq(files.isDir, file.isDir)))
+      .where(
+        and(eq(files.ownerId, userId), eq(files.path, file.path), eq(files.name, file.name), eq(files.isDir, file.isDir), eq(files.inTrash, inTrash))
+      )
       .limit(1)
     return row?.id ?? 0
   }

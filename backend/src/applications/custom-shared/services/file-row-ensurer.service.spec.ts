@@ -90,6 +90,29 @@ describe('FileRowEnsurer', () => {
     expect(props.id).toBe(0)
   })
 
+  // Trashing a file keeps its row with the original path and name, only
+  // flipping inTrash. Without an inTrash predicate, a NEW file created where a
+  // trashed one used to be would resolve to the trashed row — inheriting its
+  // version history, and losing that history to the cascade when the trash is
+  // emptied. The space branch gets this from convertToWhere; here it is explicit.
+  it('personal: scopes the lookup by trash state so a new file does not adopt a trashed row', async () => {
+    db.select.mockReturnValue(fakeSelect([]))
+    filesQueries.getOrCreateUserFile.mockResolvedValue(1234)
+
+    const id = await service.ensureFileId(user, personalSpace(), fileProps())
+
+    expect(id).toBe(1234)
+    // A live env must not match trashed rows, so a row is created instead.
+    expect(filesQueries.getOrCreateUserFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('personal: a trash-repository env looks up trashed rows', async () => {
+    db.select.mockReturnValue(fakeSelect([{ id: 777 }]))
+    const trashEnv = { inPersonalSpace: true, inTrashRepository: true } as unknown as SpaceEnv
+
+    await expect(service.ensureFileId(user, trashEnv, fileProps())).resolves.toBe(777)
+  })
+
   it('personal: matches on isDir so a dir and a file at the same (path, name) do not alias', async () => {
     db.select.mockReturnValue(fakeSelect([]))
     filesQueries.getOrCreateUserFile.mockResolvedValue(321)
