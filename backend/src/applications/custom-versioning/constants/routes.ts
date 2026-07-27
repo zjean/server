@@ -1,0 +1,32 @@
+import { FILES_ROUTE } from '../../files/constants/routes'
+
+// Version endpoints live in the files route namespace, because every one of
+// them addresses a file: the space path is the trailing wildcard, exactly as
+// in the files controller, and SpaceGuard resolves it from `req.params['*']`.
+//
+// Shape is `versions/<verb>/[:versionId/]*`, mirroring the files controller's
+// `operation/<verb>/*`. The verb comes BEFORE the id on purpose: a bare
+// `versions/*` route would also match `versions/12/content/foo`, leaving the
+// router to disambiguate a wildcard against a param. A distinct static segment
+// after `versions/` makes every route unambiguous.
+export const VERSIONS_ROUTE = {
+  BASE: FILES_ROUTE.BASE,
+  VERSIONS: 'versions',
+  LIST: 'list',
+  USAGE: 'usage',
+  CONTENT: 'content',
+  RESTORE: 'restore',
+  LABEL: 'label',
+  DELETE: 'delete',
+  DIFF: 'diff'
+} as const
+
+const NS = `${VERSIONS_ROUTE.BASE}/${VERSIONS_ROUTE.VERSIONS}`
+
+export const API_VERSIONS_LIST = `${NS}/${VERSIONS_ROUTE.LIST}`
+export const API_VERSIONS_USAGE = `${NS}/${VERSIONS_ROUTE.USAGE}`
+export const API_VERSIONS_CONTENT = `${NS}/${VERSIONS_ROUTE.CONTENT}`
+export const API_VERSIONS_RESTORE = `${NS}/${VERSIONS_ROUTE.RESTORE}`
+export const API_VERSIONS_LABEL = `${NS}/${VERSIONS_ROUTE.LABEL}`
+export const API_VERSIONS_DELETE = `${NS}/${VERSIONS_ROUTE.DELETE}`
+export const API_VERSIONS_DIFF = `${NS}/${VERSIONS_ROUTE.DIFF}`

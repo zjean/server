@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common'
 import { CustomSharedModule } from '../custom-shared/custom-shared.module'
 import { FilesModule } from '../files/files.module'
 import { VersioningQueries } from './services/versioning-queries.service'
+import { VersioningController } from './versioning.controller'
 import { VersioningService } from './services/versioning.service'
 
 // Fork-owned file versioning. See docs/plans/2026-07-25-file-versioning-design.md.
@@ -24,6 +25,7 @@ import { VersioningService } from './services/versioning.service'
 @Global()
 @Module({
   imports: [FilesModule, CustomSharedModule],
+  controllers: [VersioningController],
   providers: [VersioningService, VersioningQueries],
   exports: [VersioningService]
 })
