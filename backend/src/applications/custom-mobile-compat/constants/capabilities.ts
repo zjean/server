@@ -37,6 +37,44 @@ const ONLYOFFICE_CAPABILITY = {
   templates: ['docx', 'xlsx', 'pptx']
 } as const
 
+// File-versions capability block, mirroring upstream's
+// apps/files_versions/lib/Capabilities.php EXACTLY:
+//
+//   ['files' => ['versioning' => true, 'version_labeling' => bool,
+//                'version_deletion' => bool]]
+//
+// Three things about that shape are easy to get wrong from this side:
+//
+//   1. The key is `files.versioning`, NOT a top-level `files_versions` block.
+//      (The Phase D handoff says "advertise files_versions"; that is the app
+//      id, not the capability key. Reading Capabilities.php is what caught it.)
+//   2. `version_labeling` / `version_deletion` are SNAKE_CASE and are separate
+//      flags — NextcloudKit decodes all three
+//      (NextcloudKit+Capabilities.swift:294-309) and Android surfaces them on
+//      OCCapability.
+//   3. Advertising any of them is a promise the DAV surface keeps. NC Android
+//      gates its whole version list on `files.versioning` being true
+//      (FileDetailActivitiesFragment.java:253) and then PROPFINDs
+//      /remote.php/dav/versions/{user}/versions/{fileId}. So this block and
+//      NcVersionsController must be enabled and disabled together — which they
+//      are, because both read the same flag.
+//
+// When the flag is off we emit `versioning: false` and OMIT the other two,
+// matching what upstream looks like with the app disabled: the capability is
+// absent rather than present-and-false.
+function versioningCapabilities(): Record<string, boolean> {
+  if (configuration.applications.files.versions?.enabled !== true) {
+    return { versioning: false }
+  }
+  return {
+    versioning: true,
+    // Both are implemented by NcVersionsController: PROPPATCH of
+    // nc:version-label, and DELETE of a version file.
+    version_labeling: true,
+    version_deletion: true
+  }
+}
+
 export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
   const onlyofficeBlock = configuration.applications.files.editors.onlyoffice.enabled ? { onlyoffice: ONLYOFFICE_CAPABILITY } : {}
 
@@ -83,7 +121,10 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         // false; the readMarker PROPPATCH is accepted as a no-op).
         comments: true,
         undelete: true,
-        versioning: false,
+        // versioning / version_labeling / version_deletion — see
+        // versioningCapabilities(). Gated on files.versions.enabled, which
+        // defaults to false.
+        ...versioningCapabilities(),
         // Preview available for image mimes via /index.php/core/preview?file=<path>.
         // Non-images return 404 and the client falls back to a download.
         preview: true,

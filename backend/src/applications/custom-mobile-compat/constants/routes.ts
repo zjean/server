@@ -39,10 +39,15 @@ export const NC_ROUTE = {
   ONLYOFFICE_EMPTY: '/index.php/apps/onlyoffice/empty',
   ONLYOFFICE_SAVE: '/index.php/apps/onlyoffice/save',
 
-  // WebDAV (files, uploads, trashbin)
+  // WebDAV (files, uploads, trashbin, versions)
   DAV_FILES_PREFIX: '/remote.php/dav/files',
   DAV_UPLOADS_PREFIX: '/remote.php/dav/uploads',
   DAV_TRASHBIN_PREFIX: '/remote.php/dav/trashbin',
+  // The NC file-versions tree. Upstream's node layout is
+  // versions/{user}/{versions|restore}/... — see
+  // nextcloud/server apps/files_versions/lib/Sabre/VersionHome.php, which
+  // exposes exactly those two children. Served by NcVersionsController.
+  DAV_VERSIONS_PREFIX: '/remote.php/dav/versions',
   LEGACY_WEBDAV_PREFIX: '/remote.php/webdav'
 } as const
 
