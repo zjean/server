@@ -340,6 +340,18 @@ export class VersioningService {
     return { stream: createReadStream(blobPath), version }
   }
 
+  // The live file, for the diff endpoint's `against=current`. Lives here rather
+  // than in the controller so the controller never builds a filesystem path of
+  // its own — space.realPath is the only path any of this touches, and it was
+  // produced and authorized by the space guard.
+  async liveContent(space: SpaceEnv): Promise<{ stream: Readable; size: number }> {
+    const stats = await fs.stat(space.realPath).catch(() => null)
+    if (!stats?.isFile()) {
+      throw new FileError(HttpStatus.NOT_FOUND, 'Location not found')
+    }
+    return { stream: createReadStream(space.realPath), size: stats.size }
+  }
+
   async versionsUsage(user: UserModel, space: SpaceEnv): Promise<VersionsUsage> {
     const versionsRoot = versionsRootFromSpace(user, space)
     if (!this.enabled || !versionsRoot) return { used: 0, ceiling: null, count: 0 }
