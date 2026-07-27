@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
-import { and, asc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lt, or, sql } from 'drizzle-orm'
 import { ACTION } from '../../../common/constants'
 import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
@@ -25,6 +25,29 @@ export interface NcSyncEvent {
 // How many days of events we keep before pruning. Tokens older than this
 // horizon get a 412 Precondition Failed; client falls back to a full sync.
 const DEFAULT_KEEP_DAYS = 30
+
+// Row -> NcSyncEvent. Shared by the three readers (`since`, `recent`,
+// `recentForPath`); the bigint columns come back as strings on some driver
+// versions, so the Number() coercions are load-bearing rather than cosmetic.
+function toSyncEvent(r: {
+  id: number
+  ownerId: number
+  repository: string
+  spaceAlias: string
+  path: string
+  type: string
+  ts: number
+}): NcSyncEvent {
+  return {
+    id: Number(r.id),
+    ownerId: Number(r.ownerId),
+    repository: r.repository as 'files' | 'trash',
+    spaceAlias: r.spaceAlias,
+    path: r.path,
+    type: r.type as 'create' | 'update' | 'delete',
+    ts: Number(r.ts)
+  }
+}
 
 @Injectable()
 export class NcSyncLogService implements OnModuleInit {
@@ -74,15 +97,40 @@ export class NcSyncLogService implements OnModuleInit {
       .where(and(...conditions))
       .orderBy(asc(ncSyncEvents.id))
       .limit(opts.limit ?? 500)
-    return rows.map((r) => ({
-      id: Number(r.id),
-      ownerId: Number(r.ownerId),
-      repository: r.repository as 'files' | 'trash',
-      spaceAlias: r.spaceAlias,
-      path: r.path,
-      type: r.type as 'create' | 'update' | 'delete',
-      ts: Number(r.ts)
-    }))
+    return rows.map(toSyncEvent)
+  }
+
+  // Events for ONE path, newest first — the activity feed's per-file view.
+  //
+  // Deliberately a separate method rather than a filter on `since` above: that
+  // one is the sync-token reader and MUST stay ascending-by-id, because the
+  // caller stamps the last returned id as the new token. This one is a display
+  // query, so it wants newest-first and takes no token at all.
+  //
+  // `path` is matched exactly. Event paths are space-relative and carry no
+  // leading slash (see handleFileEvent), which is the same shape
+  // FilesQueries.getUserFile returns — the caller is responsible for handing us
+  // a path in that form.
+  async recentForPath(opts: { ownerId: number; spaceAlias: string; path: string; limit?: number }): Promise<NcSyncEvent[]> {
+    const rows = await this.db
+      .select()
+      .from(ncSyncEvents)
+      .where(and(eq(ncSyncEvents.ownerId, opts.ownerId), eq(ncSyncEvents.spaceAlias, opts.spaceAlias), eq(ncSyncEvents.path, opts.path)))
+      .orderBy(desc(ncSyncEvents.id))
+      .limit(opts.limit ?? 50)
+    return rows.map(toSyncEvent)
+  }
+
+  // The user's most recent events across every space, newest first. Same
+  // display-query contract as recentForPath.
+  async recent(opts: { ownerId: number; limit?: number }): Promise<NcSyncEvent[]> {
+    const rows = await this.db
+      .select()
+      .from(ncSyncEvents)
+      .where(eq(ncSyncEvents.ownerId, opts.ownerId))
+      .orderBy(desc(ncSyncEvents.id))
+      .limit(opts.limit ?? 50)
+    return rows.map(toSyncEvent)
   }
 
   // The most recent event id (for issuing the initial sync-token after a

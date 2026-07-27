@@ -10,6 +10,7 @@ import { SharesModule } from '../shares/shares.module'
 import { SpacesModule } from '../spaces/spaces.module'
 import { UsersModule } from '../users/users.module'
 import { WebDAVModule } from '../webdav/webdav.module'
+import { NcActivityController } from './controllers/nc-activity.controller'
 import { NcCommentsController } from './controllers/nc-comments.controller'
 import { NcDavController } from './controllers/nc-dav.controller'
 import { NcDirectEditingController } from './controllers/nc-direct-editing.controller'
@@ -28,6 +29,7 @@ import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcVersionsController } from './controllers/nc-versions.controller'
 import { NcVersionsService } from './services/nc-versions.service'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
+import { NcActivityService } from './services/nc-activity.service'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
 import { NcDirectEditingService } from './services/nc-direct-editing.service'
@@ -97,6 +99,10 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     NcDavController,
     NcExtrasController,
     NcCommentsController,
+    // The OCS activity feed. Not advertised in capabilities — it exists because
+    // NC Android renders its file-detail list (versions included) only when the
+    // activities call returns a parseable OCS body. See the controller.
+    NcActivityController,
     NcDirectEditingController,
     NcRecommendationsController,
     NcTextEditorController,
@@ -113,6 +119,7 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
   providers: [
     NcBasicAuthGuard,
     NcAppPasswordService,
+    NcActivityService,
     NcLoginFlowService,
     NcPathResolverService,
     NcShareMountResolverService,

@@ -205,15 +205,51 @@ clients rather than by testing against them:
   `FileDetailActivitiesFragment` reads versions only when `capability.getFilesVersioning().isTrue()` (:253) — which we
   now satisfy — but it fetches activities *and* versions in one task and calls `populateList` only inside
   `if (result.isSuccess() && result.getData() != null)` on the **activities** result (:347). That call is
-  `GetActivitiesRemoteOperation` → `/ocs/v2.php/apps/activity/api/v2/activity`. We deliberately do not advertise or
-  implement `activity` (see the comment at the end of `constants/capabilities.ts`), so the fetch fails and the list
-  never renders — versions included.
+  `GetActivitiesRemoteOperation` → `/ocs/v2.php/apps/activity/api/v2/activity`, which this fork did not serve.
 
-So the Android path needs a minimal Activity OCS endpoint before any of this is visible. That is a separate feature,
-not D2, and it should be filed as its own issue. Until then the surface is reachable by `curl` and by any third-party
-client that implements the NC versions tree, and it is ready for the ADR §19 soak.
+> **RESOLVED, and the mechanism above was stated too loosely.** The endpoint shipped (see D2.6). The correction matters
+> because it changes what the fix had to be: `GetActivitiesRemoteOperation.isSuccess()` **deliberately accepts 404** —
+> 200, 304 and 404 all count, an accommodation for servers without the activity app — so it is *not* true that "the
+> fetch fails" on a 404. What actually happens is that the operation then parses the body unconditionally, and
+> `jo.getAsJsonObject("ocs").getAsJsonArray("data")` throws `NullPointerException` for any body with no `ocs` key.
+> Nest's own 404 JSON is exactly such a body, and `RemoteOperation.execute` does not catch it. **The requirement was
+> therefore an OCS-shaped body, not a 200** — an empty `ocs.data` would already have been enough.
 
-**Do not read the empty Android list as a bug in this code.** That inference is the reason this section exists.
+**Do not read an empty Android list as a bug in the versions code.** That inference is the reason this section exists.
+
+### D2.6 The Activity OCS endpoint, added so the version list renders
+
+`/ocs/v2.php/apps/activity/api/v2/activity` and its `/filter` variant, backed by `nc_sync_events` — the append-only log
+`NcSyncLogService` already keeps for the RFC 6578 sync-collection REPORT. **No new storage:** that table is already a
+per-user record of create / update / delete with a path and a timestamp, already pruned by an existing cron.
+
+**Deliberately not advertised in capabilities.** The `activity` key stays absent. Android never consults it — the tab
+is added unconditionally and the call is always made — so serving the endpoint is sufficient there, while advertising it
+would additionally make NC iOS render an activity view and probe the endpoints behind it. Fixing Android without
+changing anything for iOS is the smaller change, and it leaves the existing "deliberately NOT advertising
+notifications or activity" comment in `constants/capabilities.ts` true.
+
+Three wire facts that come from `Activity.kt` and the adapters, not from convention:
+
+- **Every field must be present and non-null.** `Activity` is a Kotlin data class of non-null `String` properties parsed
+  by Gson, and **Gson bypasses Kotlin's null checks** — an omitted field lands as `null` and throws at the first
+  `.isNotEmpty()` on the render path, not at parse time.
+- **`subject_rich` must be a JSON array.** `RichElementTypeAdapter.read` calls `in.beginArray()` unconditionally; an
+  object or a string there raises `IllegalStateException` and takes the whole parse down.
+- **`icon` is dereferenced outside its own guard** (`activity.icon.endsWith(…)` runs regardless of `isNotEmpty()`), so it
+  must be a string even when empty.
+
+Two deliberate simplifications, both to avoid nullable dereferences on the render path: `subject_rich` is always the
+**empty array** with the human text in `subject` (a populated rich element sends `ActivityListAdapter` down its
+clickable-chip branch, which dereferences `RichObject.name` and `.id`, both `String?`), and `previews` is always empty.
+Also **`X-Activity-Last-Given` is deliberately not set**: `hasMoreActivities()` is `lastGiven > 0` and drives infinite
+scroll, so emitting it without implementing `since` would make Android re-request the same page forever.
+
+Honest limits, all inherited from the log rather than chosen: **no actor** (rows key on the file's owner, not on who
+made the change, so the entry names that one identity), **no fileId** in the unfiltered feed (the log stores paths;
+resolving an id per row would be a query per entry for a field only the rich-object path uses), and a **30-day
+horizon** — a file whose last change predates the prune window has an empty feed, which is the same horizon that
+already bounds what the sync REPORT can replay. Personal-space files only, like the rest of the fileId-keyed surface.
 
 ---
 
@@ -363,13 +399,11 @@ Step 2 matters: with the window at its default the measurement measures the wind
 Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). `main` at that point:
 **147 test files, 2124 backend tests passing**, `nest build` clean, backend lint clean. Feature flag still **off**.
 
-### Open decisions — these need the maintainer, not a session
+### Open decisions — both were resolved after this document was first written
 
 1. ~~**The coalescing window (D4.3).**~~ **Resolved** — the per-origin window shipped as ADR §5.1. See D4.3.
-2. **A minimal Activity OCS endpoint (D2.5).** Without it the NC versions tree is correct and unreachable from stock
-   Android. Worth its own issue; the endpoint is `/ocs/v2.php/apps/activity/api/v2/activity` and the capability key is
-   `activity` — which `constants/capabilities.ts` currently omits *on purpose*, so that comment needs revisiting rather
-   than ignoring.
+2. ~~**A minimal Activity OCS endpoint (D2.5).**~~ **Resolved** — shipped, backed by the existing sync-event log and
+   deliberately still unadvertised in capabilities. See D2.5's RESOLVED note and D2.6.
 
 ### Owed work, already scoped elsewhere
 
