@@ -412,9 +412,13 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
   the four environment facts the harness encodes, and the five cases still owed.
 - **The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on. D4.2's recipe
   belongs to it.
-- **Two release blockers from ADR §7/§19 are still unwritten:** the release note stating that enabling versioning
-  reduces effective quota by up to `quotaShare`, and the deployment-docs change adding per-home `versions/` to the
-  backup set alongside `files/`, `trash/` and the database.
+- ~~**Two release blockers from ADR §7/§19**~~ **Both written.** The quota wording is the `2.4.4-custom.1` CHANGELOG
+  entry (which is what `release.yml` uses as the GitHub Release body), and the backup requirement is
+  [`docs/backup-and-restore.md`](../backup-and-restore.md).
+- **A third blocker surfaced while wiring those up: the `RELEASE_GITHUB_TOKEN` secret does not exist.** `release.yml`
+  validates it and fails without it, so a tag push today would build and publish the container image
+  (`build-image.yml` uses the default `GITHUB_TOKEN`) while producing **no** GitHub Release — a half-completed release.
+  Creating the PAT is a maintainer action; nothing in the repo can substitute for it.
 
 ### Two corrections this phase made to the handoff
 

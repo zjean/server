@@ -1,3 +1,50 @@
+## [2.4.4-custom.1](https://github.com/zjean/server/compare/v2.4.4...v2.4.4-custom.1) (2026-07-27)
+
+First `-custom` release of the [zjean/server](https://github.com/zjean/server) fork, on top of upstream Sync-in 2.4.4.
+
+### ⚠️ Read before enabling file versioning
+
+This release adds **file versioning**, shipped **disabled** (`applications.files.versions.enabled`, default `false`).
+Nothing about it is user-visible until you turn it on. Two things to know before you do:
+
+- **Enabling it reduces every user's usable quota by up to `quotaShare` (default 50%).** Versions count toward storage
+  usage — exactly as trash already does — and the feature caps its own consumption at `quota * quotaShare` rather than
+  promising it will never affect a save. It cannot promise that: the pre-flight upload guard runs long before any
+  versioning code and reads a day-old cached directory size. The honest statement is *"snapshotting never grows storage
+  usage beyond `quotaShare` of a space's quota"* — not *"saves are never blocked"*. The versions-usage figure is shown
+  per storage root in the v2 UI so the consumption is visible rather than mysterious.
+- **Add the per-home `versions/` directories to your backup set first.** They are siblings of `files/` and `trash/`, so
+  a backup rule written as "back up `files/`" silently excludes all file history — and the loss stays invisible until
+  someone tries to restore a revision. See [`docs/backup-and-restore.md`](docs/backup-and-restore.md).
+
+### Upgrading
+
+Run pending migrations (`npm run -w backend db:migrate`). Migration `0007` adds one new table,
+`custom_files_versions`; there is no DDL on existing tables, and it is a no-op for the running system while the feature
+is disabled.
+
+### Features
+
+* **file versioning** — per-file history with restore, naming, deletion, text diff and a per-root usage figure. History
+  is captured synchronously at each of the seven destructive write paths (web, WebDAV, desktop sync, both editors, NC
+  chunked upload, and `mkFile` truncation), stored in a content-addressed, deduplicated blob store that is a sibling of
+  `files/`. Retention by count, age and quota share; restores preserve the live file's inode and are themselves
+  non-destructive. UI ships in the `custom-v2` app only. Off by default.
+* **Nextcloud file-versions support for mobile clients** — the NC versions DAV tree
+  (`/remote.php/dav/versions/{user}/versions/{fileId}`) with listing, download, restore-by-MOVE, naming and deletion,
+  plus the `files.versioning` / `version_labeling` / `version_deletion` capabilities. Verified end to end against stock
+  Nextcloud Android 34.1.0 on a real device.
+* **OCS activity feed** (`/ocs/v2.php/apps/activity/api/v2/activity`) backed by the existing sync-event log. Not
+  advertised as a capability; it exists because NC Android renders its file-detail list — file versions included — only
+  when the activities call returns a parseable OCS body.
+
+### Bug Fixes
+
+* **custom-mobile-compat:** `user_status` now carries `supports_emoji`, `restore` and `supports_busy`. NC Android reads
+  those keys without a presence guard, and one missing key made it discard and never persist the **entire** capability
+  object — silently disabling every capability-gated feature on Android, not just versioning.
+* **custom-versioning:** restore is possible at all (it previously treated the caller's own file lock as a conflict),
+  and domain errors return their real status instead of 500.
 
 ## [2.4.4](https://github.com/Sync-in/server/compare/v2.4.3...v2.4.4) (2026-07-25)
 
