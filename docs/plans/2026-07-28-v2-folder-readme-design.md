@@ -167,24 +167,25 @@ design only ensures the banner does not inherit it.
 
 Content in read mode is a `GET` of the stub's `dataUrl`, built with `buildFileModelStub(props, fullPath)`
 (`custom-v2/utils/file-model-stub.ts`) — the same call `markdown-view` makes at line 693. **Corrected 2026-07-28: this
-is cached, not re-fetched unconditionally.** `load()` (`folder-readme.component.ts:544-560`) keys on
+is cached, not re-fetched unconditionally.** `load()` (`folder-readme.component.ts:555`) keys on
 `` `${file.id}:${file.mtime}` `` in `lastLoadKey`, and re-fetches only when that key changes. This is not a staleness
 risk: `mtime` moves on every write to the file, including a write made from a different tab, a different user, or
 WebDAV/sync — there is no path that changes the readme's content without also changing its `mtime`, so the cache key
 tracks content, not merely identity. Two more mechanisms make the cache safe rather than merely fast:
 
 - **A post-await staleness guard.** `load()` checks `this.lastLoadKey !== key` both immediately after the `GET`
-  resolves and in its `catch` (:551-556), so a request superseded by a newer folder's load while in flight cannot
+  resolves and in its `catch` (:563 and :566), so a request superseded by a newer folder's load while in flight cannot
   overwrite the view with older content — the last key set wins, not the last response to arrive.
-- **Reset to `null` on disappearance.** The navigation effect (:368-380) clears `lastLoadKey` to `null` whenever
+- **Reset to `null` on disappearance.** The navigation effect (:387) clears `lastLoadKey` to `null` whenever
   `dirPath`/`readme()` resolve to nothing (no readme, or mid-hop). Without this, re-entering a folder whose readme is
   **unchanged** would hit the cache-hit early-return while the content had already been blanked by the same effect,
   leaving an empty banner — the bug fixed in `703195ce`. The reset is what makes that fix work; deleting `lastLoadKey`
   as an over-eager "simplification" reintroduces exactly that bug.
 
-**Accepted cost of the reset:** because leaving a folder nulls the cache key, returning to a folder whose readme has
-not changed since you left re-issues the `GET` for content already fetched once earlier in the session — a duplicate
-request, not a staleness risk. A couple of KB, so this is judged worth paying to keep the reset-on-disappearance fix
+**Accepted cost of the reset:** returning to a folder whose readme has not changed since you left re-issues the `GET`
+for content already fetched once earlier in the session — a duplicate request, not a staleness risk. (Precisely: the
+key is nulled when the destination has *no* readme, and simply overwritten by the destination's own key when it has
+one. Either way the return visit misses the cache.) A couple of KB, so this is judged worth paying to keep the reset-on-disappearance fix
 simple.
 
 **Rationale.**

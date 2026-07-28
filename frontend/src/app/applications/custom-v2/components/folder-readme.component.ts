@@ -222,7 +222,7 @@ export class FolderReadmeComponent implements OnDestroy {
   // edit mode locks the readme on open, and the save-triggered refresh
   // (onEditorSaved) re-reads the row while we still hold it. Neither classic's
   // writeable contract (files.service.ts:314) nor markdown-view's copy of it
-  // (markdown-view.component.ts:746) tells that lock apart from a stranger's, so
+  // (markdown-view.component.ts:758) tells that lock apart from a stranger's, so
   // both go read-only on it — Save then Cancel left the banner with no Edit
   // button, and the next Edit opened a read-only editor. The backend does tell
   // them apart: the lock route goes through filesLockManager.createOrRefresh,
@@ -311,7 +311,7 @@ export class FolderReadmeComponent implements OnDestroy {
   // (`path: '**'`, see that file's own comment), so every in-screen folder hop —
   // root<->subfolder as much as subfolder<->subfolder — reuses the same route
   // config and the host screens reload in place (personal.component.ts:342,
-  // space-files.component.ts:326) rather than being destroyed. This component and
+  // space-files.component.ts:330) rather than being destroyed. This component and
   // its editor therefore survive every such hop; constructing a ProseMirror
   // instance per folder visit would be wasted work. The one thing that DOES
   // destroy this component is leaving the browse screen entirely — see the
@@ -406,7 +406,7 @@ export class FolderReadmeComponent implements OnDestroy {
 
     // Folder navigation between two folders that match the SAME route config
     // reloads the host screen in place (personal.component.ts:342,
-    // space-files.component.ts:326) — the host is NOT destroyed, so neither is
+    // space-files.component.ts:330) — the host is NOT destroyed, so neither is
     // this component nor the embedded editor, whose ngOnDestroy is the only thing
     // that releases the exclusive lock. CloseGuardService can't help: it's a
     // single-slot manual guard that only file-detail's close() consults, not a
