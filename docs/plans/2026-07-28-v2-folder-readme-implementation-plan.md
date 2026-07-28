@@ -942,6 +942,14 @@ In the class:
 
 ```ts
   protected readonly editing = signal(false)
+  // The editor's target, CAPTURED when edit mode opens and deliberately not
+  // derived from readme() while editing. This is load-bearing: dirPath can change
+  // under us mid-edit (the host screens reload in place), and if the editor's
+  // [path]/[file] bindings tracked readme() they would swing to the new folder's
+  // file — or null — while the editor still holds unsaved content, making
+  // markdown-view re-open a different file mid-teardown. Freezing the target
+  // means folder navigation cannot disturb the editor; only we tear it down.
+  protected readonly editTarget = signal<{ path: string; file: FileProps } | null>(null)
   // Set when startEdit() is called before the readme has resolved — e.g. the
   // "Folder description" menu entry creates the file and asks for edit mode
   // before the listing refresh has landed.
@@ -953,11 +961,25 @@ In the class:
       this.pendingEdit = true
       return
     }
-    if (this.writeable()) this.editing.set(true)
+    if (this.writeable()) this.openEditor()
   }
 
   protected onEditClick(): void {
+    this.openEditor()
+  }
+
+  private openEditor(): void {
+    const file = this.readme()
+    if (!file) return
+    this.editTarget.set({ path: `${this.dirPath()}/${file.name}`, file })
     this.editing.set(true)
+  }
+
+  private closeEditor(): void {
+    // Unmounting MarkdownViewComponent triggers its ngOnDestroy, which releases
+    // the exclusive lock. Clear the frozen target so a later Edit re-captures.
+    this.editing.set(false)
+    this.editTarget.set(null)
   }
 
   protected onEditorSaved(): void {
@@ -968,9 +990,10 @@ In the class:
   }
 
   protected onEditorDone(): void {
-    // MarkdownViewComponent already ran its unsaved-changes confirm before
-    // emitting. Unmounting it triggers its ngOnDestroy, which releases the lock.
-    this.editing.set(false)
+    // Cancel path only. MarkdownViewComponent already ran its unsaved-changes
+    // confirm before emitting, and here a decline CAN be honoured — nothing has
+    // navigated. Contrast leaveEditOnNavigate below.
+    this.closeEditor()
     this.changed.emit()
   }
 ```
@@ -999,11 +1022,11 @@ Add to the component's `imports`: `ButtonComponent` from `'./button.component'`.
 Wrap the existing read/error block so exactly one mode renders. The full body becomes:
 
 ```html
-        @if (editing()) {
+        @if (editing() && editTarget(); as target) {
           <div class="fr__edit">
             <app-v2-preview-markdown-view
-              [path]="dirPath() + '/' + file.name"
-              [file]="file"
+              [path]="target.path"
+              [file]="target.file"
               [isWriteable]="true"
               [inline]="true"
               (saved)="onEditorSaved()"
@@ -1066,6 +1089,37 @@ body's success path:
       })
 ```
 
+- [ ] **Step 3b: Give `MarkdownViewComponent` a promise-shaped save for the teardown path**
+
+Additive, in `custom-v2/preview/markdown-view.component.ts`, next to the existing `save()`. The existing `save()`
+stays exactly as it is — it is the button handler and its `subscribe` shape is right for that. The teardown path needs
+something awaitable, and needs to distinguish "nothing to do" from "saved" from "failed":
+
+```ts
+  // Awaitable save for an embedding parent that is being torn down and cannot
+  // prompt (the folder readme banner on folder change). Returns 'clean' when
+  // there was nothing to save, 'saved' on success, 'failed' otherwise. Never
+  // throws — the caller is mid-teardown and must proceed either way.
+  async saveNowIfModified(): Promise<'clean' | 'saved' | 'failed'> {
+    if (!this.stub || !this.isModified() || !this.writeable() || this.readonly()) return 'clean'
+    const content = this.currentMarkdown()
+    this.saving.set(true)
+    try {
+      await firstValueFrom(this.filesUpload.uploadFileContent(this.stub, content, true))
+      this.savedContent = content
+      this.isModified.set(false)
+      return 'saved'
+    } catch {
+      return 'failed'
+    } finally {
+      this.saving.set(false)
+    }
+  }
+```
+
+It deliberately does **not** emit `saved` or raise its own toast: the banner owns the user-facing messaging for this
+path, and double-toasting would be noise. `firstValueFrom` is already imported.
+
 - [ ] **Step 4: Release the lock when the folder changes — the actual fix**
 
 Add a `viewChild` on the embedded editor and a dedicated effect. Import `ViewChild`-equivalent signal API
@@ -1093,16 +1147,34 @@ Add a `viewChild` on the embedded editor and a dedicated effect. Import `ViewChi
 ```
 
 ```ts
+  // Folder navigation CANNOT be cancelled: by the time dirPath changes, the host
+  // screen has already reloaded. So this path must not prompt — a prompt would
+  // offer a "stay" choice it cannot honour. Maintainer's ruling: auto-save the
+  // pending edit, then tear down. The frozen editTarget is what makes the await
+  // safe; the editor's bindings cannot shift while we do this.
   private async leaveEditOnNavigate(): Promise<void> {
     if (!this.editing()) return
     const view = this.editorView()
-    // requestClose runs MarkdownViewComponent's own unsaved-changes confirm.
-    // Declining keeps edit mode — and keeps the lock, which is correct: the
-    // user chose to stay with unsaved work.
-    if (view && !(await view.requestClose())) return
-    this.editing.set(false)
+    if (!view) {
+      this.closeEditor()
+      return
+    }
+    const name = this.editTarget()?.file.name ?? 'the folder description'
+    const saved = await view.saveNowIfModified()
+    if (saved === 'saved') {
+      this.toast.success('v2_saved_one', { name })
+      this.changed.emit()
+    } else if (saved === 'failed') {
+      // The lock is still released below — leaking it is the bug this whole path
+      // exists to prevent, and a stale exclusive lock harms every other user of
+      // the folder. Losing the text is the lesser harm, and we say so plainly.
+      this.toast.error('v2_readme_autosave_failed', { name })
+    }
+    this.closeEditor()
   }
 ```
+
+Requires `private readonly toast = inject(ToastService)` (from `./toast.service`) on the component.
 
 Because the effect writes `lastDirPath` before the guard, a first render never triggers the teardown path.
 
@@ -1124,13 +1196,18 @@ releases the lock.
 
 - [ ] **Step 6: Add the i18n key**
 
-`Edit` is not in either bundle. `en.json`:
+Two keys. `Edit` is not in either bundle, and the auto-save failure message is parameterised so it takes the `v2_`
+prefix per the naming convention. `v2_saved_one` already exists in both bundles — do not re-add it.
+
+`en.json`:
 ```json
   "Edit": "Edit",
+  "v2_readme_autosave_failed": "Could not save <b>{{ name }}</b> — your changes were lost.",
 ```
 `nl.json`:
 ```json
   "Edit": "Bewerken",
+  "v2_readme_autosave_failed": "Kon <b>{{ name }}</b> niet opslaan — je wijzigingen zijn verloren.",
 ```
 
 - [ ] **Step 7: Verify**
@@ -1156,9 +1233,19 @@ Browser-verify — the last two cases are the ones that matter:
 4. Type, click Cancel. Expected: discard confirm. Decline → still editing. Accept → read mode, edit discarded.
 5. **Read-only check:** open a space where your user lacks `m` in permissions. Expected: banner renders, **no** Edit
    button.
-6. **Lock-release check:** enter edit mode, type nothing, then navigate to another folder. Now open the first folder
-   as a **second user** and confirm the Edit button is available (no stale lock). Repeat having typed something:
-   expect the discard prompt, accept it, and confirm the lock is likewise released.
+6. **Lock-release check — the most important case in this task.** Enter edit mode, type nothing, then navigate to
+   another folder. Open the first folder as a **second user** and confirm the Edit button is available (no stale
+   lock).
+7. **Auto-save-on-navigate check.** Enter edit mode, type a distinctive sentence, then navigate to another folder
+   **without** clicking Save. Expected: **no prompt** — a success toast naming the file, the listing row's mtime
+   updated, and the lock released (verify as the second user). Navigate back and confirm the typed sentence is
+   present in the rendered banner. Then `GET /api/app/spaces/operation/files/personal/README.md` and confirm the
+   sentence is in the persisted file, not just the DOM.
+8. **Frozen-target check.** This is what `editTarget` exists for. Enter edit mode in folder A, type something, then
+   navigate to folder B **which also has a readme**. Expected: A's content is saved to **A's** `README.md` — not to
+   B's — and B's banner then renders B's own content in read mode. Confirm both files' contents via the API. A
+   regression here silently writes one folder's description into another's, which is the worst outcome this feature
+   can produce.
 
 - [ ] **Step 8: Commit**
 
@@ -1396,7 +1483,7 @@ Filtering is a find-in-folder action and wants rows, not prose (design §7). Bot
 signal used by the toolbar input:
 
 ```html
-    @if (!filter()) {
+    @if (!filter() || readmeBanner()?.isEditing()) {
       <app-v2-folder-readme
         [dirPath]="currentUploadRoute()"
         [files]="files()"
@@ -1406,10 +1493,31 @@ signal used by the toolbar input:
     }
 ```
 
-**Consequence to accept:** the `@if` destroys the component while a filter is active, so an in-progress edit is torn
-down — which is safe, because destruction runs the embedded editor's `ngOnDestroy` and releases the lock. Unsaved text
-is lost without a prompt, though. Verify step 2 covers it; if it feels wrong in practice, the fix is to gate on
-`[class.fr--hidden]` instead of `@if`, and that is a design change, so raise it rather than deciding alone.
+**The `|| readmeBanner()?.isEditing()` clause is not optional polish — it prevents data loss.** A bare `@if (!filter())`
+destroys the component outright. Destruction does release the lock (the embedded editor's `ngOnDestroy` runs), so it is
+lock-safe, but it bypasses `leaveEditOnNavigate()` entirely — so text the folder-change path would have auto-saved is
+instead lost silently the moment the user types in the filter box. That is inconsistent with the auto-save ruling for
+every other uncancellable teardown.
+
+Keeping the banner mounted while editing is also the better UX: filtering is a find-in-folder action, and someone
+mid-edit did not ask to lose their editor.
+
+This needs one addition to `FolderReadmeComponent` — a public read of its edit state, since `editing` is `protected`:
+
+```ts
+  // Lets the host keep the banner mounted while an edit is in progress, so
+  // typing in the filter box cannot silently discard unsaved text.
+  isEditing(): boolean {
+    return this.editing()
+  }
+```
+
+`readmeBanner()` is the `viewChild(FolderReadmeComponent)` that Task 5 adds. **If Task 5 has not landed yet when you
+do this task, add the `viewChild` here** — it is two lines and both tasks need it:
+
+```ts
+  private readonly readmeBanner = viewChild(FolderReadmeComponent)
+```
 
 - [ ] **Step 2: Verify**
 
@@ -1420,11 +1528,14 @@ npm run -w frontend build
 
 Browser-verify:
 
-1. Folder with a readme. Type in the filter box. Expected: banner disappears; rows filter.
+1. Folder with a readme, **not** editing. Type in the filter box. Expected: banner disappears; rows filter.
 2. Clear the filter. Expected: banner returns with its content, no refetch flicker.
-3. Enter edit mode, type something, then type in the filter box. Expected: banner disappears and the text is lost with
-   no prompt. Confirm the lock is released by checking as a second user. **If this feels unacceptable, stop and raise
-   it** — see the note above.
+3. **Enter edit mode, type something, then type in the filter box.** Expected: the banner **stays mounted** with the
+   editor and your text intact, and the rows filter behind it. Clear the filter — still editing, text still there.
+   Then click Save and confirm it persists via the API. A banner that vanishes here is the data-loss bug the
+   `isEditing()` clause exists to prevent.
+4. While editing with the filter active, navigate to another folder. Expected: the auto-save path runs as in Task 4 —
+   toast, lock released, content persisted to the **original** folder's readme.
 
 - [ ] **Step 3: Commit**
 

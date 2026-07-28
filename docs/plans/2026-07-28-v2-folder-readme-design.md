@@ -166,9 +166,31 @@ The banner wraps the editor in a fixed-height container so the inner `height: 10
   that only `file-detail`'s `close()` consults. It is not a router guard and registering the banner into it would
   clobber whatever `file-detail` put there.
 
-**Decision.** The banner resets explicitly on `dirPath` change. If edit mode is active it goes through the `(done)`
-path first, which runs `canClose()` (prompting if modified) and then unmounts `MarkdownViewComponent`, whose
-`ngOnDestroy` releases the lock.
+**Decision (revised 2026-07-28, during implementation — supersedes the original prompt-on-navigate design).** The
+banner resets explicitly on `dirPath` change: it **auto-saves** any pending edit, then unmounts
+`MarkdownViewComponent`, whose `ngOnDestroy` releases the lock.
+
+**Why not the prompt this section originally specified.** Prompting requires the ability to *cancel*, and folder
+navigation cannot be cancelled here — by the time `dirPath` changes, the host screen has already reloaded (that is
+the very fact this section is about). A discard prompt would therefore offer a "stay" choice it cannot honour, and
+taking that choice leaves the editor mounted while `readme()` has already re-resolved to the next folder's file,
+so `markdown-view` re-opens a different file with unsaved content pending. The decline branch produces a broken
+state, not merely a misleading one. `requestClose()` still guards the **Cancel button**, where a decline *can* be
+honoured because nothing has navigated.
+
+Maintainer's ruling was auto-save over discard-with-toast. The trade accepted: navigating away commits text the user
+never explicitly saved, which for a folder description is visible to everyone with access to the folder. On save
+failure the lock is released anyway and the loss is reported — a stale exclusive lock harms every other user of the
+folder, so it is the greater harm.
+
+**Two mechanisms make this safe, and both are load-bearing:**
+
+1. **The editor's target is frozen when edit mode opens** (`editTarget`), not derived from `readme()`. Without this,
+   `dirPath` changing mid-save swings the editor's `[path]`/`[file]` bindings to the *new* folder's readme, and the
+   in-flight save can land in the wrong file. Writing folder A's description into folder B is the worst outcome this
+   feature can produce.
+2. **`saveNowIfModified()` never throws** and reports `'clean' | 'saved' | 'failed'`, because its caller is mid-
+   teardown and must complete the unmount either way.
 
 **Rationale.** A leaked exclusive lock on a readme is silent for the user who leaked it and total for everyone else —
 the next person to open that folder gets a permanently read-only banner attributed to a colleague who has moved on.
