@@ -2,6 +2,9 @@
 
 - **Status:** Proposed. Nothing is implemented. Phase 1 is a decision the maintainer has not taken yet.
 - **Date:** 2026-07-28
+- **Task list:** [`2026-07-28-onlyoffice-version-history-handoff.md`](2026-07-28-onlyoffice-version-history-handoff.md)
+  — the executable version of this document, plus the auth plumbing §3 here leaves open and one correction to §3's
+  mapping table (`authorId` is not exposed by `listVersions`; use `author.login`).
 - **Question it answers:** can the OnlyOffice / Euro-Office web editor show a document's versions, and the diffs
   between them?
 - **Answer today:** **no, neither** — see §1. It is achievable, and ONLYOFFICE's own Nextcloud connector is a complete
