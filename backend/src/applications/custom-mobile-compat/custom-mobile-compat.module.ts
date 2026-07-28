@@ -58,8 +58,15 @@ import { NcSyncReportService } from './services/nc-sync-report.service'
 const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
 // Mounted when an OnlyOffice-protocol document server is enabled — either
 // OnlyOffice or Euro-Office. FilesModule re-exports OnlyOfficeModule on the
-// exact same either-or condition (files.module.ts), so requiring DI on
-// deployments with neither would fail at boot.
+// exact same either-or condition (its `officeConnectorEnabled`), so requiring DI
+// on deployments with neither would fail at boot.
+//
+// That claim was ASPIRATIONAL until #374, not descriptive: files.module.ts wrote
+// the condition twice and its `exports` copy omitted the Euro-Office half, so
+// widening this gate in #360 made every Euro-Office-only deployment die at boot.
+// The two sides now share one binding. If this gate is ever widened again,
+// check that FilesModule actually exports what the new configuration needs —
+// a comment asserting an invariant is not the same as the invariant holding.
 //
 // Euro-Office is an OnlyOffice-protocol server, not a second protocol: Sync-in
 // types its config as `OnlyOfficeConfig` and OnlyOfficeManager already selects

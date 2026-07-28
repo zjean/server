@@ -23,11 +23,23 @@ import { FilesEventManager } from './services/files-event-manager.service'
 import { FilesQuotaManager } from './services/files-quota-manager.service'
 import { FilesTrashRetention } from './services/files-trash-retention.service'
 
+// Euro-Office is an OnlyOffice-protocol document server, not a second protocol
+// (OnlyOfficeManager already selects it when onlyoffice is disabled —
+// only-office-manager.service.ts:82-85), so OnlyOfficeModule serves both.
+//
+// ONE constant deliberately, referenced by both `imports` and `exports` below.
+// These were two separately-written expressions until #374, and they disagreed:
+// `imports` covered Euro-Office, `exports` did not. custom-mobile-compat mounts
+// NcOnlyOfficeController on the either-or condition (#360), so on a
+// Euro-Office-only deployment the module was imported, NOT re-exported, and the
+// whole server died at boot with UnknownDependenciesException. Keeping it a
+// single binding is what makes that class of drift unrepresentable.
+const officeConnectorEnabled =
+  configuration.applications.files.editors.onlyoffice.enabled || configuration.applications.files.editors.eurooffice.enabled
+
 @Module({
   imports: [
-    ...(configuration.applications.files.editors.onlyoffice.enabled || configuration.applications.files.editors.eurooffice.enabled
-      ? [OnlyOfficeModule]
-      : []),
+    ...(officeConnectorEnabled ? [OnlyOfficeModule] : []),
     ...(configuration.applications.files.editors.collabora.enabled ? [CollaboraOnlineModule] : [])
   ],
   controllers: [FilesController, FilesTasksController],
@@ -59,8 +71,9 @@ import { FilesTrashRetention } from './services/files-trash-retention.service'
     FilesRecents,
     // Re-export OnlyOfficeModule so consumers of FilesModule (currently the
     // custom-mobile-compat NC OnlyOffice connector) get DI access to the
-    // manager + guard exported above.
-    ...(configuration.applications.files.editors.onlyoffice.enabled ? [OnlyOfficeModule] : [])
+    // manager + guard exported above. Same gate as `imports` — see the note on
+    // officeConnectorEnabled for why this is one binding and not two.
+    ...(officeConnectorEnabled ? [OnlyOfficeModule] : [])
   ]
 })
 export class FilesModule {}
