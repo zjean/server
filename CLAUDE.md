@@ -114,6 +114,23 @@ These details aren't guessable from the DTO types — the backend has runtime co
 
 **When implementing a new v2 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2 version. Do not trust the DTO types alone.
 
+### Frontend tests exist now — a little
+
+`frontend/vitest.config.mts` + `frontend/src/test-setup.ts` were stood up by #346, and CI runs them as part of the
+`test` workflow. Coverage is **two components** (the file browsers); roughly sixty others are still bare (#347).
+
+The setup is deliberately cheap and worth copying: `environment: node` (v2 components are SSR-guarded), no TestBed and
+no platform — a plain `Injector` + `runInInjectionContext`, with the two internal tokens `effect()` needs stubbed
+(`frontend/src/testing/browser-lib-stub.ts`). No new dependencies; vitest is hoisted from the backend.
+
+**The two file-browser screens are one component now.** `personal.component.ts` and `space-files.component.ts` were
+~2,800 duplicated lines that had to be edited in lockstep; since #346 they are ~120 lines each, and everything real
+lives in `custom-v2/screens/files/` — `file-browser.base.ts` (an abstract `@Directive()`), one template, one
+stylesheet, and `file-browser-repository.ts`. The two screens differ in exactly 16 things — where files come from and
+how a file is addressed on the wire — and those 16 are the repository interface. **Add screen-specific behaviour to
+the repository, not to the base with an `if`.** `viewModeStorageKey()` is the one exception and stays a component
+method: the base's `mode` signal initialises before the subclass field holding the repository exists.
+
 ## NC mobile compat: always read upstream NC source first
 
 The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS/Android clients. Its endpoints are pinned to upstream contracts that **cannot be guessed from server-side conventions** — especially the wire format, field types, and capability gates. Real precedents: an early recommendations PR shipped JSON instead of XML and used a wrong endpoint path; the carousel rendered empty until the next PR fixed both. Both mistakes would have been avoided by reading the upstream source first.
@@ -144,6 +161,24 @@ The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS
 - File ids: emit real DB ids (PR #126); negative ids confuse NC clients.
 - ETag: use **strong** ETags; `W/` prefix breaks iOS thumbnail paths (PR #140 / commit `00c3fa7`).
 
+**All XML this module emits goes through `custom-mobile-compat/utils/nc-xml.ts`** (#343/#345). It owns the one
+`XMLBuilder` config, the namespace map, `renderMultistatus()`, and the one escape function — replacing seven
+copy-pasted builder configs, five disagreeing namespace constants, eight hand-rolled multistatus renderers and three
+divergent escape helpers. Do not add an eighth builder; extend that file. Upstream's `webdav/utils/xml.ts` is
+**deliberately excluded** — it serves Sync-in's own WebDAV surface with an uppercase `D:` prefix that NC clients don't
+parse, and folding the two would put this module's wire format on the merge-conflict surface.
+
+Two facts settled while consolidating, both the opposite of what the code previously claimed:
+
+- **Namespace arity is per-body, not fixed.** A real NC 207 does carry four declarations, but the fourth is
+  `xmlns:s="http://sabredav.org/ns"` — declared on every response and used on none, because sabre's writer dumps its
+  whole `namespaceMap` on the first element. The rule is "declare every prefix the body uses, nothing more." An old
+  comment claiming NC clients expect four namespaces on *every* `<d:multistatus>` was wrong.
+- **Prefix SPELLINGS are the wire contract.** iOS parses namespace-*blind* (literal prefixed strings; SWXMLHash with
+  `shouldProcessNamespaces = false` — it cannot see declarations at all), Android namespace-*aware*. So
+  `xmlns:D="DAV:"` with `D:multistatus` is valid XML, fine for Android, and silently breaks iOS completely. Never
+  rename a prefix; `nc-xml.spec.ts` pins the spellings.
+
 The classic-UI-as-ground-truth rule above governs Sync-in's internal v2 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
 
 ## Database migrations
@@ -161,12 +196,29 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 
 Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
 (browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in**; the ADR §19
-soak against live editors and NC clients is still owed.
+soak against live editors and NC clients is still owed (#348).
+
+**There is an operator surface as of #342** — `VersionsAdminController` (`custom-versioning/versions-admin.controller.ts`)
+plus a panel on the v2 admin Tools screen: instance-wide usage, heaviest roots, and a per-root purge. Two things about
+it are load-bearing. It is a **separate controller** from `VersioningController` because its routes address the whole
+store rather than a file, so `SpaceGuard` has nothing to resolve and must not be in the chain; authorization is
+class-level `@UserHaveRole(ADMINISTRATOR)` + `UserRolesGuard` instead, at class level deliberately so a route added
+later inherits it rather than shipping unauthenticated. And the purge **must** keep routing through
+`VersionsRetention.purgeRoot` → `dropAll` → `dropVersionForRetention`, the same path the nightly rules use — that is
+what makes the labeled-version exemption, the per-`(checksum, versionsRoot)` refcount and the ADR §7 audit line apply
+without restating any of them. A bespoke delete here would silently drop all three.
 
 **e2e:** `npm -w backend run test:e2e`, after `npm run dev:db` + `npm run dev:migrate`. Read
 `custom-versioning/utils/versions-e2e.fixture.ts` before adding a case — a test user needs the `permissions` column
 (not the derived `applications` array) or every request 403s, and writes need the `sync-in-csrf` header as well as the
 cookie.
+
+**e2e files run in PARALLEL worker threads against ONE database.** `vitest-e2e.config.mts` sets no
+`fileParallelism: false`, and seven `custom-versioning` spec files create versions through the API at once. So any
+assertion about an **instance-wide** figure is racing its neighbours: comparing `usageTotals()` against a single
+`SELECT *` snapshot failed as `expected 829 to be 808`, the 21 bytes being another file's row landing between the two
+reads (#366). Scope new assertions to a root the case owns, or bracket the aggregate between a snapshot taken before
+and after it — a bracket collapses to exact equality when the file runs alone, so nothing is weakened.
 
 **Read the handoff for whatever phase you're touching before touching it.** Six documents describe this feature and
 they do not all agree:
