@@ -37,6 +37,7 @@ import { FavoritesService } from '../../services/favorites.service'
 import { V2DragService } from '../../services/drag.service'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
+import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { LinkDialogService } from '../../components/link-dialog.service'
 import { CompressDialogService } from '../../components/compress-dialog.service'
@@ -97,6 +98,7 @@ function readStoredMode(): BrowserMode {
     EmptyStateComponent,
     FabComponent,
     ActionSheetComponent,
+    FolderReadmeComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -148,6 +150,9 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly FILE_OPERATION = FILE_OPERATION
   protected readonly files = signal<FileProps[]>([])
+  // Kept for the folder readme banner's writeability check. SpaceFiles carries
+  // it on every browse response (space-files.interface.ts:3-7).
+  protected readonly permissions = signal<string>('')
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
@@ -1064,7 +1069,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
       })
   }
 
-  private currentUploadRoute(): string {
+  protected currentUploadRoute(): string {
     const segs = this.pathSegments().map((s) => s.path)
     return [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL, ...segs].join('/')
   }
@@ -1077,10 +1082,12 @@ export class PersonalComponent implements OnInit, OnDestroy {
     this.http.get<SpaceFiles>(url).subscribe({
       next: (result) => {
         this.files.set(result.files)
+        this.permissions.set(result.permissions ?? '')
         this.loading.set(false)
       },
       error: (e: HttpErrorResponse) => {
         this.files.set([])
+        this.permissions.set('')
         this.errorMessage.set(e.status === 404 ? 'Folder not found' : 'Failed to load folder')
         this.loading.set(false)
       }

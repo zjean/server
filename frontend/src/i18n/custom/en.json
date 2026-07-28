@@ -198,5 +198,6 @@
   "v2_delete_version": "Delete the version from <b>{{ date }}</b>? This cannot be undone.",
   "v2_delete_labeled_version": "<b>{{ label }}</b> is a named version, kept out of automatic clean-up. Deleting it cannot be undone.",
   "v2_versions_usage": "All version history uses {{ used }} of {{ ceiling }}",
-  "v2_versions_usage_uncapped": "All version history uses {{ used }}"
+  "v2_versions_usage_uncapped": "All version history uses {{ used }}",
+  "Failed to load folder description": "Failed to load folder description"
 }

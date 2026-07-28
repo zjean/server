@@ -198,5 +198,6 @@
   "v2_delete_version": "De versie van <b>{{ date }}</b> verwijderen? Dit kan niet ongedaan worden gemaakt.",
   "v2_delete_labeled_version": "<b>{{ label }}</b> is een benoemde versie die buiten de automatische opruiming valt. Verwijderen kan niet ongedaan worden gemaakt.",
   "v2_versions_usage": "Alle versiegeschiedenis gebruikt {{ used }} van {{ ceiling }}",
-  "v2_versions_usage_uncapped": "Alle versiegeschiedenis gebruikt {{ used }}"
+  "v2_versions_usage_uncapped": "Alle versiegeschiedenis gebruikt {{ used }}",
+  "Failed to load folder description": "Kan de mapbeschrijving niet laden"
 }
