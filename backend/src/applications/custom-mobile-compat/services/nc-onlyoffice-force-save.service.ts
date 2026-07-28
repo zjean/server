@@ -4,9 +4,8 @@ import { JwtService } from '@nestjs/jwt'
 import https from 'node:https'
 import { configuration } from '../../../configuration/config.environment'
 import { Cache } from '../../../infrastructure/cache/cache.service'
-import { ONLY_OFFICE_CACHE_KEY } from '../../files/editors/only-office/only-office.constants'
+import { onlyOfficeDocKeyCacheKey } from '../../custom-shared/utils/only-office-doc-key'
 import type { SpaceEnv } from '../../spaces/models/space-env.model'
-import { genUniqHashFromFileDBProps } from '../../files/utils/files'
 
 // Issues a `forcesave` command to the active OnlyOffice-protocol document
 // server (OnlyOffice or Euro-Office). Used by the
@@ -50,11 +49,12 @@ export class NcOnlyOfficeForceSaveService {
 
     // Read the cached document key OnlyOfficeManager.getDocumentKey set when
     // /config was answered. Cache key format is identical so we can peek
-    // without going through the manager. If the cache has dropped the key,
-    // there's no active doc-server session to forcesave anyway — return ok
-    // so the mobile UI doesn't surface a spurious error.
-    const cacheKey = `${ONLY_OFFICE_CACHE_KEY}|${genUniqHashFromFileDBProps(space.dbFile)}`
-    const docKey = await this.cache.get(cacheKey)
+    // without going through the manager — see onlyOfficeDocKeyCacheKey for why
+    // the format lives in custom-shared rather than being rebuilt here. If the
+    // cache has dropped the key, there's no active doc-server session to
+    // forcesave anyway — return ok so the mobile UI doesn't surface a spurious
+    // error.
+    const docKey = await this.cache.get(onlyOfficeDocKeyCacheKey(space.dbFile))
     if (!docKey) {
       return { ok: true, reason: 'no active session' }
     }
