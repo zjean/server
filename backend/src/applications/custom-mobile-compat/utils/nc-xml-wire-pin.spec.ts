@@ -112,30 +112,35 @@ describe('wire-format pin: nc-comment-xml', () => {
 
 // ──────── nc-uploads.controller ────────
 //
-// The odd one out: this body is a RAW TEMPLATE STRING, so it is the only
-// multistatus in the module that is pretty-printed (two-space indent, newline
-// per element) and the only one whose empty elements are self-closing
-// (`<d:collection/>`, `<d:resourcetype/>`) rather than explicitly closed. Both
-// differences are consequences of hand-writing the XML rather than of any
-// client requirement — pinned here so that folding this emitter into the shared
-// builder shows up as an explicit, reviewable byte diff rather than a silent
-// reformat.
+// THE ONE EMITTER WHOSE BYTES CHANGED. It used to be a raw template string, so
+// it was the only multistatus in the module that was pretty-printed and the only
+// one whose empty elements were self-closing. Folding it into the shared builder
+// (which is what let `xmlEscape` be deleted — #345) changed exactly three
+// things, and the literals below were updated to match after checking each:
+//
+//   1. Whitespace between elements is gone (`format: false`). Only ever
+//      cosmetic; no NC parser reads inter-element whitespace, and its absence is
+//      what every other body in this module has always emitted.
+//   2. `<d:collection/>` → `<d:collection></d:collection>`.
+//   3. `<d:resourcetype/>` → `<d:resourcetype></d:resourcetype>`.
+//
+// (2) and (3) are the ones that deserve scrutiny, because Android's WebdavEntry
+// turns ANY non-null `d:resourcetype` value into contentType "DIR" — and a chunk
+// misread as a directory has no size to sum, which would break upload resume.
+// They are safe: both forms are EMPTY elements, differing only in serialisation,
+// and every namespace-aware parser (Android goes through Jackrabbit's DOM)
+// reports an identical empty node for either. The explicit-close form is also
+// the one the files PROPFIND tree and the versions tree have always emitted, so
+// it is the form already exercised against real iOS and Android clients; the
+// self-closing form was the outlier.
+//
+// Nothing else moved: element order, every value, the href's `&` escaping, and
+// the chunk name's percent-encoding are all identical.
 
 describe('wire-format pin: nc-uploads buildUploadDirPropfindBody', () => {
-  it('collection only (depth 0 / no chunks yet), with the href XML-escaped', () => {
+  it('collection only (depth 0 / no chunks yet), with the href XML-escaped by the builder', () => {
     expect(buildUploadDirPropfindBody('/remote.php/dav/uploads/alice/A&B', [])).toBe(
-      `<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/remote.php/dav/uploads/alice/A&amp;B</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>`
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/uploads/alice/A&amp;B</d:href><d:propstat><d:prop><d:resourcetype><d:collection></d:collection></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>'
     )
   })
 
@@ -146,40 +151,18 @@ describe('wire-format pin: nc-uploads buildUploadDirPropfindBody', () => {
         { name: 'part one', size: 524288, mtimeMs: 1_716_220_800_000 }
       ])
     ).toBe(
-      `<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-  <d:response>
-    <d:href>/remote.php/dav/uploads/alice/tx</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/remote.php/dav/uploads/alice/tx/0</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:getcontentlength>1048576</d:getcontentlength>
-        <d:getlastmodified>Mon, 20 May 2024 16:00:00 GMT</d:getlastmodified>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-  <d:response>
-    <d:href>/remote.php/dav/uploads/alice/tx/part%20one</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:getcontentlength>524288</d:getcontentlength>
-        <d:getlastmodified>Mon, 20 May 2024 16:00:00 GMT</d:getlastmodified>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>
-</d:multistatus>`
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/uploads/alice/tx</d:href><d:propstat><d:prop><d:resourcetype><d:collection></d:collection></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:response><d:href>/remote.php/dav/uploads/alice/tx/0</d:href><d:propstat><d:prop><d:resourcetype></d:resourcetype><d:getcontentlength>1048576</d:getcontentlength><d:getlastmodified>Mon, 20 May 2024 16:00:00 GMT</d:getlastmodified></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response><d:response><d:href>/remote.php/dav/uploads/alice/tx/part%20one</d:href><d:propstat><d:prop><d:resourcetype></d:resourcetype><d:getcontentlength>524288</d:getcontentlength><d:getlastmodified>Mon, 20 May 2024 16:00:00 GMT</d:getlastmodified></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>'
     )
+  })
+
+  // The chunk responses must stay FILES. This is the assertion that would fail
+  // if a future change made the shared renderer emit `<d:collection/>` inside a
+  // chunk's resourcetype, which is the one delta in this migration that could
+  // have broken upload resume.
+  it('a chunk response never carries d:collection', () => {
+    const body = buildUploadDirPropfindBody('/remote.php/dav/uploads/alice/tx', [{ name: '0', size: 1, mtimeMs: 0 }])
+    const chunkBlock = body.slice(body.indexOf('/tx/0'))
+    expect(chunkBlock).toContain('<d:resourcetype></d:resourcetype>')
+    expect(chunkBlock).not.toContain('d:collection')
   })
 })
