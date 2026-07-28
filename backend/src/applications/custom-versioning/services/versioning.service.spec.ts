@@ -39,7 +39,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { Mock } from 'vitest'
 import { configuration } from '../../../configuration/config.environment'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { FileRowEnsurer } from '../../custom-shared/services/file-row-ensurer.service'
+import { onlyOfficeDocKeyCacheKey } from '../../custom-shared/utils/only-office-doc-key'
 import { FileError } from '../../files/models/file-error'
 import { LockConflict } from '../../files/models/file-lock-error'
 import { FilesLockManager } from '../../files/services/files-lock-manager.service'
@@ -147,6 +149,7 @@ describe(VersioningService.name, () => {
   let ensurer: { ensureFileId: Mock }
   let filesQueries: { getUserFileByPath: Mock; getSpaceFileId: Mock; updateFile: Mock }
   let lockManager: { create: Mock; createOrRefresh: Mock; removeLock: Mock }
+  let cache: { get: Mock; set: Mock; del: Mock }
   let tmpRoot: string
   let filePath: string
   let loggedErrors: Mock
@@ -200,13 +203,16 @@ describe(VersioningService.name, () => {
       removeLock: vi.fn().mockResolvedValue(undefined)
     }
 
+    cache = { get: vi.fn(), set: vi.fn(), del: vi.fn().mockResolvedValue(true) }
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         VersioningService,
         { provide: VersioningQueries, useValue: queries },
         { provide: FileRowEnsurer, useValue: ensurer },
         { provide: FilesQueries, useValue: filesQueries },
-        { provide: FilesLockManager, useValue: lockManager }
+        { provide: FilesLockManager, useValue: lockManager },
+        { provide: Cache, useValue: cache }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
@@ -1362,6 +1368,40 @@ describe(VersioningService.name, () => {
     expect(after.size).toBe(CONTENT.length)
     expect(after.mtimeMs).toBeGreaterThan(before.mtimeMs)
     expect(await hashOf()).not.toBe(hashBefore)
+  })
+
+  // The office-editor half of the same propagation claim the two tests above make
+  // for sync. OnlyOffice's document key names ONE content state, and
+  // OnlyOfficeManager caches it until a callback with status 2 or 4 arrives — so a
+  // restore that leaves the entry in place lets the editor re-open under a key the
+  // document server already knows, serving the pre-restore content and writing it
+  // back on the next save. Upstream ONLYOFFICE drops the key from the equivalent
+  // event (lib/Listeners/FileVersionsListener.php::versionRestored).
+  it('drops the cached OnlyOffice document key so the editor cannot serve pre-restore content', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace()
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    cache.del.mockClear()
+
+    await service.restoreVersion(user, space, versionId)
+
+    expect(cache.del).toHaveBeenCalledWith(onlyOfficeDocKeyCacheKey(space.dbFile))
+  })
+
+  // The invalidation runs after the bytes are already committed, so it is the one
+  // step in restoreVersion that must not be able to fail the call. A cache that
+  // rejects costs the user a stale editor, not a 500 on a restore that happened.
+  it('completes the restore when the cache refuses to drop the document key', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    cache.del.mockRejectedValue(new Error('redis is down'))
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).resolves.toBeUndefined()
+    expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
   })
 
   it('restore holds a server lock and releases it', async () => {
