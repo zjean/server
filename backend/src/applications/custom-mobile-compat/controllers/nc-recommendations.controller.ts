@@ -11,6 +11,36 @@ import { type NcRecommendationEntry, toRecommendationEntry } from '../utils/nc-r
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 50
 
+// Builder options for the OCS body. Exported so the spec can assert the
+// attribute-emitting behaviour directly rather than only through the (currently
+// attribute-free) response body.
+//
+// `ignoreAttributes: false` + `attributeNamePrefix: '@_'` matches every other
+// builder in this module (nc-version-xml, nc-comment-xml, nc-sync-report,
+// nc-favorites-report, nc-search, nc-propfind). On a *builder* — unlike on an
+// XMLParser, where `ignoreAttributes: true` is the correct choice — that flag
+// stops `@_`-prefixed keys from becoming attributes: fast-xml-parser 5.x emits
+// them as ELEMENTS whose tag name is the literal key, i.e. `<@_xmlns:d>DAV:
+// </@_xmlns:d>`, which is not well-formed XML and would make NextcloudKit's
+// parse of the whole document fail. No error, no warning, no failing test.
+//
+// The OCS recommendations body carries no attributes today, and upstream's does
+// not either: NC core renders OCS XML in
+// `lib/private/AppFramework/OCS/BaseResponse.php::toXML`, which calls
+// `writeAttribute` only for keys named `@attributes` or prefixed `@`, and
+// `OCA\Recommendations\Controller\RecommendationController::index` returns a
+// plain `['enabled' => bool, 'recommendations' => [...]]` array with no such
+// keys — so `<ocs>` has no xmlns. NextcloudKit's XMLToRecommendationParser
+// navigates by local element name (`xml["ocs", "data", ...]`) and never reads an
+// attribute. Flipping this flag is therefore byte-for-byte identical output; it
+// just stops the next attribute anyone adds from vanishing.
+export const NC_OCS_XML_BUILDER_OPTIONS = {
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  format: false,
+  suppressEmptyNode: false
+} as const
+
 // /ocs/v2.php/apps/recommendations/api/v1/recommendations powers the
 // "Recommended files" carousel at the top of NC iOS's Files tab. Upstream
 // implements this in the standalone `recommendations` app (NOT the `files`
@@ -29,11 +59,7 @@ const MAX_LIMIT = 50
 export class NcRecommendationsController {
   // Bare XMLBuilder. We hand the prolog to fastify and then concatenate the
   // <ocs>…</ocs> body produced from a plain JS object.
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: true,
-    format: false,
-    suppressEmptyNode: false
-  })
+  private readonly xml = new XMLBuilder(NC_OCS_XML_BUILDER_OPTIONS)
 
   constructor(
     private readonly filesRecents: FilesRecents,
