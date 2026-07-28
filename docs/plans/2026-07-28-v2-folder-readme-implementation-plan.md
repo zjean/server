@@ -152,7 +152,11 @@ And the handler, next to `save()`:
   }
 ```
 
-`Cancel` already exists as a key in `frontend/src/i18n/custom/en.json` — do not re-add it.
+**Add no i18n key for `Cancel`, and do not go looking for one in `custom/en.json` — it is not there.** The only
+definition anywhere is upstream `frontend/src/i18n/nl.json:19` (`"Cancel": "Annuleren"`). English has no entry, so the
+lookup misses and angular-l10n's missing-translation handler returns the key literal — which is already correct
+English. Both languages therefore render properly with no new key. **Do not add `Cancel` to the upstream bundles** to
+"fix" the asymmetry; editing `frontend/src/i18n/{en,nl}.json` is forbidden by Global Constraints.
 
 - [ ] **Step 4: Make the sizing inline-aware**
 
