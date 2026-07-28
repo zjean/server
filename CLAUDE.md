@@ -225,6 +225,8 @@ they do not all agree:
 
 | Document | Status |
 |---|---|
+| `2026-07-28-onlyoffice-version-history-handoff.md` | **Not started, and phase 1 is not approved.** The task list for putting a version panel inside the office editor, the document-server dev recipe, and the nine traps. Read with the design doc, which it corrects in one place. |
+| `2026-07-28-onlyoffice-version-history-design.md` | Why the OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and what it would take, in two phases, against upstream ONLYOFFICE's own connector. §5 holds decisions the maintainer has not taken. |
 | `2026-07-27-nc-android-versioning-soak.md` | The real-device soak: versioning confirmed working in stock NC Android 34.1.0, the capability bug it found, and how to reproduce (incl. the 16 KB page-size emulator crash). |
 | `2026-07-27-file-versioning-phase-e-notes.md` | The e2e suite: what the 19 cases cover, the four environment facts the harness encodes, the one case still owed. |
 | `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
