@@ -196,13 +196,39 @@ describe('custom_files_versions schema (e2e)', () => {
     // hard-coded numbers: other cases in this file leave rows behind, and a
     // total that only holds on an empty database is not the total the panel
     // shows.
-    const all = await db.select().from(customFilesVersions)
+    //
+    // The read is BRACKETED rather than taken once, because usageTotals() is
+    // instance-wide and the table is not quiescent while it runs. The six other
+    // custom-versioning e2e files create versions through the API, and
+    // vitest-e2e.config.mts sets no fileParallelism: false — so they execute in
+    // parallel worker threads against this same database. A single snapshot
+    // races them: this assertion first failed as `expected 829 to be 808`, the
+    // 21 bytes being another file's row landing between the two reads.
+    //
+    // On a quiescent table both snapshots are identical and every bracket below
+    // collapses to exact equality, so running this file alone is as strict as
+    // before. What the bracket still catches decisively is the failure this
+    // assertion exists for — a `used` summed from the truncated top-N of
+    // usageByAllRoots would fall far below the minimum, not a few bytes off it.
+    // What it cannot catch is an aggregate that is wrong only during a window in
+    // which a concurrent case both inserts and deletes; the deterministic
+    // per-root assertions above are what pin the semantics.
+    const before = await db.select().from(customFilesVersions)
     const totals = await queries.usageTotals()
-    expect(totals.used).toBe(all.reduce((n, r) => n + r.size, 0))
-    expect(totals.labeledBytes).toBe(all.filter((r) => r.label).reduce((n, r) => n + r.size, 0))
-    expect(totals.count).toBe(all.length)
-    expect(totals.roots).toBe(new Set(all.map((r) => r.versionsRoot)).size)
-    expect(totals.files).toBe(new Set(all.map((r) => r.fileId)).size)
+    const after = await db.select().from(customFilesVersions)
+
+    type VersionRows = typeof before
+    const expectWithin = (actual: number, of: (rows: VersionRows) => number) => {
+      const [a, b] = [of(before), of(after)]
+      expect(actual).toBeGreaterThanOrEqual(Math.min(a, b))
+      expect(actual).toBeLessThanOrEqual(Math.max(a, b))
+    }
+
+    expectWithin(totals.used, (rows) => rows.reduce((n, r) => n + r.size, 0))
+    expectWithin(totals.labeledBytes, (rows) => rows.filter((r) => r.label).reduce((n, r) => n + r.size, 0))
+    expectWithin(totals.count, (rows) => rows.length)
+    expectWithin(totals.roots, (rows) => new Set(rows.map((r) => r.versionsRoot)).size)
+    expectWithin(totals.files, (rows) => new Set(rows.map((r) => r.fileId)).size)
 
     // The purge's candidate list: unlabeled only, oldest first. The labeled row
     // is absent, which is the whole labeled-version exemption.
