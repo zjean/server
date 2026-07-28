@@ -153,12 +153,16 @@ export class VersioningController {
   }
 
   private async readVersionText(user: UserModel, space: SpaceEnv, versionId: number): Promise<{ text: string; label: string }> {
+    // Checked BEFORE the stream is acquired, as readLiveText already does. It
+    // reads nothing but `space`, and getVersionStream now hands back an OPEN
+    // descriptor — so throwing 415 after the call leaked one every time, with
+    // nothing left holding a reference to close it.
+    this.requireTextual(space)
     const { stream, version } = await this.versioning.getVersionStream(user, space, versionId)
     if (version.size > VERSIONS_MAX_DIFF_BYTES) {
       stream.destroy()
       throw new HttpException('This revision is too large to diff', HttpStatus.PAYLOAD_TOO_LARGE)
     }
-    this.requireTextual(space)
     const chunks: Buffer[] = []
     for await (const chunk of stream) chunks.push(chunk as Buffer)
     return { text: Buffer.concat(chunks).toString('utf8'), label: `version ${version.id}` }

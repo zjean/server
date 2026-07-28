@@ -33,6 +33,7 @@ vi.mock('../../../configuration/config.environment', () => ({
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import crypto from 'node:crypto'
+import { fstatSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -1067,6 +1068,85 @@ describe(VersioningService.name, () => {
     expect(version.origin).toBe('web')
   })
 
+  // The invariant behind CLAUDE.md's "pin the blob open before running code that
+  // can evict", read from the download side. getVersionStream used to resolve a
+  // path, check it existed, and hand `createReadStream(path)` to the controller
+  // — so an eviction between the check and the first read faulted a stream that
+  // had ALREADY been returned. The client got a truncated body instead of the
+  // clean 404 the check exists to produce. Eviction and reads share no lock
+  // (ADR §9) and every snapshot in the root can unlink blobs, so the window is
+  // reachable from any concurrent write, not just the retention sweep.
+  it('pins the blob open before returning, so an eviction mid-download cannot fault the stream', async () => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const [blob] = await blobFiles()
+
+    const { stream } = await service.getVersionStream(user, personalSpace(), queries.rows[0].id)
+
+    // The load-bearing assertion, and the only part of this that is
+    // deterministic. A path-backed fs.ReadStream returns with `fd === null` and
+    // opens on a later tick — that deferred open is the window. A descriptor
+    // already exists here, which is what makes the unlink below survivable
+    // instead of merely usually-survivable.
+    expect((stream as any).fd).toBeTypeOf('number')
+
+    // Whatever the caller does next, the bytes are already unreachable by path.
+    await fs.unlink(blob)
+
+    const errors: Error[] = []
+    stream.on('error', (e) => errors.push(e))
+    const chunks: Buffer[] = []
+    for await (const c of stream) chunks.push(c as Buffer)
+
+    expect(Buffer.concat(chunks).toString()).toBe(CONTENT)
+    expect(errors).toEqual([])
+  })
+
+  // The other half of pinning: a descriptor handed to a caller has to come back.
+  //
+  // Asserted on the FileHandle WRAPPER, not just the raw fd, and the difference
+  // is the whole point. Letting the stream's own autoClose do it closes the fd —
+  // so an fd-only assertion passes — while leaving the wrapper believing it
+  // still owns one, to be finalized by the GC. Node already warns about that and
+  // a future version throws, so every download leaked a wrapper that no test
+  // watching the fd could see.
+  it.each([
+    [
+      'the stream is consumed to the end',
+      async (s: Readable) => {
+        for await (const _ of s) {
+          /* drain */
+        }
+      }
+    ],
+    ['the caller destroys the stream early', async (s: Readable) => s.destroy()]
+  ])('releases the descriptor once %s', async (_label, drive) => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+    const open = vi.spyOn(fs, 'open')
+    const { stream } = await service.getVersionStream(user, personalSpace(), queries.rows[0].id)
+    const handle = await open.mock.results[0].value
+    const close = vi.spyOn(handle, 'close')
+    const fd = (stream as any).fd as number
+
+    await drive(stream)
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(close).toHaveBeenCalled()
+    expect(() => fstatSync(fd)).toThrow(/EBADF/)
+    open.mockRestore()
+  })
+
+  it('404s a version whose blob is already gone, rather than returning a doomed stream', async () => {
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const [blob] = await blobFiles()
+    await fs.unlink(blob)
+
+    // The open IS the existence check, so the failure surfaces as a rejection
+    // the exception filter can map — never as an error event on a stream the
+    // controller has already committed to a response.
+    await expect(service.getVersionStream(user, personalSpace(), queries.rows[0].id)).rejects.toThrow(FileError)
+  })
+
   // A stored versionsRoot is a database value, so it is still untrusted at the
   // point it becomes a filesystem path. It used to reach
   // UserModel.getHomePath's "login must be a single path segment" throw, which
@@ -1258,7 +1338,13 @@ describe(VersioningService.name, () => {
     await expect(service.deleteVersion(user, readOnly, id)).rejects.toThrow(FileError)
     // Reads stay allowed for a read-only member.
     await expect(service.listVersions(user, readOnly)).resolves.toHaveLength(1)
-    await expect(service.getVersionStream(user, readOnly, id)).resolves.toBeDefined()
+    // Destroyed rather than dropped: the returned stream owns an open
+    // descriptor, so abandoning it leaks one. Harmless in a test process, but it
+    // is the same mistake a controller could make, and letting it sit here means
+    // the suite's own GC warning is the thing that tells us.
+    const { stream } = await service.getVersionStream(user, readOnly, id)
+    expect(stream).toBeDefined()
+    stream.destroy()
   })
 
   // The trash is read-only — space.guard.ts enforces that for every ADD/MODIFY
