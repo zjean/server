@@ -314,8 +314,23 @@ None blocking. Two things recorded as knowingly accepted:
 Matrix from §9 (extended to 18 cases per Task 7's brief) run on 2026-07-28 against commit `cd9bd130`, dev stack on
 `localhost:8081` (this worktree's own backend + freshly built `dist/static`), driven by `agent-browser`.
 
-**Result: 1 case FAILED (case 5). 14 passed. 3 not tested (environment), plus a 4th (case 3) newly found not-testable
-in this environment.**
+**Result as first run: 1 case FAILED (case 5), 14 passed, 4 not tested. Case 5 was then fixed in `3e935a80` and
+re-verified; see the amendment below the table.**
+
+### Standing limitation of this verification harness — read before trusting any row
+
+`agent-browser`'s bundled headless Chromium **never runs the page's "update the rendering" steps.** Confirmed by
+instrumentation while diagnosing case 5: `requestAnimationFrame` callbacks are scheduled but never fire (2 schedules,
+0 fires), and neither `ResizeObserver` nor native `resize` events are deliverable. Chrome is not installed on this
+machine, so there is no frame-producing browser to cross-check against.
+
+Two consequences, both load-bearing for how much this table is worth:
+
+1. **Behaviour implemented inside rAF or `ResizeObserver` reads as broken here even when it works in a real browser.**
+   That is precisely what case 5's failure turned out to be — see the amendment.
+2. **Such behaviour therefore cannot be verified here at all.** Any future row covering frame-dependent code should be
+   recorded as *not tested*, not as passed. Angular's `afterNextRender` is exempt: the framework races `setTimeout`
+   against `rAF` (`scheduleCallbackWithRafRace`), so it fires either way — which is why the fix uses it.
 
 | Case | Result | Note |
 |---|---|---|
@@ -337,6 +352,39 @@ in this environment.**
 | 16 | pass | All five required hop shapes tested with concrete evidence: sibling→sibling, root→subfolder, subfolder→root, has-readme→without-readme (unmounts the section mid-save), and inside a space (not just Personal). Every hop: the auto-save toast fired (literal text captured: `Saved "README.md"`), the edited content landed in the **originating** folder only (verified via raw `GET`, destination's own readme left untouched), and the lock read `null` afterward. |
 | 17 | pass | Used a real WebDAV `LOCK` (`curl -X LOCK`, `app: 'WebDAV'`) as the "another app" lock per the task's guidance that this exercises the stranger's-app path properly. With that lock held, the banner rendered read-only (no Edit button) rather than treating the lock as absent; the lock was untouched by navigating in and out of the folder (nothing in our own component could touch it, since no editor could ever open); cleanly released via `curl -X UNLOCK` afterward. The literal two-same-user-tab variant was not separately re-driven — the component's own code comments already document that scenario as an accepted, known limitation (a second same-user/same-app tab's lock **is** treated as our own and closing one editor **does** release the shared lock), which is a different, already-acknowledged trade-off from the stranger's-app path this case is really guarding. |
 | 18 | pass | All three "leave the browse screen entirely" hops tested: sidebar → Recents, Personal → a space, and opening a different file into file-detail. In every case the lock read `null` afterward (confirmed via API) and the unsaved edit was silently discarded with no toast — exactly the documented, accepted behaviour (a destroyed component cannot run the auto-save). |
+
+### Amendment — case 5, after the fix in `3e935a80`
+
+**Verdict: pass.** Re-verified on 2026-07-28 against `3e935a80` on the same stack.
+
+The root cause was **not** a render-timing race as first suspected, and not a defect in the collapse logic itself: the
+single `requestAnimationFrame` that `measureOverflow()` scheduled **never ran**, for the harness reason above, so
+`overflowing` stayed at its initialiser `false` and every consumer of it — the fade, the Show more control, and the
+already-fixed re-measure-on-collapse — was dead. The `!host` guard was never even reached.
+
+Fixed by scheduling through Angular's `afterNextRender` instead of a bare `rAF`, plus an `effect` on the `readHost`
+viewChild and a `resize` listener. Re-measured after the fix: long readme `scrollHeight 2588` / `clientHeight 270` with
+the fade resolving to `linear-gradient(rgba(0,0,0,0), oklch(0.275 0.052 255))` and Show more present; short readme
+`100/100` with neither; the full toggle cycle working; and the expand → **reload** → Show less sequence keeping the
+control. Both Personal and a space. Edit mode unaffected.
+
+**Honest scope of what this proves.** Because a bare `rAF` does fire in a real browser, **the original failure was
+substantially an artifact of this harness, and the feature was probably not broken for real users.** The fix is still
+the right change — `afterNextRender` is the framework's render contract and is robust where a bare `rAF` is fragile
+(background tabs, occluded windows) — but it should not be recorded as having repaired a confirmed user-facing bug.
+Case 13's fade check, which had to force the class by hand because case 5 blocked reaching it, is now reachable
+naturally.
+
+**The resize listener's last link is verified only with a synthetic event**, since this harness dispatches no native
+`resize`. Real resize behaviour is untested.
+
+### Note on case 3 with a production implication
+
+Case 3 (precedence between two coexisting names) could not be built because this host's filesystem is case-insensitive
+(macOS APFS default), so `README.md` and `readme.md` collapse into one entry. Worth recording that this is not purely a
+test-rig quirk: **on any case-insensitive deployment the precedence list can never be exercised either**, because only
+one of the three names can exist in a folder at a time. Precedence matters only on case-sensitive hosts (typical Linux
+deployments), where it remains unverified by observation.
 
 **Fixtures used:** all built fresh under `files/personal/t7-case*` and `files/readme-test-space/t7-space-*` via the
 `make` → `UNLOCK` → `upload` → `UNLOCK` CSRF dance, rather than trusting pre-existing contaminated fixtures from
