@@ -441,13 +441,44 @@ export class VersioningService {
     }))
   }
 
+  // Pinned before returning, exactly as restoreVersion pins before writing, and
+  // for the same reason: eviction and reads share no lock (ADR §9), and
+  // evictUntilUnderCeiling unlinks blobs on EVERY snapshot — so any concurrent
+  // write anywhere in this versions root can pull the bytes away, not just the
+  // retention sweep.
+  //
+  // `fs.open` REPLACES the old isPathExists check rather than supplementing it.
+  // A path-based check followed by a path-based createReadStream is check-then-
+  // act: the stream's open is deferred to a later tick, so an eviction landing
+  // in between faulted a stream the controller had already committed to a
+  // response — a truncated body instead of the clean 404 the check existed to
+  // produce. The descriptor is what actually keeps the bytes reachable across an
+  // unlink; the check never could.
+  //
+  // Ownership of the descriptor leaves with the stream, so the close rides on the
+  // stream's lifetime rather than on a try/finally the way restoreVersion's does.
+  // autoClose is left at its DEFAULT (true), which closes the handle by calling
+  // FileHandle.close() — not by closing the raw fd behind the wrapper's back. So
+  // ownership can simply travel with the stream: no explicit close, and no
+  // FileHandle left for the GC to finalize (Node warns on that today under
+  // DEP0137 and will throw later). Verified by spying on the handle's close, and
+  // by the suite being free of that warning.
+  //
+  // What this DOES require is that every caller either consumes the stream or
+  // destroys it. All three do — both download handlers pipe it and destroy it on
+  // HEAD, and the diff handler consumes it, destroys it when the revision is too
+  // large, and now checks the mime type BEFORE acquiring it. A caller that takes
+  // a stream and simply drops it leaks a descriptor, which is worth knowing when
+  // adding a fourth.
   async getVersionStream(user: UserModel, space: SpaceEnv, versionId: number): Promise<{ stream: Readable; version: VersionRow }> {
     const version = await this.requireVersionFor(user, space, versionId)
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
-    if (!blobPath || !(await isPathExists(blobPath))) {
+    const handle = blobPath ? await fs.open(blobPath, 'r').catch(() => null) : null
+    if (!handle) {
       throw new FileError(HttpStatus.NOT_FOUND, 'Version content not found')
     }
-    return { stream: createReadStream(blobPath), version }
+    const stream = handle.createReadStream()
+    return { stream, version }
   }
 
   // The live file, for the diff endpoint's `against=current`. Lives here rather

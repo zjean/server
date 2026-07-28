@@ -180,11 +180,15 @@ describe(VersioningController.name, () => {
     })
   })
 
-  it('415s a non-text file rather than decoding bytes as UTF-8', async () => {
+  it('415s a non-text file rather than decoding bytes as UTF-8, without opening a stream', async () => {
     versioning.getVersionStream.mockResolvedValue(versionStream('\x00\x01', 3))
     await expect(controller.diff(user, textSpace('/data/users/alice/files/photo.jpg'), 3, {})).rejects.toMatchObject({
       status: HttpStatus.UNSUPPORTED_MEDIA_TYPE
     })
+    // The mime check reads only the space, so it runs first. getVersionStream
+    // returns a pinned descriptor and this path has no stream reference to
+    // destroy, so acquiring one here would leak it on every 415.
+    expect(versioning.getVersionStream).not.toHaveBeenCalled()
   })
 
   it('413s a revision above the diff size cap and does not leak the stream', async () => {
