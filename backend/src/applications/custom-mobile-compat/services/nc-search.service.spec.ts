@@ -117,6 +117,23 @@ describe(NcSearchService.name, () => {
     dbSelectFiles.mockReturnValue([])
   })
 
+  // BYTE-FOR-BYTE ENVELOPE PIN, added before the nc-xml.ts consolidation
+  // (#343). This service inlines its four xmlns literals rather than using a
+  // named map, so it is the emitter most likely to drift; the pin makes any
+  // change to the prolog, root element, attribute order, or close tag fail
+  // loudly. Driven with an empty result so only the envelope is pinned — the
+  // per-entry content comes from buildNcPropResponse and is tested separately.
+  it('wire-format pin: the multistatus envelope, byte for byte', async () => {
+    getRecents.mockResolvedValue([])
+    const r = makeRes()
+
+    await svc.respond(user(), recentBody(), r.res)
+
+    expect(r.body).toBe(
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns" xmlns:ocs="http://open-collaboration-services.org/ns"></d:multistatus>'
+    )
+  })
+
   it('returns 207 multistatus with XML content-type for any input', async () => {
     getRecents.mockResolvedValue([])
     const r = makeRes()

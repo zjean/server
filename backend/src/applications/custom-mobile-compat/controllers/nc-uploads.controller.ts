@@ -14,6 +14,7 @@ import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService } from '../services/nc-chunked-uploads.service'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { PROPSTAT_OK, renderMultistatus } from '../utils/nc-xml'
 
 // NC chunked-upload controller.
 //
@@ -282,41 +283,36 @@ export interface UploadChunkInfo {
 // sizes to compute `nextByte` for resume. Without per-chunk responses
 // every retry restarts at byte 0 — wasting an entire upload's worth of
 // bytes on every reconnect, on the slowest mobile networks.
+// Only `d:` is declared: the staging dir has no owncloud/nextcloud props, so
+// there is no other prefix to resolve. Escaping is the builder's job now —
+// `parentHref` is passed RAW. `encodeURIComponent` on the chunk name cannot
+// produce an XML-special character, so the name needs no separate handling.
 export function buildUploadDirPropfindBody(parentHref: string, chunks: UploadChunkInfo[]): string {
-  const safeParent = xmlEscape(parentHref)
-  const collectionResponse = `  <d:response>
-    <d:href>${safeParent}</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype><d:collection/></d:resourcetype>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>`
-  const chunkResponses = chunks
-    .map((c) => {
-      const childHref = `${safeParent}/${encodeURIComponent(c.name)}`
-      const lastModified = new Date(c.mtimeMs).toUTCString()
-      return `  <d:response>
-    <d:href>${childHref}</d:href>
-    <d:propstat>
-      <d:prop>
-        <d:resourcetype/>
-        <d:getcontentlength>${c.size}</d:getcontentlength>
-        <d:getlastmodified>${lastModified}</d:getlastmodified>
-      </d:prop>
-      <d:status>HTTP/1.1 200 OK</d:status>
-    </d:propstat>
-  </d:response>`
+  const responses: unknown[] = [
+    {
+      'd:href': parentHref,
+      'd:propstat': {
+        'd:prop': { 'd:resourcetype': { 'd:collection': '' } },
+        'd:status': PROPSTAT_OK
+      }
+    }
+  ]
+  for (const c of chunks) {
+    responses.push({
+      'd:href': `${parentHref}/${encodeURIComponent(c.name)}`,
+      'd:propstat': {
+        'd:prop': {
+          // A chunk is a file: an EMPTY resourcetype, never <d:collection/>.
+          // Android's WebdavEntry turns ANY non-null resourcetype value into
+          // contentType "DIR", and a chunk read as a directory has no size to
+          // sum for the resume offset.
+          'd:resourcetype': '',
+          'd:getcontentlength': String(c.size),
+          'd:getlastmodified': new Date(c.mtimeMs).toUTCString()
+        },
+        'd:status': PROPSTAT_OK
+      }
     })
-    .join('\n')
-  const body = chunks.length > 0 ? `${collectionResponse}\n${chunkResponses}` : collectionResponse
-  return `<?xml version="1.0" encoding="utf-8"?>
-<d:multistatus xmlns:d="DAV:">
-${body}
-</d:multistatus>`
-}
-
-function xmlEscape(s: string): string {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
+  }
+  return renderMultistatus(responses, { prefixes: ['d'] })
 }

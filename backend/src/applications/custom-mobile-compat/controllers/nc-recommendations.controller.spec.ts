@@ -1,12 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing'
-import { XMLBuilder } from 'fast-xml-parser'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { FileRecent } from '../../files/schemas/file-recent.interface'
 import { FilesRecents } from '../../files/services/files-recents.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
-import { NC_OCS_XML_BUILDER_OPTIONS, NcRecommendationsController } from './nc-recommendations.controller'
+import { createNcXmlBuilder } from '../utils/nc-xml'
+import { NcRecommendationsController } from './nc-recommendations.controller'
 import { Mock } from 'vitest'
 
 // NextcloudKit's getRecommendedFiles sends Accept: application/xml; the
@@ -231,12 +231,15 @@ describe(NcRecommendationsController.name, () => {
     )
   })
 
-  it('builder options emit @_ keys as attributes instead of dropping them', () => {
-    // Guards the flag itself. With `ignoreAttributes: true` fast-xml-parser 5.x
-    // emits `<@_xmlns:d>DAV:</@_xmlns:d>` — a malformed element, not an
-    // attribute — with no error, so the pins above would still pass while any
-    // future xmlns declaration corrupted the wire format.
-    const built = new XMLBuilder(NC_OCS_XML_BUILDER_OPTIONS).build({
+  it('the shared builder emits @_ keys as attributes instead of dropping them', () => {
+    // Guards the flag itself, from this endpoint's side: with
+    // `ignoreAttributes: true` fast-xml-parser 5.x emits
+    // `<@_xmlns:d>DAV:</@_xmlns:d>` — a malformed element, not an attribute —
+    // with no error, so the pins above would still pass while any future xmlns
+    // declaration corrupted the wire format. Duplicated deliberately with
+    // nc-xml.spec.ts's copy: this asserts the controller reaches the shared
+    // options, that one asserts the options themselves.
+    const built = createNcXmlBuilder().build({
       ocs: { '@_xmlns:d': 'DAV:', meta: { '@_probe': 'x', status: 'ok' } }
     })
     expect(built).toBe('<ocs xmlns:d="DAV:"><meta probe="x"><status>ok</status></meta></ocs>')

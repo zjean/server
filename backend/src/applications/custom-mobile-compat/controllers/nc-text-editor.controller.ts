@@ -13,6 +13,7 @@ import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcDirectEditingService, type NcDirectEditClaims } from '../services/nc-direct-editing.service'
 import { renderMarkdownEditorPage } from '../utils/markdown-editor-page'
+import { escapeHtml } from '../utils/nc-html'
 import { renderTextEditorPage } from '../utils/text-editor-page'
 
 // 5 MB cap. Big text files cause WKWebView to lag and CodeMirror to thrash;
@@ -295,7 +296,7 @@ export class NcTextEditorController {
 // information about why the token failed (expired vs malformed vs file-not-
 // found are all conflated).
 function renderError(res: FastifyReply, message: string): FastifyReply {
-  const safe = message.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+  const safe = escapeHtml(message)
   const body = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />

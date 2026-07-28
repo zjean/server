@@ -85,6 +85,26 @@ describe('NcPropfindService', () => {
     return { space } as unknown as FastifyDAVRequest & { space: typeof space }
   }
 
+  // BYTE-FOR-BYTE ENVELOPE PIN. The `toContain` test below proves the four
+  // namespaces are PRESENT; this one proves the whole envelope is UNCHANGED —
+  // exact prolog, exact root element, exact attribute order, explicit close
+  // tag. Added before the nc-xml.ts consolidation (#343) because a shared
+  // renderer can preserve every namespace and still reorder or self-close, and
+  // no `toContain` assertion in this file would notice.
+  //
+  // Driven with an empty listing so the pin covers only the envelope: the
+  // per-entry <d:response> content is nc-prop-builder's, tested separately, and
+  // the consolidation does not touch it.
+  it('wire-format pin: the multistatus envelope, byte for byte', async () => {
+    const r = req()
+    webdavSpaces.propfind.mockReturnValue(makeGen([]))
+    const { res, state } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(state.body).toBe(
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns" xmlns:ocs="http://open-collaboration-services.org/ns"></d:multistatus>'
+    )
+  })
+
   it('emits all four namespaces on multistatus', async () => {
     const r = req()
     const { res, state } = fakeReply()

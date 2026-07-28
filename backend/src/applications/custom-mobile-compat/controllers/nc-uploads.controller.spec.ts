@@ -56,7 +56,9 @@ describe('buildUploadDirPropfindBody', () => {
     // Exactly one <d:response> — the collection itself.
     expect(body.match(/<d:response>/g)?.length).toBe(1)
     expect(body).toContain(`<d:href>${baseHref}</d:href>`)
-    expect(body).toContain('<d:resourcetype><d:collection/></d:resourcetype>')
+    // Explicitly closed, not self-closed: the shared builder runs with
+    // suppressEmptyNode: false, matching every other body in this module.
+    expect(body).toContain('<d:resourcetype><d:collection></d:collection></d:resourcetype>')
   })
 
   it('emits a per-chunk <d:response> in addition to the collection one', () => {
@@ -70,10 +72,15 @@ describe('buildUploadDirPropfindBody', () => {
     expect(body).toContain(`<d:href>${baseHref}/1</d:href>`)
     expect(body).toContain('<d:getcontentlength>1048576</d:getcontentlength>')
     expect(body).toContain('<d:getcontentlength>524288</d:getcontentlength>')
-    // Chunks are files, not collections — resourcetype must be empty.
+    // Chunks are files, not collections — resourcetype must be an EMPTY
+    // element. Android's WebdavEntry turns ANY non-null resourcetype value into
+    // contentType "DIR", and a chunk read as a directory has no size to sum for
+    // the resume offset. `<d:resourcetype></d:resourcetype>` and
+    // `<d:resourcetype/>` are both empty; the former is what the shared builder
+    // emits and what the rest of this module has always emitted.
     const chunkSegment = body.split(`<d:href>${baseHref}/0</d:href>`)[1].split('</d:response>')[0]
-    expect(chunkSegment).toContain('<d:resourcetype/>')
-    expect(chunkSegment).not.toContain('<d:collection/>')
+    expect(chunkSegment).toContain('<d:resourcetype></d:resourcetype>')
+    expect(chunkSegment).not.toContain('d:collection')
   })
 
   it('emits RFC 1123 getlastmodified for each chunk', () => {

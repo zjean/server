@@ -114,6 +114,25 @@ describe(NcSyncReportService.name, () => {
     return { space, user, body } as never
   }
 
+  // BYTE-FOR-BYTE ENVELOPE PIN, added before the nc-xml.ts consolidation
+  // (#343). Two things here are envelope facts a shared renderer could silently
+  // break: the four xmlns attributes in this exact order, and <d:sync-token>
+  // sitting AFTER the responses as the last child of <d:multistatus>. RFC 6578
+  // §6.4 puts the token there, and a renderer that emitted it first — or that
+  // dropped it when there are no responses — would leave the client unable to
+  // advance. Driven with an empty event log so only the envelope is pinned.
+  it('wire-format pin: the multistatus envelope and sync-token placement, byte for byte', async () => {
+    const { reply, captured } = fakeReply()
+    const body = `<d:sync-collection xmlns:d="DAV:"><d:sync-token>${SYNC_TOKEN_URN_PREFIX}5</d:sync-token></d:sync-collection>`
+    await service.respond(buildReq(body) as never, reply)
+
+    expect(captured.body).toBe(
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns" xmlns:ocs="http://open-collaboration-services.org/ns"><d:sync-token>http://sync-in/ns/sync/v1/5</d:sync-token></d:multistatus>'
+    )
+    // Guard against the literal above drifting from the real URN prefix.
+    expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}5</d:sync-token>`)
+  })
+
   it('empty event log → echoes back the client token unchanged', async () => {
     const { reply, captured } = fakeReply()
     const body = `<d:sync-collection xmlns:d="DAV:"><d:sync-token>${SYNC_TOKEN_URN_PREFIX}5</d:sync-token></d:sync-collection>`
