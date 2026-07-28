@@ -131,7 +131,7 @@
     row-gap: 8px;
   }
 
-  // The .personal block class is reused by space-files.component.scss
+  // The .personal block class comes from files/file-browser.component.scss
   // (Emulated encap means rules above only match the personal component;
   // space-files needs its own match — see above selector list). This
   // global rule reaches both because it has no encap attribute.

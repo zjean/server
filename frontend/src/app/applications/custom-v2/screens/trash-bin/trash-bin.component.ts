@@ -33,7 +33,7 @@ import { mimeToGlyph } from '../../utils/mime-to-glyph'
   selector: 'app-v2-trash-bin',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './trash-bin.component.html',
-  styleUrl: '../space/space-files.component.scss',
+  styleUrl: '../files/file-browser.component.scss',
   imports: [
     IconV2Component,
     FileGlyphComponent,
