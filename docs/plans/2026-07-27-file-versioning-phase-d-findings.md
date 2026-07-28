@@ -412,6 +412,12 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
   the four environment facts the harness encodes, and the five cases still owed.
 - **The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on. D4.2's recipe
   belongs to it.
+- **Version history inside the office editor** — proposed, not scheduled, and not owed by any earlier phase. The
+  OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and
+  [`2026-07-28-onlyoffice-version-history-design.md`](2026-07-28-onlyoffice-version-history-design.md) scopes what it
+  would take, in two phases, against upstream ONLYOFFICE's own connector. Its §5 carries the decisions the maintainer
+  would need to take first. Note that its phase-1 panel is where users would first *see* D4.3's 300 s window, so the two
+  open items interact.
 - ~~**Two release blockers from ADR §7/§19**~~ **Both written.** The quota wording is the `2.4.4-custom.1` CHANGELOG
   entry (which is what `release.yml` uses as the GitHub Release body), and the backup requirement is
   [`docs/backup-and-restore.md`](../backup-and-restore.md).
