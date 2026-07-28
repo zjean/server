@@ -8,12 +8,14 @@ import { AdminService } from '../../../admin/admin.service'
 import type { MemberModel } from '../../../users/models/member.model'
 import { SpaceModel } from '../../../spaces/models/space.model'
 import { SpacesService } from '../../../spaces/services/spaces.service'
+import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { ButtonComponent } from '../../components/button.component'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import { ToastService } from '../../components/toast.service'
 import { PickedMember, UserGroupPickerComponent } from '../../components/user-group-picker.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { memberAvatars } from '../../utils/member-avatars'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 
 interface ManagerRef {
@@ -101,7 +103,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
 @Component({
   selector: 'app-v2-admin-spaces',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ButtonComponent, FormsModule, IconV2Component, L10nTranslateDirective, L10nTranslatePipe, UserGroupPickerComponent],
+  imports: [AvatarStackComponent, ButtonComponent, FormsModule, IconV2Component, L10nTranslateDirective, L10nTranslatePipe, UserGroupPickerComponent],
   template: `
     <div class="au">
       <header class="au__head">
@@ -175,18 +177,10 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
               <span class="as-col-desc">{{ s.description || '—' }}</span>
               <span class="as-col-managers">
                 @if (s.managers.length > 0) {
-                  <span class="as-avatars">
-                    @for (m of s.managers.slice(0, 3); track m.id) {
-                      @if (m.avatarUrl) {
-                        <img [src]="m.avatarUrl" alt="" [attr.title]="m.name" class="as-avatar" />
-                      } @else {
-                        <span class="as-avatar as-avatar--glyph" [attr.title]="m.name">@</span>
-                      }
-                    }
-                    @if (s.managers.length > 3) {
-                      <span class="as-avatar as-avatar--more">+{{ s.managers.length - 3 }}</span>
-                    }
-                  </span>
+                  <!-- Shared stack component: same rendering as the Spaces cards, and it
+                       carries the member-name hover tooltip (#305). Rows sit on --si-bg2,
+                       so the ring matches that surface rather than the card default. -->
+                  <app-v2-avatar-stack [users]="managerAvatars(s)" [size]="22" [max]="3" [ring]="'var(--si-bg2)'" />
                 } @else {
                   <span class="as-muted">—</span>
                 }
@@ -449,35 +443,6 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .as-muted {
         color: var(--si-fg-faint);
-      }
-      .as-avatars {
-        display: inline-flex;
-        align-items: center;
-      }
-      .as-avatar {
-        width: 22px;
-        height: 22px;
-        border-radius: 50%;
-        border: 1.5px solid var(--si-bg2);
-        background: var(--si-bg4);
-        object-fit: cover;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 10.5px;
-        color: var(--si-fg-muted);
-        font-weight: 500;
-
-        &:not(:first-child) {
-          margin-left: -6px;
-        }
-        &--glyph {
-          background: var(--si-bg4);
-        }
-        &--more {
-          background: var(--si-nav-soft);
-          color: var(--si-nav);
-        }
       }
       .as-col-storage {
         display: flex;
@@ -764,6 +729,13 @@ export class AdminSpacesComponent implements OnInit {
       this.sortBy.set(col)
       this.sortDir.set(col === 'modified' || col === 'storage' ? 'desc' : 'asc')
     }
+  }
+
+  // Manager avatars for the row's stack. No [total] here: this table has its own
+  // Members column, so the "+N" chip counts managers beyond `max` (the previous
+  // inline markup behaved the same way).
+  protected managerAvatars(s: SpaceModel): AvatarStackUser[] {
+    return memberAvatars(s.managers)
   }
 
   protected storagePct(s: SpaceModel): number {
