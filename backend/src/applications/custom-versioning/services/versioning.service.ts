@@ -404,10 +404,18 @@ export class VersioningService {
     if (!this.enabled || !versionsRoot) return { used: 0, ceiling: null, count: 0 }
     const { used, count } = await this.queries.usageByRoot(versionsRoot)
     const share = this.config.quotaShare
+    // The reported ceiling comes from rootQuota — the SAME function
+    // enforceQuotaShare uses — so the number the UI shows is the number that
+    // will actually be applied. Recomputing it from space.storageQuota alone
+    // reported a cap for the scope-mismatch case rootQuota deliberately skips
+    // (a share with an external path), i.e. a limit nothing would ever enforce.
+    // `null` here means "no eager cap applies", which the panel renders as an
+    // uncapped byte count instead of inventing a number.
+    const quota = this.rootQuota(user, space, versionsRoot)
     return {
       used,
       count,
-      ceiling: share && space.storageQuota ? space.storageQuota * share : null
+      ceiling: share && quota ? quota * share : null
     }
   }
 
