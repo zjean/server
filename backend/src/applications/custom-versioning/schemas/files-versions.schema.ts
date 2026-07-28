@@ -5,6 +5,7 @@ import { shares } from '../../shares/schemas/shares.schema'
 import { spacesRoots } from '../../spaces/schemas/spaces-roots.schema'
 import { spaces } from '../../spaces/schemas/spaces.schema'
 import { users } from '../../users/schemas/users.schema'
+import { VERSIONS_ROOT_MAX_LENGTH } from '../constants/versioning'
 
 // Fork-owned file-versions table. Named `custom_files_versions` (not
 // `files_versions`) so there is never a collision if upstream ships its own
@@ -80,7 +81,7 @@ export const customFilesVersions = mysqlTable(
     // holds its blobs — and the GC must match on this, not on the file's
     // current space, or it would delete a moved file's history as orphaned.
     // login and alias are both varchar(255); 261 covers 'space:' + 255.
-    versionsRoot: varchar('versionsRoot', { length: 261 }).notNull(),
+    versionsRoot: varchar('versionsRoot', { length: VERSIONS_ROOT_MAX_LENGTH }).notNull(),
     // sha512-256, hex. Algorithm-neutral column name on purpose: changing the
     // algorithm must be an explicit migration, not a silent format break.
     // 64 hex chars for sha512-256.
