@@ -346,13 +346,9 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__source ::ng-deep .cm-focused {
         outline: none !important;
       }
-      /* Inline mode (folder readme banner): the parent sets a bounded height,
-         so the body scrolls internally instead of the host filling a stage.
-         The source editor drops out of absolute positioning — inset:0 against
-         a bounded parent collapses it to zero height. */
-      .md-view--inline .md-view__body {
-        overflow: auto;
-      }
+      /* Inline mode (folder readme banner): the source editor drops out of
+         absolute positioning — inset:0 against a bounded parent (rather than
+         a stage filling the viewport) would collapse it to zero height. */
       .md-view--inline .md-view__source {
         position: static;
         inset: auto;
