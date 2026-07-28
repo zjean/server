@@ -530,11 +530,16 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.closeGuard.setCloseGuard(() => this.canClose())
+    // CloseGuardService is a SINGLE-SLOT manual guard that only file-detail's
+    // close() consults. An inline embedder (the folder readme banner) must not
+    // touch it: registering would clobber whatever file-detail put there, and
+    // nulling it on destroy would leave the slot empty rather than restored.
+    // Design §5. The banner runs its own confirm via requestClose()/cancel().
+    if (!this.inline()) this.closeGuard.setCloseGuard(() => this.canClose())
   }
 
   ngOnDestroy(): void {
-    this.closeGuard.setCloseGuard(null)
+    if (!this.inline()) this.closeGuard.setCloseGuard(null)
     if (!this.editor.isDestroyed) this.editor.destroy()
     if (this.stub?.lock) {
       const stub = this.stub

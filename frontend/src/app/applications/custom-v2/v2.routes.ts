@@ -25,20 +25,23 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.RECENTS, component: RecentsComponent },
   { path: V2_ROUTES.FAVORITES, component: FavoritesComponent },
   { path: V2_ROUTES.FILE, component: FileDetailComponent },
+  // ONE child entry per browse screen, deliberately. With a separate `path: ''`
+  // alongside `path: '**'`, navigating between the root and a subfolder crosses
+  // two different route configs, so Angular destroys and recreates the component
+  // instead of reusing it. Both screens are built to reload in place (they
+  // subscribe to route.url), and the folder-readme banner's auto-save-on-navigate
+  // only runs when the component survives the hop — with two entries an unsaved
+  // readme edit was silently lost on root<->subfolder. '**' matches the empty
+  // path too, so one entry covers both. Keep the `children` wrapper: the screens'
+  // pathSegments read the CHILD's route.url, which must exclude this path prefix.
   {
     path: V2_ROUTES.PERSONAL,
-    children: [
-      { path: '', component: PersonalComponent },
-      { path: '**', component: PersonalComponent }
-    ]
+    children: [{ path: '**', component: PersonalComponent }]
   },
   { path: V2_ROUTES.SPACES, pathMatch: 'full', component: SpacesComponent },
   {
     path: `${V2_ROUTES.SPACES}/:alias`,
-    children: [
-      { path: '', component: SpaceFilesComponent },
-      { path: '**', component: SpaceFilesComponent }
-    ]
+    children: [{ path: '**', component: SpaceFilesComponent }]
   },
   {
     path: V2_ROUTES.SHARED,

@@ -16,6 +16,7 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { SERVER_NAME } from '@sync-in-server/backend/src/common/shared'
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import { TaskItem } from '@tiptap/extension-list'
@@ -56,10 +57,16 @@ function writeStoredExpanded(expanded: boolean): void {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TiptapEditorDirective, L10nTranslatePipe, ButtonComponent, MarkdownViewComponent],
   template: `
-    @if (readme(); as file) {
+    <!-- visible() deliberately survives readme() going null: the edit branch below
+         must NOT be torn down by a navigation into a folder that has no readme
+         while an unsaved save is still in flight. Only closeEditor() unmounts it. -->
+    @if (visible()) {
       <section class="fr">
         <header class="fr__head">
-          <span class="fr__name">{{ file.name }}</span>
+          <!-- headerName() prefers the frozen edit target, so the name never
+               announces the folder we navigated INTO while we are still editing
+               the one we left. -->
+          <span class="fr__name">{{ headerName() }}</span>
           <span class="fr__spacer"></span>
           @if (!editing() && writeable()) {
             <app-v2-btn kind="ghost" size="sm" icon="pencil" (click)="onEditClick()">
@@ -81,7 +88,7 @@ function writeStoredExpanded(expanded: boolean): void {
           </div>
         } @else if (loadError(); as err) {
           <div class="fr__error">{{ err | translate: locale.language }}</div>
-        } @else {
+        } @else if (readme()) {
           <div
             #readHost
             class="fr__read v2-prose"
@@ -206,21 +213,41 @@ export class FolderReadmeComponent implements OnDestroy {
   // Emitted when the host listing is stale and should reload.
   readonly changed = output<void>()
 
-  // The listing can report OUR OWN exclusive lock: edit mode locks the readme on
-  // open, and the save-triggered refresh re-reads the row while we still hold it.
-  // Neither classic's writeable contract (files.service.ts:314) nor
-  // markdown-view's copy of it (markdown-view.component.ts:714) tells our lock
-  // apart from a stranger's, so both would go read-only on our own lock — Save
-  // then Cancel would leave the banner with no Edit button, and a later Edit
-  // would open a read-only editor. The backend does tell them apart: the lock
-  // route goes through filesLockManager.createOrRefresh, which refreshes the
-  // caller's own lock instead of conflicting (files-lock-manager.service.ts:69-87).
-  // So drop our own lock here, once, and every consumer below sees the row the
-  // way the server would treat it for us.
+  // The listing can report an exclusive lock that THIS BANNER'S OWN EDITOR took:
+  // edit mode locks the readme on open, and the save-triggered refresh
+  // (onEditorSaved) re-reads the row while we still hold it. Neither classic's
+  // writeable contract (files.service.ts:314) nor markdown-view's copy of it
+  // (markdown-view.component.ts:714) tells that lock apart from a stranger's, so
+  // both go read-only on it — Save then Cancel left the banner with no Edit
+  // button, and the next Edit opened a read-only editor. The backend does tell
+  // them apart: the lock route goes through filesLockManager.createOrRefresh,
+  // which refreshes the caller's own lock rather than conflicting
+  // (files-lock-manager.service.ts:69-87). So drop it here, once.
+  //
+  // Narrowly gated on purpose. Stripping ANY same-owner exclusive lock was too
+  // wide: markdown-view stores whatever lock() returns as stub.lock and DELETEs
+  // it on destroy, so closing this editor would have deleted a lock a DIFFERENT
+  // application of the same user still believed it held. Only locks created
+  // through the plain API lock route carry app === SERVER_NAME
+  // (files-manager.service.ts:866); WebDAV/sync-client locks carry 'WebDAV' and
+  // can be exclusive, so they stay opaque and correctly render as read-only.
+  // (Collabora and OnlyOffice already take SHARED locks, so isExclusive is false
+  // for them and they were never in scope.)
+  //
+  // KNOWN LIMITATION: FileLockProps exposes only { owner, app, info, isExclusive },
+  // and the API lock route passes no lock options, so `info` is always undefined
+  // for a SERVER_NAME lock. Nothing in the row can distinguish THIS session from
+  // another Sync-in-API session of the same user — a second v2 tab, or classic's
+  // text editor. Two such tabs can therefore both edit, last write wins, and
+  // closing one releases the other's lock. Accepted and documented.
   protected readonly readme = computed<FileProps | null>(() => {
     const file = pickFolderReadme(this.files())
     if (!file?.lock?.isExclusive) return file
-    return file.lock.owner?.id === this.currentUser()?.id ? { ...file, lock: undefined } : file
+    if (file.lock.app !== SERVER_NAME) return file
+    const me = this.currentUser()?.id
+    // Never compare two undefineds: that would strip a stranger's lock.
+    if (typeof me !== 'number' || file.lock.owner?.id !== me) return file
+    return { ...file, lock: undefined }
   })
   protected readonly loadError = signal<string | null>(null)
 
@@ -281,6 +308,15 @@ export class FolderReadmeComponent implements OnDestroy {
     content: '',
     contentType: 'markdown'
   })
+
+  // The banner renders whenever there is a readme OR we are editing one. The
+  // second term is load-bearing: navigating into a folder with no readme must not
+  // unmount an editor that still has a save in flight for the folder we left.
+  protected readonly visible = computed(() => !!this.readme() || (this.editing() && !!this.editTarget()))
+
+  // While editing, the header names the frozen target, not whatever readme() has
+  // since resolved to.
+  protected readonly headerName = computed(() => this.editTarget()?.file.name ?? this.readme()?.name ?? '')
 
   protected readonly writeable = computed(() => {
     const file = this.readme()
@@ -349,7 +385,9 @@ export class FolderReadmeComponent implements OnDestroy {
       if (previous === null || previous === dir) return
       // A queued edit intent from the folder we just left is stale.
       this.pendingEditDir = null
-      untracked(() => this.leaveEditOnNavigate())
+      // Deliberately fire-and-forget — an effect cannot await. The teardown itself
+      // runs in a finally, so the catch only ever sees a toast/emit failure.
+      untracked(() => void this.leaveEditOnNavigate().catch((e) => console.error('folder-readme: leaving edit mode failed', e)))
     })
   }
 
@@ -413,21 +451,33 @@ export class FolderReadmeComponent implements OnDestroy {
       return
     }
     this.leavingEdit = true
+    // Captured before the await: editTarget is cleared by closeEditor() below.
+    const name = this.editTarget()?.file.name ?? null
+    let outcome: 'clean' | 'saved' | 'failed'
     try {
-      const name = this.editTarget()?.file.name ?? 'the folder description'
-      const saved = await view.saveNowIfModified()
-      if (saved === 'saved') {
-        this.toast.success('v2_saved_one', { name })
-        this.changed.emit()
-      } else if (saved === 'failed') {
-        // The lock is still released below — leaking it is the bug this whole path
-        // exists to prevent, and a stale exclusive lock harms every other user of
-        // the folder. Losing the text is the lesser harm, and we say so plainly.
-        this.toast.error('v2_readme_autosave_failed', { name })
-      }
-      this.closeEditor()
+      outcome = await view.saveNowIfModified()
+    } catch {
+      // saveNowIfModified is documented never to throw; this is here so a future
+      // change to it cannot skip the unmount in the finally block.
+      outcome = 'failed'
     } finally {
+      // Unmounting is the one thing this path MUST do — it is what releases the
+      // exclusive lock. It therefore runs before the toast and before
+      // changed.emit(), and in a finally: emit() runs the host's refresh()
+      // synchronously in this call stack, so a throw anywhere under it would
+      // otherwise leave the editor mounted and the lock held, with leavingEdit
+      // already cleared so nothing would ever retry.
+      this.closeEditor()
       this.leavingEdit = false
+    }
+    if (outcome === 'saved') {
+      if (name) this.toast.success('v2_saved_one', { name })
+      this.changed.emit()
+    } else if (outcome === 'failed' && name) {
+      // The lock was already released above — leaking it is the bug this whole
+      // path exists to prevent, and a stale exclusive lock harms every other user
+      // of the folder. Losing the text is the lesser harm, and we say so plainly.
+      this.toast.error('v2_readme_autosave_failed', { name })
     }
   }
 
