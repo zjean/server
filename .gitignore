@@ -26,3 +26,8 @@ data/
 # fork-local: machine-specific Claude Code state (absolute paths, local usernames)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+# fork-local: git worktrees created for parallel branch work. Each is a FULL source
+# checkout, so a blanket `git add` from the repo root would try to commit entire
+# duplicate trees (and any gitignored-but-present env file inside them). Narrow to
+# worktrees/ on purpose — .claude/skills/ is tracked and must stay tracked.
+.claude/worktrees/
