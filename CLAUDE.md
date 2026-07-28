@@ -195,7 +195,7 @@ extend `Error`, not `HttpException` — a controller that lets one escape return
 feature). And `filesLockManager.create` treats the **caller's own** lock as a conflict; use `createOrRefresh` for any
 path that writes a file the user may have open.
 
-Five invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
+Six invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
 suite (the fifth from reading upstream Nextcloud rather than from a bug — see below):
 
 1. **Never hardlink a version blob.** It shares the live file's inode, and three of the seven write paths truncate that
@@ -203,7 +203,10 @@ suite (the fifth from reading upstream Nextcloud rather than from a bug — see 
 2. **Never replace a live file's inode.** Restores and any live-content replacement go through `copyFileContent`;
    trash retention keys on inodes (ADR §9). This is the same fact as (1), read from the other end.
 3. **Anything that reads a blob must pin it open before running code that can evict.** Eviction and reads share no
-   lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9).
+   lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9). It has
+   two violation sites, not one: the download path had the same shape (#355), where an eviction between the existence
+   check and the deferred open faulted a stream already committed to a response — a truncated body instead of the 404
+   the check existed to produce. `fs.open` REPLACES such a check; it never supplements it.
 4. **Version rows key on `files.id`, never on path**, and `files` rows are lazily materialized — use
    `custom-shared`'s `FileRowEnsurer` (ADR §3).
 5. **On the NC versions DAV tree, a version's node name is its `mtime` in unix SECONDS — never the row id — and it must
@@ -212,6 +215,17 @@ suite (the fifth from reading upstream Nextcloud rather than from a bug — see 
    NC facts in the same family: the collection's own entry must be `response[0]` (Android discards it and would
    otherwise lose the oldest version), and `d:resourcetype` must be an EMPTY element (any value makes Android treat the
    version as a directory). All three are in `utils/nc-version-xml.ts` with their upstream citations.
+6. **A pinned descriptor has an owner, and handing one to a caller makes the caller responsible for it.** The corollary
+   of (3): `getVersionStream` returns an OPEN fd, so anything that takes a stream must consume it or `destroy()` it.
+   Acquiring one and then throwing leaks a descriptor — the diff endpoint's 415 did exactly that until the mime check
+   moved above the acquisition (#355). When adding a call site, check the throw paths, not just the happy path.
+   Two Node specifics here were measured, and both invert the intuitive answer, so don't re-reason them from scratch:
+   `autoClose` (default `true`) closes the handle *through* `FileHandle.close()` rather than closing the raw fd behind
+   the wrapper's back, so ownership can simply travel with the stream — `restoreVersion` uses `autoClose: false` only
+   because it keeps the handle for its own `try/finally`. And with `autoClose: false` a fully-consumed stream emits
+   `end` but never `close`, so a `close`-only cleanup handler leaks on the *successful* path.
+   Watch for `DEP0137` ('Closing a FileHandle object on garbage collection') in test output: it is GC-timing dependent,
+   so it surfaces only in the full suite and names no source line. It means someone dropped a stream.
 
 Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
