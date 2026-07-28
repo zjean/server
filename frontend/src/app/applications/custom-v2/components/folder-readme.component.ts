@@ -165,6 +165,11 @@ export class FolderReadmeComponent {
     const next = !this.expanded()
     this.expanded.set(next)
     writeStoredExpanded(next)
+    // Collapsing restores the 30vh cap, which makes the scrollHeight/clientHeight
+    // comparison meaningful again. Without this, a session that started with the
+    // stored preference already expanded never measured overflow at all, so
+    // collapsing once hid the toggle entirely with no way back.
+    if (!next) this.measureOverflow()
   }
 
   // One editor for the component's lifetime, content swapped on navigation.
