@@ -90,6 +90,20 @@ describe('NcFavoritesReportService', () => {
     await fs.rm(tmpRoot, { recursive: true, force: true })
   })
 
+  // BYTE-FOR-BYTE ENVELOPE PIN, added before the nc-xml.ts consolidation
+  // (#343). This emitter is the only one that OMITS the `d:response` key
+  // entirely when there are no entries, rather than passing an empty array —
+  // both produce the same bytes today (an empty array contributes nothing), and
+  // this pin is what proves that equivalence holds after the two code paths
+  // collapse into one shared renderer.
+  it('wire-format pin: the multistatus envelope with no favorites, byte for byte', async () => {
+    const { reply, captured } = fakeReply()
+    await service.respond({ user } as never, reply)
+    expect(captured.body).toBe(
+      '<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns" xmlns:ocs="http://open-collaboration-services.org/ns"></d:multistatus>'
+    )
+  })
+
   describe('respond (REPORT filter-files)', () => {
     it('lists a favorited personal file with an absolute href and oc:favorite=1', async () => {
       const filePath = path.join(tmpRoot, 'report.pdf')

@@ -1,4 +1,5 @@
-import { XMLBuilder, XMLParser } from 'fast-xml-parser'
+import { XMLParser } from 'fast-xml-parser'
+import { renderMultistatus } from './nc-xml'
 
 // Wire-format helpers for /remote.php/dav/versions/{user}/versions/{fileId} —
 // the NC file-versions DAV tree. Pure functions, no DI.
@@ -63,20 +64,12 @@ export interface NcVersionXmlEntry {
   author: string | null
 }
 
-const DAV_NS = 'DAV:'
-const OC_NS = 'http://owncloud.org/ns'
-const NC_NS = 'http://nextcloud.org/ns'
-
 const HTTP_OK_PROPSTAT_STATUS = 'HTTP/1.1 200 OK'
 
-// Matches NcPropfindService / nc-comment-xml so every body this module emits
-// has the same namespace prefixes and element syntax.
-const xmlBuilder = new XMLBuilder({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  format: false,
-  suppressEmptyNode: false
-})
+// This tree emits d:, oc: and nc: props and no ocs: prop, so it declares those
+// three and no more — see nc-xml.ts's NC_XMLNS comment for why per-body arity
+// is correct rather than untidy.
+const VERSION_XMLNS = ['d', 'oc', 'nc'] as const
 
 const xmlParser = new XMLParser({
   ignoreAttributes: true,
@@ -197,15 +190,7 @@ export function isRestoreDestination(destination: string | undefined, login: str
 // ──────── internals ────────
 
 function render(responses: unknown[]): string {
-  const body = xmlBuilder.build({
-    'd:multistatus': {
-      '@_xmlns:d': DAV_NS,
-      '@_xmlns:oc': OC_NS,
-      '@_xmlns:nc': NC_NS,
-      'd:response': responses
-    }
-  })
-  return `<?xml version="1.0" encoding="utf-8"?>${body}`
+  return renderMultistatus(responses, { prefixes: VERSION_XMLNS })
 }
 
 // The collection itself. Upstream's VersionCollection reports getLastModified()

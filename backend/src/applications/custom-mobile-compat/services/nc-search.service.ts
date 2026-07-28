@@ -1,7 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { inArray } from 'drizzle-orm'
 import { FastifyReply } from 'fastify'
-import { XMLBuilder } from 'fast-xml-parser'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { File } from '../../files/schemas/file.interface'
@@ -12,6 +11,7 @@ import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { type SearchBody, parseSearchBody } from '../utils/nc-search-body'
+import { renderMultistatus } from '../utils/nc-xml'
 import { NcPathResolverService } from './nc-path-resolver.service'
 
 // Handles WebDAV `SEARCH /remote.php/dav` from NextcloudKit's
@@ -37,12 +37,6 @@ import { NcPathResolverService } from './nc-path-resolver.service'
 @Injectable()
 export class NcSearchService {
   private readonly logger = new Logger(NcSearchService.name)
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    format: false,
-    suppressEmptyNode: false
-  })
 
   constructor(
     @Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema,
@@ -65,7 +59,7 @@ export class NcSearchService {
       this.logger.error({ tag: 'respond', msg: `nc-search failed: ${(e as Error).message}` })
       responses = []
     }
-    return this.renderMultistatus(res, responses)
+    return this.sendMultistatus(res, responses)
   }
 
   private async buildRecentResponses(user: UserModel, parsed: Extract<SearchBody, { kind: 'recent' }>): Promise<Record<string, unknown>[]> {
@@ -119,17 +113,8 @@ export class NcSearchService {
     return out
   }
 
-  private renderMultistatus(res: FastifyReply, responses: Record<string, unknown>[]): FastifyReply {
-    const body = this.xml.build({
-      'd:multistatus': {
-        '@_xmlns:d': 'DAV:',
-        '@_xmlns:oc': 'http://owncloud.org/ns',
-        '@_xmlns:nc': 'http://nextcloud.org/ns',
-        '@_xmlns:ocs': 'http://open-collaboration-services.org/ns',
-        'd:response': responses
-      }
-    })
-    return res.header('Content-Type', 'application/xml; charset=utf-8').status(207).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
+  private sendMultistatus(res: FastifyReply, responses: Record<string, unknown>[]): FastifyReply {
+    return res.header('Content-Type', 'application/xml; charset=utf-8').status(207).send(renderMultistatus(responses))
   }
 }
 
