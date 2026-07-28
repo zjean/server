@@ -534,7 +534,14 @@ export class FolderReadmeComponent {
       const file = this.readme()
       const dir = this.dirPath()
       if (!file || !dir) {
-        untracked(() => this.setContent(''))
+        untracked(() => {
+          // Reset the cache key as well as the content. Without this, entering a
+          // subfolder with no readme and navigating back hits load()'s
+          // early-return on the unchanged key after the content was already
+          // blanked — leaving the banner's header with a permanently empty body.
+          this.lastLoadKey = null
+          this.setContent('')
+        })
         return
       }
       // Re-fetch when the resolved file changes identity OR content: mtime
@@ -553,8 +560,13 @@ export class FolderReadmeComponent {
     const stub = buildFileModelStub(file, `${dir}/${file.name}`)
     try {
       const text = await firstValueFrom(this.http.get(stub.dataUrl, { responseType: 'text' }))
+      // Superseded while in flight: a newer folder's load owns the view now.
+      // Without this guard, navigating A -> B where A's fetch is slower lets A's
+      // response overwrite B's rendered content, and nothing corrects it.
+      if (this.lastLoadKey !== key) return
       this.setContent(text ?? '')
     } catch (e) {
+      if (this.lastLoadKey !== key) return
       const err = e as HttpErrorResponse
       this.setContent('')
       this.loadError.set(err?.error?.message ?? err?.statusText ?? 'Failed to load folder description')
@@ -664,7 +676,10 @@ Browser-verify:
    theme. Check the dark theme too.
 3. `README.md` is still a normal row in the listing.
 4. Navigate into a subfolder with no readme. Expected: no banner, no gap, no console error.
-5. Repeat 1–4 inside a space (`/#/v2/spaces/<alias>`).
+4b. **Navigate back to the folder from step 1.** Expected: the content renders **again** — not a banner header with an
+   empty body. This is the round-trip that the `lastLoadKey` reset exists for; Task 2's review found the bug here
+   because an earlier revision of this step stopped at 4.
+5. Repeat 1–4b inside a space (`/#/v2/spaces/<alias>`).
 6. Rename `README.md` → `notes.md`. Expected: banner disappears after the listing refreshes.
 
 - [ ] **Step 9: Commit**
@@ -1444,6 +1459,9 @@ Additionally, because these are cheap and catch the two bug classes this codebas
 13. Dark theme, all of the above visible states. Expected: no white-on-white, fade blends into the card.
 14. Browser console across the whole matrix. Expected: no errors, and no `Failed to load folder description` toast
     except where deliberately provoked.
+15. **Navigation round-trip** (added after Task 2's review found a bug here): folder with a readme → subfolder without
+    one → back. Expected: content renders again, not an empty banner. Then, with a slow connection throttled if you can,
+    navigate quickly between two folders that both have readmes and confirm neither shows the other's content.
 
 - [ ] **Step 2: Record the outcome in the design doc**
 
