@@ -872,6 +872,31 @@ describe(VersioningService.name, () => {
     expect(usage).toMatchObject({ count: 1, used: CONTENT.length, ceiling: 500 })
   })
 
+  // Regression (#338): the reported ceiling and the enforced ceiling were two
+  // independent derivations of one number. rootQuota deliberately skips the
+  // eager cap when the env's quota belongs to a different scope than the
+  // versions root — a share with an external path — but versionsUsage still
+  // reported storageQuota * quotaShare, advertising a limit nothing would ever
+  // apply. Both now come from rootQuota, so this pins them together.
+  it('reports no ceiling when the env quota belongs to a different scope than the versions root', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const shareSpace = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      storageQuota: 1000,
+      root: { externalPath: '/mnt/external' }
+    })
+
+    await service.snapshotBeforeOverwrite(user, shareSpace, { origin: 'web' })
+    const usage = await service.versionsUsage(user, shareSpace)
+
+    // Bytes are still reported — they are real and they still count towards the
+    // quota — but no eager cap applies here, so there is no ceiling to show.
+    expect(usage).toMatchObject({ count: 1, used: CONTENT.length, ceiling: null })
+  })
+
   it('streams a version’s stored bytes', async () => {
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     const { stream, version } = await service.getVersionStream(user, personalSpace(), queries.rows[0].id)
