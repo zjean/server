@@ -192,17 +192,23 @@ describe('space-files browser — space-only behaviour', () => {
   })
 
   describe('filter shortcut', () => {
-    it('does NOT wire cmd/ctrl-F to the filter input', () => {
-      // The template renders a hard-coded "⌘F" hint but there is no handler:
-      // the key falls through to the generic branch and does nothing. Preserved
-      // verbatim by #346 — reported as a separate bug, not fixed here.
+    // #368: this asserted the opposite until the gap was closed. The template
+    // rendered a hard-coded "⌘F" hint with no handler behind it, so the key
+    // fell through to the browser's own find-in-page.
+    it('wires cmd/ctrl-F to the filter input and preempts the browser', () => {
       const { c } = start()
       const calls: string[] = []
       c.filterInput = { nativeElement: { focus: () => calls.push('focus'), select: () => calls.push('select') } }
       let prevented = 0
       c.onWindowKeydown({ key: 'f', metaKey: true, target: {}, preventDefault: () => prevented++ } as unknown as KeyboardEvent)
-      expect(calls).toEqual([])
-      expect(prevented).toBe(0)
+      expect(calls).toEqual(['focus', 'select'])
+      expect(prevented).toBe(1)
+    })
+
+    it('advertises the same platform-aware hint personal does, not a hard-coded glyph', () => {
+      const { c } = start()
+      expect(c.repository.filterHint()).toBe((c as unknown as { filterShortcutLabel: string }).filterShortcutLabel)
+      expect(['⌘F', 'Ctrl F']).toContain(c.repository.filterHint())
     })
   })
 

@@ -50,15 +50,6 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
   ]
 })
 export class PersonalComponent extends FileBrowserBase {
-  // Platform-aware label for the filter shortcut hint. The kbd badge next to
-  // the filter input promises ⌘F (or Ctrl-F on non-Mac); the base's keydown
-  // handler delivers on it because filterShortcutEnabled is true below.
-  protected readonly filterShortcutLabel: string = (() => {
-    if (typeof navigator === 'undefined') return 'Ctrl F'
-    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
-    return isMac ? '⌘F' : 'Ctrl F'
-  })()
-
   private readonly personalRoot = [SPACE_REPOSITORY.FILES, SPACE_ALIAS.PERSONAL].join('/')
 
   protected readonly repository: FileBrowserRepository = {

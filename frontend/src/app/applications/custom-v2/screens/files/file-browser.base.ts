@@ -74,6 +74,24 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected abstract readonly repository: FileBrowserRepository
 
   /**
+   * Platform-aware label for the filter shortcut hint — the kbd badge next to
+   * the filter input. On the base rather than in the repository because it is
+   * derived from the platform, not from the screen: both browsers want the
+   * identical string, and a repository field would invite a second screen to
+   * hard-code a different one. That is exactly what happened (#368) — one
+   * screen hard-coded '⌘F' and told every Linux and Windows user the wrong
+   * key, while also not wiring the shortcut up at all.
+   *
+   * Safe as a field initialiser: it touches only `navigator`, never
+   * `repository`, which is still undefined while base fields initialise.
+   */
+  protected readonly filterShortcutLabel: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl F'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘F' : 'Ctrl F'
+  })()
+
+  /**
    * localStorage key for the view mode.
    *
    * A METHOD rather than a `repository` field on purpose: `mode` below is
