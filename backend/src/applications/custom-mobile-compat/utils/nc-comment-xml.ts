@@ -1,4 +1,5 @@
-import { XMLBuilder, XMLParser } from 'fast-xml-parser'
+import { XMLParser } from 'fast-xml-parser'
+import { renderMultistatus } from './nc-xml'
 
 // Wire-format helpers for /remote.php/dav/comments/files/{fileId}, the DAV
 // surface NC iOS hits via NextcloudKit's NextcloudKit+Comments.swift. Three
@@ -43,20 +44,6 @@ export interface NcCommentXmlEntry {
   createdAt: Date
 }
 
-const DAV_NS = 'DAV:'
-const OC_NS = 'http://owncloud.org/ns'
-const NC_NS = 'http://nextcloud.org/ns'
-
-// fast-xml-parser config matches what NcPropfindService uses, so the output
-// shape (namespace prefixes, attribute syntax) is consistent with the rest of
-// the mobile-compat module.
-const xmlBuilder = new XMLBuilder({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  format: false,
-  suppressEmptyNode: false
-})
-
 const xmlParser = new XMLParser({
   ignoreAttributes: true,
   // Don't auto-coerce types — comment messages can be "1" or "true" and we
@@ -97,15 +84,11 @@ export function buildCommentsMultistatus(entries: NcCommentXmlEntry[]): string {
     }
   }))
 
-  const body = xmlBuilder.build({
-    'd:multistatus': {
-      '@_xmlns:d': DAV_NS,
-      '@_xmlns:oc': OC_NS,
-      '@_xmlns:nc': NC_NS,
-      'd:response': responses
-    }
-  })
-  return `<?xml version="1.0" encoding="utf-8"?>${body}`
+  // d/oc/nc. The listing itself emits only d: and oc: props, but nc: has been
+  // declared here since the endpoint shipped and NextcloudKit is namespace-blind
+  // (it matches literal prefixed names and never reads a declaration), so
+  // dropping it would be a byte change with no upside.
+  return renderMultistatus(responses, { prefixes: ['d', 'oc', 'nc'] })
 }
 
 // Build a minimal 207 Multistatus body acknowledging a PROPPATCH update or
@@ -113,20 +96,19 @@ export function buildCommentsMultistatus(entries: NcCommentXmlEntry[]): string {
 // 200..299), so an empty body would also work — but a well-formed multistatus
 // is the WebDAV-correct response shape and costs nothing.
 export function buildProppatchAck(href: string, propName: 'oc:message' | 'oc:readMarker'): string {
-  const body = xmlBuilder.build({
-    'd:multistatus': {
-      '@_xmlns:d': DAV_NS,
-      '@_xmlns:oc': OC_NS,
-      'd:response': {
+  // Two namespaces, not three: the acknowledged prop is always an oc: one.
+  return renderMultistatus(
+    [
+      {
         'd:href': href,
         'd:propstat': {
           'd:prop': { [propName]: '' },
           'd:status': 'HTTP/1.1 200 OK'
         }
       }
-    }
-  })
-  return `<?xml version="1.0" encoding="utf-8"?>${body}`
+    ],
+    { prefixes: ['d', 'oc'] }
+  )
 }
 
 // Extract `message` from NK's POST body. Accepts either a pre-parsed object
