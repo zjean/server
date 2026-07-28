@@ -48,6 +48,7 @@ import { genEtag } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
+import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
@@ -99,6 +100,14 @@ class FakeQueries {
       labeledBytes: rows.filter((r) => r.label).reduce((n, r) => n + r.size, 0),
       count: rows.length
     }
+  }
+  // Counted as a call, because the write-path pre-flight is only allowed to ask
+  // this when it is about to decline a write — a test that it never runs on the
+  // ordinary path is otherwise unwritable.
+  existsSizeInRootCalls = 0
+  async existsSizeInRoot(versionsRoot: string, size: number) {
+    this.existsSizeInRootCalls++
+    return this.rows.some((r) => r.versionsRoot === versionsRoot && r.size === size)
   }
   async oldestUnlabeledByRoot(versionsRoot: string) {
     return [...this.rows]
@@ -226,6 +235,12 @@ describe(VersioningService.name, () => {
   }
 
   const versionsDir = () => path.join(tmpRoot, 'users', 'alice', 'versions')
+
+  const pathExists = (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   async function blobFiles(): Promise<string[]> {
     const found: string[] = []
@@ -681,6 +696,119 @@ describe(VersioningService.name, () => {
     expect(queries.rows.map((r) => r.fileId).sort()).toEqual([1000, 1001, 1002])
     // Nor is a blob left behind for the write we declined to version.
     expect(await blobFiles()).toHaveLength(0)
+  })
+
+  /* ------------------------------------------- write-path pre-flight (#339) */
+
+  // The refusal above is unsatisfiable no matter what gets evicted, and it used
+  // to be discovered only AFTER the whole file had been copied into the store and
+  // then unlinked — read + write + unlink for nothing, on EVERY write to that
+  // file. The pre-flight answers it from stats.size instead.
+  it('declines a write larger than the ceiling without copying it into the store first', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace({ storageQuota: 100 }) // ceiling 50
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    const copyFile = vi.spyOn(fs, 'copyFile')
+
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+
+    // The staging copy is the expensive half; it must not happen at all.
+    expect(copyFile).not.toHaveBeenCalled()
+    expect(await pathExists(path.join(versionsDir(), VERSIONS_STAGING_DIR))).toBe(false)
+    expect(queries.rows).toHaveLength(0)
+  })
+
+  // The trap in the pre-flight: a blob already in the root costs ZERO disk bytes,
+  // so enforceQuotaShare admits it at any size — and a size-only pre-check would
+  // silently drop exactly those snapshots. The case is reachable because a
+  // restore's own safety snapshot is exempt from the cap, so an over-ceiling blob
+  // can legitimately be sitting in the root already.
+  it('still versions an over-ceiling write whose content is already stored, because a dedup hit costs no bytes', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace({ storageQuota: 100 }) // ceiling 50
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
+    expect(queries.rows).toHaveLength(1)
+    expect(await blobFiles()).toHaveLength(1)
+
+    // Identical bytes, so this write dedups against that blob and grows the store
+    // by nothing. 80 > the 50-byte ceiling, and it must still be versioned.
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(2)
+    expect(queries.rows[1]).toMatchObject({ origin: 'web', size: 80 })
+    expect(await blobFiles()).toHaveLength(1)
+    // The dedup probe is what allowed it through, and it is asked once — only
+    // because the size already exceeded the ceiling.
+    expect(queries.existsSizeInRootCalls).toBe(1)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  it('runs no pre-flight at all for a write that fits under the ceiling', async () => {
+    versionsConfig.minIntervalSeconds = 0
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 1000 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  // The pre-flight is gated on the SAME rootQuota the enforcement side uses
+  // (#338). If it were not, the fast path would have introduced a cap in exactly
+  // the scope where the ADR says none is enforced.
+  it('skips the pre-flight when the env quota belongs to a different scope than the versions root', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    // 80 bytes: over the 50 the env's quota would imply, if it applied here.
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    const shareSpace = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      storageQuota: 100,
+      root: { externalPath: '/mnt/external' }
+    })
+
+    await service.snapshotBeforeOverwrite(user, shareSpace, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.rows[0].size).toBe(80)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  it('skips the pre-flight for a space with no quota, however large the write', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 0 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  it('skips the pre-flight when quotaShare is disabled', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    versionsConfig.quotaShare = false
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 100 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  // A restore's safety snapshot is exempt from the cap, and therefore from its
+  // pre-flight: it is a net rather than new growth, and dropping it would leave a
+  // restore of an over-ceiling file with nothing to go back to.
+  it('never pre-flights a restore’s own safety snapshot', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 100 }), { origin: 'restore' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
   })
 
   // Regression: the ceiling came from space.storageQuota (the CURRENT env)

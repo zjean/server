@@ -105,6 +105,21 @@ export class VersioningService {
       return
     }
 
+    // Cheap pre-flight (#339). Declines a write that no amount of eviction
+    // could make room for BEFORE a byte is copied. It does NOT replace
+    // enforceQuotaShare below — see cannotFitEvenAfterEviction for why both
+    // exist and why this one cannot be the whole check.
+    //
+    // Exempt for `restore` for the same reason the cap below is: a restore's own
+    // safety snapshot is a net rather than new growth.
+    if (options.origin !== 'restore' && (await this.cannotFitEvenAfterEviction(user, space, versionsRoot, stats.size))) {
+      this.logger.warn({
+        tag: this.snapshot.name,
+        msg: `${space.url} (${stats.size} bytes) exceeds the versions ceiling for ${versionsRoot}, the save proceeds unversioned`
+      })
+      return
+    }
+
     const scope = this.scopeOf(space.dbFile)
     // Copy first, then hash what was copied — see stageBlob for why the digest
     // must not come from the live file.
@@ -250,6 +265,50 @@ export class VersioningService {
 
     // Leave room for the version about to be inserted.
     await this.evictUntilUnderCeiling(versionsRoot, ceiling - incomingSize)
+  }
+
+  // The write path's pre-flight: can a version of `size` bytes NEVER fit in this
+  // root, no matter what gets evicted? (#339)
+  //
+  // WHY THIS IS A SECOND CHECK AND NOT A REPLACEMENT. enforceQuotaShare has to
+  // run after staging, because the cost of the incoming version depends on
+  // whether the blob deduped, and that is only known once the copy has been
+  // hashed — and the digest must come from the copy, not from a separate read of
+  // a file that may be changing under it (see stageBlob). But enforceQuotaShare's
+  // one UNSATISFIABLE case is knowable from `stats.size` alone, and reaching it
+  // used to cost a full read + write of the file plus an unlink, on every write
+  // to it. So the expensive check stays where it is and this one only front-runs
+  // the case that can never succeed.
+  //
+  // IT COMPARES AGAINST THE CEILING, NEVER AGAINST THE FREE SPACE. `ceiling -
+  // used` is what eviction can free RIGHT NOW; a snapshot bigger than that is
+  // routinely admitted by evicting older versions, and rejecting it here would
+  // turn an efficiency fix into silent data loss. Only `size > ceiling` is
+  // unsatisfiable whatever is evicted, and it is exactly the condition
+  // enforceQuotaShare throws on.
+  //
+  // AND IT MUST NOT STEAL THE DEDUP CASE. A blob already present in the root
+  // costs zero bytes, so enforceQuotaShare admits it at ANY size — reachable,
+  // because a restore's exempt safety snapshot (or a quota that was lowered
+  // afterwards) can leave a blob larger than the current ceiling in the root, and
+  // an ordinary write back to that content then dedups against it. Identical
+  // content implies identical size, so `existsSizeInRoot` is a sound necessary
+  // condition: no row of this size means dedup is impossible and the bail is
+  // safe. A hit only means "stage it and let the real check decide", i.e. exactly
+  // today's behaviour, so the query buys the fast path without owning the
+  // decision. (A blob with no row — crash debris the orphan GC has yet to sweep —
+  // reads as non-dedupable here; the cost is one unversioned write of an
+  // over-ceiling file, which is the same degradation the caller already accepts.)
+  //
+  // A null rootQuota means no eager cap applies at all (#338), so this is a
+  // no-op there too — same gate, same function, as the enforcement side.
+  private async cannotFitEvenAfterEviction(user: UserModel, space: SpaceEnv, versionsRoot: string, size: number): Promise<boolean> {
+    const share = this.config.quotaShare
+    if (!share) return false
+    const quota = this.rootQuota(user, space, versionsRoot)
+    if (!quota) return false
+    if (size <= quota * share) return false
+    return !(await this.queries.existsSizeInRoot(versionsRoot, size))
   }
 
   // Evicts oldest-unlabeled-first until this root's version bytes fit under

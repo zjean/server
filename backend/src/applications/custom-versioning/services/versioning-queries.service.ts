@@ -106,6 +106,29 @@ export class VersioningQueries {
     return { used: Number(row?.used ?? 0), labeledBytes: Number(row?.labeled ?? 0), count: Number(row?.n ?? 0) }
   }
 
+  // Is there ANY version in this root of exactly this logical size?
+  //
+  // The dedup half of the write-path pre-flight (#339). A snapshot whose blob
+  // already exists costs zero disk bytes, so the quota cap lets it through at
+  // any size — but the digest is only known after the copy has been made, which
+  // is the whole reason the cap runs post-staging. Identical content implies
+  // identical size, so a root holding no row of this size cannot possibly dedup
+  // this content, and an over-ceiling write can be declined without copying it.
+  // The converse does not hold — same length, different bytes — so a hit means
+  // only "stage it and let enforceQuotaShare decide", exactly as before.
+  //
+  // LIMIT 1 over the (versionsRoot, ...) index prefix, and it runs ONLY for a
+  // write that already exceeds the ceiling: the path that used to pay a full
+  // read + write + unlink to reach the same answer.
+  async existsSizeInRoot(versionsRoot: string, size: number): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: customFilesVersions.id })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.size, size)))
+      .limit(1)
+    return !!row
+  }
+
   // Eviction candidate for the quota cap: oldest UNLABELED version in the root.
   // Labeled versions are never evicted, even at the ceiling.
   async oldestUnlabeledByRoot(versionsRoot: string): Promise<VersionRow | undefined> {
