@@ -172,19 +172,26 @@ In the template, on the root `div.md-view`:
 And in `styles`, appended after the existing `.md-view__source` rules:
 
 ```css
-      /* Inline mode (folder readme banner): the parent sets a bounded height,
-         so the body scrolls internally instead of the host filling a stage.
-         The source editor drops out of absolute positioning — inset:0 against
-         a bounded parent collapses it to zero height. */
-      .md-view--inline .md-view__body {
-        overflow: auto;
-      }
+      /* Inline mode (folder readme banner): the parent sets a bounded height, so
+         the source editor must drop out of absolute positioning — inset:0
+         against a bounded parent collapses it to zero height. */
       .md-view--inline .md-view__source {
         position: static;
         inset: auto;
         min-height: 180px;
       }
 ```
+
+**Do not also add `.md-view--inline .md-view__body { overflow: auto }`.** An earlier revision of this plan did, and it
+was dead code: `.md-view__body` already sets `overflow: auto` unconditionally at `:331-337`, so the inline-scoped rule
+changed nothing while its comment claimed to enable internal scrolling. The `.md-view__source` rule is the only
+load-bearing part. (Corrected after Task 1's review caught it.)
+
+**Do not add a `height` to `.md-view__source` either.** It is deliberately left with only `min-height`, and the
+consequence is a known open question rather than a settled design: `.cm-editor { height: 100% }` at `:343-345` needs a
+definite height on its containing block, which `min-height` does not establish, so CodeMirror's source mode may render
+oddly short or tall once inline mode has a real consumer. **Task 4's browser check must exercise source mode inside the
+banner explicitly** and report what it sees; picking a height before observing it would be guesswork.
 
 - [ ] **Step 5: Verify nothing regressed for `file-detail`**
 
@@ -1109,6 +1116,12 @@ npm run -w frontend build
 
 Browser-verify — the last two cases are the ones that matter:
 
+0. **Carried over from Task 1's review — check this first.** Enter edit mode, then toggle the source-mode button
+   (the `code` icon) to put CodeMirror inside the banner. Inline mode sets `.md-view__source { position: static;
+   min-height: 180px }` with no definite height, so the unchanged `.cm-editor { height: 100% }`
+   (`markdown-view.component.ts:343-345`) may go inert. Expected: a usable editor roughly 180px tall or taller, with
+   the text visible and editable. **If it renders collapsed, or absurdly tall, report it** — the fix is a definite
+   height on `.md-view--inline .md-view__source`, but do not guess at one before observing the actual failure.
 1. Folder with a readme, writeable space. Click Edit. Expected: formatting toolbar appears, text becomes editable,
    status reads "Saved".
 2. Type, click Save. Expected: success toast; the listing row's Modified column updates (proving `(changed)` →
