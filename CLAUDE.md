@@ -195,8 +195,12 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 ## File versioning (`custom-versioning`)
 
 Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
-(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in**; the ADR §19
-soak against live editors and NC clients is still owed (#348).
+(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in.** The ADR §19 soak
+(#348) is done for **both editors** against real containers and for **NC Android**; only **NC iOS** is unrun. Two things
+that soak settled and you should not re-derive: OnlyOffice has no automatic save of any kind (so every version it mints
+is a human pressing Save), while Collabora saves unprompted ~15 s after the last keystroke. And **versioning cannot be
+configured by `SYNCIN_*` environment variable at all** — `applications.files.versions` is absent from
+`environment.dist.yaml`, which is the schema those names are validated against, so every such var is silently discarded.
 
 **There is an operator surface as of #342** — `VersionsAdminController` (`custom-versioning/versions-admin.controller.ts`)
 plus a panel on the v2 admin Tools screen: instance-wide usage, heaviest roots, and a per-root purge. Two things about
@@ -227,6 +231,7 @@ they do not all agree:
 |---|---|
 | `2026-07-28-onlyoffice-version-history-handoff.md` | **Not started, and phase 1 is not approved.** The task list for putting a version panel inside the office editor, the document-server dev recipe, and the nine traps. Read with the design doc, which it corrects in one place. |
 | `2026-07-28-onlyoffice-version-history-design.md` | Why the OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and what it would take, in two phases, against upstream ONLYOFFICE's own connector. §5 holds decisions the maintainer has not taken. |
+| `2026-07-29-adr-19-editor-soak.md` | The editor half of the ADR §19 soak, against real OnlyOffice and Collabora containers: the measured cadences, #378 verified live, and two defects it found (versioning is unconfigurable by env var; the old soak recipe no longer opens the coalescing window). |
 | `2026-07-27-nc-android-versioning-soak.md` | The real-device soak: versioning confirmed working in stock NC Android 34.1.0, the capability bug it found, and how to reproduce (incl. the 16 KB page-size emulator crash). |
 | `2026-07-27-file-versioning-phase-e-notes.md` | The e2e suite: what the 19 cases cover, the four environment facts the harness encodes, the one case still owed. |
 | `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
