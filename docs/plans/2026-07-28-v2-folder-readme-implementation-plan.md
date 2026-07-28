@@ -445,7 +445,7 @@ import { pickFolderReadme } from '../utils/folder-readme'
         </header>
 
         @if (loadError(); as err) {
-          <div class="fr__error">{{ err }}</div>
+          <div class="fr__error">{{ err | translate: locale.language }}</div>
         } @else {
           <div class="fr__read v2-prose">
             <tiptap-editor [editor]="editor"></tiptap-editor>
@@ -780,7 +780,7 @@ Replace the read block from Task 2 with:
 
 ```html
         @if (loadError(); as err) {
-          <div class="fr__error">{{ err }}</div>
+          <div class="fr__error">{{ err | translate: locale.language }}</div>
         } @else {
           <div
             #readHost
@@ -985,7 +985,7 @@ Wrap the existing read/error block so exactly one mode renders. The full body be
             />
           </div>
         } @else if (loadError(); as err) {
-          <div class="fr__error">{{ err }}</div>
+          <div class="fr__error">{{ err | translate: locale.language }}</div>
         } @else {
           <div
             #readHost
