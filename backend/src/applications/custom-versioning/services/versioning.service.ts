@@ -7,7 +7,9 @@ import { randomUUID } from 'node:crypto'
 import { SERVER_NAME } from '../../../common/shared'
 import { ACTION } from '../../../common/constants'
 import { configuration } from '../../../configuration/config.environment'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { FileRowEnsurer } from '../../custom-shared/services/file-row-ensurer.service'
+import { onlyOfficeDocKeyCacheKey } from '../../custom-shared/utils/only-office-doc-key'
 import { FileProps } from '../../files/interfaces/file-props.interface'
 import { FileDBProps } from '../../files/interfaces/file-db-props.interface'
 import { FileLock } from '../../files/interfaces/file-lock.interface'
@@ -48,7 +50,10 @@ export class VersioningService {
     private readonly queries: VersioningQueries,
     private readonly fileRowEnsurer: FileRowEnsurer,
     private readonly filesQueries: FilesQueries,
-    private readonly filesLockManager: FilesLockManager
+    private readonly filesLockManager: FilesLockManager,
+    // Only ever written to, and only by invalidateOfficeDocumentKey. CacheModule
+    // is @Global, so this costs no import in custom-versioning.module.ts.
+    private readonly cache: Cache
   ) {}
 
   get enabled(): boolean {
@@ -644,6 +649,7 @@ export class VersioningService {
         await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))
         const stats = await fs.stat(space.realPath)
         await this.updateFileRow(version.fileId, stats.size, stats.mtimeMs)
+        await this.invalidateOfficeDocumentKey(space)
         FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
       } finally {
         // Only release a lock this call took. A pre-existing one belongs to an
@@ -841,6 +847,45 @@ export class VersioningService {
   private async updateFileRow(fileId: number, size: number, mtimeMs: number): Promise<void> {
     if (!fileId) return
     await this.filesQueries.updateFile(fileId, { size, mtime: Math.floor(mtimeMs) })
+  }
+
+  // A restore replaced the live bytes, so any OnlyOffice document key cached for
+  // this file now names content that no longer exists.
+  //
+  // The key IS derived from size+mtime (`genEtag`), so it would already be
+  // correct if it were recomputed — the bug is purely that
+  // OnlyOfficeManager.getDocumentKey returns the cached value when there is one,
+  // and its only invalidation runs on callback statuses 2 and 4. Leave the entry
+  // in place and the editor re-opens under a key the document server already
+  // knows, so it serves ITS copy: the user sees the pre-restore content and the
+  // next save writes it back over the restore. The v2 file-detail screen reaches
+  // this in one click — its `onVersionRestored` reloads the file, which re-mounts
+  // the office embed and asks for a fresh config.
+  //
+  // Upstream ONLYOFFICE does exactly this, from the same event: their
+  // `lib/Listeners/FileVersionsListener.php` handles `VersionRestoredEvent` by
+  // calling `deleteKeyForFile($file)`. Collabora needs no equivalent because it
+  // recomputes `Version:` on every CheckFileInfo instead of caching it.
+  //
+  // Deliberately NOT done from the shared snapshot hook, which would cover all
+  // seven write paths at once: that hook also runs on the editors' OWN saves, and
+  // dropping the key mid-session would hand the next joiner a different key for a
+  // live document — splitting the co-editing session and leaving
+  // NcOnlyOfficeForceSaveService with no key to force-save. The staleness after
+  // other external writes (WebDAV PUT, desktop sync, an overwriting upload) is
+  // the same upstream bug seen from another angle and is out of scope here.
+  //
+  // Never throws: the restore has already committed by the time this runs, and a
+  // cache that would not delete must not turn a completed restore into a 500.
+  private async invalidateOfficeDocumentKey(space: SpaceEnv): Promise<void> {
+    try {
+      await this.cache.del(onlyOfficeDocKeyCacheKey(space.dbFile))
+    } catch (e) {
+      this.logger.warn({
+        tag: this.invalidateOfficeDocumentKey.name,
+        msg: `unable to drop the office document key for ${space.url}, the editor may show pre-restore content: ${e}`
+      })
+    }
   }
 
   private async releaseLock(lock: FileLock): Promise<void> {
