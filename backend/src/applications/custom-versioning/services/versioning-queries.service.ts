@@ -172,8 +172,20 @@ export class VersioningQueries {
 
   // --- retention / GC support (B5) ---
 
-  async countByFileId(fileId: number): Promise<number> {
-    const [row] = await this.db.select({ n: count() }).from(customFilesVersions).where(eq(customFilesVersions.fileId, fileId))
+  // Version count for ONE file within ONE root — the gate for the per-file cap
+  // on the write path, where the caller holds a single fileId and the whole-root
+  // groupBy of fileIdsExceeding would be pure waste.
+  //
+  // Root-scoped for the same reason fileIdsExceeding is: a file whose versions
+  // span two roots (it was moved between spaces) has a different total per root,
+  // so pairing a GLOBAL count with the per-root candidate list below
+  // over-deletes in one root while under-enforcing in the other. Labeled rows
+  // are counted here — the cap keeps them AND charges them to the budget.
+  async countByFileId(versionsRoot: string, fileId: number): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId)))
     return Number(row?.n ?? 0)
   }
 
