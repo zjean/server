@@ -107,12 +107,12 @@ export class SpaceFilesComponent extends FileBrowserBase {
     translateRootLabel: false,
     rootArchiveName: (): string => this.spaceName() || this.repository.alias(),
     filterPlaceholder: 'Filter in this space…',
-    // Hard-coded, unlike personal's platform-aware label — and the shortcut it
-    // advertises is not wired up (filterShortcutEnabled is false). Preserved
-    // verbatim by #346; reported as a separate bug.
-    filterHint: (): string => '⌘F',
+    // Shared with personal via the base, so the hint names the key the platform
+    // actually uses. Was a hard-coded '⌘F' advertising a shortcut that had no
+    // handler behind it — filterShortcutEnabled was false (#368).
+    filterHint: (): string => this.filterShortcutLabel,
 
-    filterShortcutEnabled: false,
+    filterShortcutEnabled: true,
     showDownloadFromUrlAction: false,
     autoDownloadTaskArchive: true,
     closeActionSheetOnSelect: true,
