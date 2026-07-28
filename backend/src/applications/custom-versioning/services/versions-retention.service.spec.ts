@@ -108,6 +108,7 @@ describe(VersionsRetention.name, () => {
       unlabeledByFileIdOldestFirst: vi.fn().mockResolvedValue([]),
       usageByRoot: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0 }),
       oldestUnlabeledByRoot: vi.fn().mockResolvedValue(undefined),
+      unlabeledByRootOldestFirst: vi.fn().mockResolvedValue([]),
       danglingRows: vi.fn().mockResolvedValue([]),
       countByBlob: vi.fn().mockResolvedValue(1)
     }
@@ -380,6 +381,78 @@ describe(VersionsRetention.name, () => {
 
     // A failure in the first rule must not skip the rest.
     expect(dropped.map((r) => r.id)).toContain(5)
+  })
+
+  /* -------------------------------------------------------- rootCeiling */
+
+  it('reports the ceiling it enforces, and null when nothing caps the root', async () => {
+    quotaRows = [{ quota: 1000 }]
+    expect(await service.rootCeiling(ROOT)).toBe(500)
+
+    // No quota on the owner: nothing to cap against.
+    quotaRows = [{ quota: 0 }]
+    expect(await service.rootCeiling(ROOT)).toBeNull()
+
+    // The cap itself disabled (0 -> false).
+    quotaRows = [{ quota: 1000 }]
+    versionsConfig.quotaShare = false
+    expect(await service.rootCeiling(ROOT)).toBeNull()
+
+    // Not a root at all.
+    versionsConfig.quotaShare = 0.5
+    expect(await service.rootCeiling('nonsense')).toBeNull()
+  })
+
+  /* -------------------------------------------------------- admin purge */
+
+  it('purges a root through the retention eviction path, never a raw delete', async () => {
+    const rows = [row({ id: 1, size: 10 }), row({ id: 2, size: 30 })]
+    // Paged: one short page, so the loop stops after it.
+    queries.unlabeledByRootOldestFirst.mockResolvedValueOnce(rows).mockResolvedValue([])
+    queries.usageByRoot.mockResolvedValue({ used: 0, labeledBytes: 0, count: 0 })
+
+    const result = await service.purgeRoot(ROOT)
+
+    // The ONE seam that matters: every removal went through
+    // VersioningService.dropVersionForRetention, which is the refcount-aware
+    // blob path. A bespoke DELETE would show up here as zero calls.
+    expect(versioning.dropVersionForRetention).toHaveBeenCalledTimes(2)
+    expect(dropped.map((r) => r.id)).toEqual([1, 2])
+    expect(result).toEqual({ removed: 2, removedBytes: 40, keptLabeled: 0 })
+  })
+
+  it('leaves labeled versions alone: candidates come from the unlabeled-only query', async () => {
+    // What the purge is offered is what the unlabeled-only query returns — the
+    // labeled row is never in the page. Its survival then shows up in the
+    // post-purge count read back from the root.
+    queries.unlabeledByRootOldestFirst.mockResolvedValueOnce([row({ id: 1, size: 10 })]).mockResolvedValue([])
+    queries.usageByRoot.mockResolvedValue({ used: 25, labeledBytes: 25, count: 1 })
+
+    const result = await service.purgeRoot(ROOT)
+
+    expect(queries.unlabeledByRootOldestFirst).toHaveBeenCalledWith(ROOT, expect.any(Number))
+    expect(dropped.map((r) => r.id)).toEqual([1])
+    expect(dropped.every((r) => r.label === null)).toBe(true)
+    expect(result).toEqual({ removed: 1, removedBytes: 10, keptLabeled: 1 })
+  })
+
+  it('pages until a page comes back short', async () => {
+    // batchSize is 1000; a full page must be followed by another fetch.
+    const full = Array.from({ length: 1000 }, (_, i) => row({ id: i + 1, size: 1 }))
+    queries.unlabeledByRootOldestFirst
+      .mockResolvedValueOnce(full)
+      .mockResolvedValueOnce([row({ id: 1001, size: 1 })])
+      .mockResolvedValue([])
+
+    const result = await service.purgeRoot(ROOT)
+
+    expect(queries.unlabeledByRootOldestFirst).toHaveBeenCalledTimes(2)
+    expect(result.removed).toBe(1001)
+  })
+
+  it('is a zero result for a root that holds no history', async () => {
+    expect(await service.purgeRoot('user:nobody')).toEqual({ removed: 0, removedBytes: 0, keptLabeled: 0 })
+    expect(versioning.dropVersionForRetention).not.toHaveBeenCalled()
   })
 
   it('does not start a second run while one is in progress', async () => {

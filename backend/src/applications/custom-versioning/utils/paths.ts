@@ -4,6 +4,7 @@ import { SpaceModel } from '../../spaces/models/space.model'
 import { UserModel } from '../../users/models/user.model'
 import { isSafePathSegment } from '../../users/utils/login'
 import { VERSIONS_REPOSITORY, VERSIONS_ROOT_SPACE_PREFIX, VERSIONS_ROOT_USER_PREFIX, VERSIONS_SHARD_LENGTH } from '../constants/versioning'
+import type { VersionsRootKind } from '../interfaces/version.interface'
 
 // Resolves WHICH versions root a given space env maps to, as the discriminator
 // stored in `custom_files_versions.versionsRoot` ('user:<login>' or
@@ -85,19 +86,34 @@ export function spaceVersionsRoot(alias: string): string {
 // function turns a database value into a filesystem path — the last place that
 // should be trusting it.
 export function versionsPathFromRoot(versionsRoot: string): string | null {
+  const parsed = parseVersionsRoot(versionsRoot)
+  if (!parsed) return null
   try {
-    if (versionsRoot.startsWith(VERSIONS_ROOT_USER_PREFIX)) {
-      const login = versionsRoot.slice(VERSIONS_ROOT_USER_PREFIX.length)
-      if (!isSafePathSegment(login)) return null
-      return path.join(UserModel.getHomePath(login), VERSIONS_REPOSITORY)
-    }
-    if (versionsRoot.startsWith(VERSIONS_ROOT_SPACE_PREFIX)) {
-      const alias = versionsRoot.slice(VERSIONS_ROOT_SPACE_PREFIX.length)
-      if (!isSafePathSegment(alias)) return null
-      return path.join(SpaceModel.getHomePath(alias), VERSIONS_REPOSITORY)
-    }
+    const homePath = parsed.kind === 'user' ? UserModel.getHomePath(parsed.name) : SpaceModel.getHomePath(parsed.name)
+    return path.join(homePath, VERSIONS_REPOSITORY)
   } catch {
     return null
+  }
+}
+
+// Splits a recorded root back into (kind, name), or null for anything that is
+// not one of the two valid discriminators or whose name is not a single safe
+// path segment.
+//
+// This is the ONE place the prefix rule is decoded. versionsPathFromRoot builds
+// a filesystem path from it and the admin API accepts one from an operator, so a
+// second copy of "starts with user: / space:" would be a second copy of the
+// validation — and the weaker copy would be the one that mattered. Callers get
+// null and decide (skip versioning, 404 the version, 400 the request); nothing
+// here throws.
+export function parseVersionsRoot(versionsRoot: string): { kind: VersionsRootKind; name: string } | null {
+  for (const [prefix, kind] of [
+    [VERSIONS_ROOT_USER_PREFIX, 'user'],
+    [VERSIONS_ROOT_SPACE_PREFIX, 'space']
+  ] as [string, VersionsRootKind][]) {
+    if (!versionsRoot.startsWith(prefix)) continue
+    const name = versionsRoot.slice(prefix.length)
+    return isSafePathSegment(name) ? { kind, name } : null
   }
   return null
 }

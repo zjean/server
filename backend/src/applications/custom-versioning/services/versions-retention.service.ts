@@ -167,11 +167,77 @@ export class VersionsRetention {
   // must exist in exactly one place. Duplicating it is what produced the same
   // data-loss bug on both paths.
   private async enforceQuotaShare(versionsRoot: string): Promise<number> {
+    const ceiling = await this.rootCeiling(versionsRoot)
+    if (ceiling === null) return 0
+    return this.versioning.evictUntilUnderCeiling(versionsRoot, ceiling)
+  }
+
+  // The ceiling this sweep will ACTUALLY apply to a root: its owner's quota
+  // times quotaShare, or null when nothing caps it (no quota on the user or
+  // space, or quotaShare disabled).
+  //
+  // Public because the admin panel reports it, and it must be THIS function
+  // rather than a second derivation — that was #338, where versionsUsage
+  // computed a ceiling from `space.storageQuota` while enforcement required the
+  // resolved root to match the current env, so the figure shown was a limit
+  // nothing would ever apply. One derivation, two readers: what the panel
+  // displays is what the 3AM sweep will enforce.
+  async rootCeiling(versionsRoot: string): Promise<number | null> {
     const share = this.config.quotaShare
-    if (!share) return 0
+    if (!share) return null
     const quota = await this.rootQuota(versionsRoot)
-    if (!quota) return 0
-    return this.versioning.evictUntilUnderCeiling(versionsRoot, quota * share)
+    if (!quota) return null
+    return quota * share
+  }
+
+  /* ------------------------------------------------------------ admin purge */
+
+  // Purges ONE versions root on an operator's instruction (#342): a departing
+  // employee, an incident, a user who filled their quota with revisions of one
+  // file. Returns what went and what stayed.
+  //
+  // ROUTED THROUGH THE SAME EVICTION PATH AS THE NIGHTLY RULES, deliberately.
+  // Candidates come from the unlabeled-only query, and every removal goes
+  // through dropAll -> VersioningService.dropVersionForRetention, which is the
+  // one refcount-aware blob seam. The bespoke alternative an operator resorts to
+  // today — DELETE FROM custom_files_versions WHERE versionsRoot = ? plus an rm
+  // -rf of the directory — bypasses three things at once: the labeled-version
+  // exemption, the per-root blob refcount (a blob a surviving labeled version
+  // still points at would go with it), and the per-victim audit line ADR §7
+  // requires. It also cannot honour ADR §9's pin-before-read discipline, so a
+  // concurrent download or restore loses its bytes mid-stream.
+  //
+  // NAMED VERSIONS SURVIVE, always. There is no flag to remove them: they are
+  // exempt from every automatic rule precisely because someone decided they
+  // matter, and an admin purge is not a better-informed decision about one
+  // user's named revisions than that user's own. Removing one stays a per-version
+  // act with its own confirmation (deleteVersion's 409).
+  //
+  // Blobs left in the root with no row at all — from a purge that crashed, or
+  // from an earlier bug — are not this method's business; the nightly
+  // orphan-blob rule owns them and reaches roots by scanning the disk.
+  async purgeRoot(versionsRoot: string): Promise<{ removed: number; removedBytes: number; keptLabeled: number }> {
+    let removed = 0
+    let removedBytes = 0
+    // Paged, and re-queried each round rather than offset-walked: every row in
+    // the page is deleted before the next fetch, so the same query naturally
+    // returns the next page. A page shorter than the batch size is the last one.
+    for (;;) {
+      const page = await this.queries.unlabeledByRootOldestFirst(versionsRoot, this.batchSize)
+      if (!page.length) break
+      removedBytes += page.reduce((total, row) => total + row.size, 0)
+      removed += await this.dropAll(page, 'adminPurge')
+      if (page.length < this.batchSize) break
+    }
+    // Whatever is left in the root is exactly what the purge was not allowed to
+    // touch, so the count is read back rather than computed — it cannot then
+    // disagree with what the panel will show on its next refresh.
+    const { count: keptLabeled } = await this.queries.usageByRoot(versionsRoot)
+    this.logger.log({
+      tag: this.purgeRoot.name,
+      msg: `${versionsRoot}: purged ${removed} versions (${removedBytes} bytes), kept ${keptLabeled} named`
+    })
+    return { removed, removedBytes, keptLabeled }
   }
 
   // Version rows whose `files` row is genuinely gone. With the FK's ON DELETE
