@@ -1,6 +1,6 @@
 import { CodeEditor } from '@acrodata/code-editor'
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit, effect, inject, input, signal, untracked } from '@angular/core'
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit, effect, inject, input, output, signal, untracked } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
@@ -39,7 +39,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CodeEditor, FormsModule, TiptapEditorDirective, ButtonComponent, IconButtonComponent, L10nTranslatePipe],
   template: `
-    <div class="md-view">
+    <div class="md-view" [class.md-view--inline]="inline()">
       <header class="md-view__head">
         <span class="md-view__status">
           @if (loading()) {
@@ -199,6 +199,11 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             (click)="toggleReadonly()"
           />
         }
+        @if (inline()) {
+          <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
+            {{ 'Cancel' | translate: locale.language }}
+          </app-v2-btn>
+        }
         <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">
           {{ 'Save' | translate: locale.language }}
         </app-v2-btn>
@@ -341,6 +346,18 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__source ::ng-deep .cm-focused {
         outline: none !important;
       }
+      /* Inline mode (folder readme banner): the parent sets a bounded height,
+         so the body scrolls internally instead of the host filling a stage.
+         The source editor drops out of absolute positioning — inset:0 against
+         a bounded parent collapses it to zero height. */
+      .md-view--inline .md-view__body {
+        overflow: auto;
+      }
+      .md-view--inline .md-view__source {
+        position: static;
+        inset: auto;
+        min-height: 180px;
+      }
       .md-view__editor {
         padding: 24px 32px 48px;
         max-width: 880px;
@@ -454,6 +471,12 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   readonly path = input.required<string>()
   readonly file = input.required<FileProps | null>()
   readonly isWriteable = input<boolean>(true)
+  // Inline mode: the component is embedded in a bounded container (the folder
+  // readme banner) rather than filling the file-detail stage. Adds a Cancel
+  // control and drops the height:100% assumption.
+  readonly inline = input<boolean>(false)
+  readonly done = output<void>()
+  readonly saved = output<void>()
 
   protected readonly editor = new Editor({
     extensions: [
@@ -655,6 +678,7 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
         this.saving.set(false)
         this.isModified.set(false)
         this.toast.success('v2_saved_one', { name: this.stub!.name })
+        this.saved.emit()
       },
       error: (e: HttpErrorResponse) => {
         this.saving.set(false)
@@ -663,7 +687,18 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     })
   }
 
+  protected async cancel(): Promise<void> {
+    if (!(await this.canClose())) return
+    this.done.emit()
+  }
+
   // --- Lifecycle internals ----------------------------------------------
+
+  // Lets an embedding parent run the unsaved-changes confirm without
+  // reimplementing it. Returns true when the parent may destroy this view.
+  async requestClose(): Promise<boolean> {
+    return this.canClose()
+  }
 
   private async canClose(): Promise<boolean> {
     if (!this.isModified()) return true
