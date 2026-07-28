@@ -1504,6 +1504,32 @@ blocking — but the comment should name them so nobody concludes only interacti
 when you arrive in a folder, which is uniform rather than random but means your gate will meet a non-empty `filter()`
 on arrival more often than before.
 
+**(d) Your gate creates a silent no-op in Task 5's creation path — fix it here.** The `+ New → Folder description`
+entry is gated only on `hasFolderReadme`, not on `filter()`. So with a filter active, a user can create a folder
+description, `refresh()` runs, and `readmeBanner()?.startEdit()` resolves to `undefined` because your `@if` has removed
+the banner from the view — the file is created but no editor opens and nothing explains why. Raised by Task 5's review
+as latent-until-this-task.
+
+Fix it in `newFolderDescription()` in **both** screens by clearing the filter before creating:
+
+```ts
+  protected newFolderDescription(): void {
+    const name = FOLDER_README_NAMES[0]
+    const dirPath = this.currentUploadRoute()
+    // Clear any active filter first: it would hide the banner (so startEdit()
+    // would silently no-op through the optional viewChild) and would also hide
+    // the new Readme.md row from the listing unless the filter happened to match.
+    this.filter.set('')
+    this.filesService.make('file', name, dirPath, true).subscribe({
+      …unchanged…
+    })
+  }
+```
+
+Clearing the signal is sufficient — the filter input binds `[value]="filter()"`, so the box visibly empties too.
+Verify it: with a filter active, create a folder description and confirm the editor opens **and** the new row is
+visible.
+
 - [ ] **Step 1: Wrap the banner in both templates**
 
 Filtering is a find-in-folder action and wants rows, not prose (design §7). Both screens already expose a `filter()`
