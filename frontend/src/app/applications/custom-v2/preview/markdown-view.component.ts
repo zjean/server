@@ -704,8 +704,20 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   //
   // Deliberately raises no toast and emits no `saved`: the embedding parent owns
   // the user-facing messaging for this path, and double-toasting would be noise.
+  //
+  // 'clean' means "nothing to save" — it must NOT also mean "have modified text
+  // but cannot save it". The read-only toggle renders in inline mode gated only
+  // on writeable() (see the template above), so a user can Edit, type, then click
+  // the lock icon before navigating away: isModified() stays true while writeable()
+  // flips false (or readonly() flips true). If that path returned 'clean', the
+  // caller would attempt no save and, because the outcome isn't 'failed', raise no
+  // v2_readme_autosave_failed toast either — the edited text would vanish with no
+  // signal to the user at all. So: no modification at all → 'clean'; a
+  // modification that cannot be attempted → 'failed', which fires the existing
+  // toast. Do not collapse these back into one branch.
   async saveNowIfModified(): Promise<'clean' | 'saved' | 'failed'> {
-    if (!this.stub || !this.isModified() || !this.writeable() || this.readonly()) return 'clean'
+    if (!this.stub || !this.isModified()) return 'clean'
+    if (!this.writeable() || this.readonly()) return 'failed'
     const content = this.currentMarkdown()
     this.saving.set(true)
     try {

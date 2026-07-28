@@ -290,6 +290,10 @@ export class FolderReadmeComponent implements OnDestroy {
   // True once the rendered content is taller than the collapsed cap. Drives
   // both the fade and whether the Show more control renders at all.
   protected readonly overflowing = signal(false)
+  // Coalescing guard for the resize listener below — set true when a
+  // measurement is scheduled, cleared once readOverflow() actually runs, so a
+  // burst of native resize events schedules at most one pending measurement.
+  private resizeMeasurePending = false
 
   protected toggleExpanded(): void {
     const next = !this.expanded()
@@ -346,10 +350,17 @@ export class FolderReadmeComponent implements OnDestroy {
   constructor() {
     // The collapsed cap is 30vh, so a viewport height change moves clientHeight and
     // a width change reflows the content — either can make the overflow verdict
-    // stale with no content swap and no toggle click to re-measure it. The browser
-    // dispatches resize after it has already re-laid the page out, so this reads
-    // synchronously rather than going through measureOverflow's render hook.
-    const onResize = () => this.readOverflow()
+    // stale with no content swap and no toggle click to re-measure it. Routed
+    // through measureOverflow()'s afterNextRender scheduling (not a direct
+    // readOverflow() call) and guarded by resizeMeasurePending so a burst of
+    // native resize events — these fire continuously while a window is being
+    // dragged, not just once at the end — coalesces to one pending measurement
+    // instead of a forced layout read plus a possible signal write on every event.
+    const onResize = () => {
+      if (this.resizeMeasurePending) return
+      this.resizeMeasurePending = true
+      this.measureOverflow()
+    }
     window.addEventListener('resize', onResize, { passive: true })
     this.destroyRef.onDestroy(() => window.removeEventListener('resize', onResize))
 
@@ -587,6 +598,7 @@ export class FolderReadmeComponent implements OnDestroy {
   // keep the previous verdict rather than measuring an uncapped element and
   // concluding "not overflowing", which would hide the Show less control.
   private readOverflow(): void {
+    this.resizeMeasurePending = false
     const host = this.readHost()?.nativeElement
     if (!host) {
       this.overflowing.set(false)

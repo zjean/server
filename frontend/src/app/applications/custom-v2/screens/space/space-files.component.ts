@@ -133,6 +133,10 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   private navSubscription: Subscription | null = null
   private spaceSubscription: Subscription | null = null
   private unregisterDropHandler: (() => void) | null = null
+  // Tracks the alias this component last loaded, so a space→space hop can be
+  // told apart from a plain folder hop within the same space — see
+  // resetSpaceNameOnAliasChange below.
+  private lastSpaceAlias: string | null = null
 
   // Per-row drop-target hover signal. Mirrors personal.component — id of
   // the file-row currently being hovered as a drop target during an
@@ -324,6 +328,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
     this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
     this.unregisterDropHandler = this.drag.registerDropHandler((targetPath, files) => this.executeMove(targetPath, files))
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
+      this.resetSpaceNameOnAliasChange()
       this.syncBreadcrumbs()
       this.clearSelection()
       this.folderSize.clear()
@@ -1100,6 +1105,21 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   private currentAlias(): string {
     return this.alias().alias ?? ''
+  }
+
+  // Angular reuses this component across any hop that stays within the single
+  // `path: '**'` route entry (v2.routes.ts) — root->subfolder and subfolder->root
+  // included, now that Task 4 collapsed each browse screen to one entry. That
+  // reuse is also what makes a *space->space* hop reuse the component whenever
+  // one side of the hop is root and the other a subfolder — the two shapes that
+  // used to cross a route boundary and get recreated. loadFiles() only fetches
+  // the space name when spaceName() is empty, so without this reset the
+  // breadcrumb/title kept showing the PREVIOUS space's name after such a hop.
+  private resetSpaceNameOnAliasChange(): void {
+    const alias = this.currentAlias()
+    if (alias === this.lastSpaceAlias) return
+    this.lastSpaceAlias = alias
+    this.spaceName.set('')
   }
 
   private loadFiles(): void {
