@@ -11,7 +11,8 @@ import {
   OnInit,
   signal,
   OnDestroy,
-  ViewChild
+  ViewChild,
+  viewChild
 } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
@@ -38,6 +39,7 @@ import { FolderSizeService } from '../../services/folder-size.service'
 import { FavoritesService } from '../../services/favorites.service'
 import { V2DragService } from '../../services/drag.service'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
+import { FOLDER_README_NAMES, pickFolderReadme } from '../../utils/folder-readme'
 import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
@@ -139,12 +141,19 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
 
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>
 
+  // Handed the just-created readme file so it can hand off straight to edit
+  // mode — see newFolderDescription below.
+  private readonly readmeBanner = viewChild(FolderReadmeComponent)
+
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly FILE_OPERATION = FILE_OPERATION
   protected readonly files = signal<FileProps[]>([])
   // Kept for the folder readme banner's writeability check. SpaceFiles carries
   // it on every browse response (space-files.interface.ts:3-7).
   protected readonly permissions = signal<string>('')
+  // Gates the New menu's "Folder description" entry — hidden once the current
+  // folder already has one, matching Nextcloud's Rich Workspaces "+" menu.
+  protected readonly hasFolderReadme = computed(() => pickFolderReadme(this.files()) !== null)
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
@@ -158,7 +167,8 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onSelect: (id) => this.dispatchNewEntry(id)
+      onSelect: (id) => this.dispatchNewEntry(id),
+      hasFolderReadme: this.hasFolderReadme()
     })
   )
 
@@ -168,7 +178,7 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
   // FAB is the sole primary CTA there.
   protected readonly fabSheetOpen = signal(false)
   protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
-    ...buildNewEntrySheetItems(),
+    ...buildNewEntrySheetItems(this.hasFolderReadme()),
     { id: 'sep-fab', kind: 'divider' },
     { id: 'upload', label: 'Upload', icon: 'upload' }
   ])
@@ -834,6 +844,9 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       case 'new-markdown':
         this.newMarkdownFile()
         return
+      case 'new-folder-description':
+        this.newFolderDescription()
+        return
       case 'new-diagram':
         this.newDiagramFile()
         return
@@ -957,6 +970,23 @@ export class SpaceFilesComponent implements OnInit, OnDestroy {
       error: (e: HttpErrorResponse) => {
         this.toast.error(e.error?.message ?? 'File creation failed')
       }
+    })
+  }
+
+  // Creates the folder description with a fixed name and no prompt, then hands
+  // straight to the banner's editor — no navigation to file-detail, unlike
+  // newMarkdownFile. FOLDER_README_NAMES[0] is 'Readme.md', NC's default.
+  protected newFolderDescription(): void {
+    const name = FOLDER_README_NAMES[0]
+    const dirPath = this.currentUploadRoute()
+    this.filesService.make('file', name, dirPath, true).subscribe({
+      next: () => {
+        this.toast.success('v2_file_created', { name })
+        this.refresh()
+        // The banner queues this until the refreshed listing resolves the file.
+        this.readmeBanner()?.startEdit()
+      },
+      error: (e: HttpErrorResponse) => this.toast.error(e?.error?.message ?? 'Creation failed')
     })
   }
 
