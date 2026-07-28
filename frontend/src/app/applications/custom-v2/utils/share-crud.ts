@@ -3,30 +3,61 @@ import type { FileSpace } from '@sync-in-server/backend/src/applications/files/i
 import { SHARES_ROUTE } from '@sync-in-server/backend/src/applications/shares/constants/routes'
 import type { CreateOrUpdateShareDto } from '@sync-in-server/backend/src/applications/shares/dto/create-or-update-share.dto'
 import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
+import { SPACE_OPERATION, SPACE_PERMS_SEP } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { Observable } from 'rxjs'
 
 export type PermissionPreset = 'viewer' | 'editor' | 'manager'
 
-// Maps preset → concatenated permission string used by the backend (SPACE_OPERATION letters).
+// A permission string is a `:`-SEPARATED list of SPACE_OPERATION tokens — e.g. 'a:m:d:so'.
+// The separator is `SPACE_PERMS_SEP` (backend/src/applications/spaces/constants/spaces.ts:3) and
+// every producer/consumer on both sides of the wire splits or joins on it: backend
+// `uniquePermissions`/`differencePermissions` (common/functions.ts), `intersectPermissions`
+// (common/shared.ts), `toNcPermissions` (custom-mobile-compat/utils/nc-permissions.ts:55) and the
+// classic UI's `setTextIconPermissions`/`setStringPermission` (spaces/spaces.functions.ts:9,35,47).
+// Concatenation is not a valid encoding: SHARE_INSIDE ('si') and SHARE_OUTSIDE ('so') are
+// two characters long, so 'dsi' is ambiguous. Never build one of these by string concatenation.
+//
+// Which operations are legal on a SHARE is narrower than on a space: `SHARE_ALL_OPERATIONS`
+// (backend/src/applications/shares/constants/shares.ts:8-11) excludes SHARE_INSIDE, and classic
+// strips it from every share member (shares/models/share.model.ts:37,72 and the member search in
+// shares/components/dialogs/share-dialog.component.ts:113). The re-share permission on a share is
+// SHARE_OUTSIDE — it is also the only one of the two that `toNcPermissions` translates (to NC's
+// 'R' letter / Share bit). Classic likewise drops ADD and DELETE when the shared node is a file
+// (share.model.ts:72-75), which is what the `isDir` argument below reproduces.
+//
+// Presets are a v2 affordance layered on top of classic's per-operation checkboxes:
 //   viewer  — read-only, no ops
-//   editor  — add + modify; delete requires a dir, add too — so file shares fall back to 'm'
-//   manager — add + modify + delete + share-inside
-export function presetToPermissions(preset: PermissionPreset, isDir: boolean): string {
-  switch (preset) {
-    case 'viewer':
-      return ''
-    case 'editor':
-      return isDir ? 'am' : 'm'
-    case 'manager':
-      return isDir ? 'amdsi' : 'msi'
+//   editor  — modify, plus add on a directory
+//   manager — editor + delete (directories only) + re-share
+const PRESET_OPERATIONS: Record<PermissionPreset, { dir: SPACE_OPERATION[]; file: SPACE_OPERATION[] }> = {
+  viewer: { dir: [], file: [] },
+  editor: { dir: [SPACE_OPERATION.ADD, SPACE_OPERATION.MODIFY], file: [SPACE_OPERATION.MODIFY] },
+  manager: {
+    dir: [SPACE_OPERATION.ADD, SPACE_OPERATION.MODIFY, SPACE_OPERATION.DELETE, SPACE_OPERATION.SHARE_OUTSIDE],
+    file: [SPACE_OPERATION.MODIFY, SPACE_OPERATION.SHARE_OUTSIDE]
   }
 }
 
+export function presetToPermissions(preset: PermissionPreset, isDir: boolean): string {
+  return PRESET_OPERATIONS[preset][isDir ? 'dir' : 'file'].join(SPACE_PERMS_SEP)
+}
+
+// Splits a permission string into its operation tokens. The single place in custom-v2 that parses
+// the wire format — everything else asks this for a token set rather than substring-matching the
+// raw string (which would confuse 'si' with 'so' and match 'a' inside a future multi-char token).
+export function permissionTokens(perms: string | null | undefined): Set<string> {
+  return new Set((perms ?? '').split(SPACE_PERMS_SEP).filter(Boolean))
+}
+
+export function hasPermission(perms: string | null | undefined, op: SPACE_OPERATION): boolean {
+  return permissionTokens(perms).has(op)
+}
+
 export function permissionsToPreset(perms: string | null | undefined): PermissionPreset {
-  const p = perms ?? ''
-  if (p.includes('d') || p.includes('si')) return 'manager'
-  if (p.includes('m') || p.includes('a')) return 'editor'
+  const ops = permissionTokens(perms)
+  if (ops.has(SPACE_OPERATION.DELETE) || ops.has(SPACE_OPERATION.SHARE_OUTSIDE) || ops.has(SPACE_OPERATION.SHARE_INSIDE)) return 'manager'
+  if (ops.has(SPACE_OPERATION.MODIFY) || ops.has(SPACE_OPERATION.ADD)) return 'editor'
   return 'viewer'
 }
 

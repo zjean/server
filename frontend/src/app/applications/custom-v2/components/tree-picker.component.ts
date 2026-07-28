@@ -1,10 +1,11 @@
 import { HttpClient } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
 import { API_SPACES_TREE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
-import { SPACE_ALIAS, SPACE_OPERATION, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { SPACE_ALIAS, SPACE_OPERATION, SPACE_PERMS_SEP, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { FileTree } from '@sync-in-server/backend/src/applications/files/interfaces/file-tree.interface'
 import { firstValueFrom } from 'rxjs'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
+import { hasPermission } from '../utils/share-crud'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { ButtonComponent } from './button.component'
 import { TreePickerService } from './tree-picker.service'
@@ -27,7 +28,7 @@ const ROOT_PERSONAL: FileTree = {
   mime: 'directory',
   inShare: false,
   enabled: true,
-  permissions: `${SPACE_OPERATION.ADD}:${SPACE_OPERATION.MODIFY}:${SPACE_OPERATION.DELETE}`,
+  permissions: [SPACE_OPERATION.ADD, SPACE_OPERATION.MODIFY, SPACE_OPERATION.DELETE].join(SPACE_PERMS_SEP),
   quotaIsExceeded: false,
   hasChildren: true
 }
@@ -367,8 +368,8 @@ export class TreePickerComponent {
     if (node.tree.id === -1 || node.tree.id === -2) return true // browsing-only roots
     const p = this.pending()
     if (p?.disabledPath && node.tree.path === p.disabledPath) return true
-    // permissions check: must allow ADD for destination writes
-    if (!node.tree.permissions.includes(SPACE_OPERATION.ADD)) return true
+    // permissions check: must allow ADD for destination writes (token match, not substring)
+    if (!hasPermission(node.tree.permissions, SPACE_OPERATION.ADD)) return true
     return false
   }
 

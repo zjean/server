@@ -1,6 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
 import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
+import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { userAvatarUrl } from '../../users/user.functions'
@@ -11,6 +12,7 @@ import {
   deleteShare,
   getShare,
   permissionsToPreset,
+  permissionTokens,
   type PermissionPreset,
   presetToPermissions,
   type ShareMemberInput,
@@ -419,14 +421,22 @@ export class ShareDialogComponent {
 
   // Groups the granular operations a member's permission string grants into a
   // single hover tooltip on the preset selector — parity with the classic
-  // badge-permissions tooltip (upstream dd8647ef). The stored permission
-  // string concatenates SPACE_OPERATION tokens ('a', 'm', 'd', 'si', 'so'),
+  // badge-permissions tooltip (upstream dd8647ef). The stored permission string
+  // is a `:`-separated list of SPACE_OPERATION tokens (see share-crud.ts),
   // already reflecting the file-vs-dir preset expansion; an empty string means
-  // read-only, rendered as "No permissions" like classic.
-  private readonly permOrder = ['a', 'm', 'd', 'si', 'so'] as const
+  // read-only, rendered as "No permissions" like classic. Parsed by token, not
+  // by substring — the same way classic's setTextIconPermissions does
+  // (spaces/spaces.functions.ts:35).
+  private readonly permOrder: SPACE_OPERATION[] = [
+    SPACE_OPERATION.ADD,
+    SPACE_OPERATION.MODIFY,
+    SPACE_OPERATION.DELETE,
+    SPACE_OPERATION.SHARE_INSIDE,
+    SPACE_OPERATION.SHARE_OUTSIDE
+  ]
   protected permTexts(permissions: string): string[] {
-    const perms = permissions ?? ''
-    return this.permOrder.filter((op) => perms.includes(op)).map((op) => SPACES_PERMISSIONS_TEXT[op].text)
+    const ops = permissionTokens(permissions)
+    return this.permOrder.filter((op) => ops.has(op)).map((op) => SPACES_PERMISSIONS_TEXT[op].text)
   }
 
   protected onPick(picked: PickedMember): void {
