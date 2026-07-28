@@ -30,7 +30,7 @@ vi.mock('../../../configuration/config.environment', () => ({
   exportConfiguration: vi.fn()
 }))
 
-import { Logger } from '@nestjs/common'
+import { HttpStatus, Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import crypto from 'node:crypto'
 import { fstatSync } from 'node:fs'
@@ -48,6 +48,7 @@ import { genEtag } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
+import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
@@ -99,6 +100,14 @@ class FakeQueries {
       labeledBytes: rows.filter((r) => r.label).reduce((n, r) => n + r.size, 0),
       count: rows.length
     }
+  }
+  // Counted as a call, because the write-path pre-flight is only allowed to ask
+  // this when it is about to decline a write — a test that it never runs on the
+  // ordinary path is otherwise unwritable.
+  existsSizeInRootCalls = 0
+  async existsSizeInRoot(versionsRoot: string, size: number) {
+    this.existsSizeInRootCalls++
+    return this.rows.some((r) => r.versionsRoot === versionsRoot && r.size === size)
   }
   async oldestUnlabeledByRoot(versionsRoot: string) {
     return [...this.rows]
@@ -226,6 +235,12 @@ describe(VersioningService.name, () => {
   }
 
   const versionsDir = () => path.join(tmpRoot, 'users', 'alice', 'versions')
+
+  const pathExists = (p: string) =>
+    fs
+      .stat(p)
+      .then(() => true)
+      .catch(() => false)
 
   async function blobFiles(): Promise<string[]> {
     const found: string[] = []
@@ -681,6 +696,119 @@ describe(VersioningService.name, () => {
     expect(queries.rows.map((r) => r.fileId).sort()).toEqual([1000, 1001, 1002])
     // Nor is a blob left behind for the write we declined to version.
     expect(await blobFiles()).toHaveLength(0)
+  })
+
+  /* ------------------------------------------- write-path pre-flight (#339) */
+
+  // The refusal above is unsatisfiable no matter what gets evicted, and it used
+  // to be discovered only AFTER the whole file had been copied into the store and
+  // then unlinked — read + write + unlink for nothing, on EVERY write to that
+  // file. The pre-flight answers it from stats.size instead.
+  it('declines a write larger than the ceiling without copying it into the store first', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace({ storageQuota: 100 }) // ceiling 50
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    const copyFile = vi.spyOn(fs, 'copyFile')
+
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+
+    // The staging copy is the expensive half; it must not happen at all.
+    expect(copyFile).not.toHaveBeenCalled()
+    expect(await pathExists(path.join(versionsDir(), VERSIONS_STAGING_DIR))).toBe(false)
+    expect(queries.rows).toHaveLength(0)
+  })
+
+  // The trap in the pre-flight: a blob already in the root costs ZERO disk bytes,
+  // so enforceQuotaShare admits it at any size — and a size-only pre-check would
+  // silently drop exactly those snapshots. The case is reachable because a
+  // restore's own safety snapshot is exempt from the cap, so an over-ceiling blob
+  // can legitimately be sitting in the root already.
+  it('still versions an over-ceiling write whose content is already stored, because a dedup hit costs no bytes', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace({ storageQuota: 100 }) // ceiling 50
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
+    expect(queries.rows).toHaveLength(1)
+    expect(await blobFiles()).toHaveLength(1)
+
+    // Identical bytes, so this write dedups against that blob and grows the store
+    // by nothing. 80 > the 50-byte ceiling, and it must still be versioned.
+    await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(2)
+    expect(queries.rows[1]).toMatchObject({ origin: 'web', size: 80 })
+    expect(await blobFiles()).toHaveLength(1)
+    // The dedup probe is what allowed it through, and it is asked once — only
+    // because the size already exceeded the ceiling.
+    expect(queries.existsSizeInRootCalls).toBe(1)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  it('runs no pre-flight at all for a write that fits under the ceiling', async () => {
+    versionsConfig.minIntervalSeconds = 0
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 1000 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  // The pre-flight is gated on the SAME rootQuota the enforcement side uses
+  // (#338). If it were not, the fast path would have introduced a cap in exactly
+  // the scope where the ADR says none is enforced.
+  it('skips the pre-flight when the env quota belongs to a different scope than the versions root', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    // 80 bytes: over the 50 the env's quota would imply, if it applied here.
+    await fs.writeFile(filePath, 'x'.repeat(80))
+    const shareSpace = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      storageQuota: 100,
+      root: { externalPath: '/mnt/external' }
+    })
+
+    await service.snapshotBeforeOverwrite(user, shareSpace, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.rows[0].size).toBe(80)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  it('skips the pre-flight for a space with no quota, however large the write', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 0 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  it('skips the pre-flight when quotaShare is disabled', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    versionsConfig.quotaShare = false
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 100 }), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
+  })
+
+  // A restore's safety snapshot is exempt from the cap, and therefore from its
+  // pre-flight: it is a net rather than new growth, and dropping it would leave a
+  // restore of an over-ceiling file with nothing to go back to.
+  it('never pre-flights a restore’s own safety snapshot', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await fs.writeFile(filePath, 'x'.repeat(80))
+
+    await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 100 }), { origin: 'restore' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.existsSizeInRootCalls).toBe(0)
   })
 
   // Regression: the ceiling came from space.storageQuota (the CURRENT env)
@@ -1300,6 +1428,42 @@ describe(VersioningService.name, () => {
     expect((await fs.stat(filePath)).size).toBeGreaterThan(0)
   })
 
+  // #349: restore used to resolve the same file's id three times — in its guard,
+  // in the safety snapshot's ensurer, and again in the files-row update. The
+  // guard's row already carries it, and it is PROVEN: the row was only accepted
+  // because its fileId is the id this space env resolves to.
+  it('resolves the restored file’s id once and reuses it for the snapshot and the row update', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    ensurer.ensureFileId.mockClear()
+    filesQueries.getUserFileByPath.mockClear()
+
+    await service.restoreVersion(user, personalSpace(), versionId)
+
+    // Once, in the guard.
+    expect(filesQueries.getUserFileByPath).toHaveBeenCalledTimes(1)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+    // And nothing is lost by skipping the ensurer here: the safety snapshot is
+    // still anchored on the right file, and the files row still gets updated.
+    expect(queries.rows.find((r) => r.origin === 'restore')?.fileId).toBe(FILE_ID)
+    expect(filesQueries.updateFile).toHaveBeenCalledWith(FILE_ID, { size: CONTENT.length, mtime: expect.any(Number) })
+    expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+  })
+
+  // The other half of that trade: every OTHER snapshot must still go through the
+  // ensurer, because `files` rows are lazily materialized and a plain lookup
+  // returns nothing on a file's first version (ADR §3).
+  it('still materializes the files row through the ensurer for an ordinary snapshot', async () => {
+    versionsConfig.minIntervalSeconds = 0
+
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+    expect(ensurer.ensureFileId).toHaveBeenCalledTimes(1)
+    expect(queries.rows[0].fileId).toBe(FILE_ID)
+  })
+
   it('refuses to restore a blob whose size disagrees with its row, leaving the live file intact', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
@@ -1345,6 +1509,33 @@ describe(VersioningService.name, () => {
     const { stream } = await service.getVersionStream(user, readOnly, id)
     expect(stream).toBeDefined()
     stream.destroy()
+  })
+
+  // #349: the guard pair is one seam now (requireVersionForWrite), so what each
+  // write method answers has to be pinned per STATUS, not merely as "a FileError"
+  // — the two halves throw different ones, and their ORDER is what decides which
+  // an unknown id gets. FileError carries httpCode rather than being an
+  // HttpException, so this is the number the versioning exception filter emits.
+  it('answers 403 for a read-only member and 404 for an unknown id, on every write method', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const id = queries.rows[0].id
+    const readOnly = personalSpace({ envPermissions: '' })
+
+    const writes: ((space: SpaceEnv, versionId: number) => Promise<unknown>)[] = [
+      (space, versionId) => service.restoreVersion(user, space, versionId),
+      (space, versionId) => service.setLabel(user, space, versionId, 'x'),
+      (space, versionId) => service.deleteVersion(user, space, versionId)
+    ]
+    for (const write of writes) {
+      await expect(write(readOnly, id)).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+      // Existence is checked FIRST, so an id that is not this file's never
+      // reaches the permission half — the same 404 a member WITH modify rights
+      // gets, which is what keeps the two answers meaning one thing each.
+      await expect(write(readOnly, 999_999)).rejects.toMatchObject({ httpCode: HttpStatus.NOT_FOUND })
+      await expect(write(personalSpace(), 999_999)).rejects.toMatchObject({ httpCode: HttpStatus.NOT_FOUND })
+    }
+    expect(queries.rows).toHaveLength(1)
   })
 
   // The trash is read-only — space.guard.ts enforces that for every ADD/MODIFY

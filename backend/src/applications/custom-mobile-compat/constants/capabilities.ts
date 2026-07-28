@@ -76,7 +76,22 @@ function versioningCapabilities(): Record<string, boolean> {
 }
 
 export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
-  const onlyofficeBlock = configuration.applications.files.editors.onlyoffice.enabled ? { onlyoffice: ONLYOFFICE_CAPABILITY } : {}
+  // Advertised when EITHER OnlyOffice or Euro-Office is enabled. Euro-Office is
+  // an OnlyOffice-protocol document server bridged through the same connector
+  // (see custom-mobile-compat.module.ts), serving the identical mimetypes and
+  // templates — so the block's *content* is unchanged and the key stays
+  // `onlyoffice`. Deliberately NOT a second `eurooffice` capability key: no
+  // upstream NC app publishes one (the ONLYOFFICE NC app ships no
+  // Capabilities.php at all), and both stock clients discover Euro-Office from
+  // the directEditing catalog instead — Android matches
+  // `Editor.id in setOf("onlyoffice", "eurooffice")`
+  // (EditorUtils.kt::OFFICE_EDITOR_IDS), iOS from `directEditingCreators[].editor`
+  // (NCCapabilitiesModel.swift). Inventing a capability key no consumer reads
+  // would be a lie in the payload for no gain.
+  const onlyofficeBlock =
+    configuration.applications.files.editors.onlyoffice?.enabled === true || configuration.applications.files.editors.eurooffice?.enabled === true
+      ? { onlyoffice: ONLYOFFICE_CAPABILITY }
+      : {}
 
   return {
     version: {

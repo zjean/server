@@ -38,8 +38,26 @@ export const NC_ROUTE = {
   AVATAR: '/index.php/avatar/:user/:size',
   PREVIEW: '/index.php/core/preview',
 
-  // OnlyOffice connector (NC plugin protocol). Mounted only when
-  // applications.files.onlyoffice.enabled === true (see CustomMobileCompatModule).
+  // OnlyOffice connector (NC plugin protocol). Mounted when EITHER
+  // applications.files.editors.onlyoffice.enabled or
+  // applications.files.editors.eurooffice.enabled is true — see
+  // CustomMobileCompatModule.
+  //
+  // There is deliberately no /index.php/apps/eurooffice/* mirror. In Nextcloud
+  // a route prefix under /apps/<id>/ IS the installed app id, and the only
+  // office connector app is `onlyoffice` — every route in
+  // ONLYOFFICE/onlyoffice-nextcloud appinfo/routes.php hangs off that one id
+  // (/download, /empty, /track, /save, ...). Euro-Office is not a second NC
+  // app; it is an OnlyOffice-protocol document server, and both stock clients
+  // treat it that way:
+  //   - Android: EditorUtils.kt keeps `OFFICE_EDITOR_IDS = setOf("onlyoffice",
+  //     "eurooffice")` and matches it against the directEditing catalog's
+  //     `Editor.id` — it never derives a URL prefix from the editor name.
+  //   - iOS: NCDirectEditorAdapter.swift maps the `"eurooffice"` editor id onto
+  //     viewControllerEditor `"onlyoffice"` with the SAME OnlyOffice user agent.
+  // So a parallel /apps/eurooffice/* prefix would be a path no client ever
+  // requests. Euro-Office support is a config selection behind these routes,
+  // not a second route family.
   ONLYOFFICE_CONFIG: '/index.php/apps/onlyoffice/config',
   ONLYOFFICE_TRACK: '/index.php/apps/onlyoffice/track',
   ONLYOFFICE_EMPTY: '/index.php/apps/onlyoffice/empty',

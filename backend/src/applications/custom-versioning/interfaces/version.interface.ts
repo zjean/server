@@ -14,6 +14,13 @@ export type VersionInsert = typeof customFilesVersions.$inferInsert
 // sites stay one-liners.
 export interface SnapshotOptions {
   origin: VersionOrigin
+  // An ALREADY-PROVEN `files.id` for the file being snapshotted, letting the
+  // service skip a resolution it would otherwise repeat. Set it only when the
+  // caller has resolved the id for this same space env — restoreVersion does,
+  // via the version row its guard just validated (#349). Omitted everywhere
+  // else: `files` rows are lazily materialized, so the service must run the
+  // ensurer, and a guessed or stale id would anchor history on the wrong file.
+  fileId?: number
 }
 
 // API shape. `size` is the logical size of the snapshotted content; `mtime` is

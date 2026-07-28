@@ -93,7 +93,18 @@ export class VersioningService {
       return
     }
 
-    const fileId = await this.fileRowEnsurer.ensureFileId(user, space, this.fileProps(space, stats.size, stats.mtimeMs))
+    // The anchor (ADR §3): version rows key on `files.id`, and `files` rows are
+    // lazily materialized, so the ensurer — not a plain lookup — is what makes
+    // the id exist on a file's FIRST snapshot.
+    //
+    // `options.fileId` is an already-PROVEN id, not a shortcut past that rule.
+    // Only restoreVersion passes one, and only because requireVersionForWrite has
+    // just accepted a version row whose fileId equals the id resolved from this
+    // very space env — so the row is known to exist and the ensurer's lookup
+    // would be the same lookup a second time (#349). Any other caller has no id
+    // and must go through the ensurer: a bare lookup there returns 0 for a file
+    // that has never had a row, and the snapshot would be dropped.
+    const fileId = options.fileId || (await this.fileRowEnsurer.ensureFileId(user, space, this.fileProps(space, stats.size, stats.mtimeMs)))
     if (!fileId) {
       // The ensurer already logged the cause and returns 0 rather than throwing.
       this.logger.warn({ tag: this.snapshot.name, msg: `no file id for ${space.url}, skipping snapshot` })
@@ -102,6 +113,21 @@ export class VersioningService {
 
     if (await this.isCoalesced(fileId, user.id, options)) {
       this.logger.verbose({ tag: this.snapshot.name, msg: `coalesced ${space.url} (${options.origin})` })
+      return
+    }
+
+    // Cheap pre-flight (#339). Declines a write that no amount of eviction
+    // could make room for BEFORE a byte is copied. It does NOT replace
+    // enforceQuotaShare below — see cannotFitEvenAfterEviction for why both
+    // exist and why this one cannot be the whole check.
+    //
+    // Exempt for `restore` for the same reason the cap below is: a restore's own
+    // safety snapshot is a net rather than new growth.
+    if (options.origin !== 'restore' && (await this.cannotFitEvenAfterEviction(user, space, versionsRoot, stats.size))) {
+      this.logger.warn({
+        tag: this.snapshot.name,
+        msg: `${space.url} (${stats.size} bytes) exceeds the versions ceiling for ${versionsRoot}, the save proceeds unversioned`
+      })
       return
     }
 
@@ -250,6 +276,50 @@ export class VersioningService {
 
     // Leave room for the version about to be inserted.
     await this.evictUntilUnderCeiling(versionsRoot, ceiling - incomingSize)
+  }
+
+  // The write path's pre-flight: can a version of `size` bytes NEVER fit in this
+  // root, no matter what gets evicted? (#339)
+  //
+  // WHY THIS IS A SECOND CHECK AND NOT A REPLACEMENT. enforceQuotaShare has to
+  // run after staging, because the cost of the incoming version depends on
+  // whether the blob deduped, and that is only known once the copy has been
+  // hashed — and the digest must come from the copy, not from a separate read of
+  // a file that may be changing under it (see stageBlob). But enforceQuotaShare's
+  // one UNSATISFIABLE case is knowable from `stats.size` alone, and reaching it
+  // used to cost a full read + write of the file plus an unlink, on every write
+  // to it. So the expensive check stays where it is and this one only front-runs
+  // the case that can never succeed.
+  //
+  // IT COMPARES AGAINST THE CEILING, NEVER AGAINST THE FREE SPACE. `ceiling -
+  // used` is what eviction can free RIGHT NOW; a snapshot bigger than that is
+  // routinely admitted by evicting older versions, and rejecting it here would
+  // turn an efficiency fix into silent data loss. Only `size > ceiling` is
+  // unsatisfiable whatever is evicted, and it is exactly the condition
+  // enforceQuotaShare throws on.
+  //
+  // AND IT MUST NOT STEAL THE DEDUP CASE. A blob already present in the root
+  // costs zero bytes, so enforceQuotaShare admits it at ANY size — reachable,
+  // because a restore's exempt safety snapshot (or a quota that was lowered
+  // afterwards) can leave a blob larger than the current ceiling in the root, and
+  // an ordinary write back to that content then dedups against it. Identical
+  // content implies identical size, so `existsSizeInRoot` is a sound necessary
+  // condition: no row of this size means dedup is impossible and the bail is
+  // safe. A hit only means "stage it and let the real check decide", i.e. exactly
+  // today's behaviour, so the query buys the fast path without owning the
+  // decision. (A blob with no row — crash debris the orphan GC has yet to sweep —
+  // reads as non-dedupable here; the cost is one unversioned write of an
+  // over-ceiling file, which is the same degradation the caller already accepts.)
+  //
+  // A null rootQuota means no eager cap applies at all (#338), so this is a
+  // no-op there too — same gate, same function, as the enforcement side.
+  private async cannotFitEvenAfterEviction(user: UserModel, space: SpaceEnv, versionsRoot: string, size: number): Promise<boolean> {
+    const share = this.config.quotaShare
+    if (!share) return false
+    const quota = this.rootQuota(user, space, versionsRoot)
+    if (!quota) return false
+    if (size <= quota * share) return false
+    return !(await this.queries.existsSizeInRoot(versionsRoot, size))
   }
 
   // Evicts oldest-unlabeled-first until this root's version bytes fit under
@@ -538,8 +608,7 @@ export class VersioningService {
   // descriptor keeps the bytes alive across an unlink, so eviction can no
   // longer pull them away mid-restore.
   async restoreVersion(user: UserModel, space: SpaceEnv, versionId: number): Promise<void> {
-    const version = await this.requireVersionFor(user, space, versionId)
-    this.requireModifyPermission(space)
+    const version = await this.requireVersionForWrite(user, space, versionId)
 
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
     const handle = blobPath ? await fs.open(blobPath, 'r').catch(() => null) : null
@@ -566,12 +635,15 @@ export class VersioningService {
       // which is why `files-manager.service.ts` uses it for its own write paths.
       const [created, lock] = await this.filesLockManager.createOrRefresh(user, space.dbFile, SERVER_NAME, DEPTH.RESOURCE)
       try {
-        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
+        // `version.fileId` rather than a fourth resolution of the same id: the
+        // guard above accepted this row only because its fileId is the id this
+        // space env resolves to, so the `files` row provably exists (#349).
+        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore', fileId: version.fileId })
         // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
         // but sourced from the pinned descriptor.
         await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))
         const stats = await fs.stat(space.realPath)
-        await this.updateFileRow(user, space, stats.size, stats.mtimeMs)
+        await this.updateFileRow(version.fileId, stats.size, stats.mtimeMs)
         FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath })
       } finally {
         // Only release a lock this call took. A pre-existing one belongs to an
@@ -587,8 +659,7 @@ export class VersioningService {
   }
 
   async setLabel(user: UserModel, space: SpaceEnv, versionId: number, label: string | null): Promise<void> {
-    const version = await this.requireVersionFor(user, space, versionId)
-    this.requireModifyPermission(space)
+    const version = await this.requireVersionForWrite(user, space, versionId)
     await this.queries.setLabel(version.id, label?.trim() ? label.trim() : null)
   }
 
@@ -596,8 +667,7 @@ export class VersioningService {
   // revision is exempt from every automatic pruning rule, so removing one is
   // always a deliberate act.
   async deleteVersion(user: UserModel, space: SpaceEnv, versionId: number, confirmLabeled = false): Promise<void> {
-    const version = await this.requireVersionFor(user, space, versionId)
-    this.requireModifyPermission(space)
+    const version = await this.requireVersionForWrite(user, space, versionId)
     if (version.label && !confirmLabeled) {
       throw new FileError(HttpStatus.CONFLICT, 'This version is named, confirmation is required to delete it')
     }
@@ -694,6 +764,28 @@ export class VersioningService {
     return version
   }
 
+  // The WRITE-side guard: the version must hang off the file the caller resolved
+  // AND the caller must be allowed to modify that file. Every by-id write goes
+  // through this one seam (#349).
+  //
+  // Its value is structural, not the three lines it saves. The pair used to be a
+  // convention repeated verbatim at each write method, which makes a fourth one
+  // that forgets the permission half indistinguishable from getVersionStream
+  // deliberately calling requireVersionFor alone — reads need no modify
+  // permission. With this in place, "calls requireVersionFor directly" reads as
+  // an explicit claim to be read-only.
+  //
+  // THE ORDER IS PART OF THE CONTRACT: existence first (404), permission second
+  // (403). Both are FileError, which extends Error rather than HttpException, so
+  // the status only becomes a status through the versioning exception filter —
+  // swapping the order silently changes what every write endpoint answers for an
+  // unknown id.
+  private async requireVersionForWrite(user: UserModel, space: SpaceEnv, versionId: number): Promise<VersionRow> {
+    const version = await this.requireVersionFor(user, space, versionId)
+    this.requireModifyPermission(space)
+    return version
+  }
+
   // canModifySpaceEnv rather than a bare MODIFY check: it also refuses the trash
   // repository, which is read-only (space.guard.ts enforces the same rule for
   // every ADD/MODIFY request). Using the existing helper states the rule once
@@ -743,8 +835,10 @@ export class VersioningService {
     }
   }
 
-  private async updateFileRow(user: UserModel, space: SpaceEnv, size: number, mtimeMs: number): Promise<void> {
-    const fileId = await this.resolveFileId(user, space)
+  // Takes the id rather than re-resolving it from the space env: restoreVersion,
+  // its only caller, already holds a proven one from its guard, and the lookup
+  // this used to do was the third resolution of the same file in one call (#349).
+  private async updateFileRow(fileId: number, size: number, mtimeMs: number): Promise<void> {
     if (!fileId) return
     await this.filesQueries.updateFile(fileId, { size, mtime: Math.floor(mtimeMs) })
   }
