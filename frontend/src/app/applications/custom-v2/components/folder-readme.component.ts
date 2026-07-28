@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core'
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, input, output, signal, untracked, viewChild } from '@angular/core'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { Editor } from '@tiptap/core'
@@ -14,6 +14,20 @@ import { TiptapEditorDirective } from 'ngx-tiptap'
 import { firstValueFrom } from 'rxjs'
 import { buildFileModelStub } from '../utils/file-model-stub'
 import { pickFolderReadme } from '../utils/folder-readme'
+
+// Follows the established ui.<scope>.<setting> convention: 'ui.version'
+// (v2.constants.ts:33), 'ui.personal.viewMode' (personal.component.ts:74).
+const EXPANDED_STORAGE_KEY = 'ui.folderReadme.expanded'
+
+function readStoredExpanded(): boolean {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return false
+  return window.localStorage.getItem(EXPANDED_STORAGE_KEY) === 'true'
+}
+
+function writeStoredExpanded(expanded: boolean): void {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return
+  window.localStorage.setItem(EXPANDED_STORAGE_KEY, expanded ? 'true' : 'false')
+}
 
 // Renders a folder's Readme.md above the file listing, like Nextcloud's Rich
 // Workspaces. Detection is a pure function over the files[] the host screen
@@ -33,9 +47,21 @@ import { pickFolderReadme } from '../utils/folder-readme'
         @if (loadError(); as err) {
           <div class="fr__error">{{ err | translate: locale.language }}</div>
         } @else {
-          <div class="fr__read v2-prose">
+          <div
+            #readHost
+            class="fr__read v2-prose"
+            [class.fr__read--collapsed]="!expanded()"
+            [class.fr__read--faded]="!expanded() && overflowing()"
+            [class.fr__read--expanded]="expanded()"
+          >
             <tiptap-editor [editor]="editor"></tiptap-editor>
           </div>
+
+          @if (overflowing() || expanded()) {
+            <button type="button" class="fr__toggle" (click)="toggleExpanded()">
+              {{ (expanded() ? 'Show less' : 'Show more') | translate: locale.language }}
+            </button>
+          }
         }
       </section>
     }
@@ -74,6 +100,46 @@ import { pickFolderReadme } from '../utils/folder-readme'
       .fr__read ::ng-deep .ProseMirror {
         outline: none;
       }
+      .fr__read {
+        position: relative;
+        overflow: hidden;
+      }
+      /* 30vh collapsed matches Nextcloud's RichWorkspace.vue. */
+      .fr__read--collapsed {
+        max-height: 30vh;
+      }
+      /* Expanded is capped at 60vh with internal scroll rather than unbounded:
+         a 200-line readme would otherwise push the file list off-screen even
+         after the user expanded it — the problem the collapse exists to solve.
+         This is a deliberate divergence from NC (design doc §7). */
+      .fr__read--expanded {
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+      .fr__read--faded::after {
+        content: '';
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        height: 4em;
+        pointer-events: none;
+        background: linear-gradient(to bottom, transparent, var(--si-bg1));
+      }
+      .fr__toggle {
+        appearance: none;
+        background: none;
+        border: none;
+        padding: 6px 0 0;
+        margin: 0;
+        font: inherit;
+        font-size: 12px;
+        color: var(--si-fg-muted);
+        cursor: pointer;
+      }
+      .fr__toggle:hover {
+        color: var(--si-fg);
+        text-decoration: underline;
+      }
     `
   ]
 })
@@ -89,6 +155,17 @@ export class FolderReadmeComponent {
 
   protected readonly readme = computed(() => pickFolderReadme(this.files()))
   protected readonly loadError = signal<string | null>(null)
+
+  protected readonly expanded = signal<boolean>(readStoredExpanded())
+  // True once the rendered content is taller than the collapsed cap. Drives
+  // both the fade and whether the Show more control renders at all.
+  protected readonly overflowing = signal(false)
+
+  protected toggleExpanded(): void {
+    const next = !this.expanded()
+    this.expanded.set(next)
+    writeStoredExpanded(next)
+  }
 
   // One editor for the component's lifetime, content swapped on navigation.
   // The host screens reload in place on folder change (personal.component.ts:327,
@@ -156,8 +233,28 @@ export class FolderReadmeComponent {
     }
   }
 
+  private readonly readHost = viewChild<ElementRef<HTMLElement>>('readHost')
+
+  // scrollHeight exceeds clientHeight only while the collapsed cap is actually
+  // clipping, so this is only measurable in the collapsed state — when expanded,
+  // keep the previous verdict rather than measuring an uncapped element and
+  // concluding "not overflowing", which would hide the Show less control.
+  // Deferred a frame so ProseMirror has laid the content out.
+  private measureOverflow(): void {
+    requestAnimationFrame(() => {
+      const host = this.readHost()?.nativeElement
+      if (!host) {
+        this.overflowing.set(false)
+        return
+      }
+      if (this.expanded()) return
+      this.overflowing.set(host.scrollHeight > host.clientHeight + 1)
+    })
+  }
+
   private setContent(markdown: string): void {
     if (this.editor.isDestroyed) return
     this.editor.commands.setContent(markdown, { emitUpdate: false, contentType: 'markdown' })
+    this.measureOverflow()
   }
 }
