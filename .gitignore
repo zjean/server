@@ -18,3 +18,11 @@ frontend/bazel-out
 circular-dependencies.png
 backend/src/applications/files/assets/ocr-languages/*.traineddata
 .husky/_/
+
+# fork-local: runtime user data written by the dev stack (avatars, uploaded files).
+# Upstream tracks nothing under data/; without this, a blanket `git add` during a
+# sync-merge conflict commits real user content to a public repo.
+data/
+# fork-local: machine-specific Claude Code state (absolute paths, local usernames)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
