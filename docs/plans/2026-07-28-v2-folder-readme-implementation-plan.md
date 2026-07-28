@@ -750,6 +750,12 @@ In the class:
     const next = !this.expanded()
     this.expanded.set(next)
     writeStoredExpanded(next)
+    // Collapsing restores the 30vh cap, which makes the scrollHeight/clientHeight
+    // comparison meaningful again. Without this, a session that started with the
+    // stored preference already expanded never measured overflow at all, so
+    // collapsing once hid the toggle entirely with no way back. Found by Task 3's
+    // implementer, who reproduced it rather than assuming.
+    if (!next) this.measureOverflow()
   }
 ```
 
@@ -895,6 +901,11 @@ Browser-verify:
    reachable by scrolling the page; label reads Show less.
 4. Navigate to another folder with a long readme, then reload the page. Expected: still expanded — the preference is
    global, not per folder.
+4b. **With the page freshly reloaded while the stored preference is `expanded: true`, click Show less.** Expected: the
+   control remains visible and reads Show more, the fade appears, and clicking it expands again. This is the case the
+   `if (!next) this.measureOverflow()` line exists for — without it, `overflowing` is never measured in a session that
+   starts expanded, and collapsing once hides the control for good. Reloading first is essential; the bug does not
+   appear if you expanded within the same session.
 5. Toggle the layout to dark theme. Expected: the fade blends into the card, no white band.
 
 - [ ] **Step 7: Commit**
