@@ -131,6 +131,50 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       expect(kept.length).toBeLessThan(all.length)
     })
 
+    // #340: the cap used to be enforced ONLY by the sweep above, so between 3AM
+    // runs one file's history was bounded by nothing — the coalescing window
+    // limits the rate, not the total, and the quota cap is skipped whenever the
+    // root has no matching quota (which is the case here: no quota is set). The
+    // sweep is NOT invoked in these two cases, on purpose: that absence is the
+    // whole assertion.
+    it('caps a file at maxVersionsPerFile as the versions are written, without the nightly sweep', async () => {
+      const rel = 'e2e8-max-eager.txt'
+      e2e.config.maxVersionsPerFile = 2
+      await e2e.seed(rel, 'eager gen 0')
+      for (let i = 1; i <= 4; i++) {
+        await e2e.overwrite(rel, `eager gen ${i}`, 'web')
+      }
+
+      const kept = await e2e.versionsOf(rel)
+      expect(kept).toHaveLength(2)
+      // Newest-first, and each version holds the content the write destroyed —
+      // so the two survivors are the last two overwritten generations.
+      expect((await e2e.api.content(kept[0].id, rel)).body).toBe('eager gen 3')
+      expect((await e2e.api.content(kept[1].id, rel)).body).toBe('eager gen 2')
+    })
+
+    it('never trims a NAMED version on the write path, however old', async () => {
+      const rel = 'e2e8-max-eager-named.txt'
+      e2e.config.maxVersionsPerFile = 3
+      await e2e.seed(rel, 'named gen 0')
+      for (const n of [1, 2, 3]) {
+        await e2e.overwrite(rel, `named gen ${n}`, 'web')
+      }
+      const all = await e2e.versionsOf(rel)
+      expect(all).toHaveLength(3)
+      // Name the OLDEST — exactly what an oldest-first trim reaches for first.
+      const oldest = all[all.length - 1]
+      expect((await e2e.api.label(oldest.id, rel, 'pinned')).status).toBe(200)
+
+      await e2e.overwrite(rel, 'named gen 4', 'web')
+
+      const kept = await e2e.versionsOf(rel)
+      expect(kept.map((v) => v.id)).toContain(oldest.id)
+      expect(kept).toHaveLength(3)
+      // The unlabeled one behind it is what went instead.
+      expect((await e2e.api.content(oldest.id, rel)).body).toBe('named gen 0')
+    })
+
     it('expires versions older than retentionDays, and keeps younger ones', async () => {
       const rel = 'e2e8-days.txt'
       await e2e.seed(rel, 'days gen 0')

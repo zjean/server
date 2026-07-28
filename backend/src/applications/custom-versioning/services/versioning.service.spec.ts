@@ -104,6 +104,18 @@ class FakeQueries {
       .filter((r) => r.versionsRoot === versionsRoot && !r.label)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)[0]
   }
+  // Both root-scoped, matching the real queries: a global count paired with a
+  // per-root candidate list is the exact mismatch the retention sweep's comment
+  // warns about, and a fake that ignored the root would hide it.
+  async countByFileId(versionsRoot: string, fileId: number) {
+    return this.rows.filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId).length
+  }
+  async unlabeledByFileIdOldestFirst(versionsRoot: string, fileId: number, limit: number) {
+    return [...this.rows]
+      .filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId && !r.label)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)
+      .slice(0, limit)
+  }
   async listByFileIds(fileIds: number[]) {
     return this.rows.filter((r) => fileIds.includes(r.fileId))
   }
@@ -809,6 +821,155 @@ describe(VersioningService.name, () => {
     await service.snapshotBeforeOverwrite(user, personalSpace({ storageQuota: 100 }), { origin: 'web' })
 
     expect(queries.rows).toHaveLength(2)
+  })
+
+  /* ------------------------------------------------- maxVersionsPerFile (#340) */
+
+  // The cap used to be enforced ONLY by the 3AM sweep, so one file's row count
+  // was unbounded for up to 24 hours: the coalescing window limits the RATE, not
+  // the total, and the quota cap is skipped entirely whenever rootQuota() cannot
+  // match the versions root to the env's scope (the share-with-external-path
+  // case). A day of editing in Collabora blew past 20 and the UI listed all of
+  // them. These cases pin the eager trim; the sweep's own cases stay where they
+  // are, because it is still the backstop.
+  describe('maxVersionsPerFile on the write path', () => {
+    // Explicit ages, because oldest-first is (createdAt, id) — the same order the
+    // real query uses. Every row lands in user:alice for FILE_ID unless told
+    // otherwise, so a case only states what it varies.
+    async function seedVersion(over: Partial<VersionRow> & { ageSeconds?: number } = {}): Promise<VersionRow> {
+      const { ageSeconds = 0, ...rest } = over
+      await queries.insertVersion({
+        fileId: FILE_ID,
+        versionsRoot: 'user:alice',
+        checksum: crypto.randomBytes(32).toString('hex'),
+        size: 10,
+        mtime: 1,
+        origin: 'web',
+        ...rest
+      } as VersionInsert)
+      const row = queries.rows[queries.rows.length - 1]
+      row.createdAt = new Date(Date.now() - ageSeconds * 1000)
+      return row
+    }
+
+    const idsFor = (fileId: number, versionsRoot = 'user:alice') =>
+      queries.rows.filter((r) => r.fileId === fileId && r.versionsRoot === versionsRoot).map((r) => r.id)
+
+    beforeEach(() => {
+      versionsConfig.minIntervalSeconds = 0
+      versionsConfig.minIntervalSecondsByOrigin = {}
+      // personalSpace's storageQuota is 0, so rootQuota() is null and the quota
+      // cap does not run. That isolation is the point: these cases must fail for
+      // the per-file rule, never because eviction happened to fire.
+      versionsConfig.maxVersionsPerFile = 3
+    })
+
+    it('drops the oldest unlabeled versions beyond the cap as soon as the new one is written', async () => {
+      const [oldest, middle, newest] = [
+        await seedVersion({ ageSeconds: 300 }),
+        await seedVersion({ ageSeconds: 200 }),
+        await seedVersion({ ageSeconds: 100 })
+      ]
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      // Four rows existed for a heartbeat; the cap is 3, so the oldest went.
+      expect(idsFor(FILE_ID)).toHaveLength(3)
+      expect(idsFor(FILE_ID)).not.toContain(oldest.id)
+      expect(idsFor(FILE_ID)).toEqual(expect.arrayContaining([middle.id, newest.id]))
+      // The blob of the version just taken is still on disk with the old bytes —
+      // the trim removed a different one, not the fresh row's own blob.
+      const fresh = queries.rows.find((r) => r.size === CONTENT.length)
+      expect(fresh).toBeDefined()
+      expect(await fs.readFile(path.join(versionsDir(), fresh.checksum.slice(0, 2), fresh.checksum), 'utf8')).toBe(CONTENT)
+    })
+
+    // The exemption that matters. A labeled row is over and above the cap, so
+    // naming the OLDEST version — exactly what an oldest-first rule reaches for
+    // first — must not save it from being reached for; it must be skipped.
+    it('never trims a labeled version, even when it is the oldest candidate', async () => {
+      versionsConfig.maxVersionsPerFile = 2
+      const pinned = await seedVersion({ ageSeconds: 300, label: 'pinned' })
+      const a = await seedVersion({ ageSeconds: 200 })
+      const b = await seedVersion({ ageSeconds: 100 })
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      // The two unlabeled middles went; the named one survived despite being the
+      // oldest row in the file's history.
+      expect(idsFor(FILE_ID)).toContain(pinned.id)
+      expect(idsFor(FILE_ID)).not.toContain(a.id)
+      expect(idsFor(FILE_ID)).not.toContain(b.id)
+      expect(queries.rows.find((r) => r.id === pinned.id).label).toBe('pinned')
+    })
+
+    // `false` is "no cap", and it reaches the code as a falsy value that a
+    // `Number(keep)` or `keep ?? 0` would turn into 0 — an excess equal to the
+    // whole count, i.e. delete every unlabeled version of the file on the first
+    // write. This is the case that proves the disable path is a disable path.
+    it('trims nothing when maxVersionsPerFile is false', async () => {
+      versionsConfig.maxVersionsPerFile = false
+      for (const ageSeconds of [500, 400, 300, 200, 100]) await seedVersion({ ageSeconds })
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      expect(idsFor(FILE_ID)).toHaveLength(6)
+    })
+
+    // Same exemption the quota cap takes, and it bites harder here: the
+    // candidates are THIS file's oldest unlabeled versions, which when restoring
+    // the oldest revision is precisely the version being restored. The pinned
+    // descriptor would keep the restore correct either way (ADR §9), but the row
+    // the user just acted on would vanish from the list underneath them.
+    it('does not trim on a restore’s own safety snapshot', async () => {
+      versionsConfig.maxVersionsPerFile = 1
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const versionId = queries.rows[0].id
+      await fs.writeFile(filePath, 'content written after the version was taken')
+
+      await service.restoreVersion(user, personalSpace(), versionId)
+
+      expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+      // Over the cap by one, deliberately: the next ordinary write or the
+      // nightly sweep reclaims it.
+      expect(idsFor(FILE_ID)).toHaveLength(2)
+      expect(idsFor(FILE_ID)).toContain(versionId)
+    })
+
+    // Gate, count and candidates all agree on ONE root and ONE file. A global
+    // count paired with a per-root candidate list is the mismatch the sweep's
+    // comment records: it over-deletes in one root and under-enforces in the
+    // other for a file that was moved between spaces.
+    it('trims only the versioned file’s own rows in its own root', async () => {
+      versionsConfig.maxVersionsPerFile = 1
+      const otherFile = await seedVersion({ fileId: 9999, ageSeconds: 900 })
+      const otherRoot = await seedVersion({ versionsRoot: 'user:bob', ageSeconds: 800 })
+      const mine = await seedVersion({ ageSeconds: 700 })
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      expect(idsFor(FILE_ID)).toHaveLength(1)
+      expect(idsFor(FILE_ID)).not.toContain(mine.id)
+      expect(idsFor(9999)).toEqual([otherFile.id])
+      expect(idsFor(FILE_ID, 'user:bob')).toEqual([otherRoot.id])
+    })
+
+    // Log and continue. The row is already committed when the trim runs, so
+    // rethrowing would reach snapshotBeforeOverwrite's catch, which logs "the
+    // save proceeds unversioned" — false once the row exists — and would report
+    // a successful snapshot as a failed one.
+    it('keeps the version and the save when the trim itself fails', async () => {
+      vi.spyOn(queries, 'countByFileId').mockRejectedValueOnce(new Error('injected DB failure'))
+      await seedVersion({ ageSeconds: 300 })
+      await seedVersion({ ageSeconds: 200 })
+      await seedVersion({ ageSeconds: 100 })
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      // The snapshot stands, over the cap, and nothing was logged as an error.
+      expect(idsFor(FILE_ID)).toHaveLength(4)
+      expect(loggedErrors).not.toHaveBeenCalled()
+    })
   })
 
   /* ------------------------------------------------------- never throws to caller */

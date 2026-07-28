@@ -137,6 +137,11 @@ export class VersionsRetention {
   // unlabeled first. Labeled versions are kept AND counted, so a file with more
   // labels than the cap simply keeps them all.
   //
+  // BACKSTOP, not the only enforcement point. VersioningService trims the file it
+  // just versioned on every write (#340); this sweep still has to run, because it
+  // is the only thing that reaches a root nobody writes to and the only thing
+  // that reacts to a cap that was lowered after the versions were minted.
+  //
   // Gate, count and candidate list are all per root. They used to disagree — a
   // per-root gate, a global count, and a global candidate list filtered down —
   // which for a file whose versions span two roots (moved between spaces)
