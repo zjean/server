@@ -158,7 +158,18 @@ The banner wraps the editor in a fixed-height container so the inner `height: 10
 **This is the failure mode most likely to reach a green build.**
 
 `PersonalComponent` and `SpaceFilesComponent` reload in place on folder change (`personal.component.ts:327`,
-`space-files.component.ts:311`). They are **not** destroyed, so:
+`space-files.component.ts:311`) — **for hops that stay within one route config.**
+
+**Correction, measured during Task 4 (2026-07-28):** they were *not* reused for every hop. `v2.routes.ts` registered
+each browse screen under **two** child configs — `{ path: '' }` and `{ path: '**' }` — both pointing at the same
+component, so root↔subfolder navigation crossed configs and Angular destroyed and recreated the screen. The lock
+invariant survived that (the embedded editor's own `ngOnDestroy` still unlocked), but the auto-save teardown never ran,
+so an unsaved edit was silently lost on exactly that hop. Fixed by collapsing each screen to a single wildcard route
+entry, which makes the reuse premise true uniformly. Without that fix the feature's save behaviour would have looked
+random to a user: identical mid-edit navigation saving or discarding depending on whether the hop happened to cross a
+route boundary.
+
+With one route entry per screen, the screens are **not** destroyed on folder change, so:
 
 - `MarkdownViewComponent.ngOnDestroy` — the only thing that releases the lock — **does not fire** when the user walks
   to another folder while editing.

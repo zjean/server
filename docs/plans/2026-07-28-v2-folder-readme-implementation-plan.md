@@ -1584,6 +1584,18 @@ Additionally, because these are cheap and catch the two bug classes this codebas
 15. **Navigation round-trip** (added after Task 2's review found a bug here): folder with a readme → subfolder without
     one → back. Expected: content renders again, not an empty banner. Then, with a slow connection throttled if you can,
     navigate quickly between two folders that both have readmes and confirm neither shows the other's content.
+16. **Mid-edit navigation across every hop shape** (added after Task 4 found that one hop behaved differently). With
+    unsaved text in the editor, leave the folder each of these ways and confirm the auto-save toast fires, the content
+    lands in the **originating** folder's readme (verify via the API, not the DOM), and the lock reads `null`
+    afterwards:
+    - subfolder → sibling subfolder (both with readmes)
+    - **root → subfolder, and subfolder → root** — these crossed a route boundary before the single-route fix and
+      silently discarded the edit
+    - folder with a readme → folder **without** one (this unmounts the section mid-save; content must still persist)
+    - inside a space, not just Personal
+17. **Own-lock scope.** Open the readme in a second browser tab, or hold a lock via the DAV/sync client, then open and
+    close the banner's editor in the first tab. Expected: closing the banner does **not** delete the other session's
+    lock. A lock held by another app must render the banner read-only rather than being treated as absent.
 
 - [ ] **Step 2: Record the outcome in the design doc**
 
