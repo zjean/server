@@ -1,11 +1,14 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   effect,
   ElementRef,
   inject,
+  Injector,
   input,
   OnDestroy,
   output,
@@ -203,6 +206,8 @@ export class FolderReadmeComponent implements OnDestroy {
   private readonly http = inject(HttpClient)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
+  private readonly injector = inject(Injector)
+  private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   // Used only to tell our own exclusive lock apart from a stranger's — see writeable().
   private readonly currentUser = toSignal(this.store.user)
@@ -339,6 +344,27 @@ export class FolderReadmeComponent implements OnDestroy {
   })
 
   constructor() {
+    // The collapsed cap is 30vh, so a viewport height change moves clientHeight and
+    // a width change reflows the content — either can make the overflow verdict
+    // stale with no content swap and no toggle click to re-measure it. The browser
+    // dispatches resize after it has already re-laid the page out, so this reads
+    // synchronously rather than going through measureOverflow's render hook.
+    const onResize = () => this.readOverflow()
+    window.addEventListener('resize', onResize, { passive: true })
+    this.destroyRef.onDestroy(() => window.removeEventListener('resize', onResize))
+
+    // A measurement is only meaningful once #readHost exists, and setContent() —
+    // the content-driven trigger — can fire while it does not: opening edit mode
+    // replaces the read block with the editor, and a save there emits changed(),
+    // whose listing refresh re-resolves the readme with a new mtime and reloads the
+    // content. That measurement finds no host and reports "not overflowing", and
+    // closing the editor would then restore a read block with no fade and no
+    // toggle. So also measure whenever the element itself appears or is replaced.
+    // Guarded on truthiness so the element going away is not itself a verdict.
+    effect(() => {
+      if (this.readHost()) untracked(() => this.measureOverflow())
+    })
+
     effect(() => {
       const file = this.readme()
       const dir = this.dirPath()
@@ -535,21 +561,39 @@ export class FolderReadmeComponent implements OnDestroy {
 
   private readonly readHost = viewChild<ElementRef<HTMLElement>>('readHost')
 
+  // Defers the read until Angular has actually rendered, because #readHost lives
+  // inside `@else if (readme())` nested in `@if (visible())` and may not exist yet
+  // when setContent() runs.
+  //
+  // This was a bare requestAnimationFrame and that is what broke the feature:
+  // rAF callbacks are serviced by the browser's "update the rendering" steps, and
+  // a page whose rendering lifecycle is not running — a background/hidden tab, an
+  // occluded window, headless Chromium — never runs them. The single frame then
+  // never arrived, measureOverflow()'s guard was never reached at all, overflowing
+  // stayed at its initial false, and every consumer of it (the fade, the toggle)
+  // was dead with no error. afterNextRender does not depend on frame production:
+  // Angular's change-detection scheduler races requestAnimationFrame against
+  // setTimeout and takes whichever fires first, and registering a render hook
+  // notifies that scheduler, so the callback runs on the timer path when no frames
+  // are being produced. Measured: it lands ~1ms after the call, in the same task.
+  //
+  // The `read` phase is the one Angular reserves for layout reads.
+  private measureOverflow(): void {
+    afterNextRender({ read: () => this.readOverflow() }, { injector: this.injector })
+  }
+
   // scrollHeight exceeds clientHeight only while the collapsed cap is actually
   // clipping, so this is only measurable in the collapsed state — when expanded,
   // keep the previous verdict rather than measuring an uncapped element and
   // concluding "not overflowing", which would hide the Show less control.
-  // Deferred a frame so ProseMirror has laid the content out.
-  private measureOverflow(): void {
-    requestAnimationFrame(() => {
-      const host = this.readHost()?.nativeElement
-      if (!host) {
-        this.overflowing.set(false)
-        return
-      }
-      if (this.expanded()) return
-      this.overflowing.set(host.scrollHeight > host.clientHeight + 1)
-    })
+  private readOverflow(): void {
+    const host = this.readHost()?.nativeElement
+    if (!host) {
+      this.overflowing.set(false)
+      return
+    }
+    if (this.expanded()) return
+    this.overflowing.set(host.scrollHeight > host.clientHeight + 1)
   }
 
   private setContent(markdown: string): void {
