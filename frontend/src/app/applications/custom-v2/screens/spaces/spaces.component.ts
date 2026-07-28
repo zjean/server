@@ -6,8 +6,8 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
-import { avatarHue, avatarInitials } from '../../components/avatar.component'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
+import { memberAvatars } from '../../utils/member-avatars'
 import { ButtonComponent } from '../../components/button.component'
 import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
@@ -96,18 +96,7 @@ export class SpacesComponent implements OnInit {
   // (`spacesWithDetails`) only joins manager identities, so non-manager
   // members fall into the overflow chip via [total]=memberCount.
   protected managerAvatars(space: SpaceModel): AvatarStackUser[] {
-    return (space.managers ?? []).map((m) => ({
-      id: m.login ?? m.id,
-      initials: avatarInitials(m.name ?? m.login ?? ''),
-      hue: avatarHue(m.login ?? m.name ?? String(m.id)),
-      // MemberModel populates avatarUrl from userAvatarUrl(login) in its
-      // constructor; surfacing it here means the same user renders with
-      // the same backend-generated PNG in the user-card and the manager
-      // stack — gradient + initials only kick in when no login is set.
-      imageUrl: m.avatarUrl ?? null,
-      // Drives the avatar-stack hover tooltip (member-name parity, #295).
-      label: m.name ?? m.login ?? ''
-    }))
+    return memberAvatars(space.managers)
   }
 
   // Storage usage as a 0-100 percentage. Caps at 100 so a quota
