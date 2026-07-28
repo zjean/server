@@ -239,7 +239,15 @@ export class FolderReadmeComponent implements OnDestroy {
   // for a SERVER_NAME lock. Nothing in the row can distinguish THIS session from
   // another Sync-in-API session of the same user — a second v2 tab, or classic's
   // text editor. Two such tabs can therefore both edit, last write wins, and
-  // closing one releases the other's lock. Accepted and documented.
+  // closing one releases the other's lock. The same shape (app Sync-in, same
+  // owner, options: null, isExclusive: true) is also taken by server-side
+  // OPERATION locks: upload PATCH (files-manager.service.ts:316), upload PUT
+  // (:155), download-from-url (:691), compress (:736), extract (:791), and
+  // restore (custom-versioning/services/versioning.service.ts:465). Those get stripped by
+  // this same logic, so clicking Edit during a concurrent re-upload of this
+  // README would have the banner delete that operation's lock when it closes.
+  // Bounded — short TTL, same owner, the banner holds its own refreshed lock in
+  // the meantime — and accepted, but not limited to interactive editors alone.
   protected readonly readme = computed<FileProps | null>(() => {
     const file = pickFolderReadme(this.files())
     if (!file?.lock?.isExclusive) return file
@@ -290,11 +298,15 @@ export class FolderReadmeComponent implements OnDestroy {
   }
 
   // One editor for the component's lifetime, content swapped on navigation.
-  // The host screens reload in place when the new folder matches the SAME route
-  // config (personal.component.ts:327, space-files.component.ts:311), so this
-  // component survives subfolder-to-subfolder navigation and constructing a
-  // ProseMirror instance per folder visit would be wasted work. Root-to-subfolder
-  // is a different story — see the navigation effect below.
+  // v2.routes.ts gives each browse screen a single child route entry
+  // (`path: '**'`, see that file's own comment), so every in-screen folder hop —
+  // root<->subfolder as much as subfolder<->subfolder — reuses the same route
+  // config and the host screens reload in place (personal.component.ts:327,
+  // space-files.component.ts:311) rather than being destroyed. This component and
+  // its editor therefore survive every such hop; constructing a ProseMirror
+  // instance per folder visit would be wasted work. The one thing that DOES
+  // destroy this component is leaving the browse screen entirely — see the
+  // navigation effect's caveat below.
   protected readonly editor = new Editor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
@@ -368,16 +380,18 @@ export class FolderReadmeComponent implements OnDestroy {
     // while files arrives with the listing GET, so this always fires while the
     // editor is still mounted — readme() has not yet swung to the new folder.
     //
-    // MEASURED CAVEAT: v2.routes.ts registers the browse screens twice, at
-    // `path: ''` and `path: '**'`. Navigating between the space/personal ROOT and
-    // a subfolder crosses those two configs, so Angular destroys and recreates the
-    // host — and this component with it — and the effect below never runs for that
-    // hop. The lock is still released there (Angular destroys the child editor
-    // first, and its own ngOnDestroy unlocks), so the leak this effect exists to
-    // prevent cannot happen; but an unsaved edit IS silently lost on that one hop.
-    // Fixing it needs either a save inside MarkdownViewComponent.ngOnDestroy
-    // (which must not resurrect content the user just chose to discard) or a
-    // single route entry per browse screen. Both are maintainer calls.
+    // CAVEAT: this effect only fires for hops that reload the host screen in
+    // place — every hop WITHIN one browse screen, now that v2.routes.ts gives
+    // each browse screen a single route entry (`path: '**'`; design §5).
+    // Leaving the browse screen entirely — sidebar navigation, Personal -> a
+    // space, opening file-detail — takes a different route config, so Angular
+    // destroys the host and this component with it, and this effect never runs
+    // for that hop. ngOnDestroy below runs instead: it still releases the lock
+    // (the embedded editor's own ngOnDestroy unlocks) but does NOT auto-save, so
+    // an unsaved edit is silently discarded there, with no toast. Fixing that
+    // would need a save inside MarkdownViewComponent.ngOnDestroy that must not
+    // resurrect content the user just chose to discard — a maintainer call,
+    // still open.
     effect(() => {
       const dir = this.dirPath()
       const previous = this.lastDirPath
@@ -398,6 +412,13 @@ export class FolderReadmeComponent implements OnDestroy {
       return
     }
     this.openEditor()
+  }
+
+  // Lets the host keep the banner mounted while an edit is in progress, so
+  // typing in the filter box cannot silently discard unsaved text. `editing` is
+  // protected, so the host cannot read it directly.
+  isEditing(): boolean {
+    return this.editing()
   }
 
   protected onEditClick(): void {

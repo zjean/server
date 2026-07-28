@@ -142,7 +142,7 @@ export class PersonalComponent implements OnInit, OnDestroy {
 
   // Handed the just-created readme file so it can hand off straight to edit
   // mode — see newFolderDescription below.
-  private readonly readmeBanner = viewChild(FolderReadmeComponent)
+  protected readonly readmeBanner = viewChild(FolderReadmeComponent)
 
   // Platform-aware label for the filter shortcut hint. The kbd badge next
   // to the filter input promises ⌘F (or Ctrl-F on non-Mac); we deliver on
@@ -990,6 +990,10 @@ export class PersonalComponent implements OnInit, OnDestroy {
   protected newFolderDescription(): void {
     const name = FOLDER_README_NAMES[0]
     const dirPath = this.currentUploadRoute()
+    // Clear any active filter first: it would hide the banner (so startEdit()
+    // would silently no-op through the optional viewChild) and would also hide
+    // the new Readme.md row from the listing unless the filter happened to match.
+    this.filter.set('')
     this.filesService.make('file', name, dirPath, true).subscribe({
       next: () => {
         this.toast.success('v2_file_created', { name })
