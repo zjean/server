@@ -18,9 +18,12 @@ const TEMPLATE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx'])
 
 // NcOnlyOfficeController — exposes the Nextcloud OnlyOffice connector
 // protocol so the OnlyOffice Documents mobile app can edit Sync-in files via
-// its Nextcloud connection type. Mounted only when
-// applications.files.onlyoffice.enabled === true (see
-// custom-mobile-compat.module.ts).
+// its Nextcloud connection type. Mounted when either
+// applications.files.editors.onlyoffice.enabled or
+// applications.files.editors.eurooffice.enabled is true (see
+// custom-mobile-compat.module.ts) — OnlyOfficeManager picks whichever document
+// server is configured, so these handlers are editor-agnostic and the route
+// prefix stays the upstream NC app id `onlyoffice` (see constants/routes.ts).
 //
 // /config and /empty and /save run under NcBasicAuthGuard (mobile app
 // authenticates with an AUTH_SCOPE.MOBILE_NC app-password). /track is

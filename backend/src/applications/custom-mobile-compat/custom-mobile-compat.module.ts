@@ -56,10 +56,19 @@ import { NcSyncReportService } from './services/nc-sync-report.service'
 // (browser hop → IdP → app-password handoff). See
 // docs/plans/2026-04-25-mobile-nc-oidc-login-design.md.
 const oidcEnabled = configuration.auth?.provider === AUTH_PROVIDER.OIDC
-// Mounted only when OnlyOffice is enabled — FilesModule re-exports
-// OnlyOfficeModule conditionally on the same flag, so requiring DI on
-// disabled deployments would fail at boot.
-const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.enabled === true
+// Mounted when an OnlyOffice-protocol document server is enabled — either
+// OnlyOffice or Euro-Office. FilesModule re-exports OnlyOfficeModule on the
+// exact same either-or condition (files.module.ts), so requiring DI on
+// deployments with neither would fail at boot.
+//
+// Euro-Office is an OnlyOffice-protocol server, not a second protocol: Sync-in
+// types its config as `OnlyOfficeConfig` and OnlyOfficeManager already selects
+// it when onlyoffice is disabled (only-office-manager.service.ts:82-85). So the
+// same connector controllers serve both, and the client-facing route prefix
+// stays /index.php/apps/onlyoffice/* — that prefix is the upstream NC app id,
+// not an editor brand. See constants/routes.ts for the citation.
+const officeEditorEnabled =
+  configuration.applications.files.editors.onlyoffice?.enabled === true || configuration.applications.files.editors.eurooffice?.enabled === true
 
 @Module({
   // FilesModule exports FilesQueries (used by NcSyncReportService for DB id
@@ -114,7 +123,7 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     // the flag is read at request time, in one place.
     NcVersionsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
-    ...(onlyofficeEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController] : [])
+    ...(officeEditorEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController] : [])
   ],
   providers: [
     NcBasicAuthGuard,
@@ -135,7 +144,7 @@ const onlyofficeEnabled = configuration.applications.files.editors.onlyoffice?.e
     NcSyncReportService,
     NcVersionsService,
     ...(oidcEnabled ? [NcMobileOidcService] : []),
-    ...(onlyofficeEnabled ? [NcOnlyOfficeTranslatorService, NcOnlyOfficeFileResolver, NcOnlyOfficeForceSaveService] : [])
+    ...(officeEditorEnabled ? [NcOnlyOfficeTranslatorService, NcOnlyOfficeFileResolver, NcOnlyOfficeForceSaveService] : [])
   ]
 })
 export class CustomMobileCompatModule {}
