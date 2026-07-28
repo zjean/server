@@ -1474,8 +1474,35 @@ case has to be added twice in personal and once in space-files."
 - Modify: `frontend/src/app/applications/custom-v2/screens/space/space-files.component.html`
 
 **Interfaces:**
-- Consumes: the banner from Task 2.
-- Produces: nothing.
+- Consumes: the banner from Task 2; `viewChild(FolderReadmeComponent)` from Task 5.
+- Produces: `isEditing(): boolean` on `FolderReadmeComponent`.
+
+- [ ] **Step 0: Three carried-over items, because this task reopens `folder-readme.component.ts`**
+
+Task 4's re-review left these as non-blocking Minors, scheduled here rather than dispatched separately.
+
+**(a) Two comments now contradict the code and must be corrected — this is the hazardous one.** After Task 4 collapsed
+each browse screen to a single route entry, the comments at roughly `folder-readme.component.ts:292-297` and `:371-380`
+still assert that `v2.routes.ts` "registers the browse screens twice, at `path: ''` and `path: '**'`", that "an unsaved
+edit IS silently lost on that one hop", and that fixing it "needs … a single route entry per browse screen. Both are
+maintainer calls." All of that is now false — the fix shipped in the same commit, and design §5 says the opposite.
+These are exactly the comments a maintainer would trust before touching routing, and left as-is they invite re-adding
+the second route entry and silently reintroducing the data-loss bug. Rewrite both to describe the current state: one
+route entry per browse screen, the component survives every in-screen hop, and the remaining uncovered case is leaving
+the screen entirely.
+
+**(b) Widen the `KNOWN LIMITATION` comment's scope.** It currently names only "another Sync-in-API session (a second v2
+tab, or classic's text editor)". Server-*operation* locks have the identical shape — app `Sync-in`, same owner,
+`options: null`, `isExclusive: true` — and are taken by upload PATCH (`files-manager.service.ts:316`), PUT (`:155`),
+download-from-url (`:691`), compress (`:736`), extract (`:791`), and `custom-versioning/services/versioning.service.ts:636`.
+Those are stripped too, so clicking Edit during a concurrent re-upload of `README.md` would have the banner delete that
+operation's lock when it closes. Bounded (short TTL, same owner, the banner holds the refreshed lock meanwhile) and not
+blocking — but the comment should name them so nobody concludes only interactive editors are affected.
+
+**(c) Know this before you write the filter gate:** since Task 4's routing change, the filter text and view mode now
+**survive** a root↔subfolder hop (they always did survive subfolder↔subfolder). So a carried-over filter can be active
+when you arrive in a folder, which is uniform rather than random but means your gate will meet a non-empty `filter()`
+on arrival more often than before.
 
 - [ ] **Step 1: Wrap the banner in both templates**
 
@@ -1596,6 +1623,12 @@ Additionally, because these are cheap and catch the two bug classes this codebas
 17. **Own-lock scope.** Open the readme in a second browser tab, or hold a lock via the DAV/sync client, then open and
     close the banner's editor in the first tab. Expected: closing the banner does **not** delete the other session's
     lock. A lock held by another app must render the banner read-only rather than being treated as absent.
+18. **Leaving the browse screen entirely, mid-edit** (added after Task 4's re-review noted case 16 covers only
+    in-screen hops). With unsaved text, leave via the sidebar to Recents, from Personal into a space, and by opening a
+    file in file-detail. Expected in all three: the **lock is released** (the banner is destroyed, so the editor's own
+    `ngOnDestroy` unlocks). **Known and accepted:** the unsaved text is discarded with no toast, because a destroyed
+    component cannot run the auto-save — documented at `folder-readme.component.ts`. Record what you observe; do not
+    treat the missing toast as a new defect, but do confirm the lock is genuinely released.
 
 - [ ] **Step 2: Record the outcome in the design doc**
 
