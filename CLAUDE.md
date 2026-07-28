@@ -247,8 +247,8 @@ extend `Error`, not `HttpException` — a controller that lets one escape return
 feature). And `filesLockManager.create` treats the **caller's own** lock as a conflict; use `createOrRefresh` for any
 path that writes a file the user may have open.
 
-Six invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
-suite (the fifth from reading upstream Nextcloud rather than from a bug — see below):
+Seven invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
+suite (the fifth and seventh from reading upstream source rather than from a bug — see below):
 
 1. **Never hardlink a version blob.** It shares the live file's inode, and three of the seven write paths truncate that
    inode in place — the "saved" version would hold the new content. Blobs are cloned or copied (ADR §1.1).
@@ -278,6 +278,16 @@ suite (the fifth from reading upstream Nextcloud rather than from a bug — see 
    `end` but never `close`, so a `close`-only cleanup handler leaks on the *successful* path.
    Watch for `DEP0137` ('Closing a FileHandle object on garbage collection') in test output: it is GC-timing dependent,
    so it surfaces only in the full suite and names no source line. It means someone dropped a stream.
+7. **A restore must drop the cached OnlyOffice document key.** That key names ONE content state, and
+   `OnlyOfficeManager.getDocumentKey` returns the cached value whenever there is one — its only invalidation runs on
+   callback statuses 2 and 4. So replacing the live bytes without deleting the entry lets the editor re-open under a key
+   the document server already knows: it serves ITS copy, the user sees pre-restore content, and the next save writes it
+   back over the restore. `restoreVersion` calls `invalidateOfficeDocumentKey`; the key format has one home in
+   `custom-shared/utils/only-office-doc-key.ts`. Upstream ONLYOFFICE does the same from the same event
+   (`lib/Listeners/FileVersionsListener.php::versionRestored` → `deleteKeyForFile`). Collabora needs no equivalent: it
+   recomputes `Version:` on every CheckFileInfo instead of caching. Do NOT move this into the shared snapshot hook to
+   cover all seven write paths — that hook also runs on the editors' own saves, and dropping the key mid-session splits
+   the co-editing session and leaves `NcOnlyOfficeForceSaveService` with no key to force-save.
 
 Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /

@@ -58,6 +58,26 @@ export const NC_ROUTE = {
   // So a parallel /apps/eurooffice/* prefix would be a path no client ever
   // requests. Euro-Office support is a config selection behind these routes,
   // not a second route family.
+  //
+  // Only ONE of the four below is a route the real connector serves. Checked
+  // against ONLYOFFICE/onlyoffice-nextcloud appinfo/routes.php:
+  //   ours                 upstream
+  //   /config          →   (none) — the config endpoint is OCS,
+  //                        /ocs/v2.php/apps/onlyoffice/api/v1/config/{fileId},
+  //                        with the id in the PATH, not a query param
+  //   /track           →   callback#track, POST /track                  ✓ match
+  //   /empty  (POST)   →   callback#emptyfile is GET /empty, and it is the
+  //                        DOC SERVER fetching a blank template — not a
+  //                        create-a-document call. Creating one is
+  //                        editor#create, POST /ajax/new
+  //   /save   (POST)   →   editor#save is POST /ajax/save, and it is save-AS
+  //                        (name + dir + url), not a forcesave trigger
+  // So "the paths the mobile app expects" is an assumption, not a finding. It
+  // costs nothing while it is unused, and if a client ever does show up speaking
+  // the real protocol it will 404 on three of these. The upstream table also
+  // carries /ajax/history, /ajax/version and /ajax/restore — the version-history
+  // API that drives the editor's own history panel, which this fork has no
+  // equivalent of.
   ONLYOFFICE_CONFIG: '/index.php/apps/onlyoffice/config',
   ONLYOFFICE_TRACK: '/index.php/apps/onlyoffice/track',
   ONLYOFFICE_EMPTY: '/index.php/apps/onlyoffice/empty',
