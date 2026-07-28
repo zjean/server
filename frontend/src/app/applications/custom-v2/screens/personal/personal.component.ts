@@ -110,10 +110,11 @@ export class PersonalComponent extends FileBrowserBase {
 
     filterShortcutEnabled: true,
     showDownloadFromUrlAction: true,
-    // NOTE: space-files auto-downloads a finished compress archive and personal
-    // does not. Preserved as-is by #346; almost certainly a gap in personal, but
-    // fixing it is a behaviour change and belongs in its own PR.
-    autoDownloadTaskArchive: false,
+    // A multi-file Download queues a compress task; the base subscribes to the
+    // task's archiveId and hands the result to the browser. This was false
+    // while space-files had it true (#367) — so on Personal the archive was
+    // built server-side and then never delivered, with no error to show for it.
+    autoDownloadTaskArchive: true,
     // The action sheet also closes itself via its (closed) output, so this only
     // affects who clears the signal first.
     closeActionSheetOnSelect: false

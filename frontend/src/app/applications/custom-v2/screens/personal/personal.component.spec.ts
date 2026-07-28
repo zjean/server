@@ -115,12 +115,17 @@ describe('personal file browser — personal-only behaviour', () => {
     }
   })
 
-  it('does NOT auto-download a finished compress task', () => {
-    // space-files subscribes to filesOnEvent.archiveId and calls
-    // downloadTaskArchive; personal has no such subscription. #346 preserves
-    // this verbatim — see the PR body, it is very likely a bug in personal.
+  // #367: this asserted the opposite until the gap was closed. Personal queued
+  // the compress task and then never delivered the archive it produced.
+  it('auto-downloads a finished compress task, as space-files does', () => {
     const { deps } = start()
     deps.filesOnEvent.next({ archiveId: 'task-1', filePath: 'files/personal' })
+    expect(deps.log.only('files.downloadTaskArchive').args).toEqual(['task-1'])
+  })
+
+  it('ignores task events with no archive', () => {
+    const { deps } = start()
+    deps.filesOnEvent.next({ filePath: 'files/personal' })
     expect(deps.log.count('files.downloadTaskArchive')).toBe(0)
   })
 
