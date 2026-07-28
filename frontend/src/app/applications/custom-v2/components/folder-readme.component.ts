@@ -120,7 +120,13 @@ export class FolderReadmeComponent {
       const file = this.readme()
       const dir = this.dirPath()
       if (!file || !dir) {
-        untracked(() => this.setContent(''))
+        untracked(() => {
+          // Reset the cache key too: without this, re-entering a folder whose
+          // readme is unchanged hits the early-return in load() while the
+          // content has already been blanked, leaving an empty banner.
+          this.lastLoadKey = null
+          this.setContent('')
+        })
         return
       }
       // Re-fetch when the resolved file changes identity OR content: mtime
@@ -139,8 +145,11 @@ export class FolderReadmeComponent {
     const stub = buildFileModelStub(file, `${dir}/${file.name}`)
     try {
       const text = await firstValueFrom(this.http.get(stub.dataUrl, { responseType: 'text' }))
+      // Superseded while in flight — a newer folder's load already owns the view.
+      if (this.lastLoadKey !== key) return
       this.setContent(text ?? '')
     } catch (e) {
+      if (this.lastLoadKey !== key) return
       const err = e as HttpErrorResponse
       this.setContent('')
       this.loadError.set(err?.error?.message ?? err?.statusText ?? 'Failed to load folder description')
