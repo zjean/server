@@ -52,9 +52,25 @@ readonly permissions = input.required<string>()  // SpaceFiles.permissions, verb
 **Rationale.** The two host screens are ~1100-line near-duplicates (`personal.component.ts` 1114,
 `space-files.component.ts` 1130). Every fact this feature needs is already in their local state, so the integration
 cost per screen is one template line plus a `case` in each of its new-entry dispatchers — two for `personal`, one for
-`space-files`, for the reason in §6. Nothing about readmes leaks into either screen. `dirPath` is passed as a pre-joined string because each screen already builds that
-prefix its own way — `personal` from `SPACE_ALIAS.PERSONAL` + segments, `space-files` from the route `alias` — and
-`buildSpaceFilePath` (`custom-v2/utils/file-model-stub.ts`) already exists for it.
+`space-files`, for the reason in §6. `dirPath` is passed as a pre-joined string because each screen already builds
+that prefix its own way — `personal` from `SPACE_ALIAS.PERSONAL` + segments, `space-files` from the route `alias` —
+and `buildSpaceFilePath` (`custom-v2/utils/file-model-stub.ts`) already exists for it.
+
+**Correction (2026-07-28): "nothing leaks into either screen" overstated it — the integration cost is small, but it
+is not zero.** As shipped, both screens:
+
+- import `FOLDER_README_NAMES` and `pickFolderReadme` from `custom-v2/utils/folder-readme.ts` directly (not only
+  through the banner's inputs),
+- each gained a `hasFolderReadme` computed signal that re-derives `pickFolderReadme(this.files()) !== null` to gate
+  the New-menu entry (§6) — the exact same derivation the banner performs internally to decide whether it has
+  anything to render, computed twice,
+- each carry a byte-identical ~16-line `newFolderDescription()` method (the New-menu creation handler from §6) with no
+  shared helper between them.
+
+None of this is a defect — it is the accepted price of the "two 1100-line near-duplicate screens, no shared base
+class" starting condition this feature builds on, and it is small relative to that duplication's existing scale. But
+it is readme-specific code living in both host screens, not nothing, and a reader relying on the original sentence
+would miss it when auditing what these screens depend on.
 
 ---
 
@@ -102,6 +118,35 @@ classic-UI-as-ground-truth rule in `CLAUDE.md` applies, and this is the one plac
 is expressed on the client. `SPACE_OPERATION.MODIFY` is `'m'` (`spaces/constants/spaces.ts:6-10`); the permission
 string is a `:`-joined operation list, so `includes` is the established test.
 
+**Correction (2026-07-28): "verbatim" describes the expression, not the input it runs on.** The `readme` fed into it is
+not the raw listing row. `readme()` (`folder-readme.component.ts:256-264`) strips a lock from the row **before** the
+expression above ever sees it, when **all** of the following hold:
+
+- the lock is exclusive,
+- `lock.app === SERVER_NAME` — i.e. taken through the plain Sync-in API's lock route, not `'WebDAV'` (sync clients,
+  which stay opaque and correctly render read-only), and
+- `lock.owner.id` is a **number** equal to the current user's own numeric id — guarded so two `undefined`s are never
+  compared equal, which would strip a stranger's lock whenever neither side has resolved an id yet.
+
+This exists because the banner's own editor takes exactly this shape of lock on itself: Edit → Save re-reads the row
+while the banner still holds the lock it just took, and without the strip that row comes back looking like "locked by
+a stranger," hiding the Edit button behind its own successful save.
+
+**The consequence worth a reader's attention, and the reason `writeable` is no longer simply "verbatim":** the strip
+cannot distinguish "a lock this banner's editor is holding" from "a lock any other same-user, same-app session is
+holding" — including **server-side operation locks**, which take the identical shape (app `Sync-in`, numeric owner id,
+`isExclusive: true`, no `info`). Those are taken by upload PATCH (`files-manager.service.ts:316`), upload PUT (`:155`),
+download-from-url (`:691`), compress (`:736`), extract (`:791`), and versioning restore
+(`custom-versioning/services/versioning.service.ts:465`). So: opening Edit on `README.md` while, say, a
+download-from-url task is mid-write to that same file, then closing the editor, deletes that operation's lock — the
+banner's own `MarkdownViewComponent.ngOnDestroy` unlocks unconditionally, believing the lock is its own. Bounded (short
+TTL, same owner, the banner holds its own refreshed lock throughout the edit) and accepted, but real — this is not a
+theoretical edge case, it is the direct, necessary cost of the strip above, and it is not limited to the banner's own
+prior edit. Full reasoning and the exact gating are in the code comment at `folder-readme.component.ts:221-255`.
+**Anyone consolidating this contract for [issue #372](https://github.com/zjean/server/issues/372) or
+[issue #382](https://github.com/zjean/server/issues/382) needs this divergence, not just the verbatim expression** —
+copying only the expression and not the strip (or vice versa) changes which locks the banner treats as its own.
+
 **Pre-existing gap, deliberately not fixed here.** `file-detail.component.html:61` mounts
 `<app-v2-preview-markdown-view [path] [file]>` without `isWriteable`, which defaults to `true`
 (`markdown-view.component.ts:456`). In a read-only space, v2's file-detail therefore presents an editable-looking
@@ -120,9 +165,27 @@ design only ensures the banner does not inherit it.
 - **Edit mode.** Clicking Edit unmounts the read-only render and mounts the existing `MarkdownViewComponent` with
   `isWriteable=true`.
 
-Content in read mode is one `GET` of the stub's `dataUrl` per resolved readme, built with `buildFileModelStub(props,
-fullPath)` (`custom-v2/utils/file-model-stub.ts`) — the same call `markdown-view` makes at line 693. **No caching:** a
-readme is a couple of KB, and a stale folder description is worse than a round-trip.
+Content in read mode is a `GET` of the stub's `dataUrl`, built with `buildFileModelStub(props, fullPath)`
+(`custom-v2/utils/file-model-stub.ts`) — the same call `markdown-view` makes at line 693. **Corrected 2026-07-28: this
+is cached, not re-fetched unconditionally.** `load()` (`folder-readme.component.ts:544-560`) keys on
+`` `${file.id}:${file.mtime}` `` in `lastLoadKey`, and re-fetches only when that key changes. This is not a staleness
+risk: `mtime` moves on every write to the file, including a write made from a different tab, a different user, or
+WebDAV/sync — there is no path that changes the readme's content without also changing its `mtime`, so the cache key
+tracks content, not merely identity. Two more mechanisms make the cache safe rather than merely fast:
+
+- **A post-await staleness guard.** `load()` checks `this.lastLoadKey !== key` both immediately after the `GET`
+  resolves and in its `catch` (:551-556), so a request superseded by a newer folder's load while in flight cannot
+  overwrite the view with older content — the last key set wins, not the last response to arrive.
+- **Reset to `null` on disappearance.** The navigation effect (:368-380) clears `lastLoadKey` to `null` whenever
+  `dirPath`/`readme()` resolve to nothing (no readme, or mid-hop). Without this, re-entering a folder whose readme is
+  **unchanged** would hit the cache-hit early-return while the content had already been blanked by the same effect,
+  leaving an empty banner — the bug fixed in `703195ce`. The reset is what makes that fix work; deleting `lastLoadKey`
+  as an over-eager "simplification" reintroduces exactly that bug.
+
+**Accepted cost of the reset:** because leaving a folder nulls the cache key, returning to a folder whose readme has
+not changed since you left re-issues the `GET` for content already fetched once earlier in the session — a duplicate
+request, not a staleness risk. A couple of KB, so this is judged worth paying to keep the reset-on-disappearance fix
+simple.
 
 **Rationale.**
 
@@ -168,6 +231,22 @@ so an unsaved edit was silently lost on exactly that hop. Fixed by collapsing ea
 entry, which makes the reuse premise true uniformly. Without that fix the feature's save behaviour would have looked
 random to a user: identical mid-edit navigation saving or discarding depending on whether the hop happened to cross a
 route boundary.
+
+**Two side effects of that route collapse, outside this feature's own scope but worth recording because they affect
+the whole v2 browse tree, not just the banner.** Collapsing `{ path: '' }` + `{ path: '**' }` into one `{ path: '**' }`
+entry means **every** piece of component-local state that used to reset on a root↔subfolder hop (because that hop used
+to destroy and recreate the screen) now survives it, not only the readme banner's own state:
+
+- **Filter text now survives root↔subfolder hops.** It always survived subfolder↔subfolder hops (same route config
+  before this change too); now a filter typed at the root is still active after navigating into a subfolder, and vice
+  versa. Previously the two shapes behaved differently for the same user action.
+- **View mode (list/grid/gallery) now survives the same hops**, for the identical reason — `mode` is component-local
+  state that a destroy-and-recreate used to reset to the `localStorage`-persisted default, and no longer does.
+
+Both are user-visible behaviour changes on the Personal and space browse screens generally, made *for* this feature's
+benefit (the auto-save on navigate needs the component to survive the hop) but not scoped *to* this feature. Neither
+was flagged as a defect during Task 7 verification; recorded here so a future reader does not mistake either for
+unrelated drift.
 
 With one route entry per screen, the screens are **not** destroyed on folder change, so:
 
@@ -254,7 +333,15 @@ The storage key follows the established `ui.<scope>.<setting>` convention (`ui.v
 `ui.personal.viewMode` at `personal.component.ts:74`, `ui.space.viewMode` at `space-files.component.ts:75`).
 
 **i18n.** New strings go in `frontend/src/i18n/custom/{en,nl}.json` per `CLAUDE.md` — never in the upstream bundles.
-None of `Edit`, `Show more`, `Show less`, `Folder description` exists in either bundle today. All four are short
+
+**Correction (2026-07-28): `Edit` is not one of the new strings — it already exists upstream, and must stay there.**
+Upstream's `frontend/src/i18n/nl.json` already has `"Edit": "Bewerken"`; upstream's `en.json` has no `Edit` key at
+all and correctly falls through to the literal `Edit` for English, matching the identity-mapping pattern `CLAUDE.md`
+describes for short static strings. The code is right to **not** add `Edit` to the custom bundle: doing so would
+create a second `Edit` key that shadows the upstream Dutch translation for every other screen that already uses it,
+purely to satisfy this feature's own English literal (which already renders correctly via the existing fallthrough).
+`Show more`, `Show less`, and `Folder description` are the actual new strings this feature adds — none existed in
+either bundle before this feature, and all three now live in `frontend/src/i18n/custom/{en,nl}.json`. They are short
 static strings, so they use the plain-English-literal-as-key convention (no `v2_` prefix, which is reserved for
 parameterised keys).
 
@@ -290,13 +377,42 @@ Browser matrix — each row is a case the pure-function-plus-signals design cann
    reload.
 6. Edit → modify → Save → banner and the listing row both reflect the new content/mtime.
 7. Edit → modify → Cancel → discard prompt appears; declining keeps edit mode.
-8. Edit → **navigate to another folder** → prompt fires, lock is released (§5). Verify by reopening the folder as a
-   second user.
+8. Edit → **navigate to another folder** → auto-saves the pending edit into the folder you left, then releases the
+   lock; no prompt (§5 supersedes the original prompt-on-navigate design with this). Verify by reopening the folder as
+   a second user.
 9. Read-only space (no `m` in permissions) → banner renders, **no** Edit button.
 10. Readme exclusively locked by another user → no Edit button.
 11. `+ New → Folder description` in an empty folder → creates `Readme.md`, banner appears in edit mode; the entry is
     then hidden.
 12. Filter active → banner hidden; clearing the filter restores it.
+
+**Cases 13–18, added in Task 7 because they are cheap and catch the two bug classes this codebase has hit before.**
+§11 reports results for these under the same numbering; folded in here so the definitions and the results match one
+table instead of splitting the matrix across two documents.
+
+13. Dark theme, all of the above visible states. Expected: no white-on-white, the fade blends into the card.
+14. Browser console across the whole matrix. Expected: no errors, and no `Failed to load folder description` toast
+    except where deliberately provoked.
+15. **Navigation round-trip.** Folder with a readme → subfolder without one → back. Expected: content renders again,
+    not an empty banner. Then, with a slow connection throttled if possible, navigate quickly between two folders
+    that both have readmes and confirm neither ever shows the other's content.
+16. **Mid-edit navigation across every hop shape.** With unsaved text in the editor, leave the folder each of these
+    ways and confirm the auto-save toast fires, the content lands in the **originating** folder's readme (verify via
+    the API, not the DOM), and the lock reads `null` afterwards:
+    - subfolder → sibling subfolder (both with readmes)
+    - **root → subfolder, and subfolder → root** — these crossed a route boundary before the single-route fix (§5)
+      and silently discarded the edit
+    - folder with a readme → folder **without** one (this unmounts the section mid-save; content must still persist)
+    - inside a space, not just Personal
+17. **Own-lock scope.** Open the readme in a second browser tab, or hold a lock via the DAV/sync client, then open
+    and close the banner's editor in the first tab. Expected: closing the banner does **not** delete the other
+    session's lock. A lock held by another app must render the banner read-only rather than being treated as absent.
+18. **Leaving the browse screen entirely, mid-edit.** With unsaved text, leave via the sidebar to Recents, from
+    Personal into a space, and by opening a file in file-detail. Expected in all three: the lock is released (the
+    banner is destroyed, so the editor's own `ngOnDestroy` unlocks). **Known and accepted:** the unsaved text is
+    discarded with no toast, because a destroyed component cannot run the auto-save — documented at
+    `folder-readme.component.ts`. Confirm the lock is genuinely released; do not treat the missing toast as a new
+    defect.
 
 ---
 
@@ -314,8 +430,11 @@ None blocking. Two things recorded as knowingly accepted:
 Matrix from §9 (extended to 18 cases per Task 7's brief) run on 2026-07-28 against commit `cd9bd130`, dev stack on
 `localhost:8081` (this worktree's own backend + freshly built `dist/static`), driven by `agent-browser`.
 
-**Result as first run: 1 case FAILED (case 5), 14 passed, 4 not tested. Case 5 was then fixed in `3e935a80` and
-re-verified; see the amendment below the table.**
+**Result as first run, over the 18-row table below: 13 passed, 1 partial pass (case 8), 3 not tested (cases 3, 9, 10),
+1 FAILED (case 5) — 13 + 1 + 3 + 1 = 18. Case 5 was then fixed in `3e935a80` and re-verified; see the amendment below
+the table.** Case 8's "partial pass" is counted on its own line rather than folded into either "passed" or "not
+tested": its core mechanism (auto-save into the originating folder, lock released) was directly verified, but the
+row's "verify as a second user" clause was not — genuinely partial, not fully either state.
 
 ### Standing limitation of this verification harness — read before trusting any row
 
@@ -378,6 +497,43 @@ naturally.
 **The resize listener's last link is verified only with a synthetic event**, since this harness dispatches no native
 `resize`. Real resize behaviour is untested.
 
+### Scope of this record, precisely
+
+This table is not one snapshot — read it as two, and note what was **not** re-run.
+
+- **17 of 18 rows** (all but case 5) reflect a run against `cd9bd130`.
+- **Case 5, and case 13's fade specifically**, were re-checked against `3e935a80` — the commit right after `cd9bd130`
+  that changed the shared measurement/render path (`measureOverflow()` moved from a bare `rAF` to `afterNextRender`,
+  plus the new `readHost` viewChild effect and the `resize` listener).
+- That commit's blast radius is wider than the two rows re-checked: rows 1, 2, 4, 6, 7, 9, 10, 11, 12, 15, 16, 17, and
+  18 all render the read-mode banner through the same measurement path, and were **not** re-verified after it changed.
+  They are recorded as they stood against `cd9bd130`, on the strength that `3e935a80` was a scheduling-mechanism swap
+  (bare `rAF` → `afterNextRender`) rather than a change to what gets measured or when the read-mode branch renders —
+  but that is an inference from reading the diff, not a re-observation.
+- The fix wave in this document (C1–C3, D1–D13) touched `folder-readme.component.ts`'s resize handling again (C3) and
+  `markdown-view.component.ts`'s save-outcome logic (C1) and `space-files.component.ts`'s space-name reset (C2). None
+  of those commits are reflected in the table above — **this record's browser matrix was not re-run for this fix
+  wave**, per the maintainer's explicit instruction not to re-run it. C1 and C2 have their own targeted browser
+  verification in the fix-wave report; C3 does not, for the reason given at C3's entry there.
+
+### Known untested transition: editing with a filter active, then Cancel
+
+Not previously listed as a gap, so recording it as one now rather than leaving it implicit. The filter gate in both
+templates is `@if (!filter() || readmeBanner()?.isEditing())` (Task 6) — it keeps the banner mounted while editing so
+a filter keystroke cannot silently discard unsaved text. Neither Task 6's browser check nor case 12 above exercised
+**editing with a filter active, then leaving edit mode** (via Cancel, or via the auto-save teardown on folder change)
+while that filter is still non-empty: Task 6's check stopped once it confirmed the banner stayed mounted and the text
+survived a filter keystroke, and case 12 above never had an editor open at all.
+
+The reason this is worth flagging rather than assumed-fine: `readmeBanner()?.isEditing()` reads a `viewChild` signal
+of the very component the `@if` gates — the query and its target are the same component. When editing ends and
+`closeEditor()` sets `editing` back to `false`, the guard's own truth value flips from "keep it mounted" to "hide it"
+in the same signal graph that decides whether it exists at all. This **does** converge correctly by inspection: the
+next change-detection pass evaluates `filter() && !isEditing()` as true and the `@if` resolves to hidden, and nothing
+about the viewChild query itself is invalidated by the component's own signal changing (only its *destruction* would
+invalidate the query, and destruction happens as a result of the `@if` going false, not a cause of it) — so there is
+no cycle here, just an untested path. Recorded as **not tested**, not as passed.
+
 ### Note on case 3 with a production implication
 
 Case 3 (precedence between two coexisting names) could not be built because this host's filesystem is case-insensitive
@@ -391,3 +547,45 @@ deployments), where it remains unverified by observation.
 earlier tasks. Personal's root `README.md` (previously ~88 lines of filler) was overwritten with a known marker for
 the root-hop case-16 test. No fixture cleanup was performed afterward; the `t7-case*` / `t7-space-*` folders remain on
 disk for anyone who wants to re-inspect the evidence.
+
+---
+
+## 12. Security note — auto-rendered markdown as a trust surface
+
+Added 2026-07-28, at the final whole-branch review's request, recording reasoning that had been done but not written
+down.
+
+**Why this needed a dedicated look.** The banner is a broader trust surface than v2's existing markdown viewer. Opening
+a `.md` file in file-detail is a user action directed at one specific file the user chose. The readme banner is not:
+it renders automatically, for every user who opens the folder, with no click required, and its content is controlled
+by **anyone with write access to that folder** — which, on a shared space, is not necessarily the person viewing it.
+A malicious or compromised writeable-space member could put content in `Readme.md` that every other member of that
+space renders passively just by browsing to the folder.
+
+**The question:** can content in a folder's `Readme.md`, rendered through the same TipTap/ProseMirror pipeline as edit
+mode (§4), execute script or otherwise act on behalf of the viewer, given that rendering here is unconditional and
+requires no viewer intent?
+
+**Conclusion: no vulnerability found**, for three independent reasons — any one of which would already block script
+execution, so this is not resting on a single control:
+
+1. **No raw-HTML node in the schema.** ProseMirror's document model is defined by the schema TipTap builds from the
+   configured extensions (StarterKit, TaskList/TaskItem, TableKit, Image, Markdown — the same set in both read mode
+   and edit mode, §4). That schema admits no node type that carries arbitrary HTML. Markdown input containing a raw
+   `<script>` tag or an `on*` attribute has nowhere to go in the resulting document — the parser either drops it or
+   folds it into a text node, but there is no node that would let the browser execute it, because ProseMirror never
+   hands unescaped HTML to `innerHTML` for content it parsed as a document node.
+2. **The Link extension sanitizes URI schemes.** TipTap 3.25's Link extension (`StarterKit.configure({ link: {
+   openOnClick: false } })`, §4) validates `href` values against an allowed-protocol list before accepting them as a
+   link mark — a `javascript:` URI is rejected, not rendered as a clickable link. `openOnClick: false` additionally
+   means read mode never navigates on a click at all.
+3. **`allowBase64` images cannot execute.** `Image.configure({ allowBase64: true })` (§4) permits `data:` URIs in
+   `src`, but an `<img>` element's `src` is fetched and decoded as image data by the browser's image pipeline — it is
+   not a script execution context regardless of what bytes the data URI carries. This is a deliberate, narrow
+   allowance (embedding an image inline in the markdown without a separate upload) and does not open a script path.
+
+**What this does not cover.** This is a client-rendering-surface review, not a full security audit of the feature.
+Access control (who can write `Readme.md` in the first place) is governed by the same space/folder permission model as
+every other file in that folder — nothing here changes who can write it, only what happens when it is rendered. The
+pre-existing gap noted in §3 (`file-detail`'s missing `isWriteable` check) is a separate, already-recorded issue on a
+separate surface.

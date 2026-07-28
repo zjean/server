@@ -1494,7 +1494,7 @@ the screen entirely.
 **(b) Widen the `KNOWN LIMITATION` comment's scope.** It currently names only "another Sync-in-API session (a second v2
 tab, or classic's text editor)". Server-*operation* locks have the identical shape — app `Sync-in`, same owner,
 `options: null`, `isExclusive: true` — and are taken by upload PATCH (`files-manager.service.ts:316`), PUT (`:155`),
-download-from-url (`:691`), compress (`:736`), extract (`:791`), and `custom-versioning/services/versioning.service.ts:636`.
+download-from-url (`:691`), compress (`:736`), extract (`:791`), and `custom-versioning/services/versioning.service.ts:465`.
 Those are stripped too, so clicking Edit during a concurrent re-upload of `README.md` would have the banner delete that
 operation's lock when it closes. Bounded (short TTL, same owner, the banner holds the refreshed lock meanwhile) and not
 blocking — but the comment should name them so nobody concludes only interactive editors are affected.
