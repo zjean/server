@@ -30,7 +30,7 @@ vi.mock('../../../configuration/config.environment', () => ({
   exportConfiguration: vi.fn()
 }))
 
-import { Logger } from '@nestjs/common'
+import { HttpStatus, Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import crypto from 'node:crypto'
 import { fstatSync } from 'node:fs'
@@ -1428,6 +1428,42 @@ describe(VersioningService.name, () => {
     expect((await fs.stat(filePath)).size).toBeGreaterThan(0)
   })
 
+  // #349: restore used to resolve the same file's id three times — in its guard,
+  // in the safety snapshot's ensurer, and again in the files-row update. The
+  // guard's row already carries it, and it is PROVEN: the row was only accepted
+  // because its fileId is the id this space env resolves to.
+  it('resolves the restored file’s id once and reuses it for the snapshot and the row update', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    ensurer.ensureFileId.mockClear()
+    filesQueries.getUserFileByPath.mockClear()
+
+    await service.restoreVersion(user, personalSpace(), versionId)
+
+    // Once, in the guard.
+    expect(filesQueries.getUserFileByPath).toHaveBeenCalledTimes(1)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+    // And nothing is lost by skipping the ensurer here: the safety snapshot is
+    // still anchored on the right file, and the files row still gets updated.
+    expect(queries.rows.find((r) => r.origin === 'restore')?.fileId).toBe(FILE_ID)
+    expect(filesQueries.updateFile).toHaveBeenCalledWith(FILE_ID, { size: CONTENT.length, mtime: expect.any(Number) })
+    expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+  })
+
+  // The other half of that trade: every OTHER snapshot must still go through the
+  // ensurer, because `files` rows are lazily materialized and a plain lookup
+  // returns nothing on a file's first version (ADR §3).
+  it('still materializes the files row through the ensurer for an ordinary snapshot', async () => {
+    versionsConfig.minIntervalSeconds = 0
+
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+    expect(ensurer.ensureFileId).toHaveBeenCalledTimes(1)
+    expect(queries.rows[0].fileId).toBe(FILE_ID)
+  })
+
   it('refuses to restore a blob whose size disagrees with its row, leaving the live file intact', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
@@ -1473,6 +1509,33 @@ describe(VersioningService.name, () => {
     const { stream } = await service.getVersionStream(user, readOnly, id)
     expect(stream).toBeDefined()
     stream.destroy()
+  })
+
+  // #349: the guard pair is one seam now (requireVersionForWrite), so what each
+  // write method answers has to be pinned per STATUS, not merely as "a FileError"
+  // — the two halves throw different ones, and their ORDER is what decides which
+  // an unknown id gets. FileError carries httpCode rather than being an
+  // HttpException, so this is the number the versioning exception filter emits.
+  it('answers 403 for a read-only member and 404 for an unknown id, on every write method', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const id = queries.rows[0].id
+    const readOnly = personalSpace({ envPermissions: '' })
+
+    const writes: ((space: SpaceEnv, versionId: number) => Promise<unknown>)[] = [
+      (space, versionId) => service.restoreVersion(user, space, versionId),
+      (space, versionId) => service.setLabel(user, space, versionId, 'x'),
+      (space, versionId) => service.deleteVersion(user, space, versionId)
+    ]
+    for (const write of writes) {
+      await expect(write(readOnly, id)).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+      // Existence is checked FIRST, so an id that is not this file's never
+      // reaches the permission half — the same 404 a member WITH modify rights
+      // gets, which is what keeps the two answers meaning one thing each.
+      await expect(write(readOnly, 999_999)).rejects.toMatchObject({ httpCode: HttpStatus.NOT_FOUND })
+      await expect(write(personalSpace(), 999_999)).rejects.toMatchObject({ httpCode: HttpStatus.NOT_FOUND })
+    }
+    expect(queries.rows).toHaveLength(1)
   })
 
   // The trash is read-only — space.guard.ts enforces that for every ADD/MODIFY
