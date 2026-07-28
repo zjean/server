@@ -1,4 +1,5 @@
 import { getTableName } from 'drizzle-orm'
+import { getTableConfig } from 'drizzle-orm/mysql-core'
 import { getTablesWithFileIdColumn } from '../../../infrastructure/database/utils'
 import { customFilesVersions } from './files-versions.schema'
 
@@ -33,5 +34,39 @@ describe('custom_files_versions schema', () => {
     expect(customFilesVersions.fileId).toBeDefined()
     const guarded = getTablesWithFileIdColumn().map((t) => getTableName(t))
     expect(guarded).toContain('custom_files_versions')
+  })
+
+  // THIS TEST GUARDS VERSION HISTORY AGAINST A STALE CACHE COLUMN.
+  //
+  // `ownerId` / `spaceId` / `spaceExternalRootId` / `shareExternalId` are a
+  // NON-AUTHORITATIVE CACHE that a cross-space move leaves stale BY DESIGN
+  // (ADR §15). They shipped with ON DELETE CASCADE, which meant deleting an
+  // unrelated user or space destroyed the version history of a file that had
+  // already moved away — silently, with the blobs then reaped by the nightly
+  // GC (issue #337). A column allowed to be stale must not be allowed to
+  // delete rows, so all four are ON DELETE SET NULL.
+  //
+  // `fileId` keeps its cascade: it is NOT NULL, it is the anchor, and
+  // `filesQueries.deleteFiles` hard-deletes `files` rows (including every
+  // descendant of a directory in one regexp query) — a non-cascading FK there
+  // would make those deletes fail (ADR §3.2).
+  it('cascades only on fileId; the stale scope cache nulls out instead', () => {
+    const byColumn = new Map(
+      getTableConfig(customFilesVersions).foreignKeys.map((fk) => [
+        fk
+          .reference()
+          .columns.map((c) => c.name)
+          .join(','),
+        fk.onDelete
+      ])
+    )
+    expect(byColumn.get('fileId')).toBe('cascade')
+    for (const scopeColumn of ['ownerId', 'spaceId', 'spaceExternalRootId', 'shareExternalId']) {
+      expect(byColumn.get(scopeColumn)).toBe('set null')
+    }
+    // authorId was already set null (nullable for system-originated snapshots).
+    expect(byColumn.get('authorId')).toBe('set null')
+    // Nothing else may cascade — a new FK has to make this decision explicitly.
+    expect([...byColumn].filter(([, action]) => action === 'cascade').map(([col]) => col)).toEqual(['fileId'])
   })
 })
