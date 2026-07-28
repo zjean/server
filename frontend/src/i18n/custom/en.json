@@ -82,6 +82,7 @@
   "v2_emptying_trash_progress": "Emptying trash…",
   "v2_saved_one": "Saved \"{{ name }}\"",
   "v2_discard_unsaved_changes": "Discard unsaved changes to \"{{ name }}\"?",
+  "v2_readme_autosave_failed": "Could not save \"{{ name }}\" — your changes were lost.",
   "v2_space_disabled_in_trash": "{{ name }}: Space is disabled",
   "v2_share_n_created": "{{ nb }} items shared",
   "v2_share_n_partial_fail": "Shared {{ created }} · {{ failed }} failed",

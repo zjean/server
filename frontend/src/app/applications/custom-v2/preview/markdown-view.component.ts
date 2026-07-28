@@ -688,6 +688,33 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     this.done.emit()
   }
 
+  // Awaitable save for an embedding parent that is being torn down and cannot
+  // prompt (the folder readme banner on folder change). Returns 'clean' when
+  // there was nothing to save, 'saved' on success, 'failed' otherwise. Never
+  // throws — the caller is mid-teardown and must proceed either way.
+  //
+  // Both the content and the HTTP request are captured/issued synchronously
+  // before the first await, so it stays correct even if this component is
+  // destroyed while the request is in flight.
+  //
+  // Deliberately raises no toast and emits no `saved`: the embedding parent owns
+  // the user-facing messaging for this path, and double-toasting would be noise.
+  async saveNowIfModified(): Promise<'clean' | 'saved' | 'failed'> {
+    if (!this.stub || !this.isModified() || !this.writeable() || this.readonly()) return 'clean'
+    const content = this.currentMarkdown()
+    this.saving.set(true)
+    try {
+      await firstValueFrom(this.filesUpload.uploadFileContent(this.stub, content, true))
+      this.savedContent = content
+      this.isModified.set(false)
+      return 'saved'
+    } catch {
+      return 'failed'
+    } finally {
+      this.saving.set(false)
+    }
+  }
+
   // --- Lifecycle internals ----------------------------------------------
 
   // Lets an embedding parent run the unsaved-changes confirm without
