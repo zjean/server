@@ -18,7 +18,13 @@ export const VERSIONS_ROUTE = {
   RESTORE: 'restore',
   LABEL: 'label',
   DELETE: 'delete',
-  DIFF: 'diff'
+  DIFF: 'diff',
+  // Instance-wide operator endpoints (#342). They carry NO trailing wildcard —
+  // they address the whole store, not a file — so they never collide with the
+  // per-file routes above, every one of which has a distinct static verb.
+  ADMIN: 'admin',
+  STORAGE: 'storage',
+  PURGE: 'purge'
 } as const
 
 const NS = `${VERSIONS_ROUTE.BASE}/${VERSIONS_ROUTE.VERSIONS}`
@@ -30,3 +36,8 @@ export const API_VERSIONS_RESTORE = `${NS}/${VERSIONS_ROUTE.RESTORE}`
 export const API_VERSIONS_LABEL = `${NS}/${VERSIONS_ROUTE.LABEL}`
 export const API_VERSIONS_DELETE = `${NS}/${VERSIONS_ROUTE.DELETE}`
 export const API_VERSIONS_DIFF = `${NS}/${VERSIONS_ROUTE.DIFF}`
+
+const ADMIN_NS = `${NS}/${VERSIONS_ROUTE.ADMIN}`
+
+export const API_VERSIONS_ADMIN_STORAGE = `${ADMIN_NS}/${VERSIONS_ROUTE.STORAGE}`
+export const API_VERSIONS_ADMIN_PURGE = `${ADMIN_NS}/${VERSIONS_ROUTE.PURGE}`

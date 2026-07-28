@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
-import { XMLBuilder } from 'fast-xml-parser'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH, XML_CONTENT_TYPE } from '../../webdav/constants/webdav'
@@ -9,38 +8,34 @@ import { WebDAVSpaces } from '../../webdav/services/webdav-spaces.service'
 import { FavoritesManager } from '../../custom-favorites/services/favorites-manager.service'
 import '../interfaces/nc-request.interface'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
+import { renderMultistatus } from '../utils/nc-xml'
 import { type NcPermissionsMode } from '../utils/nc-permissions'
 import { buildShareMountPropResponse, rawurlencodeSegment } from '../utils/nc-share-mount-response'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 
-// Nextcloud clients expect four namespaces on every <d:multistatus>:
+// This body declares all four of the module's namespaces, because
+// nc-prop-builder emits a prefixed prop from each:
 //   d   — DAV:                                        (lowercase prefix, NC convention)
 //   oc  — http://owncloud.org/ns                      (fileid, permissions, owner-*, ...)
 //   nc  — http://nextcloud.org/ns                     (has-preview, trashbin-*, mount-type)
 //   ocs — http://open-collaboration-services.org/ns   (share-permissions bitmask)
+//
+// This comment used to claim NC clients expect four namespaces on EVERY
+// multistatus. They don't — the rule is "declare every prefix the body uses",
+// a real NC server's fourth declaration is xmlns:s (sabredav), and ocs: is not
+// in NC's namespaceMap at all. nc-xml.ts carries the upstream citations and the
+// per-client reasoning; the arity here is unchanged and correct because all four
+// prefixes really are used.
 //
 // Sync-in's native WebDAV only declares DAV: (via an uppercase "D:" prefix,
 // which NC clients don't parse), so PROPFIND responses for stock mobile
 // clients are built here from scratch rather than delegated to
 // WebDAVMethods.propfind.
 
-const XMLNS = {
-  d: 'DAV:',
-  oc: 'http://owncloud.org/ns',
-  nc: 'http://nextcloud.org/ns',
-  ocs: 'http://open-collaboration-services.org/ns'
-}
-
 @Injectable()
 export class NcPropfindService {
   private readonly logger = new Logger(NcPropfindService.name)
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    format: false,
-    suppressEmptyNode: false
-  })
 
   constructor(
     private readonly webdavSpaces: WebDAVSpaces,
@@ -141,16 +136,7 @@ export class NcPropfindService {
       throw new HttpException('Propfind failed', HttpStatus.INTERNAL_SERVER_ERROR)
     }
 
-    const body = this.xml.build({
-      'd:multistatus': {
-        '@_xmlns:d': XMLNS.d,
-        '@_xmlns:oc': XMLNS.oc,
-        '@_xmlns:nc': XMLNS.nc,
-        '@_xmlns:ocs': XMLNS.ocs,
-        'd:response': responses
-      }
-    })
-    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
+    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(renderMultistatus(responses))
   }
 }
 

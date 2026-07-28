@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, asc, count, desc, eq, gt, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
+import { and, asc, count, countDistinct, desc, eq, gt, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -98,7 +98,7 @@ export class VersioningQueries {
     const [row] = await this.db
       .select({
         used: sum(customFilesVersions.size),
-        labeled: sum(sql`CASE WHEN ${customFilesVersions.label} IS NULL THEN 0 ELSE ${customFilesVersions.size} END`),
+        labeled: labeledBytesSQL(),
         n: count()
       })
       .from(customFilesVersions)
@@ -106,15 +106,108 @@ export class VersioningQueries {
     return { used: Number(row?.used ?? 0), labeledBytes: Number(row?.labeled ?? 0), count: Number(row?.n ?? 0) }
   }
 
-  // Eviction candidate for the quota cap: oldest UNLABELED version in the root.
-  // Labeled versions are never evicted, even at the ceiling.
-  async oldestUnlabeledByRoot(versionsRoot: string): Promise<VersionRow | undefined> {
+  // Is there ANY version in this root of exactly this logical size?
+  //
+  // The dedup half of the write-path pre-flight (#339). A snapshot whose blob
+  // already exists costs zero disk bytes, so the quota cap lets it through at
+  // any size — but the digest is only known after the copy has been made, which
+  // is the whole reason the cap runs post-staging. Identical content implies
+  // identical size, so a root holding no row of this size cannot possibly dedup
+  // this content, and an over-ceiling write can be declined without copying it.
+  // The converse does not hold — same length, different bytes — so a hit means
+  // only "stage it and let enforceQuotaShare decide", exactly as before.
+  //
+  // LIMIT 1 over the (versionsRoot, ...) index prefix, and it runs ONLY for a
+  // write that already exceeds the ceiling: the path that used to pay a full
+  // read + write + unlink to reach the same answer.
+  async existsSizeInRoot(versionsRoot: string, size: number): Promise<boolean> {
     const [row] = await this.db
+      .select({ id: customFilesVersions.id })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.size, size)))
+      .limit(1)
+    return !!row
+  }
+
+  // Instance-wide totals for the admin panel (#342) — ONE aggregate over the
+  // table, deliberately not distinctRoots() followed by N usageByRoot() calls.
+  //
+  // Reports the same three figures usageByRoot does, plus how many roots and
+  // files they are spread over, so the panel's summary line and its per-root
+  // table cannot define "used" or "labeled" differently.
+  async usageTotals(): Promise<{ used: number; labeledBytes: number; count: number; roots: number; files: number }> {
+    const [row] = await this.db
+      .select({
+        used: sum(customFilesVersions.size),
+        labeled: labeledBytesSQL(),
+        n: count(),
+        roots: countDistinct(customFilesVersions.versionsRoot),
+        files: countDistinct(customFilesVersions.fileId)
+      })
+      .from(customFilesVersions)
+    return {
+      used: Number(row?.used ?? 0),
+      labeledBytes: Number(row?.labeled ?? 0),
+      count: Number(row?.n ?? 0),
+      roots: Number(row?.roots ?? 0),
+      files: Number(row?.files ?? 0)
+    }
+  }
+
+  // usageByRoot for EVERY root at once, heaviest first, capped at `limit` — the
+  // "which users and spaces are the heavy consumers" question (#342).
+  //
+  // Ordered by SUM(size), i.e. by the same number the quota cap charges, so the
+  // ranking answers "who is eating quota" rather than "who has the most rows".
+  async usageByAllRoots(limit: number): Promise<{ versionsRoot: string; used: number; labeledBytes: number; count: number; files: number }[]> {
+    const rows = await this.db
+      .select({
+        versionsRoot: customFilesVersions.versionsRoot,
+        used: sum(customFilesVersions.size),
+        labeled: labeledBytesSQL(),
+        n: count(),
+        files: countDistinct(customFilesVersions.fileId)
+      })
+      .from(customFilesVersions)
+      .groupBy(customFilesVersions.versionsRoot)
+      .orderBy(desc(sum(customFilesVersions.size)))
+      .limit(limit)
+    return rows.map((r) => ({
+      versionsRoot: r.versionsRoot,
+      used: Number(r.used ?? 0),
+      labeledBytes: Number(r.labeled ?? 0),
+      count: Number(r.n ?? 0),
+      files: Number(r.files ?? 0)
+    }))
+  }
+
+  // Oldest-first UNLABELED versions in one root. Labeled versions are never
+  // candidates for anything automatic, and are equally never candidates for the
+  // admin purge — the exemption is encoded HERE, in the candidate query, rather
+  // than restated at each caller, which is how this feature produced the same
+  // data-loss bug twice.
+  //
+  // Paged for the same reason unlabeledOlderThan is: a heavy root can hold a
+  // very large number of rows and each removal costs a DELETE, a refcount COUNT
+  // and possibly an unlink.
+  async unlabeledByRootOldestFirst(versionsRoot: string, limit: number): Promise<VersionRow[]> {
+    return this.db
       .select()
       .from(customFilesVersions)
       .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), isNull(customFilesVersions.label)))
       .orderBy(asc(customFilesVersions.createdAt), asc(customFilesVersions.id))
-      .limit(1)
+      .limit(limit)
+  }
+
+  // Eviction candidate for the quota cap: oldest UNLABELED version in the root.
+  // Labeled versions are never evicted, even at the ceiling.
+  //
+  // The same query as unlabeledByRootOldestFirst with limit 1, and delegating
+  // says so: if the eviction order ever changes it must change for both, since
+  // the eager cap and the admin purge remove rows from the same end of the same
+  // list.
+  async oldestUnlabeledByRoot(versionsRoot: string): Promise<VersionRow | undefined> {
+    const [row] = await this.unlabeledByRootOldestFirst(versionsRoot, 1)
     return row
   }
 
@@ -261,6 +354,18 @@ export class VersioningQueries {
       .where(isNull(files.id))
       .limit(limit)
   }
+}
+
+// SUM over the LABELED rows' sizes only.
+//
+// Shared by all three aggregates on purpose. `labeledBytes` is what makes the
+// eviction loop safe — it is how evictUntilUnderCeiling knows a ceiling is
+// unreachable before it deletes every unlabeled version chasing it — and it is
+// also what the admin panel reports as unreclaimable. Two definitions of
+// "labeled bytes" would let the panel promise a purge the enforcement path
+// cannot deliver.
+function labeledBytesSQL() {
+  return sum(sql`CASE WHEN ${customFilesVersions.label} IS NULL THEN 0 ELSE ${customFilesVersions.size} END`)
 }
 
 // Explicit column map so a join'd select still returns exactly the version row

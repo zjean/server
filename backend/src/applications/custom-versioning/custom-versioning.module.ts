@@ -5,6 +5,8 @@ import { VersioningQueries } from './services/versioning-queries.service'
 import { VersionsRetention } from './services/versions-retention.service'
 import { VersioningController } from './versioning.controller'
 import { VersioningService } from './services/versioning.service'
+import { VersionsAdminService } from './services/versions-admin.service'
+import { VersionsAdminController } from './versions-admin.controller'
 
 // Fork-owned file versioning. See docs/plans/2026-07-25-file-versioning-design.md.
 //
@@ -26,8 +28,10 @@ import { VersioningService } from './services/versioning.service'
 @Global()
 @Module({
   imports: [FilesModule, CustomSharedModule],
-  controllers: [VersioningController],
-  providers: [VersioningService, VersioningQueries, VersionsRetention],
+  // VersionsAdminController is separate from VersioningController because it is
+  // authorized by role rather than by SpaceGuard — see its header.
+  controllers: [VersioningController, VersionsAdminController],
+  providers: [VersioningService, VersioningQueries, VersionsRetention, VersionsAdminService],
   exports: [VersioningService]
 })
 export class CustomVersioningModule {}

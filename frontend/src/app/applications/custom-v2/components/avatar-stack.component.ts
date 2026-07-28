@@ -18,7 +18,7 @@ export interface AvatarStackUser extends AvatarUser {
     <div class="stack" [class.stack--tip]="labels().length > 0">
       @for (u of shown(); track u.id; let i = $index) {
         <div class="slot" [style.margin-left.px]="i === 0 ? 0 : -6">
-          <app-v2-avatar [user]="u" [size]="size()" [ring]="'var(--si-bg3)'" />
+          <app-v2-avatar [user]="u" [size]="size()" [ring]="ring()" />
         </div>
       }
       @if (extraCount() > 0) {
@@ -28,6 +28,7 @@ export interface AvatarStackUser extends AvatarUser {
           [style.height.px]="size()"
           [style.border-radius.px]="size()"
           [style.font-size.px]="extraFontSize()"
+          [style.box-shadow]="'0 0 0 2px ' + ring()"
         >
           +{{ extraCount() }}
         </div>
@@ -66,7 +67,6 @@ export interface AvatarStackUser extends AvatarUser {
         font-family: var(--si-sans);
         font-weight: 600;
         margin-left: -6px;
-        box-shadow: 0 0 0 2px var(--si-bg3);
       }
       .tip {
         position: absolute;
@@ -122,6 +122,10 @@ export class AvatarStackComponent {
   // knows the total member count but only has avatar identities for managers),
   // the "+N" chip is computed against `total` instead of users.length.
   readonly total = input<number | undefined>(undefined)
+  // Ring colour drawn around each avatar and the "+N" chip. Defaults to the
+  // card surface; callers on a different surface (e.g. the admin Spaces table
+  // rows, which sit on --si-bg2) pass their own so the ring stays invisible.
+  readonly ring = input<string>('var(--si-bg3)')
   @Input() max = 3
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
