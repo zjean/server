@@ -20,7 +20,7 @@ import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { SpaceModel } from '../../spaces/models/space.model'
 import { UserModel } from '../../users/models/user.model'
 import { isPathInside } from '../../files/utils/files'
-import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from './paths'
+import { blobPathFromRoot, parseVersionsRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from './paths'
 
 const user = { id: 7, login: 'alice' } as unknown as UserModel
 
@@ -171,5 +171,36 @@ describe('versions path resolution', () => {
     expect(() => versionsPathFromRoot(root)).not.toThrow()
     expect(versionsPathFromRoot(root)).toBeNull()
     expect(blobPathFromRoot(root, 'a'.repeat(64))).toBeNull()
+  })
+
+  /* --------------------------------------------------------- root parsing */
+
+  // parseVersionsRoot is the single decoder of the prefix rule: versionsPathFromRoot
+  // builds a filesystem path from it, and the admin purge validates an
+  // operator-supplied root with it. A second copy of the rule would mean the
+  // weaker copy decided what a valid root is.
+  it('splits a root into its kind and name', () => {
+    expect(parseVersionsRoot(userVersionsRoot('alice'))).toEqual({ kind: 'user', name: 'alice' })
+    expect(parseVersionsRoot(spaceVersionsRoot('team'))).toEqual({ kind: 'space', name: 'team' })
+  })
+
+  it.each([
+    ['no prefix', 'alice'],
+    ['a prefix that only looks right', 'users:alice'],
+    ['an empty name', 'user:'],
+    ['a traversal', 'user:../../etc'],
+    ['a separator', 'space:a/b'],
+    ['a dot name', 'user:.'],
+    ['an empty string', '']
+  ])('refuses %s', (_label, root) => {
+    expect(parseVersionsRoot(root)).toBeNull()
+  })
+
+  // The two functions agree by construction: anything the parser refuses has no
+  // path, and anything it accepts has one.
+  it('agrees with versionsPathFromRoot in both directions', () => {
+    for (const root of ['user:alice', 'space:team', 'user:', 'nonsense', 'space:a/b']) {
+      expect(parseVersionsRoot(root) === null).toBe(versionsPathFromRoot(root) === null)
+    }
   })
 })

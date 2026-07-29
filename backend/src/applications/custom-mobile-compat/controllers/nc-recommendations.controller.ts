@@ -1,15 +1,33 @@
 import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
-import { XMLBuilder } from 'fast-xml-parser'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesRecents } from '../../files/services/files-recents.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { type NcRecommendationEntry, toRecommendationEntry } from '../utils/nc-recommendation-entry'
+import { createNcXmlBuilder } from '../utils/nc-xml'
 
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 50
+
+// The OCS recommendations body is not a multistatus, but it needs the same
+// builder options as every other emitter in this module — so it takes them from
+// the shared util rather than declaring an eighth copy. The reasoning behind the
+// `ignoreAttributes: false` flag now lives on NC_XML_BUILDER_OPTIONS in
+// nc-xml.ts, with the test that guards it in nc-xml.spec.ts.
+//
+// Worth recording why the flag matters HERE specifically, since this body has no
+// attributes today and upstream's has none either: NC core renders OCS XML in
+// `lib/private/AppFramework/OCS/BaseResponse.php::toXML`, which calls
+// `writeAttribute` only for keys named `@attributes` or prefixed `@`, and
+// `OCA\Recommendations\Controller\RecommendationController::index` returns a
+// plain `['enabled' => bool, 'recommendations' => [...]]` array with no such
+// keys — so `<ocs>` has no xmlns. NextcloudKit's XMLToRecommendationParser
+// navigates by local element name (`xml["ocs", "data", ...]`) and never reads an
+// attribute. The flag is therefore byte-for-byte irrelevant to today's output;
+// it just stops the next attribute anyone adds from silently becoming a
+// malformed `<@_xmlns:d>` ELEMENT.
 
 // /ocs/v2.php/apps/recommendations/api/v1/recommendations powers the
 // "Recommended files" carousel at the top of NC iOS's Files tab. Upstream
@@ -29,11 +47,7 @@ const MAX_LIMIT = 50
 export class NcRecommendationsController {
   // Bare XMLBuilder. We hand the prolog to fastify and then concatenate the
   // <ocs>…</ocs> body produced from a plain JS object.
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: true,
-    format: false,
-    suppressEmptyNode: false
-  })
+  private readonly xml = createNcXmlBuilder()
 
   constructor(
     private readonly filesRecents: FilesRecents,

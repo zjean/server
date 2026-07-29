@@ -5,6 +5,7 @@ import { shares } from '../../shares/schemas/shares.schema'
 import { spacesRoots } from '../../spaces/schemas/spaces-roots.schema'
 import { spaces } from '../../spaces/schemas/spaces.schema'
 import { users } from '../../users/schemas/users.schema'
+import { VERSIONS_ROOT_MAX_LENGTH } from '../constants/versioning'
 
 // Fork-owned file-versions table. Named `custom_files_versions` (not
 // `files_versions`) so there is never a collision if upstream ships its own
@@ -58,19 +59,29 @@ export const customFilesVersions = mysqlTable(
     // decision — authoritative scope is always the `files` row plus the space
     // env the caller already resolved. A cross-space move leaves these stale
     // by design; they are refreshed opportunistically on the next snapshot.
-    ownerId: bigint('ownerId', { mode: 'number', unsigned: true }).references(() => users.id, { onDelete: 'cascade' }),
-    spaceId: bigint('spaceId', { mode: 'number', unsigned: true }).references(() => spaces.id, { onDelete: 'cascade' }),
+    //
+    // ON DELETE SET NULL, NOT cascade. A column that is allowed to be stale by
+    // design must never be allowed to delete a row: after a cross-space move
+    // these still name the PREVIOUS owner/space, so a cascade would let the
+    // deletion of an unrelated user or space silently destroy the history of a
+    // file that had moved away — exactly the bug `versionsRoot` (below) was
+    // written to keep the GC from committing. Nothing reads these as a filter
+    // or a permission input; `fileId` is the anchor and `versionsRoot` resolves
+    // the blob, so nulling them loses only a join shortcut. `fileId`'s cascade
+    // is deliberate and load-bearing (ADR §3.2) — do not change it.
+    ownerId: bigint('ownerId', { mode: 'number', unsigned: true }).references(() => users.id, { onDelete: 'set null' }),
+    spaceId: bigint('spaceId', { mode: 'number', unsigned: true }).references(() => spaces.id, { onDelete: 'set null' }),
     spaceExternalRootId: bigint('spaceExternalRootId', { mode: 'number', unsigned: true }).references(() => spacesRoots.id, {
-      onDelete: 'cascade'
+      onDelete: 'set null'
     }),
-    shareExternalId: bigint('shareExternalId', { mode: 'number', unsigned: true }).references(() => shares.id, { onDelete: 'cascade' }),
+    shareExternalId: bigint('shareExternalId', { mode: 'number', unsigned: true }).references(() => shares.id, { onDelete: 'set null' }),
     // Where the blob physically lives: 'user:<login>' or 'space:<alias>'.
     // Recorded at snapshot time and AUTHORITATIVE for blob resolution, so a
     // file moved to another space keeps resolving to the root that actually
     // holds its blobs — and the GC must match on this, not on the file's
     // current space, or it would delete a moved file's history as orphaned.
     // login and alias are both varchar(255); 261 covers 'space:' + 255.
-    versionsRoot: varchar('versionsRoot', { length: 261 }).notNull(),
+    versionsRoot: varchar('versionsRoot', { length: VERSIONS_ROOT_MAX_LENGTH }).notNull(),
     // sha512-256, hex. Algorithm-neutral column name on purpose: changing the
     // algorithm must be an explicit migration, not a silent format break.
     // 64 hex chars for sha512-256.

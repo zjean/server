@@ -238,7 +238,7 @@ export class FolderReadmeComponent implements OnDestroy {
   // owner, options: null, isExclusive: true) is also taken by server-side
   // OPERATION locks: upload PATCH (files-manager.service.ts:316), upload PUT
   // (:155), download-from-url (:691), compress (:736), extract (:791), and
-  // restore (custom-versioning/services/versioning.service.ts:465). Those get stripped by
+  // restore (custom-versioning/services/versioning.service.ts:641). Those get stripped by
   // this same logic, so clicking Edit during a concurrent re-upload of this
   // README would have the banner delete that operation's lock when it closes.
   // Bounded — short TTL, same owner, the banner holds its own refreshed lock in
@@ -304,8 +304,8 @@ export class FolderReadmeComponent implements OnDestroy {
   // v2.routes.ts gives each browse screen a single child route entry
   // (`path: '**'`, see that file's own comment), so every in-screen folder hop —
   // root<->subfolder as much as subfolder<->subfolder — reuses the same route
-  // config and the host screens reload in place (personal.component.ts:342,
-  // space-files.component.ts:330) rather than being destroyed. This component and
+  // config and the ONE host screen reloads in place (the navigation subscription
+  // at file-browser.base.ts:338) rather than being destroyed. This component and
   // its editor therefore survive every such hop; constructing a ProseMirror
   // instance per folder visit would be wasted work. The one thing that DOES
   // destroy this component is leaving the browse screen entirely — see the
@@ -399,15 +399,16 @@ export class FolderReadmeComponent implements OnDestroy {
     })
 
     // Folder navigation between two folders that match the SAME route config
-    // reloads the host screen in place (personal.component.ts:342,
-    // space-files.component.ts:330) — the host is NOT destroyed, so neither is
-    // this component nor the embedded editor, whose ngOnDestroy is the only thing
-    // that releases the exclusive lock. CloseGuardService can't help: it's a
-    // single-slot manual guard that only file-detail's close() consults, not a
-    // router guard. So drop edit mode explicitly whenever dirPath changes, which
-    // both releases the lock and auto-saves. See design §5.
+    // reloads the host screen in place (file-browser.base.ts:338 re-runs
+    // loadFiles() on each navigation emission) — the host is NOT destroyed, so
+    // neither is this component nor the embedded editor, whose ngOnDestroy is the
+    // only thing that releases the exclusive lock. CloseGuardService can't help:
+    // it's a single-slot manual guard that only file-detail's close() consults,
+    // not a router guard. So drop edit mode explicitly whenever dirPath changes,
+    // which both releases the lock and auto-saves. See design §5.
     //
-    // dirPath is derived from the route (currentUploadRoute() over toSignal(route.url))
+    // dirPath is derived from the route (file-browser.base.ts:1090's
+    // currentUploadRoute() over toSignal(route.url))
     // while files arrives with the listing GET, so this always fires while the
     // editor is still mounted — readme() has not yet swung to the new folder.
     //

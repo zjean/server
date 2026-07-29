@@ -109,6 +109,32 @@ describe('NcOnlyOfficeController', () => {
       const out = await controller.config(fakeReq, '42')
       expect((out as any).editorConfig.callbackUrl).toBe('https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx')
     })
+
+    // The rewrite happens OUTSIDE the config signature, and that is deliberate.
+    // getSettings signs the config before this controller sees it, and the
+    // document server takes the callback URL from the decoded token, not the body
+    // (DocsCoServer.js::fillDataFromJwt → `data.documentCallbackUrl =
+    // edit.callbackUrl`) — so on any deployment with a secret, which is all of
+    // them, the rewrite does not take effect and the callback lands on the
+    // upstream /api/spaces/onlyoffice/callback route. Both routes end in the same
+    // OnlyOfficeManager.callBack, so nothing is lost.
+    //
+    // This test exists so that re-signing here is a deliberate choice with a
+    // failing test attached, not a drive-by "fix". If you re-sign, you also need
+    // the secret in this controller and a second signing site in the fork.
+    it('does NOT re-sign the config after rewriting the callback url', async () => {
+      resolverMock.resolve.mockResolvedValue({ url: 'x' })
+      onlyOfficeManagerMock.getSettings.mockResolvedValue({})
+      translatorMock.toNcEnvelope.mockReturnValue({
+        token: 'signed-over-the-upstream-callback-url',
+        editorConfig: { callbackUrl: 'https://sync-in.test/api/spaces/onlyoffice/callback/personal/a.docx?token=user-jwt-abc' }
+      })
+
+      const out = await controller.config(fakeReq, '42')
+
+      expect((out as any).token).toBe('signed-over-the-upstream-callback-url')
+      expect((out as any).editorConfig.callbackUrl).toContain('/index.php/apps/onlyoffice/track')
+    })
   })
 
   describe('empty()', () => {

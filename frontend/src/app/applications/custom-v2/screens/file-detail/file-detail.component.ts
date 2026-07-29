@@ -38,7 +38,7 @@ import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
 import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
-import { isOfficeExtension } from '../../utils/office'
+import { isOfficeEditorEnabled, isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
 import { OfficeViewComponent } from '../../preview/office-view.component'
 import { TextCodeViewComponent } from '../../preview/text-code-view.component'
@@ -154,9 +154,14 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
   protected readonly isPdf = computed(() => isPdfMime(this.file()?.mime))
+  // An office editor being *configured* is half the gate — the other half is the
+  // extension. Classic couples them the same way (file.model.ts:189-191); v2 had
+  // only the extension half, so on a server with no office editor a .docx still
+  // mounted the embed and dead-ended on "editor not available" (#307).
+  protected readonly officeEditorEnabled = computed(() => isOfficeEditorEnabled(this.store.server().files.editors))
   protected readonly isOffice = computed(() => {
     const f = this.file()
-    return !!f && !isPdfMime(f.mime) && isOfficeExtension(f.name)
+    return !!f && !isPdfMime(f.mime) && isOfficeExtension(f.name) && this.officeEditorEnabled()
   })
   protected readonly isMarkdown = computed(() => {
     const f = this.file()
@@ -176,7 +181,11 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly diagramPath = computed(() => this.currentPath())
   protected readonly showOfficeEmbed = computed(() => this.isOffice() || (this.isPdf() && this.pdfStage() === 'office'))
-  protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf())
+  // Same gate from the other end: a PDF is only "editable" when an office editor
+  // is enabled (classic file.model.ts:185), so without one the toggle that mounts
+  // the embed must not be offered either. `showOfficeEmbed` reaches the embed for
+  // a PDF solely through `pdfStage`, which only `toggleToOffice` ever advances.
+  protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf() && this.officeEditorEnabled())
   protected readonly commentsAvailable = computed(() => {
     const f = this.file()
     return !!f && !f.isDir

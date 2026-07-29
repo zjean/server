@@ -20,6 +20,12 @@ export const VERSIONS_SHARD_LENGTH = 2
 // Leftovers here are crash debris and are safe for the retention GC to remove.
 export const VERSIONS_STAGING_DIR = '.staging'
 
+// Width of the `versionsRoot` column, and therefore the longest root string
+// that can exist: 'space:' (6) + a 255-char alias. The schema declares
+// varchar() from this constant and the admin purge DTO caps its input by it, so
+// a root that exists can always be named. Changing it is a migration.
+export const VERSIONS_ROOT_MAX_LENGTH = 261
+
 // Discriminator prefixes for the `versionsRoot` column. Recording which root a
 // blob was written to keeps it resolvable after a cross-space move, when the
 // file's current space no longer matches where its blobs live (ADR §15).
@@ -58,3 +64,10 @@ export const VERSIONS_TEXTUAL_MIMES: ReadonlySet<string> = new Set([
 // Per side. A diff of a 200 MB file is neither renderable nor worth the memory;
 // 2 MB is generous for anything a human reads.
 export const VERSIONS_MAX_DIFF_BYTES = 2 * 1024 * 1024
+
+// How many roots the admin storage panel ranks (#342).
+//
+// A constant rather than a query parameter: the panel's question is "who are the
+// heavy consumers", which a fixed top-N answers, and the number is exported so
+// the panel's heading and the query cannot disagree about it.
+export const VERSIONS_ADMIN_TOP_ROOTS = 10

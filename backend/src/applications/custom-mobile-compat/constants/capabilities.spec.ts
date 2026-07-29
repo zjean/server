@@ -8,6 +8,9 @@ vi.mock('../../../configuration/config.environment', () => ({
         editors: {
           onlyoffice: {
             enabled: false
+          },
+          eurooffice: {
+            enabled: false
           }
         },
         versions: {
@@ -167,13 +170,30 @@ describe('ncCapabilities', () => {
     // we don't lie about a feature the operator hasn't configured.
     afterEach(() => {
       mockConfig.applications.files.editors.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.eurooffice.enabled = false
     })
 
-    it('omits the block when onlyoffice is disabled', () => {
+    it('omits the block when no office editor is enabled', () => {
       mockConfig.applications.files.editors.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.eurooffice.enabled = false
       const c = ncCapabilities('https://sync-in.example.test')
       const files = (c.capabilities as Record<string, Record<string, unknown>>).files
       expect(files.onlyoffice).toBeUndefined()
+    })
+
+    // Euro-Office is an OnlyOffice-protocol document server bridged through the
+    // same /index.php/apps/onlyoffice/* connector, so it advertises the same
+    // block under the same key — there is no `eurooffice` capability key
+    // upstream, and both stock clients discover Euro-Office from the
+    // directEditing catalog rather than from capabilities.
+    it('advertises the block when only eurooffice is enabled', () => {
+      mockConfig.applications.files.editors.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.eurooffice.enabled = true
+      const c = ncCapabilities('https://sync-in.example.test')
+      const files = (c.capabilities as Record<string, Record<string, unknown>>).files
+      expect(files.onlyoffice).toBeDefined()
+      expect((files.onlyoffice as { templates: string[] }).templates).toEqual(['docx', 'xlsx', 'pptx'])
+      expect(files.eurooffice).toBeUndefined()
     })
 
     it('advertises mimetypes + templates when enabled', () => {

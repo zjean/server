@@ -503,3 +503,77 @@ describe(`${NcDavController.name} — GET/HEAD dispatch`, () => {
     expect(webdav.headOrGet).toHaveBeenCalledWith(expect.anything(), expect.anything(), SPACE_REPOSITORY.FILES)
   })
 })
+
+describe(`${NcDavController.name} — legacy /remote.php/webdav redirect`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+
+  const res = () => {
+    const headers: Record<string, string> = {}
+    const r = {
+      statusCode: 0,
+      headers,
+      status(code: number) {
+        r.statusCode = code
+        return r
+      },
+      header(name: string, value: string) {
+        headers[name] = value
+        return r
+      }
+    }
+    return r
+  }
+
+  beforeAll(async () => {
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        { provide: NcPathResolverService, useValue: {} },
+        { provide: NcShareMountResolverService, useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn() } },
+        { provide: SpacesManager, useValue: {} },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: {} },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  const req = (url: string) => ({ url, user: { id: 7, login: 'bob' } }) as unknown as FastifyDAVRequest
+
+  // 308, never 301. This is the URL ONLYOFFICE documents for connecting its
+  // Documents mobile app to a Nextcloud account, and real Nextcloud serves the
+  // path outright — so no client here has been hardened against a redirect that
+  // changes the method. A 301 may legally be replayed as GET (RFC 7231 §6.4.2),
+  // which silently turns a PUT into a download of the collection; 308 forbids it.
+  it('answers the bare legacy root with 308 and the modern per-user location', async () => {
+    const r = res()
+    await controller.legacyWebdavRoot(req('/remote.php/webdav'), r as never)
+    expect(r.statusCode).toBe(308)
+    expect(r.headers.location).toBe('/remote.php/dav/files/bob/')
+  })
+
+  it('carries the subpath through, url-encoding the login', async () => {
+    const r = res()
+    await controller.legacyWebdavRest(req('/remote.php/webdav/docs/report.docx'), r as never)
+    expect(r.statusCode).toBe(308)
+    expect(r.headers.location).toBe('/remote.php/dav/files/bob/docs/report.docx')
+  })
+
+  it('drops the query string from the redirect target', async () => {
+    const r = res()
+    await controller.legacyWebdavRest(req('/remote.php/webdav/a.docx?x=1'), r as never)
+    expect(r.headers.location).toBe('/remote.php/dav/files/bob/a.docx')
+  })
+})

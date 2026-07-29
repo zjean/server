@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
-import { XMLBuilder } from 'fast-xml-parser'
 import path from 'node:path'
 import { encodeUrl } from '../../../common/shared'
 import { getProps } from '../../files/utils/files'
@@ -13,6 +12,7 @@ import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import '../interfaces/nc-request.interface'
 import { buildNcPropResponse } from '../utils/nc-prop-builder'
 import { ncSubpathForFavorite } from '../utils/nc-favorites-xml'
+import { renderMultistatus } from '../utils/nc-xml'
 import { NcPathResolverService } from './nc-path-resolver.service'
 import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 
@@ -27,24 +27,11 @@ import { NcShareMountResolverService } from './nc-share-mount-resolver.service'
 // classic /api/app/favorites endpoints drive — so the NC surface never drifts
 // from the web surface. See docs/plans/2026-06-11-nc-favorites-design.md.
 
-const XMLNS = {
-  d: 'DAV:',
-  oc: 'http://owncloud.org/ns',
-  nc: 'http://nextcloud.org/ns',
-  ocs: 'http://open-collaboration-services.org/ns'
-}
-
 const NC_FILES_URL_PREFIX = '/remote.php/dav/files'
 
 @Injectable()
 export class NcFavoritesReportService {
   private readonly logger = new Logger(NcFavoritesReportService.name)
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    format: false,
-    suppressEmptyNode: false
-  })
 
   constructor(
     private readonly favorites: FavoritesManager,
@@ -163,14 +150,8 @@ export class NcFavoritesReportService {
   }
 
   private send(res: FastifyReply, responses: unknown[]): FastifyReply {
-    const root: Record<string, unknown> = {
-      '@_xmlns:d': XMLNS.d,
-      '@_xmlns:oc': XMLNS.oc,
-      '@_xmlns:nc': XMLNS.nc,
-      '@_xmlns:ocs': XMLNS.ocs
-    }
-    if (responses.length > 0) root['d:response'] = responses
-    const body = this.xml.build({ 'd:multistatus': root })
-    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
+    // The "omit d:response entirely when empty" behaviour this method used to
+    // implement by hand is now renderMultistatus's default for every caller.
+    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(renderMultistatus(responses))
   }
 }

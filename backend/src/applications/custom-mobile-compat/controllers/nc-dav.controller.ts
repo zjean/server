@@ -402,12 +402,20 @@ export class NcDavController {
     await this.spacesQueries.getOrCreateSpaceFile(0, fileProps, dbFile)
   }
 
+  // 308, not 301. `/remote.php/webdav/` is the URL ONLYOFFICE's own help pages
+  // tell users to enter when connecting the Documents mobile app to a Nextcloud
+  // account, and real Nextcloud serves that path directly rather than
+  // redirecting — so the clients arriving here are the ones that never had to
+  // survive a redirect. RFC 7231 §6.4.2 permits a user agent to rewrite a
+  // redirected 301 as GET, which for PROPFIND/PUT/MOVE turns the whole
+  // connection into a read of the collection. 308 (§6.4.7) forbids that
+  // rewrite, so the method and body survive.
   private redirectLegacy(req: FastifyDAVRequest, res: FastifyReply, rest: string): void {
     const user = req.user as UserModel
     if (!user) throw new HttpException('forbidden', HttpStatus.FORBIDDEN)
     const target = rest ? `/${rest}` : '/'
     const location = `/remote.php/dav/files/${encodeURIComponent(user.login)}${target}`
-    res.status(HttpStatus.MOVED_PERMANENTLY).header('location', location)
+    res.status(HttpStatus.PERMANENT_REDIRECT).header('location', location)
   }
 }
 

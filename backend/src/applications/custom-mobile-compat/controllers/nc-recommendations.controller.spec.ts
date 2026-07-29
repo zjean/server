@@ -5,6 +5,7 @@ import { FilesRecents } from '../../files/services/files-recents.service'
 import type { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { createNcXmlBuilder } from '../utils/nc-xml'
 import { NcRecommendationsController } from './nc-recommendations.controller'
 import { Mock } from 'vitest'
 
@@ -184,6 +185,64 @@ describe(NcRecommendationsController.name, () => {
 
     await controller.recommendations(makeReq(), r.res, '0')
     expect(getRecents.mock.calls[0][1]).toBe(10)
+  })
+
+  // --- wire-format pins (issue #344) ---------------------------------------
+  //
+  // The builder used to be constructed with `ignoreAttributes: true`, which on a
+  // *builder* makes fast-xml-parser silently discard `@_`-prefixed keys instead
+  // of emitting them as attributes. These three tests pin both halves of the fix:
+  // the emitted bytes must not change, and an attribute must actually survive.
+
+  it('emits exactly this body for a representative payload (byte-for-byte pin)', async () => {
+    getRecents.mockResolvedValue([
+      recent({ id: 42, path: 'files/personal', name: 'photo.jpg', mime: 'image-jpeg' }),
+      recent({ id: 43, path: 'files/personal/Documents', name: 'report.docx' }),
+      // out of home → dropped
+      recent({ id: 44, path: 'files/team-marketing/Brand', name: 'logo.svg', mime: 'image-svg+xml' })
+    ])
+    const r = makeRes()
+
+    await controller.recommendations(makeReq(), r.res)
+
+    expect(r.body).toBe(
+      '<?xml version="1.0"?>\n' +
+        '<ocs><meta><status>ok</status><statuscode>200</statuscode><message>OK</message></meta>' +
+        '<data><enabled>1</enabled><recommendations>' +
+        '<element><id>42</id><timestamp>1714742400</timestamp><name>photo.jpg</name><directory>/</directory>' +
+        '<extension>jpg</extension><mimeType>image/jpeg</mimeType><hasPreview>1</hasPreview><reason>recent</reason></element>' +
+        '<element><id>43</id><timestamp>1714742400</timestamp><name>report.docx</name><directory>/Documents</directory>' +
+        '<extension>docx</extension><mimeType>application/vnd.openxmlformats-officedocument.wordprocessingml.document</mimeType>' +
+        '<hasPreview>0</hasPreview><reason>recent</reason></element>' +
+        '</recommendations></data></ocs>'
+    )
+  })
+
+  it('emits exactly this body for the empty-carousel case (byte-for-byte pin)', async () => {
+    getRecents.mockResolvedValue([])
+    const r = makeRes()
+
+    await controller.recommendations(makeReq(), r.res)
+
+    expect(r.body).toBe(
+      '<?xml version="1.0"?>\n' +
+        '<ocs><meta><status>ok</status><statuscode>200</statuscode><message>OK</message></meta>' +
+        '<data><enabled>1</enabled><recommendations></recommendations></data></ocs>'
+    )
+  })
+
+  it('the shared builder emits @_ keys as attributes instead of dropping them', () => {
+    // Guards the flag itself, from this endpoint's side: with
+    // `ignoreAttributes: true` fast-xml-parser 5.x emits
+    // `<@_xmlns:d>DAV:</@_xmlns:d>` — a malformed element, not an attribute —
+    // with no error, so the pins above would still pass while any future xmlns
+    // declaration corrupted the wire format. Duplicated deliberately with
+    // nc-xml.spec.ts's copy: this asserts the controller reaches the shared
+    // options, that one asserts the options themselves.
+    const built = createNcXmlBuilder().build({
+      ocs: { '@_xmlns:d': 'DAV:', meta: { '@_probe': 'x', status: 'ok' } }
+    })
+    expect(built).toBe('<ocs xmlns:d="DAV:"><meta probe="x"><status>ok</status></meta></ocs>')
   })
 
   it('drops recents outside the user’s resolved home (would 404 on iOS tap)', async () => {

@@ -29,7 +29,12 @@ import { buildFileModelStub } from '../utils/file-model-stub'
     @if (loading()) {
       <div class="office-view__state" l10nTranslate>Loading editor…</div>
     } @else if (error(); as err) {
-      <div class="office-view__error">{{ err | translate: locale.language : { editor: officeEditorName } }}</div>
+      <div class="office-view__error">
+        <div>{{ err | translate: locale.language : { editor: officeEditorName } }}</div>
+        @if (errorDetail(); as detail) {
+          <div class="office-view__error-detail">{{ detail }}</div>
+        }
+      </div>
     } @else if (config(); as cfg) {
       <app-files-onlyoffice-document
         class="office-view__doc"
@@ -37,6 +42,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         [editorName]="officeEditorName"
         [documentServerUrl]="cfg.documentServerUrl"
         [config]="cfg.config"
+        (loadError)="onLoadError($event)"
         (wasSaved)="onSave()"
       />
     }
@@ -57,6 +63,10 @@ import { buildFileModelStub } from '../utils/file-model-stub'
       }
       .office-view__error {
         color: var(--si-fg);
+      }
+      .office-view__error-detail {
+        margin-top: 6px;
+        color: var(--si-fg-muted);
       }
       .office-view__doc {
         display: block;
@@ -79,6 +89,9 @@ export class OfficeViewComponent implements OnDestroy {
   protected readonly config = signal<OnlyOfficeReqDto | null>(null)
   protected readonly loading = signal(false)
   protected readonly error = signal<string | null>(null)
+  // Untranslated technical detail shown under the localized headline. Only the
+  // editor-load path sets it; see onLoadError for why it is not a i18n key.
+  protected readonly errorDetail = signal<string | null>(null)
   protected readonly docId = computed(() => `v2-preview-doc-${this.file()?.id ?? 'none'}`)
   // Editor label shown in OnlyOfficeComponent's load/init error messages.
   // Mirrors classic FilesViewerOnlyOfficeComponent.officeEditorName — picks
@@ -128,6 +141,7 @@ export class OfficeViewComponent implements OnDestroy {
         this.fileStub = buildFileModelStub(f, p)
         this.config.set(null)
         this.error.set(null)
+        this.errorDetail.set(null)
         this.loading.set(true)
         this.http
           .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
@@ -161,6 +175,31 @@ export class OfficeViewComponent implements OnDestroy {
   protected onSave(): void {
     this.fileStub?.updateHTimeAgo?.()
     this.saved.emit()
+  }
+
+  // The document server's api.js failed to load, or DocsAPI never showed up.
+  // Without this binding the emitted error went nowhere and the pane stayed
+  // permanently blank — the `error()` signal is only otherwise set by the
+  // /settings HTTP path, which had already succeeded by this point (#376).
+  //
+  // OnlyOfficeComponent hands over an already-interpolated English title+message
+  // pair and never exposes the numeric error code (only-office.component.ts:79-93),
+  // so the code cannot be mapped to one of our own keys. Instead the headline
+  // comes from `v2_office_load_failed` — which carries the `{{ editor }}`
+  // placeholder, so it names OnlyOffice or Euro-Office per the server config and
+  // stays translatable — and the emitted `message` is surfaced verbatim beneath
+  // it as technical detail. Classic shows both of these strings untranslated too
+  // (it forwards them straight to sendNotification), so the detail line is
+  // parity rather than a regression.
+  //
+  // Releasing the lock mirrors classic's net effect: classic closes the whole
+  // dialog on this error, and its ngOnDestroy drops the lock. No server-side
+  // editor session exists — the editor never loaded — so leaving the stub lock
+  // in place would show the file as locked-by-me for something that isn't open.
+  protected onLoadError(e: { title: string; message: string }): void {
+    this.releaseLock()
+    this.error.set('v2_office_load_failed')
+    this.errorDetail.set(e.message)
   }
 
   // Mirrors classic FilesViewerOnlyOfficeComponent.ngOnInit lock handling.

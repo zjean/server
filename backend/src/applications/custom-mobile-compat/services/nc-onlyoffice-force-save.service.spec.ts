@@ -9,6 +9,14 @@ vi.mock('../../../configuration/config.environment', () => ({
             externalServer: 'https://docs.example.test',
             secret: 'test-secret',
             verifySSL: false
+          },
+          // Euro-Office is the same OnlyOfficeConfig shape — only one of the two
+          // is ever enabled on a given deployment.
+          eurooffice: {
+            enabled: false,
+            externalServer: 'https://euro.example.test',
+            secret: 'euro-secret',
+            verifySSL: false
           }
         }
       }
@@ -34,7 +42,10 @@ describe('NcOnlyOfficeForceSaveService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    mockConfig.applications.files.editors.onlyoffice.enabled = true
     mockConfig.applications.files.editors.onlyoffice.externalServer = 'https://docs.example.test'
+    mockConfig.applications.files.editors.eurooffice.enabled = false
+    mockConfig.applications.files.editors.eurooffice.externalServer = 'https://euro.example.test'
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -93,5 +104,35 @@ describe('NcOnlyOfficeForceSaveService', () => {
     const out = await service.forceSave(fakeSpace)
     expect(out.ok).toBe(false)
     expect(out.reason).toContain('ECONNREFUSED')
+  })
+
+  // Euro-Office deployments (onlyoffice disabled, eurooffice enabled) reach the
+  // same connector — OnlyOfficeManager already selects the eurooffice config, so
+  // forcesave has to select it the same way or every mobile Save reports
+  // 'doc server not configured' against a perfectly configured server.
+  describe('Euro-Office deployment', () => {
+    beforeEach(() => {
+      mockConfig.applications.files.editors.onlyoffice.enabled = false
+      mockConfig.applications.files.editors.eurooffice.enabled = true
+    })
+
+    it('POSTs to the eurooffice document server and signs with its secret', async () => {
+      cacheMock.get.mockResolvedValue('doc-key-1')
+      jwtMock.signAsync.mockResolvedValue('signed-jwt')
+      axiosRefMock.mockResolvedValue({ data: {} })
+
+      const out = await service.forceSave(fakeSpace)
+
+      expect(jwtMock.signAsync).toHaveBeenCalledWith({ c: 'forcesave', key: 'doc-key-1' }, { secret: 'euro-secret', expiresIn: 60 })
+      expect(axiosRefMock).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://euro.example.test/coauthoring/CommandService.ashx' }))
+      expect(out).toEqual({ ok: true })
+    })
+
+    it('reports not-configured when the eurooffice externalServer is unset', async () => {
+      mockConfig.applications.files.editors.eurooffice.externalServer = null
+      const out = await service.forceSave(fakeSpace)
+      expect(out).toEqual({ ok: false, reason: 'doc server not configured' })
+      expect(axiosRefMock).not.toHaveBeenCalled()
+    })
   })
 })

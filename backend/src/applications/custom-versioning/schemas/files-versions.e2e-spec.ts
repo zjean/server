@@ -10,6 +10,7 @@ import { DeleteUserDto } from '../../users/dto/delete-user.dto'
 import { UserModel } from '../../users/models/user.model'
 import { AdminUsersManager } from '../../users/services/admin-users-manager.service'
 import { generateUserTest } from '../../users/utils/test'
+import { VersioningQueries } from '../services/versioning-queries.service'
 import { customFilesVersions } from './files-versions.schema'
 
 // Schema-level e2e for custom_files_versions. Unit specs in this repo mock
@@ -157,6 +158,86 @@ describe('custom_files_versions schema (e2e)', () => {
     expect(inUserRoot).toHaveLength(1)
 
     await db.delete(files).where(eq(files.id, fileId))
+  })
+
+  // The admin panel's numbers (#342). SUM/GROUP BY/COUNT(DISTINCT) correctness —
+  // and MySQL handing SUM() back as a decimal STRING, which is why every
+  // aggregate in VersioningQueries wraps its result in Number() — can only be
+  // proven against a real MariaDB. A mocked db would agree with any arithmetic.
+  it('aggregates totals and per-root usage the way their labels claim', async () => {
+    const queries = app.get<VersioningQueries>(VersioningQueries)
+    const fileA = await insertFileRow('agg-a.txt')
+    const fileB = await insertFileRow('agg-b.txt')
+    const root = `user:${userTest.login}`
+    const otherRoot = 'space:agg-e2e-space'
+
+    await insertVersion(fileA, { size: 100, versionsRoot: root })
+    await insertVersion(fileA, { size: 200, versionsRoot: root, label: 'keep-me' })
+    await insertVersion(fileB, { size: 300, versionsRoot: root })
+    await insertVersion(fileB, { size: 7, versionsRoot: otherRoot })
+
+    // Per root, exact: two files, three rows, 600 bytes of which 200 are named.
+    const perRoot = await queries.usageByAllRoots(100)
+    expect(perRoot.find((r) => r.versionsRoot === root)).toEqual({
+      versionsRoot: root,
+      used: 600,
+      labeledBytes: 200,
+      count: 3,
+      files: 2
+    })
+    expect(perRoot.find((r) => r.versionsRoot === otherRoot)).toMatchObject({ used: 7, labeledBytes: 0, count: 1, files: 1 })
+    // Heaviest first — the ranking is by bytes, which is what quota is charged in.
+    const positions = perRoot.map((r) => r.versionsRoot)
+    expect(positions.indexOf(root)).toBeLessThan(positions.indexOf(otherRoot))
+    // usageByRoot and the grouped query must not disagree about one root.
+    expect(await queries.usageByRoot(root)).toEqual({ used: 600, labeledBytes: 200, count: 3 })
+
+    // Totals are asserted against a full read of the table rather than against
+    // hard-coded numbers: other cases in this file leave rows behind, and a
+    // total that only holds on an empty database is not the total the panel
+    // shows.
+    //
+    // The read is BRACKETED rather than taken once, because usageTotals() is
+    // instance-wide and the table is not quiescent while it runs. The six other
+    // custom-versioning e2e files create versions through the API, and
+    // vitest-e2e.config.mts sets no fileParallelism: false — so they execute in
+    // parallel worker threads against this same database. A single snapshot
+    // races them: this assertion first failed as `expected 829 to be 808`, the
+    // 21 bytes being another file's row landing between the two reads.
+    //
+    // On a quiescent table both snapshots are identical and every bracket below
+    // collapses to exact equality, so running this file alone is as strict as
+    // before. What the bracket still catches decisively is the failure this
+    // assertion exists for — a `used` summed from the truncated top-N of
+    // usageByAllRoots would fall far below the minimum, not a few bytes off it.
+    // What it cannot catch is an aggregate that is wrong only during a window in
+    // which a concurrent case both inserts and deletes; the deterministic
+    // per-root assertions above are what pin the semantics.
+    const before = await db.select().from(customFilesVersions)
+    const totals = await queries.usageTotals()
+    const after = await db.select().from(customFilesVersions)
+
+    type VersionRows = typeof before
+    const expectWithin = (actual: number, of: (rows: VersionRows) => number) => {
+      const [a, b] = [of(before), of(after)]
+      expect(actual).toBeGreaterThanOrEqual(Math.min(a, b))
+      expect(actual).toBeLessThanOrEqual(Math.max(a, b))
+    }
+
+    expectWithin(totals.used, (rows) => rows.reduce((n, r) => n + r.size, 0))
+    expectWithin(totals.labeledBytes, (rows) => rows.filter((r) => r.label).reduce((n, r) => n + r.size, 0))
+    expectWithin(totals.count, (rows) => rows.length)
+    expectWithin(totals.roots, (rows) => new Set(rows.map((r) => r.versionsRoot)).size)
+    expectWithin(totals.files, (rows) => new Set(rows.map((r) => r.fileId)).size)
+
+    // The purge's candidate list: unlabeled only, oldest first. The labeled row
+    // is absent, which is the whole labeled-version exemption.
+    const candidates = await queries.unlabeledByRootOldestFirst(root, 10)
+    expect(candidates.map((r) => r.size)).toEqual([100, 300])
+    expect((await queries.oldestUnlabeledByRoot(root))?.size).toBe(100)
+
+    await db.delete(files).where(eq(files.id, fileA))
+    await db.delete(files).where(eq(files.id, fileB))
   })
 
   it('accepts a versions root at the full 261-char width (space: + 255-char alias)', async () => {

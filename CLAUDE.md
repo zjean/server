@@ -114,6 +114,23 @@ These details aren't guessable from the DTO types — the backend has runtime co
 
 **When implementing a new v2 feature that mirrors an existing classic one:** open the classic component and service side-by-side while writing the v2 version. Do not trust the DTO types alone.
 
+### Frontend tests exist now — a little
+
+`frontend/vitest.config.mts` + `frontend/src/test-setup.ts` were stood up by #346, and CI runs them as part of the
+`test` workflow. Coverage is **two components** (the file browsers); roughly sixty others are still bare (#347).
+
+The setup is deliberately cheap and worth copying: `environment: node` (v2 components are SSR-guarded), no TestBed and
+no platform — a plain `Injector` + `runInInjectionContext`, with the two internal tokens `effect()` needs stubbed
+(`frontend/src/testing/browser-lib-stub.ts`). No new dependencies; vitest is hoisted from the backend.
+
+**The two file-browser screens are one component now.** `personal.component.ts` and `space-files.component.ts` were
+~2,800 duplicated lines that had to be edited in lockstep; since #346 they are ~120 lines each, and everything real
+lives in `custom-v2/screens/files/` — `file-browser.base.ts` (an abstract `@Directive()`), one template, one
+stylesheet, and `file-browser-repository.ts`. The two screens differ in exactly 16 things — where files come from and
+how a file is addressed on the wire — and those 16 are the repository interface. **Add screen-specific behaviour to
+the repository, not to the base with an `if`.** `viewModeStorageKey()` is the one exception and stays a component
+method: the base's `mode` signal initialises before the subclass field holding the repository exists.
+
 ## NC mobile compat: always read upstream NC source first
 
 The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS/Android clients. Its endpoints are pinned to upstream contracts that **cannot be guessed from server-side conventions** — especially the wire format, field types, and capability gates. Real precedents: an early recommendations PR shipped JSON instead of XML and used a wrong endpoint path; the carousel rendered empty until the next PR fixed both. Both mistakes would have been avoided by reading the upstream source first.
@@ -144,6 +161,24 @@ The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS
 - File ids: emit real DB ids (PR #126); negative ids confuse NC clients.
 - ETag: use **strong** ETags; `W/` prefix breaks iOS thumbnail paths (PR #140 / commit `00c3fa7`).
 
+**All XML this module emits goes through `custom-mobile-compat/utils/nc-xml.ts`** (#343/#345). It owns the one
+`XMLBuilder` config, the namespace map, `renderMultistatus()`, and the one escape function — replacing seven
+copy-pasted builder configs, five disagreeing namespace constants, eight hand-rolled multistatus renderers and three
+divergent escape helpers. Do not add an eighth builder; extend that file. Upstream's `webdav/utils/xml.ts` is
+**deliberately excluded** — it serves Sync-in's own WebDAV surface with an uppercase `D:` prefix that NC clients don't
+parse, and folding the two would put this module's wire format on the merge-conflict surface.
+
+Two facts settled while consolidating, both the opposite of what the code previously claimed:
+
+- **Namespace arity is per-body, not fixed.** A real NC 207 does carry four declarations, but the fourth is
+  `xmlns:s="http://sabredav.org/ns"` — declared on every response and used on none, because sabre's writer dumps its
+  whole `namespaceMap` on the first element. The rule is "declare every prefix the body uses, nothing more." An old
+  comment claiming NC clients expect four namespaces on *every* `<d:multistatus>` was wrong.
+- **Prefix SPELLINGS are the wire contract.** iOS parses namespace-*blind* (literal prefixed strings; SWXMLHash with
+  `shouldProcessNamespaces = false` — it cannot see declarations at all), Android namespace-*aware*. So
+  `xmlns:D="DAV:"` with `D:multistatus` is valid XML, fine for Android, and silently breaks iOS completely. Never
+  rename a prefix; `nc-xml.spec.ts` pins the spellings.
+
 The classic-UI-as-ground-truth rule above governs Sync-in's internal v2 work. **NC-source-as-ground-truth governs `custom-mobile-compat`.** They're independent — both apply when their domains intersect.
 
 ## Database migrations
@@ -160,19 +195,43 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 ## File versioning (`custom-versioning`)
 
 Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
-(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in**; the ADR §19
-soak against live editors and NC clients is still owed.
+(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in.** The ADR §19 soak
+(#348) is done for **both editors** against real containers and for **NC Android**; only **NC iOS** is unrun. Two things
+that soak settled and you should not re-derive: OnlyOffice has no automatic save of any kind (so every version it mints
+is a human pressing Save), while Collabora saves unprompted ~15 s after the last keystroke. And **versioning cannot be
+configured by `SYNCIN_*` environment variable at all** — `applications.files.versions` is absent from
+`environment.dist.yaml`, which is the schema those names are validated against, so every such var is silently discarded.
+
+**There is an operator surface as of #342** — `VersionsAdminController` (`custom-versioning/versions-admin.controller.ts`)
+plus a panel on the v2 admin Tools screen: instance-wide usage, heaviest roots, and a per-root purge. Two things about
+it are load-bearing. It is a **separate controller** from `VersioningController` because its routes address the whole
+store rather than a file, so `SpaceGuard` has nothing to resolve and must not be in the chain; authorization is
+class-level `@UserHaveRole(ADMINISTRATOR)` + `UserRolesGuard` instead, at class level deliberately so a route added
+later inherits it rather than shipping unauthenticated. And the purge **must** keep routing through
+`VersionsRetention.purgeRoot` → `dropAll` → `dropVersionForRetention`, the same path the nightly rules use — that is
+what makes the labeled-version exemption, the per-`(checksum, versionsRoot)` refcount and the ADR §7 audit line apply
+without restating any of them. A bespoke delete here would silently drop all three.
 
 **e2e:** `npm -w backend run test:e2e`, after `npm run dev:db` + `npm run dev:migrate`. Read
 `custom-versioning/utils/versions-e2e.fixture.ts` before adding a case — a test user needs the `permissions` column
 (not the derived `applications` array) or every request 403s, and writes need the `sync-in-csrf` header as well as the
 cookie.
 
+**e2e files run in PARALLEL worker threads against ONE database.** `vitest-e2e.config.mts` sets no
+`fileParallelism: false`, and seven `custom-versioning` spec files create versions through the API at once. So any
+assertion about an **instance-wide** figure is racing its neighbours: comparing `usageTotals()` against a single
+`SELECT *` snapshot failed as `expected 829 to be 808`, the 21 bytes being another file's row landing between the two
+reads (#366). Scope new assertions to a root the case owns, or bracket the aggregate between a snapshot taken before
+and after it — a bracket collapses to exact equality when the file runs alone, so nothing is weakened.
+
 **Read the handoff for whatever phase you're touching before touching it.** Six documents describe this feature and
 they do not all agree:
 
 | Document | Status |
 |---|---|
+| `2026-07-28-onlyoffice-version-history-handoff.md` | **Not started, and phase 1 is not approved.** The task list for putting a version panel inside the office editor, the document-server dev recipe, and the nine traps. Read with the design doc, which it corrects in one place. |
+| `2026-07-28-onlyoffice-version-history-design.md` | Why the OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and what it would take, in two phases, against upstream ONLYOFFICE's own connector. §5 holds decisions the maintainer has not taken. |
+| `2026-07-29-adr-19-editor-soak.md` | The editor half of the ADR §19 soak, against real OnlyOffice and Collabora containers: the measured cadences, #378 verified live, and two defects it found (versioning is unconfigurable by env var; the old soak recipe no longer opens the coalescing window). |
 | `2026-07-27-nc-android-versioning-soak.md` | The real-device soak: versioning confirmed working in stock NC Android 34.1.0, the capability bug it found, and how to reproduce (incl. the 16 KB page-size emulator crash). |
 | `2026-07-27-file-versioning-phase-e-notes.md` | The e2e suite: what the 19 cases cover, the four environment facts the harness encodes, the one case still owed. |
 | `2026-07-27-file-versioning-phase-d-findings.md` | **Entry point.** What Phase D verified, what it found that was untrue, and §5's short list of what is left — including two decisions that need the maintainer. |
@@ -195,15 +254,18 @@ extend `Error`, not `HttpException` — a controller that lets one escape return
 feature). And `filesLockManager.create` treats the **caller's own** lock as a conflict; use `createOrRefresh` for any
 path that writes a file the user may have open.
 
-Five invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
-suite (the fifth from reading upstream Nextcloud rather than from a bug — see below):
+Seven invariants worth knowing before you edit anything in this area, each learned from a bug that reached a green test
+suite (the fifth and seventh from reading upstream source rather than from a bug — see below):
 
 1. **Never hardlink a version blob.** It shares the live file's inode, and three of the seven write paths truncate that
    inode in place — the "saved" version would hold the new content. Blobs are cloned or copied (ADR §1.1).
 2. **Never replace a live file's inode.** Restores and any live-content replacement go through `copyFileContent`;
    trash retention keys on inodes (ADR §9). This is the same fact as (1), read from the other end.
 3. **Anything that reads a blob must pin it open before running code that can evict.** Eviction and reads share no
-   lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9).
+   lock; a restore that resolved a path first destroyed both the file and the version being restored (ADR §9). It has
+   two violation sites, not one: the download path had the same shape (#355), where an eviction between the existence
+   check and the deferred open faulted a stream already committed to a response — a truncated body instead of the 404
+   the check existed to produce. `fs.open` REPLACES such a check; it never supplements it.
 4. **Version rows key on `files.id`, never on path**, and `files` rows are lazily materialized — use
    `custom-shared`'s `FileRowEnsurer` (ADR §3).
 5. **On the NC versions DAV tree, a version's node name is its `mtime` in unix SECONDS — never the row id — and it must
@@ -212,6 +274,27 @@ suite (the fifth from reading upstream Nextcloud rather than from a bug — see 
    NC facts in the same family: the collection's own entry must be `response[0]` (Android discards it and would
    otherwise lose the oldest version), and `d:resourcetype` must be an EMPTY element (any value makes Android treat the
    version as a directory). All three are in `utils/nc-version-xml.ts` with their upstream citations.
+6. **A pinned descriptor has an owner, and handing one to a caller makes the caller responsible for it.** The corollary
+   of (3): `getVersionStream` returns an OPEN fd, so anything that takes a stream must consume it or `destroy()` it.
+   Acquiring one and then throwing leaks a descriptor — the diff endpoint's 415 did exactly that until the mime check
+   moved above the acquisition (#355). When adding a call site, check the throw paths, not just the happy path.
+   Two Node specifics here were measured, and both invert the intuitive answer, so don't re-reason them from scratch:
+   `autoClose` (default `true`) closes the handle *through* `FileHandle.close()` rather than closing the raw fd behind
+   the wrapper's back, so ownership can simply travel with the stream — `restoreVersion` uses `autoClose: false` only
+   because it keeps the handle for its own `try/finally`. And with `autoClose: false` a fully-consumed stream emits
+   `end` but never `close`, so a `close`-only cleanup handler leaks on the *successful* path.
+   Watch for `DEP0137` ('Closing a FileHandle object on garbage collection') in test output: it is GC-timing dependent,
+   so it surfaces only in the full suite and names no source line. It means someone dropped a stream.
+7. **A restore must drop the cached OnlyOffice document key.** That key names ONE content state, and
+   `OnlyOfficeManager.getDocumentKey` returns the cached value whenever there is one — its only invalidation runs on
+   callback statuses 2 and 4. So replacing the live bytes without deleting the entry lets the editor re-open under a key
+   the document server already knows: it serves ITS copy, the user sees pre-restore content, and the next save writes it
+   back over the restore. `restoreVersion` calls `invalidateOfficeDocumentKey`; the key format has one home in
+   `custom-shared/utils/only-office-doc-key.ts`. Upstream ONLYOFFICE does the same from the same event
+   (`lib/Listeners/FileVersionsListener.php::versionRestored` → `deleteKeyForFile`). Collabora needs no equivalent: it
+   recomputes `Version:` on every CheckFileInfo instead of caching. Do NOT move this into the shared snapshot hook to
+   cover all seven write paths — that hook also runs on the editors' own saves, and dropping the key mid-session splits
+   the co-editing session and leaves `NcOnlyOfficeForceSaveService` with no key to force-save.
 
 Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /

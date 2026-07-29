@@ -15,6 +15,8 @@
     "start": "ng serve",
     "build": "ng build",
     "build:dev": "ng build --configuration development",
+    "test": "vitest run --config vitest.config.mts",
+    "test:watch": "vitest --config vitest.config.mts",
     "lint": "ng lint",
     "lint:staged": "if git diff --cached --name-only --diff-filter=ACM --relative -- . | grep -q .; then ng lint; fi",
     "lint:fix": "ng lint --fix",

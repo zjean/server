@@ -1,6 +1,5 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
-import { XMLBuilder } from 'fast-xml-parser'
 import path from 'node:path'
 import { FileProps } from '../../files/interfaces/file-props.interface'
 import { getProps } from '../../files/utils/files'
@@ -12,6 +11,7 @@ import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { FavoritesManager } from '../../custom-favorites/services/favorites-manager.service'
 import { buildNcDeletedResponse, buildNcPropResponse } from '../utils/nc-prop-builder'
 import { formatSyncToken, parseSyncCollectionBody, type ParsedSyncCollection } from '../utils/nc-sync-xml'
+import { renderMultistatus } from '../utils/nc-xml'
 import { NcFileRowEnsurer } from './nc-file-row-ensurer.service'
 import { NcSyncEvent, NcSyncLogService } from './nc-sync-log.service'
 
@@ -27,13 +27,6 @@ import { NcSyncEvent, NcSyncLogService } from './nc-sync-log.service'
 // space showing up at the user-root URL) is a phase-2-follow-up; for the
 // initial NC mobile sync we only need personal-space deltas.
 
-const XMLNS = {
-  d: 'DAV:',
-  oc: 'http://owncloud.org/ns',
-  nc: 'http://nextcloud.org/ns',
-  ocs: 'http://open-collaboration-services.org/ns'
-}
-
 const NC_FILES_URL_PREFIX = '/remote.php/dav/files'
 
 // Cap any client-supplied <d:limit> to keep a single REPORT response
@@ -43,12 +36,6 @@ const MAX_LIMIT = 500
 @Injectable()
 export class NcSyncReportService {
   private readonly logger = new Logger(NcSyncReportService.name)
-  private readonly xml = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    format: false,
-    suppressEmptyNode: false
-  })
 
   constructor(
     private readonly syncLog: NcSyncLogService,
@@ -228,17 +215,10 @@ export class NcSyncReportService {
   }
 
   private send(res: FastifyReply, responses: unknown[], syncTokenSeq: number): FastifyReply {
-    const body = this.xml.build({
-      'd:multistatus': {
-        '@_xmlns:d': XMLNS.d,
-        '@_xmlns:oc': XMLNS.oc,
-        '@_xmlns:nc': XMLNS.nc,
-        '@_xmlns:ocs': XMLNS.ocs,
-        'd:response': responses,
-        'd:sync-token': formatSyncToken(syncTokenSeq)
-      }
-    })
-    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(`<?xml version="1.0" encoding="utf-8"?>${body}`)
+    // <d:sync-token> goes LAST, after the responses — RFC 6578 §6.4. `trailing`
+    // is what guarantees that ordering now that the envelope is shared.
+    const body = renderMultistatus(responses, { trailing: { 'd:sync-token': formatSyncToken(syncTokenSeq) } })
+    return res.type(XML_CONTENT_TYPE).status(HttpStatus.MULTI_STATUS).send(body)
   }
 }
 

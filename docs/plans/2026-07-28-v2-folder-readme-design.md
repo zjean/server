@@ -9,6 +9,48 @@ All `file:line` citations were verified against `main` at commit `aa0648a1` on 2
 
 ---
 
+## 0. Correction (2026-07-29) — the two host screens became one, so the integration did too
+
+**Read this before any `personal.component.ts` / `space-files.component.ts` citation below.** Issue #346 (PR #371 and
+its predecessors, merged into `main` after this branch was written) consolidated the two ~1100-line browse screens
+behind a single abstract `FileBrowserBase` (`custom-v2/screens/files/file-browser.base.ts`) plus one shared template
+(`file-browser.component.html`). `personal.component.ts` is now 122 lines and `space-files.component.ts` 172; both are
+thin `FileBrowserRepository` strategies. `space-files.component.html` and `.scss` were **deleted** — the shared pair
+replaces them.
+
+Every host-side line-number citation in §1, §5, §6 and §7 below therefore points at code that no longer exists at that
+line. What the citations *described* is still true; only the location changed. As merged onto this refactor:
+
+| §1/§6 said (two screens) | Now (one base) |
+|---|---|
+| a `permissions` signal per screen | `file-browser.base.ts` `permissions` signal, set in `loadFiles()`'s success *and* error paths |
+| a `hasFolderReadme` computed per screen | one computed on the base, feeding both the New-menu and the FAB-sheet builders |
+| a byte-identical `newFolderDescription()` in each screen | one method on the base, next to `newMarkdownFile()` |
+| a `viewChild(FolderReadmeComponent)` per screen | one `readmeBanner` viewChild on the base |
+| **three** dispatch sites (§6's table), because `personal.onFabSheetSelect` duplicated the whole `switch` | **ONE** `case 'new-folder-description'` in the base's `dispatchNewEntry`; the FAB sheet delegates to it (`onFabSheetSelect`), so the asymmetry §6 warned about is gone |
+| one template line per screen template | one block in the shared `file-browser.component.html`, same structural spot (after the drop-overlay, before `@if (loading())`) |
+
+So §1's "Correction (2026-07-28)" — that the integration cost is small but not zero, and duplicated across two screens
+— is now **half** true: the cost is no longer duplicated, and `hasFolderReadme` is derived once rather than twice.
+What genuinely remains in each subclass is a single `FolderReadmeComponent` entry in its `imports` array, which is
+unavoidable: the shared template renders `<app-v2-folder-readme>`, and a standalone component's template dependencies
+must be declared on that component. Every other component in the shared template is declared twice for the identical
+reason.
+
+Readme behaviour is identical on both screens, so **none of it belongs in `FileBrowserRepository`** — that seam is
+explicitly for "where the files come from and how they are addressed on the wire", and its header calls itself a
+preservation boundary rather than a normalisation opportunity. Nothing readme-related was added to it.
+
+The route collapse this design's §5 depends on (one `{ path: '**' }` child per browse screen) survived the merge
+untouched — `main` never edited `v2.routes.ts` — so §5's in-place-reload premise still holds, now via
+`FileBrowserBase`'s single `repository.navigation()` subscription instead of two per-screen ones.
+
+§9's "there is no frontend test runner" is also **obsolete**: the same refactor brought `npm run -w frontend test`
+(vitest), and this branch now ships `custom-v2/utils/folder-readme.spec.ts` covering the three precedence cases §11's
+case 3 could not build on a case-insensitive host. See §13.
+
+---
+
 ## Context
 
 In the v2 UI, a folder's `README.md` is just another row. Nextcloud renders it above the listing as a folder

@@ -1,4 +1,23 @@
+import type { FileEditorProviders } from '@sync-in-server/backend/src/applications/files/editors/file-editor-providers.interface'
 import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
+
+// True when this server has an office editor v2's embed can actually talk to.
+//
+// v2's embed speaks the OnlyOffice connector protocol only — see
+// preview/office-view.component.ts, which mounts upstream's
+// <app-files-onlyoffice-document> and calls API_ONLY_OFFICE_SETTINGS.
+// Euro-Office rides that same protocol (it reuses ONLY_OFFICE_APP_LOCK and the
+// OnlyOffice extension map), so it belongs here; Collabora does NOT — it has no
+// v2 viewer at all, so a Collabora-only server must fall back to the standard
+// preview rather than mount an embed that cannot load.
+//
+// This is deliberately narrower than classic's gate (file.model.ts:189-191),
+// which also admits `collabora && COLLABORA_ONLINE_EXTENSIONS.has(ext)` because
+// classic ships a Collabora viewer. Widening this to match classic verbatim
+// would reintroduce the dead embed this predicate exists to prevent.
+export function isOfficeEditorEnabled(editors: FileEditorProviders | null | undefined): boolean {
+  return editors?.onlyoffice === true || editors?.eurooffice === true
+}
 
 // Returns true if the file's extension is one the OnlyOffice/Euro-Office
 // editors know how to open. Both providers share the same extension map
