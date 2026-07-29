@@ -38,7 +38,7 @@
   }
 
   &__title {
-    font-size: 13px;
+    font-size: var(--si-text-8);
     font-weight: 600;
     font-family: var(--si-display);
     letter-spacing: -0.1px;
@@ -46,7 +46,7 @@
 
   &__summary {
     margin-left: auto;
-    font-size: 11px;
+    font-size: var(--si-text-4);
     color: rgba(255, 255, 255, 0.75);
   }
 
@@ -62,7 +62,7 @@
   &__empty {
     padding: 32px 12px;
     text-align: center;
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-faint);
   }
 
@@ -72,7 +72,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11.5px;
+    font-size: var(--si-text-5);
     color: var(--si-fg-faint);
 
     app-v2-btn {
@@ -89,7 +89,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: background 120ms ease;
+  transition: background var(--si-dur-2) var(--si-ease);
 
   &--active {
     border-color: var(--si-accent-line);
@@ -104,7 +104,7 @@
     display: flex;
     align-items: baseline;
     gap: 6px;
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg);
     letter-spacing: -0.05px;
     min-width: 0;
@@ -113,7 +113,7 @@
   &__op {
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     flex-shrink: 0;
   }
 
@@ -141,11 +141,11 @@
   &__bar {
     height: 100%;
     background: var(--si-accent);
-    transition: width 200ms ease;
+    transition: width var(--si-dur-3) var(--si-ease);
   }
 
   &__meta {
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
   }

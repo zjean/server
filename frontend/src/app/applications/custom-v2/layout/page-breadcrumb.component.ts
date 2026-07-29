@@ -64,7 +64,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
         padding: 12px 28px 0;
         background: var(--si-bg2);
         font-family: var(--si-sans);
-        font-size: 12px;
+        font-size: var(--si-text-6);
         line-height: 1.4;
         color: var(--si-fg-faint);
       }
@@ -92,7 +92,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
       .pcb__crumb--link {
         color: var(--si-fg-faint);
         cursor: pointer;
-        transition: color 120ms ease;
+        transition: color var(--si-dur-2) var(--si-ease);
       }
       .pcb__crumb--link:hover {
         color: var(--si-fg-muted);

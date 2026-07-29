@@ -119,7 +119,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         padding: 14px 18px;
         font-family: var(--si-display);
         font-weight: 600;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         letter-spacing: -0.01em;
         color: var(--si-fg);
         text-transform: capitalize;
@@ -134,7 +134,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         gap: 10px;
       }
       .dp__kv-title {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -146,11 +146,11 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         grid-template-columns: 92px 1fr;
         align-items: baseline;
         gap: 12px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
 
         > span:first-child {
           color: var(--si-fg-faint);
-          font-size: 12px;
+          font-size: var(--si-text-6);
         }
       }
       .dp__kv-val {
@@ -159,7 +159,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
       }
       .dp__kv-mono {
         font-family: var(--si-mono);
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
       }
       .dp__kv-faint {
         color: var(--si-fg-faint);
@@ -178,12 +178,12 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
       .dp__empty-title {
         font-family: var(--si-display);
         font-weight: 500;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         color: var(--si-fg);
         margin-top: 4px;
       }
       .dp__empty-lede {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg-faint);
         max-width: 220px;
         line-height: 1.45;

@@ -98,8 +98,8 @@ import { ToastService } from '../components/toast.service'
         cursor: pointer;
         padding: 0;
         transition:
-          background 120ms ease,
-          color 120ms ease;
+          background var(--si-dur-2) var(--si-ease),
+          color var(--si-dur-2) var(--si-ease);
 
         &:hover {
           background: rgba(255, 255, 255, 0.08);
@@ -117,10 +117,10 @@ import { ToastService } from '../components/toast.service'
         min-width: 15px;
         height: 15px;
         padding: 0 4px;
-        border-radius: 999px;
+        border-radius: var(--si-r4);
         background: var(--si-rose, oklch(0.72 0.17 20));
         color: #fff;
-        font-size: 9.5px;
+        font-size: var(--si-text-1);
         font-weight: 700;
         font-family: var(--si-mono);
         display: inline-flex;
@@ -151,13 +151,13 @@ import { ToastService } from '../components/toast.service'
         border-bottom: 1px solid var(--si-line);
       }
       .nb__panel-title {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .nb__clear {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         background: transparent;
         border: none;
         color: var(--si-fg-muted);
@@ -173,7 +173,7 @@ import { ToastService } from '../components/toast.service'
       .nb__empty {
         padding: 24px 14px;
         text-align: center;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
       }
       .nb__list {
@@ -189,7 +189,7 @@ import { ToastService } from '../components/toast.service'
         display: flex;
         align-items: stretch;
         border-left: 2px solid transparent;
-        transition: background 120ms ease;
+        transition: background var(--si-dur-2) var(--si-ease);
 
         &:hover {
           background: var(--si-bg3);
@@ -224,7 +224,7 @@ import { ToastService } from '../components/toast.service'
         gap: 8px;
       }
       .nb-item__author {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
@@ -233,13 +233,13 @@ import { ToastService } from '../components/toast.service'
         white-space: nowrap;
       }
       .nb-item__time {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
         font-family: var(--si-mono);
         flex-shrink: 0;
       }
       .nb-item__content {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg-muted);
         line-height: 1.35;
         overflow: hidden;
@@ -262,7 +262,7 @@ import { ToastService } from '../components/toast.service'
         background: transparent;
         border: none;
         color: var(--si-fg-faint);
-        font-size: 15px;
+        font-size: var(--si-text-11);
         cursor: pointer;
         padding: 0;
 

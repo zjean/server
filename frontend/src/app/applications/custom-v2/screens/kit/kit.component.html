@@ -92,4 +92,35 @@
       <app-v2-icon-btn iconName="trash" [disabled]="true" />
     </div>
   </section>
+
+  <!--
+    Type and spacing were the two dimensions this page did NOT document, and they
+    are exactly the two that drifted — 19 distinct font sizes and 54 off-grid
+    spacing values by the time of the #398 audit. Rendering them here is the point.
+  -->
+  <section class="kit__section">
+    <h2 class="kit__section-title">Type scale</h2>
+    <div class="kit__scale">
+      @for (t of typeScale; track t.token) {
+        <div class="kit__scale-row">
+          <code class="kit__scale-token">{{ t.token }}</code>
+          <code class="kit__scale-value">{{ t.px }}</code>
+          <span class="kit__scale-sample" [style.font-size]="'var(' + t.token + ')'">{{ t.use }}</span>
+        </div>
+      }
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Spacing scale</h2>
+    <div class="kit__scale">
+      @for (s of spaceScale; track s.token) {
+        <div class="kit__scale-row">
+          <code class="kit__scale-token">{{ s.token }}</code>
+          <code class="kit__scale-value">{{ s.px }}</code>
+          <span class="kit__scale-bar" [style.width]="'var(' + s.token + ')'"></span>
+        </div>
+      }
+    </div>
+  </section>
 </div>

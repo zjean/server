@@ -41,7 +41,7 @@
     border-radius: 8px;
     color: var(--si-fg-faint);
     cursor: pointer;
-    transition: background 120ms ease, color 120ms ease;
+    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
 
     &:hover {
       background: var(--si-bg2);
@@ -70,7 +70,7 @@
     background: transparent;
     border: 0;
     font: inherit;
-    font-size: 13.5px;
+    font-size: var(--si-text-9);
     line-height: 1.3;
     letter-spacing: -0.1px;
     white-space: nowrap;
@@ -82,7 +82,7 @@
     &--link {
       color: var(--si-fg-faint);
       cursor: pointer;
-      transition: color 120ms ease;
+      transition: color var(--si-dur-2) var(--si-ease);
       flex-shrink: 1;
 
       &:hover {
@@ -143,7 +143,7 @@
     background: var(--si-bg2);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
-    transition: border-color 120ms ease, background 120ms ease;
+    transition: border-color var(--si-dur-2) var(--si-ease), background var(--si-dur-2) var(--si-ease);
 
     &:focus-within {
       border-color: var(--si-accent);
@@ -164,7 +164,7 @@
     outline: none;
     color: inherit;
     font: inherit;
-    font-size: 14px;
+    font-size: var(--si-text-10);
 
     &::placeholder {
       color: var(--si-fg-ghost);
@@ -178,7 +178,7 @@
 
   &__search-kbd {
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     font-weight: 500;
     color: var(--si-fg-faint);
     background: var(--si-bg3);
@@ -204,9 +204,9 @@
     align-items: center;
     justify-content: center;
     margin-left: 4px;
-    border-radius: 999px;
+    border-radius: var(--si-r4);
     text-decoration: none;
-    transition: box-shadow 120ms ease, transform 120ms ease;
+    transition: box-shadow var(--si-dur-2) var(--si-ease), transform var(--si-dur-2) var(--si-ease);
 
     &:hover {
       box-shadow: 0 0 0 2px var(--si-line-strong);
