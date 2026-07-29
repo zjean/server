@@ -5,7 +5,7 @@ description: Pick up GitHub issues from the zjean/server backlog and ship them a
 
 # Working open issues into PRs against zjean/server
 
-This fork has a small but specific PR workflow. `main` is protected — direct pushes are blocked, every change goes through a PR, and `gh pr create` will silently target the upstream `Sync-in/server` repo if you forget the `--repo` flag. On top of that, several conventions (branch prefix, commit prefix, merge strategy, ground-truth source for the file area you're touching) are repo-specific and not derivable from looking at one issue in isolation.
+This fork has a small but specific PR workflow. `develop` (the default branch) and `main` are both protected — direct pushes are blocked, day-to-day PRs go to `develop`, and `gh pr create` will silently target the upstream `Sync-in/server` repo if you forget the `--repo` flag. On top of that, several conventions (branch prefix, commit prefix, merge strategy, ground-truth source for the file area you're touching) are repo-specific and not derivable from looking at one issue in isolation.
 
 This skill is the recipe for turning "I want to work on some issues" into a clean PR (or a small set of clean PRs), with the conventions baked in so they don't get fluffed.
 
