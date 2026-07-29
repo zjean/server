@@ -54,7 +54,7 @@ export class EditorHistoryService {
   // revision would be presented as the document's present state.
   async history(user: UserModel, space: SpaceEnv): Promise<EditorHistoryEntry[]> {
     const rows = await this.ascending(user, space)
-    return [...rows.map((row, index) => this.entryFor(row, index + 1)), await this.liveEntry(space, rows.length + 1)]
+    return [...rows.map((row, index) => this.entryFor(row, index + 1)), await this.liveEntry(space, rows.length + 1, rows.at(-1))]
   }
 
   // Render inputs for ONE ordinal. `officeToken` is the caller's own
@@ -156,7 +156,21 @@ export class EditorHistoryService {
   }
 
   // The live file as a history entry.
-  private async liveEntry(space: SpaceEnv, ordinal: number): Promise<EditorHistoryEntry> {
+  //
+  // `newest` is the most recent version row, and it is what names the live
+  // entry's author. That is not a borrow from the wrong place: `snapshot`
+  // records `authorId = user.id` for the user performing the OVERWRITE
+  // (versioning.service.ts:168), so a row holds the bytes that were REPLACED
+  // while naming the person who replaced them — and the newest row therefore
+  // names whoever wrote the content that is live now.
+  //
+  // Omitted when that row has no author, or when there is no row at all. The
+  // panel renders a missing user as "Anonymous" (`version.user.name ||
+  // this.textAnonymous`, web-apps documenteditor Main.js:764), which is the
+  // honest rendering of "we do not know" — but it must not be the rendering of
+  // the CURRENT version in a session the user is sitting in, which is what
+  // omitting this unconditionally produced.
+  private async liveEntry(space: SpaceEnv, ordinal: number, newest?: VersionProps): Promise<EditorHistoryEntry> {
     const stats = await fs.stat(space.realPath).catch(() => null)
     if (!stats?.isFile()) {
       throw new FileError(HttpStatus.NOT_FOUND, 'Location not found')
@@ -164,10 +178,8 @@ export class EditorHistoryService {
     return {
       created: Math.floor(stats.mtimeMs / 1000),
       key: await this.liveDocumentKey(space),
-      version: ordinal
-      // No `user`: nothing records who wrote the content that is live NOW. A
-      // version row's author is the author of the SUPERSEDED content, so
-      // borrowing the newest row's author would name the wrong person.
+      version: ordinal,
+      ...(newest?.author && { user: { id: newest.author.login, name: newest.author.fullName } })
     }
   }
 
