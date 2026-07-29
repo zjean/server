@@ -2,8 +2,8 @@ import { HttpService } from '@nestjs/axios'
 import { Injectable, Logger } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import https from 'node:https'
-import { configuration } from '../../../configuration/config.environment'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { activeOfficeEditorConfig } from '../../custom-shared/utils/active-office-editor'
 import { onlyOfficeDocKeyCacheKey } from '../../custom-shared/utils/only-office-doc-key'
 import type { SpaceEnv } from '../../spaces/models/space-env.model'
 
@@ -35,13 +35,16 @@ export class NcOnlyOfficeForceSaveService {
 
   async forceSave(space: SpaceEnv): Promise<{ ok: boolean; reason?: string }> {
     // Which document server is actually active. Euro-Office speaks the same
-    // OnlyOffice protocol and only one of the two can be on, so mirror the
+    // OnlyOffice protocol and only one of the two can be on, so this mirrors the
     // selection OnlyOfficeManager makes (only-office-manager.service.ts:82-85)
     // rather than reading `onlyoffice` unconditionally — on a Euro-Office
     // deployment that read left externalServer null and every mobile Save
     // returned 'doc server not configured'.
-    const editors = configuration.applications.files.editors
-    const oo = editors.onlyoffice?.enabled ? editors.onlyoffice : editors.eurooffice
+    //
+    // The expression itself lives in custom-shared because a second fork caller
+    // now needs the same choice for the same reason: EditorHistoryService signs
+    // the editor's version responses with this secret.
+    const oo = activeOfficeEditorConfig()
     const externalServer = oo?.externalServer
     if (!externalServer) {
       return { ok: false, reason: 'doc server not configured' }

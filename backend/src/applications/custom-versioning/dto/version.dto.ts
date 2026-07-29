@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer'
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 import { VERSIONS_ROOT_MAX_LENGTH } from '../constants/versioning'
 
 export class SetVersionLabelDto {
@@ -41,6 +41,22 @@ export class PurgeVersionsRootDto {
   @IsString()
   @MaxLength(VERSIONS_ROOT_MAX_LENGTH)
   versionsRoot: string
+}
+
+export class EditorVersionDto {
+  // The caller's own TOKEN_TYPE.ONLY_OFFICE JWT, which the service echoes into
+  // the `url` it hands the editor — because that url is fetched by the DOCUMENT
+  // SERVER, server-to-server, where a browser session is worth nothing.
+  //
+  // Named `officeToken` rather than `token` deliberately. `token` is the query
+  // parameter OnlyOfficeGuard authenticates FROM
+  // (ONLY_OFFICE_TOKEN_QUERY_PARAM_NAME), and this route is not one of those —
+  // it is an ordinary SpaceGuard route. Reusing the name would make a
+  // token-authenticated and a session-authenticated route look identical at
+  // every call site.
+  @IsString()
+  @IsNotEmpty()
+  officeToken: string
 }
 
 export class VersionDiffDto {

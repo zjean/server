@@ -25,11 +25,16 @@ import {
   API_VERSIONS_CONTENT,
   API_VERSIONS_DELETE,
   API_VERSIONS_DIFF,
+  API_VERSIONS_EDITOR_CONTENT,
+  API_VERSIONS_EDITOR_HISTORY,
+  API_VERSIONS_EDITOR_RESTORE,
+  API_VERSIONS_EDITOR_VERSION,
   API_VERSIONS_LABEL,
   API_VERSIONS_LIST,
   API_VERSIONS_RESTORE,
   API_VERSIONS_USAGE
 } from '../constants/routes'
+import type { EditorHistoryEntry, EditorVersionData } from '../interfaces/editor-history.interface'
 
 // Shared harness for the Phase E versioning e2e suite. TEST-ONLY code living in
 // src/, following the precedent of users/utils/test.ts.
@@ -133,6 +138,23 @@ export interface VersionsApi {
   label: (versionId: number, rel: string, label: string | null) => Promise<{ status: number; body: string }>
   remove: (versionId: number, rel: string, query?: string) => Promise<{ status: number; body: string }>
   diff: (versionId: number, rel: string, query?: string) => Promise<{ status: number; body: string }>
+
+  /* -------------------- the OnlyOffice editor's history protocol (#386) */
+
+  editorHistory: (rel: string) => Promise<{ status: number; body: EditorHistoryEntry[] }>
+  // `version` is an ORDINAL, and `officeToken` is the ONLY_OFFICE JWT the caller
+  // lifts from its editor config — see EditorHistoryService.
+  editorVersion: (version: number, rel: string, officeToken: string) => Promise<{ status: number; body: EditorVersionData & { message?: string } }>
+  editorRestore: (version: number, rel: string, opts?: { csrf?: boolean }) => Promise<{ status: number; body: EditorHistoryEntry[] }>
+  /**
+   * The document server's own fetch of a version's bytes.
+   *
+   * Deliberately takes the token as a QUERY PARAMETER and sends NO cookie: this
+   * is the one versions route authenticated by an ONLY_OFFICE token instead of a
+   * browser session, and a case that sent the cookie would pass whether or not
+   * the token auth worked at all.
+   */
+  editorContent: (versionId: number, rel: string, officeToken?: string) => Promise<{ status: number; body: string; headers: Record<string, unknown> }>
 }
 
 export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
@@ -213,6 +235,30 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
         return { status: res.statusCode, body: res.body, headers: res.headers as Record<string, unknown> }
       },
       restore: (versionId, rel, opts) => write('POST', url(API_VERSIONS_RESTORE, rel, versionId), undefined, opts),
+      async editorHistory(rel) {
+        const res = await app.inject({ method: 'GET', url: url(API_VERSIONS_EDITOR_HISTORY, rel), headers: { cookie: session.cookie } } as never)
+        return { status: res.statusCode, body: res.statusCode === 200 ? (res.json() as EditorHistoryEntry[]) : [] }
+      },
+      async editorVersion(version, rel, officeToken) {
+        const res = await app.inject({
+          method: 'GET',
+          url: `${url(API_VERSIONS_EDITOR_VERSION, rel, version)}?officeToken=${encodeURIComponent(officeToken)}`,
+          headers: { cookie: session.cookie }
+        } as never)
+        return { status: res.statusCode, body: res.json() }
+      },
+      async editorRestore(version, rel, opts) {
+        const res = await write('POST', url(API_VERSIONS_EDITOR_RESTORE, rel, version), undefined, opts)
+        return { status: res.status, body: res.status === 201 || res.status === 200 ? (JSON.parse(res.body) as EditorHistoryEntry[]) : [] }
+      },
+      async editorContent(versionId, rel, officeToken) {
+        const res = await app.inject({
+          method: 'GET',
+          // No cookie, on purpose — see the interface note.
+          url: `${url(API_VERSIONS_EDITOR_CONTENT, rel, versionId)}${officeToken === undefined ? '' : `?token=${encodeURIComponent(officeToken)}`}`
+        } as never)
+        return { status: res.statusCode, body: res.body, headers: res.headers as Record<string, unknown> }
+      },
       label: (versionId, rel, label) => write('PATCH', url(API_VERSIONS_LABEL, rel, versionId), { label }),
       remove: (versionId, rel, query) => write('DELETE', `${url(API_VERSIONS_DELETE, rel, versionId)}${query ?? ''}`),
       async diff(versionId, rel, query) {

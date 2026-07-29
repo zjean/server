@@ -1,22 +1,26 @@
 import { HttpException, HttpStatus, ValidationPipe } from '@nestjs/common'
-import { EXCEPTION_FILTERS_METADATA } from '@nestjs/common/constants'
+import { EXCEPTION_FILTERS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants'
 import { Reflector } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { Readable } from 'node:stream'
 import { Mock } from 'vitest'
+import { ContextInterceptor } from '../../infrastructure/context/interceptors/context.interceptor'
+import { ContextManager } from '../../infrastructure/context/services/context-manager.service'
 import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { OverrideSpacePermission } from '../spaces/decorators/space-override-permission.decorator'
 import { SpaceGuard } from '../spaces/guards/space.guard'
 import { SpaceEnv } from '../spaces/models/space-env.model'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
-import { DeleteVersionDto } from './dto/version.dto'
+import { DeleteVersionDto, EditorVersionDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
+import { EditorHistoryService } from './services/editor-history.service'
 import { VersioningService } from './services/versioning.service'
 import { VersioningController } from './versioning.controller'
 
 describe(VersioningController.name, () => {
   let controller: VersioningController
+  let editorHistory: { history: Mock; versionData: Mock; restore: Mock }
   let versioning: {
     enabled: boolean
     listVersions: Mock
@@ -48,9 +52,21 @@ describe(VersioningController.name, () => {
       deleteVersion: vi.fn().mockResolvedValue(undefined),
       liveContent: vi.fn()
     }
+    editorHistory = {
+      history: vi.fn().mockResolvedValue([]),
+      versionData: vi.fn().mockResolvedValue({ fileType: 'docx', url: 'https://x/y', version: 1, key: '1_1' }),
+      restore: vi.fn().mockResolvedValue([])
+    }
     const moduleRef = await Test.createTestingModule({
       controllers: [VersioningController],
-      providers: [{ provide: VersioningService, useValue: versioning }]
+      providers: [
+        { provide: VersioningService, useValue: versioning },
+        { provide: EditorHistoryService, useValue: editorHistory },
+        // ContextInterceptor is declared on editorVersion, and Nest instantiates
+        // it to build the chain even though these cases call handlers directly.
+        // In production ContextModule is @Global.
+        { provide: ContextManager, useValue: { headerOriginUrl: () => 'https://files.example.test', run: (_c: any, cb: any) => cb() } }
+      ]
     })
       // The guard is the authorization boundary and is exercised where it lives;
       // these cases call the handlers directly, so it is stubbed out. What is
@@ -215,6 +231,12 @@ describe(VersioningController.name, () => {
     await expect(controller.label(user, space, 1, {})).rejects.toThrow(HttpException)
     await expect(controller.remove(user, space, 1, {})).rejects.toThrow(HttpException)
     await expect(controller.diff(user, space, 1, {})).rejects.toThrow(HttpException)
+    // The editor-history routes are gated by the same probe: VersionsService's
+    // one-way `availability` latch in the frontend keys on this 404, and it is
+    // what keeps the panel out of the editor entirely while the flag is off.
+    await expect(controller.editorHistory(user, space)).rejects.toThrow(HttpException)
+    await expect(controller.editorVersion(user, space, 1, { officeToken: 't' })).rejects.toThrow(HttpException)
+    await expect(controller.editorRestore(user, space, 1)).rejects.toThrow(HttpException)
 
     // The message, not just the status: these routes also 404 with 'Space not
     // found' from SpaceGuard, and the v2 service tells the two apart by
@@ -227,5 +249,59 @@ describe(VersioningController.name, () => {
     // Nothing reached the service.
     expect(versioning.listVersions).not.toHaveBeenCalled()
     expect(versioning.restoreVersion).not.toHaveBeenCalled()
+    expect(editorHistory.history).not.toHaveBeenCalled()
+    expect(editorHistory.restore).not.toHaveBeenCalled()
+  })
+
+  /* ---------------------------------------- the OnlyOffice history protocol */
+
+  it('delegates the three editor-history routes to the adapter', async () => {
+    const space = textSpace()
+
+    await controller.editorHistory(user, space)
+    await controller.editorVersion(user, space, 2, { officeToken: 'office-jwt' })
+    await controller.editorRestore(user, space, 2)
+
+    expect(editorHistory.history).toHaveBeenCalledWith(user, space)
+    // The ordinal reaches the adapter unchanged, and the lifted token with it —
+    // the adapter is where both are validated.
+    expect(editorHistory.versionData).toHaveBeenCalledWith(user, space, 2, 'office-jwt')
+    expect(editorHistory.restore).toHaveBeenCalledWith(user, space, 2)
+  })
+
+  // Same reason `restore` needs it: an in-editor restore replaces the content of
+  // an existing file, so the POST default of ADD would let a member who may only
+  // add new files overwrite one. Belt to the frontend's own VIEW-mode gate —
+  // that gate hides the button, this one refuses the request.
+  it('declares MODIFY for the in-editor restore too', () => {
+    const permission = new Reflector().get(OverrideSpacePermission, VersioningController.prototype.editorRestore)
+    expect(permission).toBe(SPACE_OPERATION.MODIFY)
+  })
+
+  // The urls in a version response must be ABSOLUTE, because the document server
+  // fetches them itself. `headerOriginUrl()` is the only origin that is right
+  // behind the reverse proxy and it is populated by ContextInterceptor — without
+  // the interceptor it returns undefined and the panel silently gets
+  // `undefined/files/...`. Asserted as metadata because the failure is invisible
+  // in a unit test that stubs the context manager.
+  it('declares ContextInterceptor on editorVersion, the one route that builds urls', () => {
+    const interceptors = new Reflector().get(INTERCEPTORS_METADATA, VersioningController.prototype.editorVersion) ?? []
+    expect(interceptors).toContain(ContextInterceptor)
+  })
+
+  describe('EditorVersionDto over a query string', () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true })
+    const parse = (query: Record<string, unknown>) => pipe.transform(query, { type: 'query', metatype: EditorVersionDto })
+
+    it('accepts the lifted office token', async () => {
+      await expect(parse({ officeToken: 'a.b.c' })).resolves.toMatchObject({ officeToken: 'a.b.c' })
+    })
+
+    // A missing or empty token would otherwise produce a url the document server
+    // 401s on, and the symptom — an empty panel — points nowhere near the cause.
+    it('rejects an absent or empty token with a 400', async () => {
+      await expect(parse({})).rejects.toThrow()
+      await expect(parse({ officeToken: '' })).rejects.toThrow()
+    })
   })
 })
