@@ -628,6 +628,113 @@ describe(VersioningService.name, () => {
     })
   })
 
+  /* --------------------- proven human saves skip the override (#389) */
+
+  // The per-origin override exists for one stated reason: "an editor's cadence
+  // is set by the document server, not by a human" (ADR §5.1). The §19 soak
+  // measured that and found it FALSE for OnlyOffice, which has no autosave — so
+  // its 300 was applied exclusively to human saves, and four Ctrl+S presses in
+  // two minutes minted zero versions. A save we can prove a human triggered
+  // falsifies the override's premise and gets the interactive number.
+  describe('interactive saves and the per-origin window', () => {
+    // THE test: one origin, one elapsed time, two answers, decided only by who
+    // pressed save.
+    it('releases a human editor save that an automatic one of the same age would coalesce', async () => {
+      const ninetySecondsAgo = () => new Date(Date.now() - 90_000)
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+      queries.rows[0].createdAt = ninetySecondsAgo()
+      await fs.writeFile(filePath, 'a human pressed Ctrl+S again')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+
+      // 90s > the 60s interactive scalar -> a new version, even though
+      // onlyoffice's own window is 300.
+      expect(queries.rows).toHaveLength(2)
+
+      for (const row of queries.rows) row.createdAt = ninetySecondsAgo()
+      await fs.writeFile(filePath, 'the document server timer fired')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'automatic' })
+
+      // Same 90s, same origin: inside the 300s editor window -> suppressed.
+      expect(queries.rows).toHaveLength(2)
+    })
+
+    // The regression this whole change exists to prevent, in the soak's own
+    // terms: four explicit saves inside two minutes produced zero new versions.
+    it('mints a version for each of four human saves inside two minutes', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+
+      for (let i = 2; i <= 4; i++) {
+        // Each save is a full interactive window apart, but all four land well
+        // inside onlyoffice's 300s override.
+        for (const row of queries.rows) row.createdAt = new Date(row.createdAt.getTime() - 61_000)
+        await fs.writeFile(filePath, `human save ${i}`)
+        await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+      }
+
+      expect(queries.rows).toHaveLength(4)
+    })
+
+    // An interactive save is not exempt from coalescing — it is moved onto the
+    // interactive window, which still suppresses a burst.
+    it('still coalesces two human saves inside the interactive window', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+      await fs.writeFile(filePath, 'saved again immediately')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+
+      expect(queries.rows).toHaveLength(1)
+    })
+
+    // Collabora's PutFile carries no discriminator, so its caller never sets
+    // saveKind. This pins that "unset" is a distinct third state from
+    // 'automatic' — it must resolve through the override exactly as before.
+    it('leaves an omitted saveKind resolving exactly as it did before the field existed', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      queries.rows[0].createdAt = new Date(Date.now() - 120_000)
+      await fs.writeFile(filePath, 'two minutes later')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+
+      // Two minutes is past the 60s scalar but inside collabora's 300s window.
+      expect(queries.rows).toHaveLength(1)
+    })
+
+    // A human save reads the SCALAR, not a hardcoded 60. An operator who
+    // widened the interactive window widened it for the editors too.
+    it('honours a retuned scalar for interactive editor saves', async () => {
+      versionsConfig.minIntervalSeconds = 120
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+      queries.rows[0].createdAt = new Date(Date.now() - 90_000)
+      await fs.writeFile(filePath, 'ninety seconds later')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+
+      expect(queries.rows).toHaveLength(1)
+    })
+
+    // `0` on the scalar means "never coalesce" and must survive being reached
+    // through the interactive path — the same not-truthiness trap as the
+    // per-origin lookup, from a third side.
+    it('treats a scalar of 0 as "never coalesce" for interactive editor saves', async () => {
+      versionsConfig.minIntervalSeconds = 0
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+      await fs.writeFile(filePath, 'immediately again')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
+
+      expect(queries.rows).toHaveLength(2)
+    })
+
+    // A restore is never coalesced regardless (ADR §9), and nothing about the
+    // discriminator may weaken that.
+    it('never coalesces a restore, whatever saveKind claims', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'restore', saveKind: 'automatic' })
+      await fs.writeFile(filePath, 'changed between restores')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'restore', saveKind: 'automatic' })
+
+      expect(queries.rows.filter((r) => r.origin === 'restore')).toHaveLength(2)
+    })
+  })
+
   /* -------------------------------------------------------------- quota share */
 
   it('evicts oldest-unlabeled-first to stay under quota * quotaShare', async () => {

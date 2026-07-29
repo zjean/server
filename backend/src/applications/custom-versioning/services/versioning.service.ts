@@ -218,7 +218,9 @@ export class VersioningService {
   // The window is per-origin (ADR §5) because the editors' cadence is set by the
   // document server while an interactive save is a human decision — see
   // FilesVersionsOriginIntervalsConfig for the numbers and why one scalar cannot
-  // serve both.
+  // serve both. When the caller can prove which of the two this write was
+  // (`options.saveKind`), that proof beats the origin's default; see
+  // coalescingWindow.
   private async isCoalesced(fileId: number, authorId: number | null, options: SnapshotOptions): Promise<boolean> {
     // A restore's safety snapshot is never coalesced. It is the only record of
     // the pre-restore content, so suppressing it would leave a second restore
@@ -226,7 +228,7 @@ export class VersioningService {
     // restore is never destructive would stop holding. Restores are rare and
     // deliberate; there is no autosave storm to protect against.
     if (options.origin === 'restore') return false
-    const window = this.coalescingWindow(options.origin)
+    const window = this.coalescingWindow(options.origin, options.saveKind)
     if (window <= 0) return false
     const newest = await this.queries.newestForTuple(fileId, authorId ?? null, options.origin)
     if (!newest || newest.label) return false
@@ -237,6 +239,17 @@ export class VersioningService {
   // The window for one origin: its own override if configured, otherwise the
   // scalar fallback (ADR §5).
   //
+  // AN INTERACTIVE SAVE SKIPS THE OVERRIDE ENTIRELY. The override exists for
+  // one stated reason — "an editor's cadence is set by the document server, not
+  // by a human" (ADR §5.1) — so a save we can PROVE a human triggered falsifies
+  // its premise and gets the interactive number, which is what the scalar is.
+  // The §19 soak is what forced this: OnlyOffice has no autosave at all, so its
+  // 300 was being applied exclusively to human saves, and four Ctrl+S presses
+  // inside two minutes produced zero versions. Deliberately not a new config
+  // key — see the design note. `saveKind` is only ever set where a
+  // discriminator is on the wire (`forcesavetype`, statuses 6/7), so Collabora
+  // and every non-editor origin resolve exactly as before.
+  //
   // TESTS FOR A NUMBER, NOT FOR TRUTHINESS. `0` is a meaningful value — "never
   // coalesce this origin" — and `?? fallback` or a truthiness check would
   // silently promote it back to 60. That is the same class of bug as the
@@ -245,7 +258,8 @@ export class VersioningService {
   // Reads through the config object each call rather than caching, because the
   // specs mutate `configuration.applications.files.versions` on an
   // already-constructed service.
-  private coalescingWindow(origin: VersionOrigin): number {
+  private coalescingWindow(origin: VersionOrigin, saveKind?: SnapshotOptions['saveKind']): number {
+    if (saveKind === 'interactive') return this.config.minIntervalSeconds ?? 0
     const configured = (this.config.minIntervalSecondsByOrigin as Partial<Record<VersionOrigin, number>> | undefined)?.[origin]
     if (typeof configured === 'number') return configured
     // An environment.yaml predating the per-origin block leaves it undefined;

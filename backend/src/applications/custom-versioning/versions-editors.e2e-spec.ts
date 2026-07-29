@@ -168,16 +168,20 @@ describe('versions editor callbacks (e2e)', () => {
   // D4's finding, end to end. The window is a RATE LIMIT, not a session
   // collapser, and the editor origins get their own 300s value precisely because
   // their cadence is the document server's rather than a human's.
-  it('coalesces a second save inside the editor window, and mints a new version outside it', async () => {
+  // `forcesavetype: 2` — "by timer, from the document server config" — is what
+  // makes the editor window apply. It is NOT decoration on this case: since
+  // #389 the window is chosen by who triggered the save, and a status-6 body
+  // with no discriminator counts as human (see the case below).
+  it('coalesces a second automatic save inside the editor window, and mints a new version outside it', async () => {
     const rel = 'e2e11-coalesce.docx'
     e2e.config.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 } as never
     await e2e.seed(rel, 'coalesce generation 0')
 
-    await callback(rel, 6, 'coalesce generation 1')
+    await callback(rel, 6, 'coalesce generation 1', { forcesavetype: 2 })
     expect(await e2e.versionsOf(rel)).toHaveLength(1)
 
     // A second save moments later: the pre-session state is already captured.
-    await callback(rel, 6, 'coalesce generation 2')
+    await callback(rel, 6, 'coalesce generation 2', { forcesavetype: 2 })
     expect(await e2e.versionsOf(rel)).toHaveLength(1)
     // And the one version still holds the PRE-SESSION bytes, not generation 1 —
     // which is the whole point of coalescing rather than replacing.
@@ -185,7 +189,50 @@ describe('versions editor callbacks (e2e)', () => {
 
     // Outside the window, the next save is a new version.
     e2e.config.minIntervalSecondsByOrigin = { collabora: 0, onlyoffice: 0 } as never
-    await callback(rel, 6, 'coalesce generation 3')
+    await callback(rel, 6, 'coalesce generation 3', { forcesavetype: 2 })
+    expect(await e2e.versionsOf(rel)).toHaveLength(2)
+  })
+
+  /* The #389 defect, end to end through a real callback rather than a stub.
+     The ADR §19 soak measured it in a browser: four explicit Ctrl+S presses
+     inside two minutes produced ZERO new versions, because OnlyOffice's 300 s
+     editor window was being applied to human saves — and OnlyOffice has no
+     automatic save at all, so human saves are the only kind it makes.
+
+     Both halves of the rule are visible here because this spec's beforeEach
+     (:76) pins `minIntervalSeconds` to 0 while the case below sets the
+     onlyoffice override to 300 — so "falls back to the scalar" and "keeps the
+     origin override" give OPPOSITE answers for the same elapsed time, and which
+     one applies is decided only by `forcesavetype`. The case above pins the
+     override half. Neither depends on a value from environment.yaml. */
+  it('does not apply the editor window to a save OnlyOffice reports as human (#389)', async () => {
+    const rel = 'e2e11-human-save.docx'
+    e2e.config.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 } as never
+    await e2e.seed(rel, 'human generation 0')
+
+    // forcesavetype 1 = "each time the saving is done (e.g. the Save button is
+    // clicked)". Four of them, back to back, well inside the 300 s window.
+    for (const generation of [1, 2, 3, 4]) {
+      await callback(rel, 6, `human generation ${generation}`, { forcesavetype: 1 })
+    }
+
+    // One version per press. Before #389 this was 1.
+    expect(await e2e.versionsOf(rel)).toHaveLength(4)
+  })
+
+  // Statuses 2 and 3 carry no `forcesavetype` at all — OnlyOffice documents it
+  // as present on 6 and 7 only — and so does a status 6 that simply omits it.
+  // All three are treated as human, so in this env (scalar 0) none of them
+  // coalesce behind the editor window. Pinned because it is the default arm of
+  // the classification, and a default is exactly what silently changes.
+  it('treats a save with no discriminator as human, not as an editor autosave', async () => {
+    const rel = 'e2e11-no-discriminator.docx'
+    e2e.config.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 } as never
+    await e2e.seed(rel, 'undiscriminated generation 0')
+
+    await callback(rel, 6, 'undiscriminated generation 1')
+    await callback(rel, 6, 'undiscriminated generation 2')
+
     expect(await e2e.versionsOf(rel)).toHaveLength(2)
   })
 

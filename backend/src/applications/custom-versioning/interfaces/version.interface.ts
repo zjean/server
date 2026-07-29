@@ -14,6 +14,22 @@ export type VersionInsert = typeof customFilesVersions.$inferInsert
 // sites stay one-liners.
 export interface SnapshotOptions {
   origin: VersionOrigin
+  // What triggered this save, when the caller can prove it. Only the coalescing
+  // WINDOW keys on this (ADR §5.1 as amended by
+  // docs/plans/2026-07-29-coalescing-forcesavetype-design.md); it is never
+  // stored, so the newest-version lookup is unchanged.
+  //
+  // OMITTED MEANS "NO DISCRIMINATOR AVAILABLE" and resolves exactly as it did
+  // before this field existed. That is what leaves Collabora — whose WOPI
+  // PutFile carries nothing equivalent — and all nine non-editor origins
+  // untouched by construction rather than by a matching `if`.
+  //
+  // `interactive` is a positive claim that a human triggered the write. It
+  // must not be inferred from the origin: OnlyOffice has no autosave only
+  // because this fork sends `autosave: false`, so an origin-based hardcode
+  // would be silently wrong the day that flips or an operator enables the
+  // document server's own forcesave timer.
+  saveKind?: 'interactive' | 'automatic'
   // An ALREADY-PROVEN `files.id` for the file being snapshotted, letting the
   // service skip a resolution it would otherwise repeat. Set it only when the
   // caller has resolved the id for this same space env — restoreVersion does,
