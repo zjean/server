@@ -65,3 +65,23 @@
     outline: none;
   }
 }
+
+// ─── Reduced motion (#398) ─────────────────────────────────────────────
+// Ships with the motion tokens because it is the same concern: v2 declares ~115
+// transitions and honoured this preference in exactly 3 of them, so the setting
+// was effectively ignored. One blanket rule is the right shape here — a
+// per-component opt-in is what produced 3-out-of-115 in the first place.
+//
+// 0.01ms rather than 0: transitionend / animationend still fire, so anything
+// that sequences off those events keeps working instead of hanging.
+@media (prefers-reduced-motion: reduce) {
+  .v2-root,
+  .v2-root *,
+  .v2-root *::before,
+  .v2-root *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

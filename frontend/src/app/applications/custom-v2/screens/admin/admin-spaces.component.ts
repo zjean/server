@@ -479,7 +479,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       .au-row__chip {
         display: inline-flex;
         padding: 1px 7px;
-        border-radius: 999px;
+        border-radius: var(--si-r4);
         font-size: 10.5px;
         font-weight: 600;
         letter-spacing: 0.2px;
@@ -523,7 +523,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         padding: 3px 4px 3px 3px;
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
-        border-radius: 999px;
+        border-radius: var(--si-r4);
         font-size: 11.5px;
         color: var(--si-fg);
       }

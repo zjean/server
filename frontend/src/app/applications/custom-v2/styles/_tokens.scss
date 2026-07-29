@@ -145,11 +145,94 @@
   --si-serif: 'Geist Variable', 'Inter Variable', system-ui, sans-serif;
   --si-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
+  // ─── Type scale (#398) ───────────────────────────────────────────────
+  // Numbered like --si-bg* / --si-r* / --si-shadow*, and deliberately a RECORD
+  // of the sizes v2 already ships rather than a fresh modular scale: adopting it
+  // must not move a pixel. The counts are source-level declaration counts at the
+  // time of writing — they are what makes the ladder non-arbitrary, and they say
+  // which steps are load-bearing. 15 steps covers 333 of the 337 declarations.
+  --si-text-1: 9.5px; //    4×  chrome eyebrows, sidebar back / source links
+  --si-text-2: 10px; //    11×  kbd hints, usage readouts, section labels
+  --si-text-3: 10.5px; //  37×  table headers, chips, mono timestamps
+  --si-text-4: 11px; //    35×  eyebrows, count pills
+  --si-text-5: 11.5px; //  28×  card paths, segmented buttons
+  --si-text-6: 12px; //    51×  densest metadata — the most common size in v2
+  --si-text-7: 12.5px; //  40×  comment / description body
+  --si-text-8: 13px; //    50×  default control and table body text
+  --si-text-9: 13.5px; //   8×  row names, breadcrumb segments
+  --si-text-10: 14px; //   30×  page meta, inputs, tab labels
+  --si-text-11: 15px; //   19×  prose body, card titles
+  --si-text-12: 18px; //    3×  dialog and sub-section headings
+  --si-text-13: 20px; //    6×  section headings
+  --si-text-14: 22px; //    3×  secondary page titles
+  --si-text-15: 26px; //    8×  page titles
+  //
+  // Four singletons stay literal until the bulk migration snaps them, each a
+  // ≤2px move on ONE declaration: 14.5px (button lg) → --si-text-10, 17px →
+  // --si-text-12, 19px → --si-text-13, 32px (the _kit title) → --si-text-15.
+
+  // ─── Spacing scale (#398) ────────────────────────────────────────────
+  // Same principle — the values already in use, so adoption is a rename.
+  --si-space-1: 2px; //    35×
+  --si-space-2: 4px; //    70×
+  --si-space-3: 6px; //    82×
+  --si-space-4: 8px; //   133×  most common
+  --si-space-5: 10px; //   97×
+  --si-space-6: 12px; //   77×
+  --si-space-7: 14px; //   57×
+  --si-space-8: 16px; //   32×
+  --si-space-9: 18px; //   36×
+  --si-space-10: 20px; //  35×
+  --si-space-11: 24px; //  14×
+  --si-space-12: 28px; //  28×
+  --si-space-13: 32px; //  18×
+  //
+  // 3px (23×), 5px (18×) and 7px (13×) are deliberately NOT steps: they are the
+  // off-grid values the audit flagged, and each sits between two steps above.
+  // The migration rounds them to the nearer step; those are the only spacing
+  // changes it should produce.
+
+  // ─── Motion (#398) ───────────────────────────────────────────────────
+  // 120ms carries 103 of v2's ~115 transitions, written two ways today (120ms
+  // and 0.12s). One token, one notation. --si-ease is plain `ease` because that
+  // is what every existing transition uses — naming it is not licence to
+  // change the curve.
+  --si-dur-1: 100ms; //     3×  micro, opacity-only
+  --si-dur-2: 120ms; //   103×  the house transition
+  --si-dur-3: 200ms; //     7×  panel / drawer slide
+  --si-dur-4: 220ms; //     1×  file-detail inspector
+  --si-ease: ease;
+
+  // ─── Stacking (#398) ─────────────────────────────────────────────────
+  // 25 distinct z-indexes ship today, including hand-tuned neighbours
+  // (70, 71, 72, 73, 74, 75, 76, 77, 80, 81, 90, 91). These bands name the
+  // layers those numbers were reaching for.
+  //
+  // NOT migrated in this change, on purpose: renumbering a stacking context is
+  // the kind of edit whose regressions do not appear in a diff — two elements
+  // that never overlap on the screens you happen to open look identical either
+  // way. Each consumer should move on its own, with eyes on the screen.
+  --si-z-base: 1;
+  --si-z-sticky: 20; // sticky table headers, top bar
+  --si-z-overlay: 40; // drop overlays, scrims
+  --si-z-panel: 60; // inspector, side panels
+  --si-z-popover: 80; // popovers, dropdowns, context menus
+  --si-z-dialog: 90; // modals
+  --si-z-toast: 100; // toasts
+
   // ─── Radii ───────────────────────────────────────────────────────────
-  --si-r1: 6px;
+  // r1 is 7px, not 6px: 7px is what the app's controls actually use, and
+  // migrating those call sites down to 6px would have tightened almost every
+  // corner in v2 by a pixel for no gain (maintainer's call, #398). The nine
+  // existing var(--si-r1) consumers move 6px → 7px, which is the whole visual
+  // delta of this change.
+  //
+  // r4 was 20px and had ZERO consumers. Repurposed as the pill radius, which
+  // 15 declarations were spelling as a literal 999px.
+  --si-r1: 7px;
   --si-r2: 10px;
   --si-r3: 14px;
-  --si-r4: 20px;
+  --si-r4: 999px;
 
   // ─── Shadows — neutral black, navy-coherent ──────────────────────────
   --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.3);

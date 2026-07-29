@@ -70,13 +70,13 @@ interface TabEntry {
         background: transparent;
         border: 0;
         font-family: var(--si-sans);
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         font-weight: 500;
         letter-spacing: -0.05px;
         color: var(--si-fg-faint);
         cursor: pointer;
         text-decoration: none;
-        transition: color 120ms ease;
+        transition: color var(--si-dur-2) var(--si-ease);
       }
       .bb__tab:hover {
         color: var(--si-fg-muted);

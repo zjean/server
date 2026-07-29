@@ -145,4 +145,45 @@
     color: var(--si-fg-faint);
     letter-spacing: 0.02em;
   }
+
+  &__scale {
+    display: flex;
+    flex-direction: column;
+    gap: var(--si-space-3);
+  }
+
+  &__scale-row {
+    display: grid;
+    grid-template-columns: 150px 64px 1fr;
+    align-items: center;
+    gap: var(--si-space-6);
+    min-height: 28px;
+  }
+
+  &__scale-token {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-accent);
+  }
+
+  &__scale-value {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-fg-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__scale-sample {
+    color: var(--si-fg);
+    line-height: 1.2;
+  }
+
+  &__scale-bar {
+    height: 14px;
+    // 2px, not --si-r1: at 7px the narrow steps round into lozenges and stop
+    // reading as a width comparison, which is the whole job of this row.
+    border-radius: var(--si-space-1);
+    background: var(--si-accent-soft);
+    border: 1px solid var(--si-accent-line);
+  }
 }

@@ -10,7 +10,7 @@
   background: var(--si-chrome-bg);
   color: var(--si-fg);
   font-family: var(--si-sans);
-  font-size: 12.5px;
+  font-size: var(--si-text-7);
   border-bottom: 1px solid rgba(0, 0, 0, 0.25);
 
   // Brand button is mobile-only — it acts as the left-nav drawer toggle.
@@ -64,7 +64,7 @@
     background: var(--si-accent-soft);
     color: var(--si-accent);
     border: 1px solid var(--si-accent-line);
-    font-size: 11px;
+    font-size: var(--si-text-4);
     font-weight: 600;
     letter-spacing: -0.1px;
     font-family: var(--si-display);

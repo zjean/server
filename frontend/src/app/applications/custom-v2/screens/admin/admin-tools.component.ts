@@ -303,7 +303,7 @@ function formatDate(ts: number | null | undefined): string {
       .at-badge {
         display: inline-flex;
         padding: 3px 10px;
-        border-radius: 999px;
+        border-radius: var(--si-r4);
         font-size: 10.5px;
         font-weight: 600;
         letter-spacing: 0.8px;
@@ -428,7 +428,7 @@ function formatDate(ts: number | null | undefined): string {
         display: inline-block;
         margin-right: 8px;
         padding: 1px 7px;
-        border-radius: 999px;
+        border-radius: var(--si-r4);
         background: var(--si-bg4);
         color: var(--si-fg-muted);
         font-size: 10px;
