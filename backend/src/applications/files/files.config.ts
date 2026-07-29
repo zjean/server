@@ -107,6 +107,16 @@ export class FilesVersionsRetentionConfig {
 // callback statuses 2/3/6/7 and has no autosave-per-keystroke path at all
 // (ADR §5), so coalescing rarely fires there.
 //
+// AMENDED after the ADR §19 soak (#389). "Barely needs one" was too generous:
+// OnlyOffice has no automatic save AT ALL, so its 300 was being applied
+// exclusively to HUMAN saves — the category the scalar's 60 is for — and four
+// Ctrl+S presses inside two minutes minted zero versions. The values below are
+// unchanged; what changed is that a save OnlyOffice reports as human-triggered
+// (`forcesavetype`) now resolves to the scalar instead, because the premise
+// above — the document server decides when to save — is false for that save.
+// Collabora reports no such thing and keeps the override for every save. See
+// docs/plans/2026-07-29-coalescing-forcesavetype-design.md.
+//
 // `0` means "never coalesce this origin" and is distinguishable from "not
 // configured" — the lookup tests for a number, not for truthiness. Any origin
 // without a field here falls back to the scalar `minIntervalSeconds`.

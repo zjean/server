@@ -330,7 +330,7 @@ describe(OnlyOfficeManager.name, () => {
       await expectSuccessfulSaveCallback('http://onlyoffice/document.docx?md5=abc123&expires=1739400549&shardkey=-33120641&filename=document.docx')
 
       expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
-      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice' })
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice', saveKind: 'interactive' })
     })
 
     it('does not snapshot when the document closed with no changes (status 2, notmodified)', async () => {
@@ -376,7 +376,7 @@ describe(OnlyOfficeManager.name, () => {
       it.each(SAVING_STATUSES)('status %i (%s) versions exactly once', async (status, extra) => {
         await expectSuccessfulSaveCallback(mockDocumentUrl, { status, ...extra })
         expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
-        expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice' })
+        expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, expect.objectContaining({ origin: 'onlyoffice' }))
       })
 
       it.each(NON_SAVING_STATUSES)('status %i (%s) never versions', async (status, extra) => {
@@ -385,6 +385,39 @@ describe(OnlyOfficeManager.name, () => {
         await service.callBack(mockUser, mockSpaceEnv, mockToken)
 
         expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+      })
+    })
+
+    /* Fork: versioning — #389. The coalescing window keys on WHO triggered the
+       save, and `forcesavetype` is the only thing on the wire that says.
+
+       Exhaustive on purpose, for the same reason the status table above is: the
+       classification is a claim about an upstream contract, and the contract
+       says `forcesavetype` is present on statuses 6 and 7 ONLY. Statuses 2 and
+       3 are therefore permanently unclassifiable, as is a status-6 body that
+       omits the field despite the contract — all three default to
+       `interactive`, because a status-2 flush is the tail of a human session
+       and a status-3 retry is a human save being re-attempted. Erring toward
+       keeping a revision is the direction this feature should fail in.
+
+       See docs/plans/2026-07-29-coalescing-forcesavetype-design.md §2.2. */
+    describe('classifying a save as human or automatic (#389)', () => {
+      const CLASSIFICATIONS = [
+        [6, { forcesavetype: 1 }, 'interactive', 'the Save button was clicked'],
+        [6, { forcesavetype: 3 }, 'interactive', 'the form was submitted'],
+        [6, { forcesavetype: 2 }, 'automatic', 'by the document server timer'],
+        [6, { forcesavetype: 0 }, 'automatic', 'via the command service'],
+        [6, {}, 'interactive', 'forcesavetype absent where the contract says it cannot be'],
+        [7, { forcesavetype: 1 }, 'interactive', 'a human save, retried after an error'],
+        [7, { forcesavetype: 2 }, 'automatic', 'a timer save, retried after an error'],
+        [2, { notmodified: false }, 'interactive', 'session-close flush, no discriminator'],
+        [3, {}, 'interactive', 'save-error retry, trigger already lost']
+      ] as const
+
+      it.each(CLASSIFICATIONS)('status %i %o -> %s (%s)', async (status, extra, saveKind) => {
+        await expectSuccessfulSaveCallback(mockDocumentUrl, { status, ...extra })
+
+        expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice', saveKind })
       })
     })
 

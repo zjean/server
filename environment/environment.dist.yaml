@@ -444,6 +444,11 @@ applications:
       minIntervalSeconds: 60
       # Per-origin overrides of the window above. The document servers decide
       # when to save, so they need a wider window than a human pressing Save.
+      # Applies only to saves the server did NOT trigger: when an editor tells us
+      # a person pressed Save (OnlyOffice reports this), that save uses
+      # minIntervalSeconds above instead, since the reason for the wider window
+      # does not hold. Collabora reports nothing, so all of its saves use the
+      # override.
       # default: collabora/onlyoffice 300
       minIntervalSecondsByOrigin:
         collabora: 300

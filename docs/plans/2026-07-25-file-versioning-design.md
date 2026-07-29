@@ -180,6 +180,22 @@ The single scalar above was wrong, and D4 is what showed it. **Superseded:** `mi
 
 `onlyoffice` gets 300 for symmetry rather than out of need: it saves only from callback statuses 2/3/6/7 and has no autosave path, so coalescing there is expected to rarely fire either way.
 
+### 5.2 AMENDED after the §19 soak — a proven human save skips the override
+
+The sentence §5.1 rests on — **"an editor's cadence is set by the document server, not by a human"** — was measured by the ADR §19 editor soak and is **true for Collabora and false for OnlyOffice**. OnlyOffice has no automatic save of any kind, so every version it mints is a human pressing Save, and its 300 s window was therefore applied *exclusively* to the category §5.1 itself assigns 60 s. The soak measured the consequence: **four explicit Ctrl+S saves inside two minutes produced zero new versions.**
+
+**Superseded:** the window is chosen by origin alone. **Now:** the window is chosen by origin *unless the caller can prove a human triggered the write*, in which case the scalar `minIntervalSeconds` governs and the per-origin override does not apply.
+
+This is not a new rule so much as §5.1's own justification applied in the one case where it can be checked. The override exists *because* the document server sets the cadence; positive evidence that a person set it falsifies the premise for that write, and nothing else about §5.1 changes.
+
+Three things this deliberately does not do, each of which was considered:
+
+- **No config change.** The interactive number already exists — it is the scalar. Adding a per-origin *human* window would be a new operator-visible key, and per #384 anything added there must also land in `environment.dist.yaml` or its env var is silently discarded. Nothing to add means nothing to get wrong.
+- **No schema change.** The kind is never stored; `isCoalesced` still finds the newest version by `(fileId, authorId, origin)`, the tuple `custom_files_versions_coalesce_idx` is built on. So a human Save 10 s after a timer save still coalesces against it — acceptable, because the window is a rate limit and *"was anything captured in the last 60 s?"* is the question a rate limit should ask regardless of what captured it.
+- **No change to the values.** `collabora: 300` and `onlyoffice: 300` both stand, and an `onlyoffice` save that cannot be proven human keeps 300.
+
+The discriminator is OnlyOffice's `forcesavetype`, which exists on callback statuses 6 and 7 **only** — so statuses 2 (the session-close flush) and 3 (a save-error retry) carry nothing, and are treated as human on the grounds that both are the tail of a human action and neither is a storm. Collabora's WOPI `PutFile` carries no equivalent, so it never claims either way and keeps the override by construction. Full reasoning, the classification table, and the verification still owed: **`docs/plans/2026-07-29-coalescing-forcesavetype-design.md`** (#389).
+
 ## 6. Retention — mirror the trash retention config shape
 
 **Decision.** `FilesVersionsConfig`, added to `files/files.config.ts`, mirroring `FilesTrashRetentionConfig` (:51-63) **including its `0 → false` Transform + `ValidateIf` idiom** so `0` means "off" rather than "immediately expire everything":

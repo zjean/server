@@ -27,6 +27,7 @@ import { FileLockOptions } from '../../interfaces/file-lock.interface'
 import { FileLockProps } from '../../interfaces/file-props.interface'
 import { LockConflict } from '../../models/file-lock-error'
 import { FilesLockManager } from '../../services/files-lock-manager.service'
+import type { SnapshotOptions } from '../../../custom-versioning/interfaces/version.interface'
 import { VersioningService } from '../../../custom-versioning/services/versioning.service'
 import {
   copyFileContent,
@@ -155,14 +156,14 @@ export class OnlyOfficeManager {
             this.logger.debug({ tag: this.callBack.name, msg: `document was edited but closed with no changes : ${space.url}` })
           } else {
             this.logger.debug({ tag: this.callBack.name, msg: `document was edited and closed but not saved (let's do it) : ${space.url}` })
-            await this.saveDocument(user, space, callBackData.url)
+            await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
           }
           await this.removeFileLock(user.id, space)
           await this.removeDocumentKey(space)
           break
         case 3:
           this.logger.error({ tag: this.callBack.name, msg: `document cannot be saved, an error has occurred (try to save it) : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url)
+          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
           break
         case 4:
           // No active users on the document
@@ -172,11 +173,11 @@ export class OnlyOfficeManager {
           break
         case 6:
           this.logger.debug({ tag: this.callBack.name, msg: `document is edited but save was requested : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url)
+          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
           break
         case 7:
           this.logger.error({ tag: this.callBack.name, msg: `document cannot be force saved, an error has occurred (try to save it) : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url)
+          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
           break
         default:
           this.logger.error({ tag: this.callBack.name, msg: 'unhandled case' })
@@ -186,6 +187,41 @@ export class OnlyOfficeManager {
       return { error: e.message }
     }
     return { error: 0 }
+  }
+
+  /* Fork: versioning. Classifies a save callback as human-triggered or
+     automatic, for the coalescing window only (#389, and
+     docs/plans/2026-07-29-coalescing-forcesavetype-design.md).
+
+     THIS IS THE ONLY PLACE THAT CAN DECIDE, because the status is half the
+     answer and saveDocument never sees it. `forcesavetype` is documented as
+     present on statuses 6 and 7 ONLY, so status 2 (the session-close flush)
+     and status 3 (a retry of a save whose trigger is already lost) carry no
+     discriminator at all.
+
+     Everything unclassifiable is treated as interactive, deliberately. A
+     status-2 flush is the tail of a human editing session and fires at most
+     once per session, so there is no autosave storm there to suppress; a
+     status-3 retry is a failed human save being re-attempted. Both err toward
+     keeping a revision, which is the direction this feature should fail in.
+     The same default covers `forcesavetype` simply being absent where the
+     contract says it cannot be — the wire is not the contract. */
+  private saveKindOf(callBackData: OnlyOfficeCallBack): SnapshotOptions['saveKind'] {
+    switch (callBackData.forcesavetype) {
+      // 2 = by timer (document server config), 0 = to the command service.
+      // Neither is a person, and both make the origin's editor window the
+      // right one.
+      case 0:
+      case 2:
+        return 'automatic'
+      // 1 = the saving is done, e.g. the Save button was clicked.
+      // 3 = the form was submitted (Complete & Submit).
+      case 1:
+      case 3:
+        return 'interactive'
+      default:
+        return 'interactive'
+    }
   }
 
   private async genConfiguration(
@@ -352,7 +388,7 @@ export class OnlyOfficeManager {
     return docKey
   }
 
-  private async saveDocument(user: UserModel, space: SpaceEnv, url: string): Promise<void> {
+  private async saveDocument(user: UserModel, space: SpaceEnv, url: string, saveKind?: SnapshotOptions['saveKind']): Promise<void> {
     /* url format:
       https://onlyoffice-server.com/cache/files/data/-33120641_7158/output.pptx/output.pptx
       ?md5=duFHKC-5d47s-RRcYn3hAw&expires=1739400549&shardkey=-33120641&filename=output.pptx
@@ -410,8 +446,12 @@ export class OnlyOfficeManager {
     /* Fork: versioning. This editor bypasses saveStream entirely, so the copy
        below — not any moveFiles — is the destructive moment. The acting user
        arrives as a parameter here (there is no req), and this runs only from
-       callback statuses 2/3/6/7, never on a keystroke autosave. */
-    await this.versioning.snapshotBeforeOverwrite(user, space, { origin: 'onlyoffice' })
+       callback statuses 2/3/6/7, never on a keystroke autosave.
+
+       `saveKind` is classified by saveKindOf at the callback switch — the only
+       place that can see the status. It picks the coalescing window and is
+       never stored. */
+    await this.versioning.snapshotBeforeOverwrite(user, space, { origin: 'onlyoffice', saveKind })
     // copy contents to avoid inode changes (`file.id` in some cases)
     try {
       await copyFileContent(tmpFilePath, space.realPath)
