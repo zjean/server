@@ -200,9 +200,15 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   // siblings inside the overlay.
   readonly path = input.required<string>()
   readonly file = input.required<FileProps | null>()
-  // Whether the current user has MODIFY on this file. Defaulted optimistically
-  // to true; the backend's LOCK request enforces the actual permission.
-  readonly isWriteable = input<boolean>(true)
+  // The RESOLVED writeability verdict, not one half of it: the embedder owns the
+  // whole contract (utils/file-writeable.ts) because only the embedder holds the
+  // permission string, and only the embedder can know whether an exclusive lock on
+  // the row is a stranger's or its own. Defaulted to false so an embedder that
+  // forgets to bind gets a read-only editor rather than an editable-looking one it
+  // has no right to — which is exactly what file-detail did until #372. The
+  // backend's LOCK request is still the enforcement; this is about not presenting
+  // an affordance that the enforcement will refuse.
+  readonly isWriteable = input<boolean>(false)
 
   protected readonly content = signal<string>('')
   protected readonly loading = signal(false)
@@ -367,7 +373,10 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
     this.resetState()
     this.loading.set(true)
     this.stub = buildFileModelStub(file, path)
-    this.writeable.set(this.isWriteable() && !file.lock?.isExclusive)
+    this.writeable.set(this.isWriteable())
+    // The lock is still read here, but for a different question: not "may I write"
+    // (isWriteable() already answered that, lock included) but "who is holding it",
+    // so the header can name them.
     if (file.lock?.isExclusive) {
       this.lockOwner.set(fileLockPropsToString(file.lock))
       this.readonly.set(true)

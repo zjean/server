@@ -58,9 +58,9 @@
         } @else if (showOfficeEmbed()) {
           <app-v2-preview-office-view [path]="currentPath()" [file]="f" />
         } @else if (isMarkdown()) {
-          <app-v2-preview-markdown-view [path]="currentPath()" [file]="f" />
+          <app-v2-preview-markdown-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" />
         } @else if (isText()) {
-          <app-v2-preview-text-code-view [path]="currentPath()" [file]="f" />
+          <app-v2-preview-text-code-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" />
         } @else if (isImage() && previewUrl()) {
           <img
             #imageEl
