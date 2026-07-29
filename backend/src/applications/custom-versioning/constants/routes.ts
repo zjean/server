@@ -19,6 +19,20 @@ export const VERSIONS_ROUTE = {
   LABEL: 'label',
   DELETE: 'delete',
   DIFF: 'diff',
+  // The OnlyOffice / Euro-Office editor's own version-history protocol. Three
+  // are called by the editor's event handlers running IN THE PAGE and are
+  // ordinary SpaceGuard routes like everything above; EDITOR_CONTENT is fetched
+  // by the DOCUMENT SERVER, server-to-server, and therefore lives on a separate
+  // controller under `@OnlyOfficeEnvironment()` — see
+  // versions-office.controller.ts for why that cannot be a second guard stack
+  // here.
+  //
+  // The `:version` in the first three is an ORDINAL into the history array, not
+  // a row id. The editor has no other handle on a revision.
+  EDITOR_HISTORY: 'editor-history',
+  EDITOR_VERSION: 'editor-version',
+  EDITOR_RESTORE: 'editor-restore',
+  EDITOR_CONTENT: 'editor-content',
   // Instance-wide operator endpoints (#342). They carry NO trailing wildcard —
   // they address the whole store, not a file — so they never collide with the
   // per-file routes above, every one of which has a distinct static verb.
@@ -36,6 +50,11 @@ export const API_VERSIONS_RESTORE = `${NS}/${VERSIONS_ROUTE.RESTORE}`
 export const API_VERSIONS_LABEL = `${NS}/${VERSIONS_ROUTE.LABEL}`
 export const API_VERSIONS_DELETE = `${NS}/${VERSIONS_ROUTE.DELETE}`
 export const API_VERSIONS_DIFF = `${NS}/${VERSIONS_ROUTE.DIFF}`
+
+export const API_VERSIONS_EDITOR_HISTORY = `${NS}/${VERSIONS_ROUTE.EDITOR_HISTORY}`
+export const API_VERSIONS_EDITOR_VERSION = `${NS}/${VERSIONS_ROUTE.EDITOR_VERSION}`
+export const API_VERSIONS_EDITOR_RESTORE = `${NS}/${VERSIONS_ROUTE.EDITOR_RESTORE}`
+export const API_VERSIONS_EDITOR_CONTENT = `${NS}/${VERSIONS_ROUTE.EDITOR_CONTENT}`
 
 const ADMIN_NS = `${NS}/${VERSIONS_ROUTE.ADMIN}`
 
