@@ -2,13 +2,23 @@ name: Build Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     tags: ['v*.*.*']
   workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
+
+# Serialize builds per ref so two rapid merges to develop can't finish out of
+# order and leave :beta (or :main) pointing at the older sha. The in-progress
+# run always completes (no cancellation), and the newest queued run builds
+# after it; note GitHub keeps only ONE pending run per group, so a push
+# superseded while pending never gets its :sha-<short> image — acceptable,
+# since the moving tags always end on the newest sha.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/sync-in-server
@@ -40,6 +50,7 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/develop' }}
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push

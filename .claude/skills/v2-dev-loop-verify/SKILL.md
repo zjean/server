@@ -259,6 +259,19 @@ If a human is watching the session: surface a screenshot via `Read` after `take_
 
 If the smoke run found a real bug (token mismatch, save failure, missing dispatch branch), state it clearly with the smoking-gun evidence — the white-bg + near-white-fg pair for the PR #202 family, or the un-changed file content for save failures. Don't bury it in a list of things-that-worked.
 
+## Producing PR screenshots (required for UI-facing PRs)
+
+Issue #387 makes screenshots mandatory on UI-facing PRs. After verifying the
+change, capture the final state(s) with agent-browser, save as
+`docs/screenshots/YYYY-MM-DD-<topic>-<label>.png`, commit on the PR branch,
+push, then embed in the PR body pinned to the head commit SHA:
+
+    SHA=$(git rev-parse HEAD)
+    echo "![after](https://github.com/zjean/server/raw/$SHA/docs/screenshots/<file>.png)"
+
+Before/after pairs beat single shots for visual fixes. The PNGs merge into
+`develop` deliberately — they are the verification record.
+
 ## When this skill doesn't apply
 
 - The change is purely backend / non-visual: just unit tests are sufficient. This skill is overkill.
