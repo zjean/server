@@ -1,6 +1,6 @@
 import { CodeEditor } from '@acrodata/code-editor'
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit, effect, inject, input, signal, untracked } from '@angular/core'
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit, effect, inject, input, output, signal, untracked } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
@@ -39,7 +39,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CodeEditor, FormsModule, TiptapEditorDirective, ButtonComponent, IconButtonComponent, L10nTranslatePipe],
   template: `
-    <div class="md-view">
+    <div class="md-view" [class.md-view--inline]="inline()">
       <header class="md-view__head">
         <span class="md-view__status">
           @if (loading()) {
@@ -199,6 +199,11 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             (click)="toggleReadonly()"
           />
         }
+        @if (inline()) {
+          <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
+            {{ 'Cancel' | translate: locale.language }}
+          </app-v2-btn>
+        }
         <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">
           {{ 'Save' | translate: locale.language }}
         </app-v2-btn>
@@ -208,7 +213,10 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         @if (loading()) {
           <div class="md-view__state">{{ 'Loading…' | translate: locale.language }}</div>
         } @else if (loadError(); as err) {
-          <div class="md-view__state md-view__state--error">{{ err }}</div>
+          <!-- Translated like the folder-readme banner's equivalent: the value is
+               either a server message (no key, so it falls through to itself) or one
+               of the English literals below, which the custom bundle translates. -->
+          <div class="md-view__state md-view__state--error">{{ err | translate: locale.language }}</div>
         } @else if (sourceMode()) {
           <code-editor
             #sourceEditor
@@ -223,7 +231,10 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             [lineWrapping]="true"
           />
         } @else {
-          <div class="md-view__editor">
+          <!-- v2-prose is the shared markdown typography (styles/_prose.scss), the
+               same partial the folder-readme banner's read mode uses, so switching
+               between the two cannot reflow the text. -->
+          <div class="md-view__editor v2-prose">
             <tiptap-editor class="md-view__editor-host" [editor]="editor"></tiptap-editor>
           </div>
         }
@@ -341,94 +352,40 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__source ::ng-deep .cm-focused {
         outline: none !important;
       }
+      /* Inline mode (folder readme banner): the source editor drops out of
+         absolute positioning — inset:0 against a bounded parent (rather than
+         a stage filling the viewport) would collapse it to zero height. */
+      .md-view--inline .md-view__source {
+        position: static;
+        inset: auto;
+        min-height: 180px;
+      }
       .md-view__editor {
         padding: 24px 32px 48px;
         max-width: 880px;
         margin: 0 auto;
       }
+      /* Inline mode (folder readme banner): the text column must line up with the
+         embedder's read block, or clicking Edit reflows the text being read. So
+         the padding and the centring both go, and the measure comes from the
+         embedder — the readme card sets --v2-inline-measure and its read block
+         obeys the same value, which is what keeps the two identical. The fallback
+         of none means an embedder that sets nothing still gets the old full-width
+         behaviour. The 880px centred default above is for the file-detail stage,
+         which has a viewport to centre in. */
+      .md-view--inline .md-view__editor {
+        padding: 0;
+        max-width: var(--v2-inline-measure, none);
+        margin: 0;
+      }
+      /* Everything about how markdown BODY text looks now comes from the shared
+         .v2-prose partial on the wrapper above (styles/_prose.scss), which is
+         global under .v2-root and so reaches ProseMirror's generated DOM without
+         ::ng-deep. Only the two rules that are about the editor rather than the
+         prose stay here. */
       .md-view__editor-host ::ng-deep .ProseMirror {
         outline: none;
         min-height: 200px;
-        font-size: 15px;
-        line-height: 1.6;
-        color: var(--si-fg);
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h1 {
-        font-size: 1.9em;
-        margin: 0.8em 0 0.4em;
-        font-weight: 700;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h2 {
-        font-size: 1.5em;
-        margin: 0.8em 0 0.4em;
-        font-weight: 700;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h3 {
-        font-size: 1.25em;
-        margin: 0.7em 0 0.3em;
-        font-weight: 600;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror p {
-        margin: 0.5em 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul,
-      .md-view__editor-host ::ng-deep .ProseMirror ol {
-        padding-left: 1.4em;
-        margin: 0.5em 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] {
-        list-style: none;
-        padding-left: 0.2em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] li {
-        display: flex;
-        gap: 0.4em;
-        align-items: flex-start;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] li > label {
-        flex-shrink: 0;
-        margin-top: 0.2em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror blockquote {
-        margin: 0.5em 0;
-        padding-left: 1em;
-        border-left: 3px solid var(--si-border, rgba(0, 0, 0, 0.18));
-        color: var(--si-fg-muted, #555);
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror code {
-        background: var(--si-bg3, rgba(0, 0, 0, 0.06));
-        padding: 1px 4px;
-        border-radius: 4px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 0.92em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror pre {
-        background: var(--si-bg3, rgba(0, 0, 0, 0.06));
-        padding: 12px;
-        border-radius: 6px;
-        overflow: auto;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror pre code {
-        background: none;
-        padding: 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror a {
-        color: var(--si-accent, #0a5fb8);
-        text-decoration: underline;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror table {
-        border-collapse: collapse;
-        margin: 0.6em 0;
-        width: 100%;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror th,
-      .md-view__editor-host ::ng-deep .ProseMirror td {
-        border: 1px solid var(--si-border, rgba(0, 0, 0, 0.18));
-        padding: 6px 8px;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror img {
-        max-width: 100%;
-        height: auto;
       }
       .md-view__state {
         padding: 24px;
@@ -454,6 +411,19 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   readonly path = input.required<string>()
   readonly file = input.required<FileProps | null>()
   readonly isWriteable = input<boolean>(true)
+  // Inline mode: the component is embedded in a bounded container (the folder
+  // readme banner) rather than filling the file-detail stage. Adds a Cancel
+  // control and drops the height:100% assumption.
+  readonly inline = input<boolean>(false)
+  readonly done = output<void>()
+  readonly saved = output<void>()
+  // Pushed on every change of the modified state, for an embedding parent that has
+  // to know about unsaved text at a moment when it can no longer ASK. The folder
+  // readme banner is destroyed together with its browse screen when the user leaves
+  // it, and Angular destroys this child first — so by the time the parent's
+  // ngOnDestroy runs it can neither serialize the content nor resolve this
+  // component through its view query. A pushed boolean survives both.
+  readonly dirtyChange = output<boolean>()
 
   protected readonly editor = new Editor({
     extensions: [
@@ -507,15 +477,26 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
         untracked(() => this.editor.setEditable(editable, false))
       }
     })
+    // One place to mirror the modified state outwards, rather than an emit beside
+    // each of the four writers to isModified.
+    effect(() => {
+      const dirty = this.isModified()
+      untracked(() => this.dirtyChange.emit(dirty))
+    })
     this.layoutService.switchTheme.subscribe((t: string) => this.theme.set(t === themeDark ? 'dark' : 'light'))
   }
 
   ngOnInit(): void {
-    this.closeGuard.setCloseGuard(() => this.canClose())
+    // CloseGuardService is a SINGLE-SLOT manual guard that only file-detail's
+    // close() consults. An inline embedder (the folder readme banner) must not
+    // touch it: registering would clobber whatever file-detail put there, and
+    // nulling it on destroy would leave the slot empty rather than restored.
+    // Design §5. The banner runs its own confirm via requestClose()/cancel().
+    if (!this.inline()) this.closeGuard.setCloseGuard(() => this.canClose())
   }
 
   ngOnDestroy(): void {
-    this.closeGuard.setCloseGuard(null)
+    if (!this.inline()) this.closeGuard.setCloseGuard(null)
     if (!this.editor.isDestroyed) this.editor.destroy()
     if (this.stub?.lock) {
       const stub = this.stub
@@ -655,6 +636,7 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
         this.saving.set(false)
         this.isModified.set(false)
         this.toast.success('v2_saved_one', { name: this.stub!.name })
+        this.saved.emit()
       },
       error: (e: HttpErrorResponse) => {
         this.saving.set(false)
@@ -663,7 +645,57 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     })
   }
 
+  protected async cancel(): Promise<void> {
+    if (!(await this.canClose())) return
+    this.done.emit()
+  }
+
+  // Awaitable save for an embedding parent that is being torn down and cannot
+  // prompt (the folder readme banner on folder change). Returns 'clean' when
+  // there was nothing to save, 'saved' on success, 'failed' otherwise. Never
+  // throws — the caller is mid-teardown and must proceed either way.
+  //
+  // Both the content and the HTTP request are captured/issued synchronously
+  // before the first await, so it stays correct even if this component is
+  // destroyed while the request is in flight.
+  //
+  // Deliberately raises no toast and emits no `saved`: the embedding parent owns
+  // the user-facing messaging for this path, and double-toasting would be noise.
+  //
+  // 'clean' means "nothing to save" — it must NOT also mean "have modified text
+  // but cannot save it". The read-only toggle renders in inline mode gated only
+  // on writeable() (see the template above), so a user can Edit, type, then click
+  // the lock icon before navigating away: isModified() stays true while writeable()
+  // flips false (or readonly() flips true). If that path returned 'clean', the
+  // caller would attempt no save and, because the outcome isn't 'failed', raise no
+  // v2_readme_autosave_failed toast either — the edited text would vanish with no
+  // signal to the user at all. So: no modification at all → 'clean'; a
+  // modification that cannot be attempted → 'failed', which fires the existing
+  // toast. Do not collapse these back into one branch.
+  async saveNowIfModified(): Promise<'clean' | 'saved' | 'failed'> {
+    if (!this.stub || !this.isModified()) return 'clean'
+    if (!this.writeable() || this.readonly()) return 'failed'
+    const content = this.currentMarkdown()
+    this.saving.set(true)
+    try {
+      await firstValueFrom(this.filesUpload.uploadFileContent(this.stub, content, true))
+      this.savedContent = content
+      this.isModified.set(false)
+      return 'saved'
+    } catch {
+      return 'failed'
+    } finally {
+      this.saving.set(false)
+    }
+  }
+
   // --- Lifecycle internals ----------------------------------------------
+
+  // Lets an embedding parent run the unsaved-changes confirm without
+  // reimplementing it. Returns true when the parent may destroy this view.
+  async requestClose(): Promise<boolean> {
+    return this.canClose()
+  }
 
   private async canClose(): Promise<boolean> {
     if (!this.isModified()) return true

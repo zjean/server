@@ -82,6 +82,8 @@
   "v2_emptying_trash_progress": "Prullenbak legen…",
   "v2_saved_one": "\"{{ name }}\" opgeslagen",
   "v2_discard_unsaved_changes": "Niet-opgeslagen wijzigingen voor \"{{ name }}\" verwerpen?",
+  "v2_readme_autosave_failed": "Kon \"{{ name }}\" niet opslaan — je wijzigingen zijn verloren.",
+  "v2_readme_discarded": "Niet-opgeslagen wijzigingen voor \"{{ name }}\" zijn verworpen.",
   "v2_space_disabled_in_trash": "{{ name }}: Ruimte is uitgeschakeld",
   "v2_share_n_created": "{{ nb }} items gedeeld",
   "v2_share_n_partial_fail": "{{ created }} gedeeld · {{ failed }} mislukt",
@@ -156,6 +158,7 @@
   "Calculate size": "Mapgrootte berekenen",
   "Size calculation failed": "Berekenen van grootte mislukt",
   "Folders only": "Alleen mappen",
+  "Folder description": "Mapbeschrijving",
   "Print": "Afdrukken",
   "Favorites": "Favorieten",
   "Add to favorites": "Toevoegen aan favorieten",
@@ -216,5 +219,11 @@
   "v2_versions_named_bytes": "{{ bytes }} benoemd",
   "v2_versions_purge_confirm": "Alle niet-benoemde versiegeschiedenis van <b>{{ name }}</b> ({{ bytes }}) verwijderen? Benoemde versies blijven bewaard. Dit kan niet ongedaan worden gemaakt.",
   "v2_versions_purged": "{{ count }} versies opgeruimd ({{ bytes }})",
-  "v2_versions_purge_kept": "{{ count }} benoemde versies zijn bewaard"
+  "v2_versions_purge_kept": "{{ count }} benoemde versies zijn bewaard",
+  "Failed to load folder description": "Kan de mapbeschrijving niet laden",
+  "Failed to load file": "Kan het bestand niet laden",
+  "Add a folder description…": "Een mapbeschrijving toevoegen…",
+  "This folder description is too large to be shown here.": "Deze mapbeschrijving is te groot om hier weer te geven.",
+  "Show more": "Meer weergeven",
+  "Show less": "Minder weergeven"
 }

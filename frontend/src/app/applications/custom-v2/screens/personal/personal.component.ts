@@ -13,6 +13,7 @@ import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { FileThumbComponent } from '../../components/file-thumb.component'
+import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -43,6 +44,10 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
     EmptyStateComponent,
     FabComponent,
     ActionSheetComponent,
+    // Declared here purely because the shared template renders
+    // <app-v2-folder-readme>; the wiring behind it is entirely in
+    // FileBrowserBase, same as for every other component in this list.
+    FolderReadmeComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,

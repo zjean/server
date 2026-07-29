@@ -7,6 +7,7 @@
 // kept in the fallback chain so a brief load lag doesn't flash system-ui.
 
 @use './tokens';
+@use './prose';
 
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/inter';

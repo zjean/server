@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { combineLatest, Observable, Subscription } from 'rxjs'
+import { tap } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
@@ -15,6 +16,7 @@ import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { FileThumbComponent } from '../../components/file-thumb.component'
+import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { PillComponent } from '../../components/pill.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -45,6 +47,10 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
     EmptyStateComponent,
     FabComponent,
     ActionSheetComponent,
+    // Declared here purely because the shared template renders
+    // <app-v2-folder-readme>; the wiring behind it is entirely in
+    // FileBrowserBase, same as for every other component in this list.
+    FolderReadmeComponent,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -100,7 +106,12 @@ export class SpaceFilesComponent extends FileBrowserBase {
 
     // Both the params and the url matter: switching spaces keeps this component
     // instance alive and only changes the alias param.
-    navigation: (): Observable<unknown> => combineLatest([this.route.params, this.route.url]),
+    //
+    // The tap is the space-name reset, and it has to happen HERE rather than in
+    // onListingLoaded: the base syncs breadcrumbs before it loads the listing, so
+    // a reset that waited for the response would publish the previous space's
+    // name into the trail first. See resetSpaceNameOnAliasChange.
+    navigation: (): Observable<unknown> => combineLatest([this.route.params, this.route.url]).pipe(tap(() => this.resetSpaceNameOnAliasChange())),
 
     rootLabel: (): string => this.spaceName() || this.repository.alias(),
     // A space name is user data, never an i18n key.
@@ -131,6 +142,24 @@ export class SpaceFilesComponent extends FileBrowserBase {
 
   protected viewModeStorageKey(): string {
     return 'ui.space.viewMode'
+  }
+
+  // Angular reuses this component across any hop that stays within the single
+  // `path: '**'` route entry (v2.routes.ts) — root->subfolder and subfolder->root
+  // included, since the folder-readme work collapsed each browse screen to one
+  // entry (design §5 of docs/plans/2026-07-28-v2-folder-readme-design.md). That
+  // reuse is also what makes a *space->space* hop reuse the component whenever one
+  // side of the hop is root and the other a subfolder — the two shapes that used
+  // to cross a route boundary and get recreated. onListingLoaded only fetches the
+  // space name when spaceName() is empty, so without this reset the
+  // breadcrumb/title kept showing the PREVIOUS space's name after such a hop.
+  private lastSpaceAlias: string | null = null
+
+  private resetSpaceNameOnAliasChange(): void {
+    const alias = this.repository.alias()
+    if (alias === this.lastSpaceAlias) return
+    this.lastSpaceAlias = alias
+    this.spaceName.set('')
   }
 
   private loadSpaceName(alias: string): void {

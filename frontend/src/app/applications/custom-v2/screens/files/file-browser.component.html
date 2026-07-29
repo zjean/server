@@ -91,6 +91,15 @@
       </div>
     </div>
 
+    @if (!filter() || readmeBanner()?.isEditing()) {
+      <app-v2-folder-readme
+        [dirPath]="loadedDirPath()"
+        [files]="files()"
+        [permissions]="permissions()"
+        (changed)="refresh()"
+      />
+    }
+
     @if (loading()) {
       <div class="personal__state" l10nTranslate>Loading…</div>
     } @else if (errorMessage(); as err) {

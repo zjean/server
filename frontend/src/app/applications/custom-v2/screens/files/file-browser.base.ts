@@ -1,5 +1,18 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { computed, DestroyRef, Directive, effect, ElementRef, HostListener, inject, OnDestroy, OnInit, signal, ViewChild } from '@angular/core'
+import {
+  computed,
+  DestroyRef,
+  Directive,
+  effect,
+  ElementRef,
+  HostListener,
+  inject,
+  OnDestroy,
+  OnInit,
+  signal,
+  ViewChild,
+  viewChild
+} from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale } from 'angular-l10n'
@@ -34,7 +47,9 @@ import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.
 import { FavoritesService } from '../../services/favorites.service'
 import { FolderSizeService } from '../../services/folder-size.service'
 import { V2DragService } from '../../services/drag.service'
+import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
+import { FOLDER_README_NAMES, pickFolderReadme } from '../../utils/folder-readme'
 import { isArchiveMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { buildNewEntryMenu, buildNewEntrySheetItems, NewEntryId } from './new-entry-menu'
@@ -131,9 +146,38 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   @ViewChild('fileInput') protected fileInput?: ElementRef<HTMLInputElement>
   @ViewChild('filterInput') protected filterInput?: ElementRef<HTMLInputElement>
 
+  // The folder-readme banner rendered above the listing by the shared template.
+  // Queried here so `newFolderDescription()` can hand the freshly created file
+  // straight to its editor, and so the template's filter gate can ask whether an
+  // edit is in progress. Readme behaviour is identical on both screens, so it
+  // lives on the base and NOT in FileBrowserRepository — that seam is only for
+  // where files come from and how they are addressed on the wire.
+  protected readonly readmeBanner = viewChild(FolderReadmeComponent)
+
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly FILE_OPERATION = FILE_OPERATION
   protected readonly files = signal<FileProps[]>([])
+  // The browse response's permission string, kept for the folder readme banner's
+  // writeability check. `SpaceFiles` carries it on every response and both
+  // screens read the same field.
+  protected readonly permissions = signal<string>('')
+  // The folder path the CURRENT `files`/`permissions` describe — not the folder
+  // the router is pointing at.
+  //
+  // `currentUploadRoute()` derives its answer from the URL, so it flips
+  // synchronously on navigation, while `files` is only written when the listing
+  // GET returns. For everything else in this class that gap is invisible, because
+  // they read the route at the moment the user acts. The folder-readme banner is
+  // different: it holds all three at once and composes a file path out of them.
+  // Given the route path and the previous folder's rows — and `loadFiles()`
+  // deliberately does not blank `files` while loading, so the old listing stays on
+  // screen — it would build `<new folder>/<old folder's readme name>` and open an
+  // editor on a file that need not exist. So publish the path in the same turn as
+  // the rows it belongs to, and let the banner bind to this instead.
+  protected readonly loadedDirPath = signal<string>('')
+  // Gates the New menu's "Folder description" entry — hidden once the current
+  // folder already has one, matching Nextcloud's Rich Workspaces "+" menu.
+  protected readonly hasFolderReadme = computed(() => pickFolderReadme(this.files()) !== null)
   protected readonly loading = signal(true)
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
@@ -144,7 +188,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   // tacks on the FAB-only Upload primitive.
   protected readonly fabSheetOpen = signal(false)
   protected readonly fabSheetItems = computed<readonly ActionSheetEntry[]>(() => [
-    ...buildNewEntrySheetItems(),
+    ...buildNewEntrySheetItems(this.hasFolderReadme()),
     { id: 'sep-fab', kind: 'divider' },
     { id: 'upload', label: 'Upload', icon: 'upload' }
   ])
@@ -154,7 +198,8 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly newMenuAnchor = signal<ContextMenuAnchor | null>(null)
   protected readonly newMenuItems = computed<ContextMenuEntry[]>(() =>
     buildNewEntryMenu({
-      onSelect: (id) => this.dispatchNewEntry(id)
+      onSelect: (id) => this.dispatchNewEntry(id),
+      hasFolderReadme: this.hasFolderReadme()
     })
   )
 
@@ -808,6 +853,12 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       case 'new-markdown':
         this.newMarkdownFile()
         return
+      // ONE case, covering the desktop dropdown AND the mobile FAB sheet: the
+      // sheet's create ids delegate to this switch (see onFabSheetSelect below),
+      // so there is no second dispatcher to keep in step.
+      case 'new-folder-description':
+        this.newFolderDescription()
+        return
       case 'new-diagram':
         this.newDiagramFile()
         return
@@ -961,6 +1012,38 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     })
   }
 
+  // Creates the folder description with a fixed name and no prompt, then hands
+  // straight to the banner's editor — no navigation to file-detail, unlike
+  // newMarkdownFile above. FOLDER_README_NAMES[0] is 'Readme.md', NC's default.
+  protected newFolderDescription(): void {
+    const name = FOLDER_README_NAMES[0]
+    const dirPath = this.currentUploadRoute()
+    // Clear any active filter BEFORE the request, not in the next handler: the
+    // filter gate in the shared template unmounts the banner, and `startEdit()`
+    // below reaches it through an optional viewChild that resolves to undefined
+    // while it is unmounted — so the edit intent would silently vanish. Clearing
+    // here gives Angular a change-detection pass to mount it while the request is
+    // in flight. A filter would also hide the new Readme.md row from the listing
+    // unless it happened to match.
+    //
+    // Restored if creation fails, so a failure does not also cost the user the
+    // query they had typed.
+    const previousFilter = this.filter()
+    this.filter.set('')
+    this.filesService.make('file', name, dirPath, true).subscribe({
+      next: () => {
+        this.toast.success('v2_file_created', { name })
+        this.refresh()
+        // The banner queues this until the refreshed listing resolves the file.
+        this.readmeBanner()?.startEdit()
+      },
+      error: (e: HttpErrorResponse) => {
+        this.filter.set(previousFilter)
+        this.toast.error(e?.error?.message ?? 'Creation failed')
+      }
+    })
+  }
+
   // Two-step prompt mirrors classic's download dialog: collect URL, then offer a
   // derived name the user can rename. Backend kicks off an async download task —
   // no auto-navigate because the file isn't available until the task finishes.
@@ -1027,6 +1110,9 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       })
   }
 
+  // The folder the ROUTE currently points at. Callers that act on a user gesture
+  // want this; anything that has to agree with the loaded listing wants
+  // `loadedDirPath` instead.
   private currentUploadRoute(): string {
     const segs = this.pathSegments().map((s) => s.path)
     return [SPACE_REPOSITORY.FILES, this.repository.alias(), ...segs].join('/')
@@ -1038,15 +1124,25 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     this.loading.set(true)
     this.errorMessage.set(null)
     const segs = this.pathSegments().map((s) => s.path)
+    const dirPath = this.currentUploadRoute()
     const url = [API_SPACES_BROWSE, SPACE_REPOSITORY.FILES, alias, ...segs].join('/')
     this.http.get<SpaceFiles>(url).subscribe({
       next: (result) => {
         this.files.set(result.files)
+        this.permissions.set(result.permissions ?? '')
+        // Published in the same turn as files/permissions, and carrying the path
+        // this response was requested for — see loadedDirPath's own comment.
+        this.loadedDirPath.set(dirPath)
         this.loading.set(false)
         this.repository.onListingLoaded?.(alias)
       },
       error: (e: HttpErrorResponse) => {
         this.files.set([])
+        // Cleared on the error path too: a stale permission string from the
+        // previous folder would let the banner offer Edit on content it could
+        // not load.
+        this.permissions.set('')
+        this.loadedDirPath.set('')
         this.errorMessage.set(e.status === 404 ? 'Folder not found' : 'Failed to load folder')
         this.loading.set(false)
       }
