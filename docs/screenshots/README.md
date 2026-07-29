@@ -11,3 +11,5 @@ pinned to the head commit SHA so the image survives branch auto-deletion:
 Screenshots land on `develop` (and eventually `main`) with the squash merge —
 that is intentional; they are the visual record of what was verified, same as
 the PNGs under `docs/plans/`.
+
+First verified on the develop workflow canary PR.
