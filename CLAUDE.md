@@ -4,16 +4,19 @@ This is a fork of [`Sync-in/server`](https://github.com/Sync-in/server), maintai
 
 ## Branch protection
 
-`main` and `upstream-main` are both protected:
+`main`, `develop`, and `upstream-main` are all protected:
 
-- **`main`** — direct pushes are blocked. All changes (including docs, CI config, trivial fixes) must go through a pull request. The `test` status check must pass and any PR conversations must be resolved before merge.
-- **`upstream-main`** — a pure mirror of `upstream/main`. Only the `upstream-sync.yml` workflow should write to it (force-push allowed; human pushes blocked by PR-equivalent requirement).
+- **`develop`** — the default branch and the base for ALL day-to-day PRs (features, fixes, mods, docs, CI config, upstream syncs). Direct pushes blocked; the `test` status check must pass, the branch must be up to date with `develop`, and PR conversations must be resolved before merge. Every merge to `develop` publishes `ghcr.io/zjean/sync-in-server:beta` (plus `:develop` and `:sha-<short>`).
+- **`main`** — stable releases only. It advances exclusively via `develop → main` promotion PRs, merged with a **merge commit** (never squash — a squash would break the shared history and make every later promotion conflict). Direct pushes blocked; `test` must pass (up-to-date requirement deliberately OFF — the promotion merge commit on `main` is never an ancestor of `develop`, so a strict check would deadlock every promotion after the first).
+- **`upstream-main`** — a pure mirror of `upstream/main`. Only the `upstream-sync.yml` workflow writes to it (force-push allowed; human pushes blocked by PR-equivalent requirement). Sync PRs open against `develop`.
 
 ### Practical implications
 
-- Never attempt `git push origin main` directly. It will be rejected.
-- Every change, even a one-line doc fix, flows: feature branch → push → open PR → wait for `test` green → merge.
-- Feature branches are auto-deleted on merge (`delete_branch_on_merge: true`).
+- Never push to `main` or `develop` directly. Both are rejected.
+- Every change flows: feature branch (off `develop`) → push → PR with base `develop` → wait for `test` green → squash-merge.
+- UI-facing PRs (anything user-visible under `frontend/`) must include agent-browser screenshots — capture against the local dev server, commit PNGs under `docs/screenshots/`, embed in the PR body via a raw URL pinned to the head commit SHA (see `.github/PULL_REQUEST_TEMPLATE.md`).
+- Feature branches are auto-deleted on merge (`delete_branch_on_merge: true`). `develop` survives promotion merges only because it is protected — never unprotect it.
+- If an emergency fix ever lands on `main` directly, immediately back-merge `main → develop` via a PR.
 
 ## Branch naming and commit conventions
 
@@ -42,16 +45,22 @@ git checkout -b upstream-contrib/fix-foo upstream/main
 
 The repo has Squash and Merge-commit both enabled; Rebase is disabled. Pick per PR:
 
-- **Feature / fix / mod / docs / chore PRs → Squash and merge.** Keeps `main`'s history clean; one commit per logical change.
-- **Upstream sync PRs (`upstream-main` → `main`) → Create a merge commit.** Preserves the merge point so upstream history stays legible; full upstream history remains available on the `upstream-main` branch regardless.
+- **Feature / fix / mod / docs / chore PRs (base `develop`) → Squash and merge.** One commit per logical change.
+- **Upstream sync PRs (`upstream-main` → `develop`) → Create a merge commit.** Preserves the merge point.
+- **Release promotion PRs (`develop` → `main`) → Create a merge commit.** Same reason, stronger: a squash here permanently forks `main` from `develop`.
 
-GitHub remembers the user's last-used strategy; double-check the dropdown on upstream-sync PRs.
+GitHub remembers the last-used strategy; double-check the dropdown on sync and promotion PRs.
 
 ## Versioning and releases
 
 - Version scheme: `<upstream-base>-custom.<n>` — e.g. `2.2.1-custom.1`, `2.2.1-custom.2`, then reset on upstream bump to `2.2.2-custom.1`.
 - `package.json` `version` field holds the current value (root + backend + frontend all align).
-- Releases are cut by tagging `v<version>` on `main`. The tag fires `release.yml` (archives + draft GitHub Release) and `build-image.yml` (versioned image).
+- Cutting a stable release:
+  1. On `develop`, open a PR bumping `version` in root + backend + frontend `package.json` (all three must align) and updating `CHANGELOG.md`.
+  2. Open the promotion PR: `gh pr create --repo zjean/server --base main --head develop --title "release: v<version>"`. Merge it with **Create a merge commit**.
+  3. Tag the merge commit on `main`: `git fetch origin main && git tag v<version> origin/main && git push origin v<version>`.
+  4. The tag fires `release.yml` (archives + draft GitHub Release; it verifies the tag is in `main`'s history) and `build-image.yml` (`:<version>`, `:<major>.<minor>`, `:latest`).
+- Beta builds: every push to `develop` publishes `:beta`, `:develop`, and `:sha-<short>`. Pin deployments to the sha tag when a beta needs to be reproducible. There are no git prerelease tags.
 - Image: `ghcr.io/zjean/sync-in-server`. Tags published automatically:
   - Every push to `main` → `:main`, `:sha-<short>`
   - Every `v*.*.*` tag → `:<version>`, `:<major>.<minor>`, `:latest`
@@ -69,12 +78,14 @@ Quick self-check: `git remote -v` should show `git@github-prive:...` for both `o
 ## Upstream remote and license
 
 - Remote `upstream` → `git@github-prive:Sync-in/server.git` (push intentionally disabled via `DISABLE` push URL).
-- Upstream sync is automated: `upstream-sync.yml` runs weekly + on `workflow_dispatch`, force-pushes `upstream/main` → `origin/upstream-main`, and opens a PR into `main` when there's new upstream work.
+- Upstream sync is automated: `upstream-sync.yml` runs weekly + on `workflow_dispatch`, force-pushes `upstream/main` → `origin/upstream-main`, and opens a PR into `develop` when there's new upstream work.
 - License is **AGPL-3.0-or-later**. Preserve the `LICENSE` file, keep `"license": "AGPL-3.0-or-later"` in every `package.json`, and never strip upstream copyright headers. If this server is deployed for anyone but the maintainer, a user-visible "Source: github.com/zjean/server" link must appear in the UI (§13 network clause).
 
 ## Opening pull requests
 
 **PRs must always target `zjean/server` (the fork), never `Sync-in/server` (upstream).** The `upstream` remote is fetched for sync only — it must never receive PRs from this fork.
+
+Day-to-day PRs base on `develop`; the only PRs with base `main` are release promotions (`--head develop`) and, exceptionally, emergency hotfixes (which must be back-merged to `develop` immediately).
 
 `gh pr create` picks the target repo from its "default repo" setting, which — in a clone with an `upstream` remote — can silently resolve to `Sync-in/server`. The belt-and-suspenders fix:
 
@@ -86,7 +97,7 @@ Quick self-check: `git remote -v` should show `git@github-prive:...` for both `o
 
 2. **Every `gh pr create` invocation passes `--repo zjean/server` explicitly**, even when the default is set — the flag costs nothing and is the authoritative override if the default ever drifts:
    ```bash
-   gh pr create --repo zjean/server --base main --head <branch> --title "..." --body "..."
+   gh pr create --repo zjean/server --base develop --head <branch> --title "..." --body "..."
    ```
 
 **If a PR accidentally opens against upstream:** close it immediately with `gh pr close <n> --repo Sync-in/server --comment "wrong repo"`, then reopen against the fork with `--repo zjean/server`. Do not leave an open PR against `Sync-in/server` — it looks like a contribution attempt and pollutes their queue.
