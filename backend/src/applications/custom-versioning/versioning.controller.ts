@@ -13,9 +13,11 @@ import {
   Res,
   StreamableFile,
   UseFilters,
-  UseGuards
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common'
 import { FastifyReply } from 'fastify'
+import { ContextInterceptor } from '../../infrastructure/context/interceptors/context.interceptor'
 import { fileName, getMimeType } from '../files/utils/files'
 import { OverrideSpacePermission } from '../spaces/decorators/space-override-permission.decorator'
 import { GetSpace } from '../spaces/decorators/space.decorator'
@@ -26,9 +28,11 @@ import { GetUser } from '../users/decorators/user.decorator'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_ROUTE } from './constants/routes'
 import { VERSIONS_DISABLED_MESSAGE, VERSIONS_MAX_DIFF_BYTES, VERSIONS_TEXTUAL_MIMES } from './constants/versioning'
-import { DeleteVersionDto, SetVersionLabelDto, VersionDiffDto } from './dto/version.dto'
+import { DeleteVersionDto, EditorVersionDto, SetVersionLabelDto, VersionDiffDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
+import { EditorHistoryEntry, EditorVersionData } from './interfaces/editor-history.interface'
 import { VersionProps, VersionsUsage } from './interfaces/version.interface'
+import { EditorHistoryService } from './services/editor-history.service'
 import { VersioningService } from './services/versioning.service'
 import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
 
@@ -50,7 +54,10 @@ import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
 // because neither type extends HttpException. See the filter for the full list.
 @UseFilters(VersioningExceptionsFilter)
 export class VersioningController {
-  constructor(private readonly versioning: VersioningService) {}
+  constructor(
+    private readonly versioning: VersioningService,
+    private readonly editorHistoryService: EditorHistoryService
+  ) {}
 
   @Get(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.LIST}/*`)
   async list(@GetUser() user: UserModel, @GetSpace() space: SpaceEnv): Promise<VersionProps[]> {
@@ -114,6 +121,56 @@ export class VersioningController {
   ): Promise<void> {
     this.requireEnabled()
     return this.versioning.deleteVersion(user, space, versionId, dto.confirmLabeled === true)
+  }
+
+  /* ------------------------------ the OnlyOffice editor's history protocol */
+
+  // Three routes serving the OnlyOffice / Euro-Office editor's version panel.
+  // They are called by the editor's event handlers running IN THE PAGE, so they
+  // are ordinary SpaceGuard routes like every other route on this controller.
+  // The bytes of a past revision are NOT served from here — the document server
+  // fetches those itself, from VersionsOfficeController.
+  //
+  // ContextInterceptor is on `editorVersion` ALONE — the only one of the three
+  // that builds a url — and there it is load-bearing: the urls handed to the
+  // document server must be absolute, and `contextManager.headerOriginUrl()`,
+  // the only thing that is correct behind the reverse proxy, is populated by
+  // that interceptor and returns undefined without it. The failure is a url
+  // reading `undefined/files/versions/...`, which surfaces as an empty panel.
+
+  @Get(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.EDITOR_HISTORY}/*`)
+  async editorHistory(@GetUser() user: UserModel, @GetSpace() space: SpaceEnv): Promise<EditorHistoryEntry[]> {
+    this.requireEnabled()
+    return this.editorHistoryService.history(user, space)
+  }
+
+  @Get(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.EDITOR_VERSION}/:version/*`)
+  @UseInterceptors(ContextInterceptor)
+  async editorVersion(
+    @GetUser() user: UserModel,
+    @GetSpace() space: SpaceEnv,
+    // An ORDINAL into the history array, not a row id — see EditorHistoryService.
+    @Param('version', ParseIntPipe) version: number,
+    @Query() dto: EditorVersionDto
+  ): Promise<EditorVersionData> {
+    this.requireEnabled()
+    return this.editorHistoryService.versionData(user, space, version, dto.officeToken)
+  }
+
+  // MODIFY rather than the ADD a POST would otherwise imply, for the same reason
+  // `restore` above carries the override: this replaces the content of an
+  // existing file, and without it the guard would accept a member who may only
+  // add new ones. A read-only session must not be able to reach this even if the
+  // frontend offered the button.
+  @Post(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.EDITOR_RESTORE}/:version/*`)
+  @OverrideSpacePermission(SPACE_OPERATION.MODIFY)
+  async editorRestore(
+    @GetUser() user: UserModel,
+    @GetSpace() space: SpaceEnv,
+    @Param('version', ParseIntPipe) version: number
+  ): Promise<EditorHistoryEntry[]> {
+    this.requireEnabled()
+    return this.editorHistoryService.restore(user, space, version)
   }
 
   // `against=current` (default) diffs the version against the live file;
