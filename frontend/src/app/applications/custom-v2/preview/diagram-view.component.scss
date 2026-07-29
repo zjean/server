@@ -17,12 +17,12 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-muted, #888);
+  color: var(--si-fg-muted);
   font-size: 14px;
 }
 
 .diagram-view__state--error {
-  color: var(--danger, #dc3545);
+  color: var(--si-rose);
 }
 
 .diagram-conflict__backdrop {

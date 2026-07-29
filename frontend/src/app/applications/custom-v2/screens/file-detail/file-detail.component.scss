@@ -139,6 +139,11 @@
     box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
   }
 
+  // The two raw colours below are deliberate, not token drift: they are the
+  // canvas an embedded document or video is composited on, not app chrome. A
+  // PDF or office document is authored against white regardless of the app
+  // theme, and letterbox bars belong black. Tokenising them would tie foreign
+  // content to the navy ramp and make it look broken.
   &__iframe {
     width: 100%;
     height: 100%;
@@ -282,7 +287,7 @@
     justify-content: center;
     gap: 4px;
     background: transparent;
-    color: var(--si-fg-subtle, var(--si-fg-muted));
+    color: var(--si-fg-muted);
     border: none;
     border-radius: 8px;
     cursor: pointer;

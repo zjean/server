@@ -111,10 +111,22 @@ function emptyDraft(): GroupDraft {
               </span>
               <span class="ag-row__actions">
                 @if (!isPersonal()) {
-                  <button type="button" class="ag-row__action" (click)="openMembers(g)" [attr.title]="'Members' | translate: locale.language">
+                  <button
+                    type="button"
+                    class="ag-row__action"
+                    (click)="openMembers(g)"
+                    [attr.title]="'Members' | translate: locale.language"
+                    [attr.aria-label]="'Members' | translate: locale.language"
+                  >
                     <app-v2-icon name="people" [size]="12" />
                   </button>
-                  <button type="button" class="ag-row__action" (click)="openEdit(g)" [attr.title]="'Edit' | translate: locale.language">
+                  <button
+                    type="button"
+                    class="ag-row__action"
+                    (click)="openEdit(g)"
+                    [attr.title]="'Edit' | translate: locale.language"
+                    [attr.aria-label]="'Edit' | translate: locale.language"
+                  >
                     <app-v2-icon name="pencil" [size]="12" />
                   </button>
                   <button
@@ -122,6 +134,7 @@ function emptyDraft(): GroupDraft {
                     class="ag-row__action ag-row__action--danger"
                     (click)="confirmDelete(g)"
                     [attr.title]="'Delete' | translate: locale.language"
+                    [attr.aria-label]="'Delete' | translate: locale.language"
                   >
                     <app-v2-icon name="trash" [size]="12" />
                   </button>
@@ -332,8 +345,8 @@ function emptyDraft(): GroupDraft {
         gap: 4px;
       }
       .ag-row__action {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         border-radius: 5px;
         background: transparent;
         border: none;

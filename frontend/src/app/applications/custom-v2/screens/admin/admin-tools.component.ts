@@ -85,8 +85,10 @@ function formatDate(ts: number | null | undefined): string {
               {{ 'Start' | translate: locale.language }}
             </app-v2-btn>
           }
+          <!-- danger, not ghost: dropping every index is destructive, and read as
+               neutral beside Start/Refresh until #399. -->
           <app-v2-btn
-            kind="ghost"
+            kind="danger"
             size="sm"
             icon="trash"
             [disabled]="busy() || status().indexesCount === 0 || (status().state !== IndexingState.IDLE && status().state !== IndexingState.DISABLED)"
@@ -188,7 +190,7 @@ function formatDate(ts: number | null | undefined): string {
                         {{ r.ceiling === null ? ('Not capped' | translate: locale.language) : (r.ceiling | toBytes: 1 : true) }}
                       </td>
                       <td class="at-table__num">
-                        <app-v2-btn kind="ghost" size="sm" icon="trash" [disabled]="!!purging()" (click)="purge(r)">
+                        <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="!!purging()" (click)="purge(r)">
                           {{ 'Purge' | translate: locale.language }}
                         </app-v2-btn>
                       </td>
@@ -224,7 +226,11 @@ function formatDate(ts: number | null | undefined): string {
         display: flex;
         flex-direction: column;
         gap: 20px;
-        max-width: 720px;
+        // 820 to match the Settings column (#399). At 720 these cards stopped
+        // ~310px short of the admin tables on the sibling admin screens, which
+        // made the section look unfinished — and the per-owner table inside the
+        // versions card was cramped for no reason.
+        max-width: 820px;
       }
       .at__head {
         display: flex;
