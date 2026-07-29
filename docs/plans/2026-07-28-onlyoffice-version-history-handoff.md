@@ -3,8 +3,9 @@
 - **Date:** 2026-07-28
 - **Implements:** [`2026-07-28-onlyoffice-version-history-design.md`](2026-07-28-onlyoffice-version-history-design.md) — the
   design. This file is the task list, the environment recipe, and the list of things that will bite you.
-- **Status:** nothing implemented. Phase 1 is **not approved yet** — the design's §5 carries three decisions the
-  maintainer has not taken. Do not start until §1 below says you may.
+- **Status:** **phase 1 is approved and built** — backend in #386, frontend in #388, browser-verified against a real
+  document server on 2026-07-29 (§9 records what that settled, including two things this document guessed at).
+  Phase 2 remains ungated and unstarted; design §5's second and third decisions still belong to the maintainer.
 - **Audience:** a fresh agent with no memory of the audit that produced the design.
 
 > **One correction to the design, which is otherwise accurate.** Its §3 mapping table says the editor's `user.id` comes
@@ -344,3 +345,49 @@ that does not, and an e2e case proving a coalesced save's archive is dropped rat
 - Do not expect any of this to reach the ONLYOFFICE **mobile** apps. They connect as WebDAV storages and never load an
   editor config, so no panel of ours can appear there; mobile history is the NC versions DAV tree, which already works.
 - Do not start phase 2 before phase 1 ships.
+
+---
+
+## 9. What the browser verification settled (2026-07-29)
+
+Phase 1 built and verified against `onlyoffice/documentserver` on an isolated rig (own port, own database, own
+`dataPath`, own `agent-browser --session`). Four things came out of it that this document had left open or got wrong.
+
+**1. `changeHistory` must NOT be flipped, and §T1.7's fallback is dead code.** The question was "if Restore is missing,
+flip `document.permissions.changeHistory` to `true`". It is missing nothing, and the flag is vestigial: the shipped
+document server derives the affordance from the EVENTS alone —
+
+```
+_config.editorConfig.canUseHistory  = _config.events && !!_config.events.onRequestHistory
+_config.editorConfig.canHistoryClose = _config.events && !!_config.events.onRequestHistoryClose
+```
+
+(`/var/www/onlyoffice/documentserver/web-apps/apps/api/documents/api.js`, 9.3) — and the string `changeHistory` appears
+**nowhere in the whole `web-apps` tree**. So there is nothing to gate on it, which matches upstream marking it
+`@deprecated since 5.5, use onRequestRestore` and never setting it in their own connector. **No `mod` was needed.**
+
+**2. `onRequestHistoryClose` is inert here, and the re-mount moved to the restore.** Upstream does
+`location.reload(true)`, which in v2 would discard the whole SPA. The reason upstream needs it is a stale document key
+after a restore — so that is handled at the moment of the restore instead (`onRestored` → re-fetch `/settings` →
+re-mount). This is NOT optional: verified live, a restore leaves the page holding the OLD document key
+(`1b98-19facad5c8e`), and the re-mount is what re-opens the editor under the new one (`1b96-19facae44d5`). Without it the
+editor keeps editing pre-restore content and the next save writes it back over the restore — invariant 7 from the other
+end.
+
+**3. The document server really can fetch a version's bytes.** `docker exec … curl <the url from editor-version>` →
+`200, 6994 bytes, application/vnd.openxmlformats-officedocument.wordprocessingml.document`; the same url with the
+`token` stripped → `401`. That pair is the auth model of §3 confirmed rather than reasoned about.
+
+**4. A rig note that cost time twice.** The soak's LAN-IP rule (`2026-07-29-adr-19-editor-soak.md` §2.2) is right and the
+IP is **not stable across sessions** — this run's machine had moved networks since the soak, so the documented
+`192.168.1.177` silently produced a document server the browser could reach and the backend could not. Re-derive it
+(`ipconfig getifaddr en0`) and verify all three legs before touching the UI. Also: `agent-browser` shares one session by
+default, and this run spent a while driving a **sibling agent's** dev server on `:8081` believing it was its own. Pass
+`--session <name>`.
+
+Verified, each against the real document server: history oldest-first with the live file last and `currentVersion` = the
+live ordinal; `created` rendered as a locale string; revision ids `2_3` / `2_4` with the live entry keyed by the document
+key and carrying no `user`; the version response JWT-signed and its claims equal to its body; restore by ordinal
+replacing the live bytes, snapshotting the replaced state as origin `restore`, and refreshing the panel; and the panel
+ABSENT on a fresh load while `files.versions.enabled` is false (the `usage` probe 404s, `availability` latches
+`unavailable`, and the editor mounts with `onDocumentStateChange` alone).

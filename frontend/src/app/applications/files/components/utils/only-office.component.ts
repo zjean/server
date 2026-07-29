@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, OnInit, Output, SimpleChanges } from '@angular/core'
 import type { OnlyOfficeConfig } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.interface'
+import type { OnlyOfficeHistoryHooks } from '../../../custom-v2/models/only-office-history.model'
 import loadScript from './only-office.utils'
 
 @Component({
@@ -11,6 +12,13 @@ export class OnlyOfficeComponent implements OnInit, OnChanges, OnDestroy {
   @Input({ required: true }) editorName: string
   @Input({ required: true }) documentServerUrl: string
   @Input({ required: true }) config: OnlyOfficeConfig
+  // Fork: optional version-history event handlers. Absent — which is every
+  // caller but the v2 office view — behaviour is byte-for-byte what it was.
+  //
+  // They arrive as their OWN input rather than inside `config` because they
+  // cannot survive the trip: onLoad deep-clones the config through
+  // JSON.parse(JSON.stringify(...)) below, and functions do not survive that.
+  @Input() historyHooks?: OnlyOfficeHistoryHooks
   @Output() loadError = new EventEmitter<{ title: string; message: string }>()
   @Output() wasSaved = new EventEmitter<string>()
   private isFirstOnChanges = true
@@ -68,7 +76,16 @@ export class OnlyOfficeComponent implements OnInit, OnChanges, OnDestroy {
       }
 
       const config: OnlyOfficeConfig = JSON.parse(JSON.stringify(this.config))
-      config.events = { onDocumentStateChange: (e: { data: boolean }) => (e.data ? this.wasSaved.emit() : null) }
+      // Fork: the history hooks are spread AFTER the clone, for the reason on the
+      // input. The cast is because upstream declares the four history events as
+      // `(event: object) => void` while their real payloads carry fields the
+      // handlers must read (`{data: number}`, `{data: {version}}`) — so the fork's
+      // precise signatures are not assignable to the looser declared ones. The
+      // narrower types are the useful ones; see only-office-history.model.ts.
+      config.events = {
+        onDocumentStateChange: (e: { data: boolean }) => (e.data ? this.wasSaved.emit() : null),
+        ...(this.historyHooks ?? {})
+      } as OnlyOfficeConfig['events']
       window.DocEditor.instances[this.id] = window.DocsAPI.DocEditor(this.id, config)
     } catch (err) {
       console.error(err)
