@@ -10,6 +10,9 @@ import { API_ONLY_OFFICE_SETTINGS } from '@sync-in-server/backend/src/applicatio
 import { OnlyOfficeComponent } from '../../files/components/utils/only-office.component'
 import type { FileModel } from '../../files/models/file.model'
 import { StoreService } from '../../../store/store.service'
+import type { OnlyOfficeHistoryEditor, OnlyOfficeHistoryHooks } from '../models/only-office-history.model'
+import { EditorHistoryService } from '../services/editor-history.service'
+import { VersionsService } from '../services/versions.service'
 import { buildFileModelStub } from '../utils/file-model-stub'
 
 // Renders an OnlyOffice editor for an office file (or PDF being toggled into
@@ -42,6 +45,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         [editorName]="officeEditorName"
         [documentServerUrl]="cfg.documentServerUrl"
         [config]="cfg.config"
+        [historyHooks]="historyHooks()"
         (loadError)="onLoadError($event)"
         (wasSaved)="onSave()"
       />
@@ -80,6 +84,8 @@ export class OfficeViewComponent implements OnDestroy {
   private readonly http = inject(HttpClient)
   private readonly destroyRef = inject(DestroyRef)
   private readonly store = inject(StoreService)
+  private readonly versions = inject(VersionsService)
+  private readonly editorHistory = inject(EditorHistoryService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   readonly path = input.required<string>()
@@ -99,6 +105,48 @@ export class OfficeViewComponent implements OnDestroy {
   // Upstream 2.4.1 made `editorName` a required input on OnlyOfficeComponent
   // (commit 98031da3, dynamic editor naming).
   protected readonly officeEditorName = this.store.server().files.editors.onlyoffice ? ONLY_OFFICE_APP_LOCK : EURO_OFFICE_APP_LOCK
+
+  /**
+   * The editor's own version-history panel, or nothing.
+   *
+   * Four conditions, all required, and the last two are the interesting ones:
+   *
+   *  - the feature is on. `availability` latches one-way off a real call, so a
+   *    server with `files.versions.enabled` false never offers the panel. The
+   *    probe below is what settles it.
+   *  - the session is EDITABLE. A read-only session that offers Restore is worse
+   *    than no panel at all: the button is there, and the server refuses it. The
+   *    backend route carries MODIFY, so this gate is the honest UI, not the
+   *    security boundary.
+   *  - the config carries an ONLY_OFFICE token. Without it, every url we would
+   *    hand the document server is one it cannot fetch, so the panel would open
+   *    and render nothing — better to not offer it.
+   *  - `historyHooks` is UNDEFINED, not an empty object, when any of those fail.
+   *    OnlyOfficeComponent spreads whatever it is given into `config.events`, and
+   *    the editor decides whether to show the affordance by whether
+   *    `onRequestHistory` exists.
+   *
+   * Left unset by the CLASSIC viewer (`files-viewer-only-office.component.ts`),
+   * which shares the same component — a deliberate scope line for this feature,
+   * not an oversight.
+   */
+  protected readonly historyHooks = computed<OnlyOfficeHistoryHooks | undefined>(() => {
+    const cfg = this.config()
+    if (!cfg || this.versions.availability() !== 'available') return undefined
+    if (cfg.config?.editorConfig?.mode === FILE_MODE.VIEW) return undefined
+    const officeToken = this.editorHistory.officeTokenFrom(cfg.config?.document?.url)
+    if (!officeToken) return undefined
+    return this.editorHistory.hooksFor({
+      spacePath: this.path(),
+      officeToken,
+      // Resolved on every call rather than captured: the instance is replaced
+      // whenever this component re-mounts the editor, which reloadEditor() does
+      // right after a restore.
+      editor: () => window.DocEditor?.instances?.[this.docId()] as OnlyOfficeHistoryEditor | undefined,
+      locale: this.locale.language,
+      onRestored: () => this.reloadEditor()
+    })
+  })
 
   // FileModel stub — bridges to classic services (lock-aware) for the
   // duration of this view. Held outside signals so destroy can release the
@@ -136,35 +184,71 @@ export class OfficeViewComponent implements OnDestroy {
       const key = `${p}::${f.id ?? ''}`
       if (key === this.loadedKey) return
       this.loadedKey = key
-      untracked(() => {
-        this.releaseLock()
-        this.fileStub = buildFileModelStub(f, p)
-        this.config.set(null)
-        this.error.set(null)
-        this.errorDetail.set(null)
-        this.loading.set(true)
-        this.http
-          .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
-          .pipe(takeUntilDestroyed(this.destroyRef))
-          .subscribe({
-            next: (cfg) => {
-              this.loading.set(false)
-              if (!cfg) {
-                this.error.set('v2_office_settings_missing')
-                this.config.set(null)
-                return
-              }
-              this.applyOfficeLock(cfg)
-              this.config.set(cfg)
-            },
-            error: (e: HttpErrorResponse) => {
-              this.loading.set(false)
-              this.config.set(null)
-              this.error.set(e.status === 404 ? 'v2_office_unavailable' : (e.error?.message ?? 'v2_office_load_failed'))
-            }
-          })
-      })
+      untracked(() => this.loadSettings(p, f))
     })
+  }
+
+  // Extracted from the effect so a restore can re-run it directly — see
+  // reloadEditor. Everything a caller must not do inside a tracked context (it
+  // reads config() through releaseLock and writes it on success) is why the
+  // effect calls this inside untracked().
+  private loadSettings(p: string, f: FileProps): void {
+    this.releaseLock()
+    this.fileStub = buildFileModelStub(f, p)
+    this.config.set(null)
+    this.error.set(null)
+    this.errorDetail.set(null)
+    this.loading.set(true)
+    // Settles `availability` once per session so historyHooks can decide whether
+    // to offer the panel at all. A no-op after the first answer.
+    this.versions.probe(p)
+    this.http
+      .get<OnlyOfficeReqDto>(`${API_ONLY_OFFICE_SETTINGS}/${p}`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (cfg) => {
+          this.loading.set(false)
+          if (!cfg) {
+            this.error.set('v2_office_settings_missing')
+            this.config.set(null)
+            return
+          }
+          this.applyOfficeLock(cfg)
+          this.config.set(cfg)
+        },
+        error: (e: HttpErrorResponse) => {
+          this.loading.set(false)
+          this.config.set(null)
+          this.error.set(e.status === 404 ? 'v2_office_unavailable' : (e.error?.message ?? 'v2_office_load_failed'))
+        }
+      })
+  }
+
+  /**
+   * Tears the editor down and re-opens it against a freshly fetched config.
+   *
+   * Called after an in-editor restore, where it is REQUIRED rather than tidy. A
+   * restore replaces the live bytes and drops the cached OnlyOffice document key
+   * server-side (invariant 7, #378) — but the config held by this page still
+   * carries the OLD key. Without a re-open the editor goes on editing pre-restore
+   * content under a key the document server still honours, and the next save
+   * writes that content back over the restore.
+   *
+   * Clearing `config` unmounts OnlyOfficeComponent, whose ngOnDestroy destroys
+   * the DocEditor instance; the new config mounts a fresh one with the new key.
+   * `loadedKey` is reset because the (path, fileId) pair has not changed, so the
+   * effect would otherwise treat the reload as a duplicate.
+   *
+   * Upstream reloads the whole page for this (`editor.js:268`). Here that would
+   * throw away the surrounding SPA.
+   */
+  private reloadEditor(): void {
+    const p = this.path()
+    const f = this.file()
+    if (!p || !f) return
+    this.loadedKey = ''
+    this.loadSettings(p, f)
+    this.loadedKey = `${p}::${f.id ?? ''}`
   }
 
   ngOnDestroy(): void {

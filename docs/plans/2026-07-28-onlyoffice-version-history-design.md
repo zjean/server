@@ -1,6 +1,9 @@
 # Design — version history inside the OnlyOffice / Euro-Office editor
 
-- **Status:** Proposed. Nothing is implemented. Phase 1 is a decision the maintainer has not taken yet.
+- **Status:** **Phase 1 approved, built and browser-verified** (#386 backend, #388 frontend, 2026-07-29). Phase 2 is
+  still a decision the maintainer has not taken. Where this document and the handoff's §9 disagree, §9 is what was
+  measured — in particular §1's claim that `changeHistory` is one of three things that must change is **wrong**: the flag
+  is vestigial in document server 9.x and was left alone.
 - **Date:** 2026-07-28
 - **Task list:** [`2026-07-28-onlyoffice-version-history-handoff.md`](2026-07-28-onlyoffice-version-history-handoff.md)
   — the executable version of this document, plus the auth plumbing §3 here leaves open and one correction to §3's
@@ -46,9 +49,12 @@ Written plainly first, because three of the four are easy to conflate and every 
 
 Three independent facts, all of which must change for anything to appear:
 
-1. **`document.permissions.changeHistory` is hardcoded `false`** — `only-office-manager.service.ts:220`. Upstream's own
-   interface marks it `@deprecated since 5.5, please add the onRequestRestore field instead`
-   (`only-office.interface.ts:36-38`), so it is the weaker of the two gates, but it is explicitly off.
+1. ~~**`document.permissions.changeHistory` is hardcoded `false`**~~ — `only-office-manager.service.ts:220`. **This item
+   was wrong, and it is the one thing the build did not have to change.** Upstream's interface marks it
+   `@deprecated since 5.5, please add the onRequestRestore field instead` (`only-office.interface.ts:36-38`), and the
+   shipped document server does not read it *at all*: `changeHistory` appears nowhere in the 9.x `web-apps` tree, which
+   derives the affordance from `!!_config.events.onRequestHistory` instead. It is not "the weaker of the two gates" — it
+   is not a gate. See the handoff's §9.1.
 2. **No history event is wired.** The only event the editor component sets is
    `config.events = { onDocumentStateChange: … }` — `files/components/utils/only-office.component.ts:71`. The four the
    panel needs (`onRequestHistory`, `onRequestHistoryData`, `onRequestRestore`, `onRequestHistoryClose`) appear nowhere
