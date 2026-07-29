@@ -377,6 +377,15 @@ amendment, so it is recorded here rather than done here. The default stays **60*
 > The decisive argument turned out to be the one about `maxVersionsPerFile`, not the row count: at 60 seconds an hour
 > of active editing mints ~10 versions and evicts about half of that file's genuinely distinct older revisions.
 
+> **RUN, 2026-07-29.** Both editors were soaked against real containers — see
+> [`2026-07-29-adr-19-editor-soak.md`](2026-07-29-adr-19-editor-soak.md). D4.1 is confirmed exactly (five 40-second idle
+> periods produced zero versions; five explicit Ctrl+S produced five), and the document server's own
+> `autoAssembly.enable = false` confirms it from the other side. D4.2's *direction* is confirmed and its **number is
+> corrected**: Collabora saved **15 s and 16 s** after the last keystroke, not 30, even though its `coolwsd.xml` does
+> carry `idlesave_duration_secs = 30`. **Step 2 of the recipe below is now insufficient** — since §5.1 shipped, a scalar
+> `minIntervalSeconds: 0` leaves the editors coalescing at their per-origin default of 300, so it measures the window
+> rather than the editor. Set `minIntervalSecondsByOrigin.<editor>: 0` explicitly.
+
 **What is still owed, and is a soak item either way.** ADR §19 already requires a soak against real Collabora and
 OnlyOffice before the flag defaults on. The empirical confirmation of D4.1/D4.2 belongs to that soak. Recipe, for
 whoever runs it:
@@ -410,8 +419,12 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
 - **Phase E**, cases E2E-1..20 in the plan's §5. **15 of the 20 are done** — see
   [`2026-07-27-file-versioning-phase-e-notes.md`](2026-07-27-file-versioning-phase-e-notes.md) for what each covers,
   the four environment facts the harness encodes, and the five cases still owed.
-- **The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on. D4.2's recipe
-  belongs to it.
+- ~~**The ADR §19 soak** against real Collabora, OnlyOffice and NC clients, before the flag defaults on.~~ **Done for
+  both editors** ([`2026-07-29-adr-19-editor-soak.md`](2026-07-29-adr-19-editor-soak.md)) and for NC Android
+  ([`2026-07-27-nc-android-versioning-soak.md`](2026-07-27-nc-android-versioning-soak.md)). **NC iOS is the only leg
+  left.** The editor soak also found a release-relevant defect that is not a versioning bug at all: no
+  `SYNCIN_APPLICATIONS_FILES_VERSIONS_*` env var has any effect, because that path is missing from
+  `environment.dist.yaml` — so on the Docker deployment the flag cannot even be turned off without mounting a YAML file.
 - **Version history inside the office editor** — proposed, not scheduled, and not owed by any earlier phase. The
   OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and
   [`2026-07-28-onlyoffice-version-history-design.md`](2026-07-28-onlyoffice-version-history-design.md) scopes what it
