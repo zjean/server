@@ -1,6 +1,6 @@
 # Claude operating notes for this repo
 
-This is a fork of [`Sync-in/server`](https://github.com/Sync-in/server), maintained under `zjean/server`. Full workflow details live in [`docs/plans/2026-04-22-fork-maintenance-design.md`](docs/plans/2026-04-22-fork-maintenance-design.md). This file is the short, load-bearing version.
+This is a fork of [`Sync-in/server`](https://github.com/Sync-in/server), maintained under `zjean/server`. Full workflow details live in [`docs/plans/2026-04-22-fork-maintenance-design.md`](docs/plans/2026-04-22-fork-maintenance-design.md); the branch and release flow it describes is superseded by [`docs/plans/2026-07-29-dev-workflow-develop-branch-plan.md`](docs/plans/2026-07-29-dev-workflow-develop-branch-plan.md) (PRs base on `develop`, `main` is stable-releases-only). This file is the short, load-bearing version.
 
 ## Branch protection
 
