@@ -60,8 +60,8 @@
   blockquote {
     margin: 0.5em 0;
     padding-left: 1em;
-    border-left: 3px solid var(--si-border, rgba(0, 0, 0, 0.18));
-    color: var(--si-fg-muted, #555);
+    border-left: 3px solid var(--si-border);
+    color: var(--si-fg-muted);
   }
 
   code {
@@ -85,7 +85,7 @@
   }
 
   a {
-    color: var(--si-accent, #0a5fb8);
+    color: var(--si-accent);
     text-decoration: underline;
   }
 

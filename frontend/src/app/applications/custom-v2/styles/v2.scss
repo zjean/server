@@ -35,6 +35,35 @@
       color: var(--si-accent-hover);
     }
   }
+
+  // ─── Keyboard focus ring (#396) ──────────────────────────────────────
+  // ONE rule for the whole v2 tree, deliberately: before this, ~60 components
+  // shared two :focus-visible rules between them, and every <a> had no ring at
+  // all (upstream's `a { outline: none !important }` in styles/components/
+  // _fixes.scss, now scoped away from .v2-root). Declaring it here means a new
+  // component cannot ship without a focus indicator.
+  //
+  // outline-offset is positive on purpose. The primary button is filled with
+  // --si-accent, and an accent ring drawn ON that fill measures 1:1 — invisible.
+  // Offsetting puts the ring on the surrounding surface instead, where it is
+  // 7.4:1 or better. Outline follows the element's own border-radius, so
+  // rounded controls need nothing extra.
+  :focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 2px;
+  }
+
+  // No `:focus:not(:focus-visible) { outline: none }` companion rule here on
+  // purpose: every browser this app supports gates the UA ring on
+  // :focus-visible already (the oklch tokens above need Safari 15.4+, which has
+  // it), so the rule would only cost bytes against the component-style budget.
+  //
+  // The markdown editor is a contenteditable whose focus is carried by the
+  // caret; _prose.scss suppresses its outline on purpose so the ring does not
+  // double up with the editor's own container border.
+  .v2-prose:focus-visible {
+    outline: none;
+  }
 }
 
 // ─── Reduced motion (#398) ─────────────────────────────────────────────

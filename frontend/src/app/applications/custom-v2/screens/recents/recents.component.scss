@@ -384,7 +384,8 @@
     height: 48px;
     border-radius: 24px;
     background: var(--si-bg4);
-    color: var(--si-fg-ghost);
+    // see empty-state.component.ts — ghost on bg4 is 2.59 (#397)
+    color: var(--si-fg-tertiary);
     display: flex;
     align-items: center;
     justify-content: center;

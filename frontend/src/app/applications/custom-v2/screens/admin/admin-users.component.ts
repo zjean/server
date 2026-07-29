@@ -141,10 +141,17 @@ function emptyDraft(isGuest: boolean): UserDraft {
                   (click)="impersonate(u)"
                   [disabled]="!canImpersonate(u)"
                   [attr.title]="'Sign in as…' | translate: locale.language"
+                  [attr.aria-label]="'Sign in as…' | translate: locale.language"
                 >
                   <app-v2-icon name="person" [size]="12" />
                 </button>
-                <button type="button" class="au-row__action" (click)="openEdit(u)" [attr.title]="'Edit' | translate: locale.language">
+                <button
+                  type="button"
+                  class="au-row__action"
+                  (click)="openEdit(u)"
+                  [attr.title]="'Edit' | translate: locale.language"
+                  [attr.aria-label]="'Edit' | translate: locale.language"
+                >
                   <app-v2-icon name="pencil" [size]="12" />
                 </button>
                 <button
@@ -152,6 +159,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
                   class="au-row__action au-row__action--danger"
                   (click)="confirmDelete(u)"
                   [attr.title]="'Delete' | translate: locale.language"
+                  [attr.aria-label]="'Delete' | translate: locale.language"
                 >
                   <app-v2-icon name="trash" [size]="12" />
                 </button>
@@ -475,8 +483,8 @@ function emptyDraft(isGuest: boolean): UserDraft {
         gap: 4px;
       }
       .au-row__action {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         border-radius: 5px;
         background: transparent;
         border: none;

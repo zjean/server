@@ -9,12 +9,33 @@
 // as a coordinated set, not a scattered rainbow.
 //
 // Variable names are unchanged so every existing consumer across the v2 tree
-// keeps resolving — only the values shift. All body text passes WCAG AA on
-// bg-0..bg-2.
+// keeps resolving — only the values shift.
 //
 // Scoped under .v2-root so nothing leaks into the classic layout.
 // hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the
 // fallback (fallbacks generated from the oklch values, sRGB-accurate).
+//
+// ─── Measured contrast, text tier × surface (#397) ───────────────────────
+// An earlier revision of this header claimed "all body text passes WCAG AA on
+// bg-0..bg-2". That was not true: fg-ghost on bg2 measured 4.33. Real numbers,
+// measured in-browser against the rendered app rather than derived by hand —
+// keep them here so the next change does not have to re-derive them.
+//
+//              bg0     bg1     bg2     bg3     bg4     bg5     bg6
+//   fg        15.51   13.89   12.14    9.73    7.25    5.35   [4.00]
+//   muted     12.30   11.02    9.63    7.72    5.75   [4.24]  [3.18]
+//   faint      9.86    8.83    7.97    6.35    4.76   [3.51]  [2.62]
+//   tertiary   8.05    7.21    6.30    5.05   [3.76]  [2.78]  [2.08]
+//   ghost      5.54    4.96   [4.33]  [3.47]  [2.59]  [1.91]  [1.43]
+//
+//   [n] = below 4.5:1, i.e. not usable for normal-size text.
+//
+// Practical rules this implies:
+//   • bg5 and bg6 carry NO text tier at AA. They are fills, not text surfaces.
+//   • ghost is a bg0/bg1-only tier — separators and chrome, never body text on
+//     a card. It is not a placeholder colour (that was the 4.33 failure).
+//   • faint is the lowest tier that survives on bg4 (the selected-row surface),
+//     which is why it sits at L 0.84 rather than the 0.82 it had before.
 
 .v2-root {
   // ─── Backgrounds — richer navy (hue 255), wider elevation steps ──────
@@ -49,8 +70,10 @@
   --si-fg: oklch(0.975 0.012 250);
   --si-fg-muted: #d4dfeb;
   --si-fg-muted: oklch(0.9 0.02 250);
-  --si-fg-faint: #bac6d2;
-  --si-fg-faint: oklch(0.82 0.022 250);
+  // L 0.84, not 0.82: at 0.82 this tier measured 4.47 against bg4 (the
+  // selected-row surface), so selecting a row pushed its own metadata under AA.
+  --si-fg-faint: #c0ccd9;
+  --si-fg-faint: oklch(0.84 0.022 250);
   --si-fg-tertiary: #aab6c2;
   --si-fg-tertiary: oklch(0.77 0.022 250);
   --si-fg-ghost: #8b96a5;
@@ -69,6 +92,15 @@
   --si-accent-fg: oklch(0.24 0.05 50);
   --si-accent-hover: #ffc07a;
   --si-accent-hover: oklch(0.88 0.135 58);
+
+  // ─── Focus ring (#396) ───────────────────────────────────────────────
+  // Its own token rather than a raw --si-accent reference, so the ring can be
+  // retuned without disturbing the brand accent. Measured against every
+  // surface: 9.42 (bg0) · 8.44 (bg1) · 7.37 (bg2) · 5.91 (bg3) · 4.40 (bg4) ·
+  // 3.25 (bg5) · 2.43 (bg6) — WCAG 2.2 SC 1.4.11 wants 3:1, so it holds
+  // everywhere a control actually sits. bg6 is a lifted-element fill and hosts
+  // no focusable control; if that ever changes, this ring needs a second tone.
+  --si-focus-ring: var(--si-accent);
 
   // ─── Nav — alias of accent (one accent everywhere) ───────────────────
   --si-nav: var(--si-accent);

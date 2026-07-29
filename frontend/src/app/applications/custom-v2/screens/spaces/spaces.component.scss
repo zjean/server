@@ -209,11 +209,16 @@
     margin: 0 4px;
   }
 
+  // margin-top: auto pins the footer to the bottom of the card (#399). The grid
+  // already gives every card in a row the same height, but the footer used to
+  // flow straight after the content — so a card carrying a description pushed
+  // its own divider and meta row ~23px below its row-mates'.
   &__footer {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    margin-top: auto;
     padding-top: 10px;
     border-top: 1px solid var(--si-line);
   }
