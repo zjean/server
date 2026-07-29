@@ -366,13 +366,26 @@ _config.editorConfig.canHistoryClose = _config.events && !!_config.events.onRequ
 **nowhere in the whole `web-apps` tree**. So there is nothing to gate on it, which matches upstream marking it
 `@deprecated since 5.5, use onRequestRestore` and never setting it in their own connector. **No `mod` was needed.**
 
-**2. `onRequestHistoryClose` is inert here, and the re-mount moved to the restore.** Upstream does
-`location.reload(true)`, which in v2 would discard the whole SPA. The reason upstream needs it is a stale document key
-after a restore — so that is handled at the moment of the restore instead (`onRestored` → re-fetch `/settings` →
-re-mount). This is NOT optional: verified live, a restore leaves the page holding the OLD document key
-(`1b98-19facad5c8e`), and the re-mount is what re-opens the editor under the new one (`1b96-19facae44d5`). Without it the
-editor keeps editing pre-restore content and the next save writes it back over the restore — invariant 7 from the other
-end.
+**2. The restore re-mounts.** `onRestored` → re-fetch `/settings` → re-mount. This is NOT optional: verified live, a
+restore leaves the page holding the OLD document key (`1b98-19facad5c8e`), and the re-mount is what re-opens the editor
+under the new one (`1b96-19facae44d5`). Without it the editor keeps editing pre-restore content and the next save writes
+it back over the restore — invariant 7 from the other end.
+
+> **CORRECTED 2026-07-29 (#408).** This section originally continued: "`onRequestHistoryClose` is inert here, and the
+> re-mount moved to the restore… the reason upstream needs it is a stale document key after a restore." **That premise
+> was wrong, and it shipped a bug** — the panel could not be closed and the document stayed read-only.
+>
+> The stale key is a *separate* concern that `onRestored` correctly handles. Upstream's `location.reload(true)` on close
+> is there because the document server **has no command for leaving history mode**: `refreshHistory` and
+> `setHistoryData` are the only two methods `api.js` publishes (`api.js:924-925`), and the Docs API states plainly that
+> "when the function is called, the editor must be reinitialized in editing mode"
+> ([config/events](https://api.onlyoffice.com/docs/docs-api/usage-api/config/events/)). History mode is entered
+> read-only, so an inert handler strands the user there — while still rendering the Close History button, which the
+> document server offers off the handler's mere presence (`api.js:408`).
+>
+> `onRequestHistoryClose` now calls back to `OfficeViewComponent.reloadEditor()`, the same re-mount the restore uses.
+> Note what the verification list at the end of this section does **not** contain: closing the panel. The case was
+> reasoned about rather than exercised, which is exactly how the wrong premise survived.
 
 **3. The document server really can fetch a version's bytes.** `docker exec … curl <the url from editor-version>` →
 `200, 6994 bytes, application/vnd.openxmlformats-officedocument.wordprocessingml.document`; the same url with the
