@@ -57,9 +57,21 @@
   <section class="settings__section">
     <div class="settings__section-title" l10nTranslate>Language</div>
     <div class="settings__form-row">
-      <select class="settings__input" [(ngModel)]="$any(this).languageValue" [value]="language()" (change)="language.set($any($event.target).value)">
+      <!--
+        ngModel + [ngValue], matching the classic account screen. Deliberately
+        NOT a [value] binding on the <select>: that is applied before @for has
+        rendered the options, so assigning select.value matches nothing and
+        silently no-ops. SelectControlValueAccessor tracks option registration
+        instead, so the selection lands once the options exist.
+      -->
+      <select
+        class="settings__input"
+        [ngModel]="language()"
+        (ngModelChange)="language.set($event)"
+        [attr.aria-label]="'Language' | translate: locale.language"
+      >
         @for (l of languages; track l) {
-          <option [value]="l">{{ languageLabels[l] || l }}</option>
+          <option [ngValue]="l">{{ languageLabels[l] || l }}</option>
         }
       </select>
       <app-v2-btn kind="primary" size="sm" [disabled]="savingLanguage()" (click)="saveLanguage()">
@@ -71,9 +83,20 @@
   <section class="settings__section">
     <div class="settings__section-title" l10nTranslate>Online status</div>
     <div class="settings__form-row">
-      <select class="settings__input" [value]="onlineStatus()" (change)="onlineStatus.set(+$any($event.target).value)">
+      <!--
+        Same fix as Language above. [ngValue] rather than [value] keeps the index
+        a number end-to-end, which is why the `+` coercion this used to need is
+        gone. Previously the [value] binding no-opped and the browser fell back
+        to selectedIndex 0 — correct-looking only while the user's status was 0.
+      -->
+      <select
+        class="settings__input"
+        [ngModel]="onlineStatus()"
+        (ngModelChange)="onlineStatus.set($event)"
+        [attr.aria-label]="'Online status' | translate: locale.language"
+      >
         @for (s of onlineStatuses; track s; let i = $index) {
-          <option [value]="i">{{ statusLabel(i) | translate: locale.language }}</option>
+          <option [ngValue]="i">{{ statusLabel(i) | translate: locale.language }}</option>
         }
       </select>
       <app-v2-btn kind="primary" size="sm" (click)="saveOnlineStatus()">

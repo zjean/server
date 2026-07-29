@@ -1,5 +1,14 @@
 // fix firefox outline
-a, .row, tbody {
+//
+// Scoped away from the v2 tree deliberately. Being `!important`, this rule also
+// suppressed the keyboard focus ring on every <a> under .v2-root — the whole
+// left nav, breadcrumbs and avatar link had no visible focus at all, and no v2
+// stylesheet could win against it (#396). The `:not(.v2-root <sel>)` form
+// excludes DESCENDANTS of .v2-root; a plain `:not(.v2-root)` would not, because
+// body still matches it. Classic keeps the Firefox fix unchanged.
+a:not(.v2-root a),
+.row:not(.v2-root .row),
+tbody:not(.v2-root tbody) {
   outline: none !important;
 }
 
