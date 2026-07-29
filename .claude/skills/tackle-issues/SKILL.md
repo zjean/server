@@ -178,12 +178,12 @@ Branch is auto-deleted on merge (`delete_branch_on_merge: true`); no cleanup nee
 
 ## When to deviate
 
-- **A single trivial issue** (one-line typo, comment fix): you don't need branch-and-PR drama — but the policy says you still need a PR because `main` is protected. Use `fix/<short-topic>` and ship it; PR will pass review in seconds.
+- **A single trivial issue** (one-line typo, comment fix): you don't need branch-and-PR drama — but the policy says you still need a PR because `develop` is protected. Use `fix/<short-topic>` and ship it; PR will pass review in seconds.
 - **Issue requires significant design work, not a code change**: this skill isn't the right fit. Discuss the design with the user first; the resulting PR may not close the issue (just refs it).
 - **Multiple issues that all need the same upstream NC research**: do the research once and link the same source from each PR. Don't duplicate the research narrative in three PR descriptions.
 
 ## When this skill doesn't apply
 
 - The user wants to *triage* the backlog (close stale, re-label, write up new findings) but not code. This skill is for shipping PRs.
-- The user has uncommitted in-progress work on `main` already. Don't blindly `git checkout -b` from a dirty state — surface what's there first and ask.
+- The user has uncommitted in-progress work on `develop` already. Don't blindly `git checkout -b` from a dirty state — surface what's there first and ask.
 - The work is an upstream sync (`chore: sync upstream`). That has its own flow — use `sync-in-fork-maintenance` instead.
