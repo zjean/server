@@ -324,7 +324,14 @@ cost of chrome on every listing forever. The menu entry costs ~6 lines and adds 
 - **Hidden while a filter is active.** Filtering is a find-in-folder action; it wants rows, not prose.
 - Collapsed to `max-height: 30vh` with a bottom fade gradient, applied **only when the content actually overflows**.
 - Expanded is capped at `60vh` with internal scroll, **not unbounded**.
-- Expanded/collapsed state persists in `localStorage` under `ui.folderReadme.expanded` — global, not per folder.
+- **Expanded/collapsed state is not persisted. Every folder opens collapsed.** Revised 2026-07-29 after seeing it in
+  screenshots: the original decision persisted the state in `localStorage` under a single global key
+  `ui.folderReadme.expanded`, and the consequence read badly in practice — expanding one long readme left *every* other
+  folder opening "expanded", including two-line ones, showing a live **Show less** control against content that was
+  never clipped. Per-folder persistence was considered and rejected as more state than the feature earns. The state now
+  lives only in the component's `expanded` signal, and the navigation effect resets it on every `dirPath` change,
+  because the host screens reload in place on an in-screen hop and the component would otherwise carry the previous
+  folder's state forward. Cross-screen hops destroy the component and so start collapsed for free.
 
 **Rationale.** `30vh` collapsed and the fade are lifted from NC (`RichWorkspace.vue` styles: `max-height: 30vh`
 unfocused, `50vh` focused, plus a `linear-gradient` `:after`). The `60vh` expanded cap is a deliberate divergence:

@@ -37,20 +37,6 @@ import { pickFolderReadme } from '../utils/folder-readme'
 import { ButtonComponent } from './button.component'
 import { ToastService } from './toast.service'
 
-// Follows the established ui.<scope>.<setting> convention: 'ui.version'
-// (v2.constants.ts:33), 'ui.personal.viewMode' (personal.component.ts:77).
-const EXPANDED_STORAGE_KEY = 'ui.folderReadme.expanded'
-
-function readStoredExpanded(): boolean {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return false
-  return window.localStorage.getItem(EXPANDED_STORAGE_KEY) === 'true'
-}
-
-function writeStoredExpanded(expanded: boolean): void {
-  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return
-  window.localStorage.setItem(EXPANDED_STORAGE_KEY, expanded ? 'true' : 'false')
-}
-
 // Renders a folder's Readme.md above the file listing, like Nextcloud's Rich
 // Workspaces. Detection is a pure function over the files[] the host screen
 // already loaded, so this costs one content GET and no extra listing request.
@@ -188,7 +174,11 @@ function writeStoredExpanded(expanded: boolean): void {
         appearance: none;
         background: none;
         border: none;
-        padding: 6px 0 0;
+        /* 9px horizontal matches the --xs step of v2's button padding scale
+           (button.component.ts:47-49), so this control is inset like every other
+           small control rather than sitting flush against the card's text edge.
+           It also widens the hit area beyond the label's glyphs. */
+        padding: 6px 9px 0;
         margin: 0;
         font: inherit;
         font-size: 12px;
@@ -286,7 +276,12 @@ export class FolderReadmeComponent implements OnDestroy {
   // awaiting its save) and issue two uploads plus two toasts for one edit.
   private leavingEdit = false
 
-  protected readonly expanded = signal<boolean>(readStoredExpanded())
+  // Not persisted, and reset on every folder change (see the navigation effect):
+  // a folder always opens collapsed. An earlier revision remembered this in
+  // localStorage under a single global key, which meant expanding one long readme
+  // left every other folder — including two-line ones — opening "expanded" with a
+  // live Show less control against content that was never clipped.
+  protected readonly expanded = signal<boolean>(false)
   // True once the rendered content is taller than the collapsed cap. Drives
   // both the fade and whether the Show more control renders at all.
   protected readonly overflowing = signal(false)
@@ -298,11 +293,10 @@ export class FolderReadmeComponent implements OnDestroy {
   protected toggleExpanded(): void {
     const next = !this.expanded()
     this.expanded.set(next)
-    writeStoredExpanded(next)
     // Collapsing restores the 30vh cap, which makes the scrollHeight/clientHeight
-    // comparison meaningful again. Without this, a session that started with the
-    // stored preference already expanded never measured overflow at all, so
-    // collapsing once hid the toggle entirely with no way back.
+    // comparison meaningful again — readOverflow() declines to measure while
+    // expanded, because an uncapped element never reports overflow and the Show
+    // less control would disappear.
     if (!next) this.measureOverflow()
   }
 
@@ -434,6 +428,14 @@ export class FolderReadmeComponent implements OnDestroy {
       const previous = this.lastDirPath
       this.lastDirPath = dir
       if (previous === null || previous === dir) return
+      // Every folder opens collapsed. The host screens reload in place on an
+      // in-screen hop, so this component survives and would otherwise carry the
+      // previous folder's expanded state into the next one. Reset before the new
+      // content loads, so setContent()'s measurement runs against the 30vh cap
+      // and decides the fade and the Show more control on this folder's own
+      // content. (Cross-screen hops destroy the component, so they start
+      // collapsed for free.)
+      this.expanded.set(false)
       // A queued edit intent from the folder we just left is stale.
       this.pendingEditDir = null
       // Deliberately fire-and-forget — an effect cannot await. The teardown itself
