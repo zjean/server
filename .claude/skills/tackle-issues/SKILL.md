@@ -63,7 +63,7 @@ The branch prefix tells the reader (and the eventual commit log grep) what kind 
 `<topic>` should be short and grep-friendly. `fix/oc-size-folder` beats `fix/issue-205-folder-size-rendering-fix`.
 
 ```bash
-git checkout main && git pull
+git checkout develop && git pull
 git checkout -b fix/oc-size-folder
 ```
 
@@ -115,7 +115,7 @@ If pre-commit hooks fail, fix the underlying issue and make a new commit. Don't 
 For the PR — **always pass `--repo zjean/server` explicitly**, even when the default is set. The flag is the authoritative override against the silent-upstream-targeting bug:
 
 ```bash
-gh pr create --repo zjean/server --base main --head fix/oc-size-folder \
+gh pr create --repo zjean/server --base develop --head fix/oc-size-folder \
   --title "fix(nc-compat): emit recursive folder size for oc:size" \
   --body "$(cat <<'EOF'
 ## Summary
@@ -137,6 +137,7 @@ PR title mirrors the commit subject. PR body conventions:
 - Add **Test plan** as a checkbox list.
 - End with `Closes #N` for each issue this PR fully resolves. Use `Refs #N` (no auto-close) when partial.
 - For NC-compat or v2 changes that ride on ground-truth research, link the upstream source you used (commit/permalink, not a moving branch URL).
+- UI-facing change? The PR body must embed agent-browser screenshots per `.github/PULL_REQUEST_TEMPLATE.md` — capture via the v2-dev-loop-verify skill, commit PNGs under `docs/screenshots/`, link by head-SHA raw URL.
 
 ## Step 7 — Combine-into-one-PR specifics
 
@@ -159,15 +160,18 @@ If during review one of the combined fixes is contested, the per-issue commit st
 
 Per CLAUDE.md, the repo allows both squash and merge-commit but rebase is disabled. Pick by PR type:
 
-- **Feature / fix / mod / docs / chore PRs → Squash and merge.** One commit per logical change on `main`.
-- **Upstream sync PRs (`upstream-main` → `main`) → Create a merge commit.** Preserves the merge point. (Not what this skill produces, but worth knowing — GitHub remembers the last-used strategy, double-check the dropdown on your next non-sync PR.)
+- **Feature / fix / mod / docs / chore PRs (base `develop`) → Squash and merge.** One commit per logical change.
+- **Upstream sync PRs (`upstream-main` → `develop`) → Create a merge commit.** Preserves the merge point.
+- **Release promotion PRs (`develop` → `main`) → Create a merge commit.** Same reason, stronger: a squash here permanently forks `main` from `develop`.
+
+(Sync and promotion PRs aren't what this skill produces, but worth knowing — GitHub remembers the last-used strategy, double-check the dropdown on your next non-sync PR.)
 
 Branch is auto-deleted on merge (`delete_branch_on_merge: true`); no cleanup needed.
 
 ## Gotchas
 
 - **`gh pr create` and the wrong repo**: the `upstream` remote being present makes `gh` resolve the default repo to `Sync-in/server` in some cases. Always pass `--repo zjean/server`. If you opened a PR there by mistake, close it on Sync-in with a "wrong repo" comment, reopen on zjean — don't leave it polluting their queue.
-- **`git push origin main`**: blocked. Won't accidentally bypass — but mentioning it because attempting this once burns time.
+- **`git push origin main`**: blocked — and so is `git push origin develop`. Everything goes through a PR with base `develop`.
 - **rtk wrapper gotchas**: `git commit --allow-empty` is rejected by rtk's git wrapper; use `rtk proxy git commit --allow-empty`. `gh api` calls returning JSON may be reshaped into a schema stub; use `rtk proxy gh api …` when you need the raw response. Normal `git`, `gh pr create`, `gh run list`, etc. pass through unmodified.
 - **Cherry-pick a fix to upstream-contrib later?**: if a fix is upstream-mergeable (no `custom-*` paths, no fork-flavored language), it can go on a separate `upstream-contrib/<topic>` branch *rooted at `upstream/main`* (not `main`) and contributed back. Don't try to mix that with this skill's flow — open a follow-up.
 - **CI**: the `test` status check must pass before merge, and any PR conversations must be resolved. Watch `gh run watch` or just keep an eye on the PR; don't merge until green.

@@ -1,6 +1,6 @@
 ---
 name: sync-in-fork-maintenance
-description: Maintain the zjean/server fork of Sync-in/server — trigger the upstream-sync workflow, resolve the upstream-main→main merge conflicts it produces, and investigate what custom UI code under `frontend/src/app/applications/custom-v2/` needs to adapt when upstream changes backend contracts. Use this skill whenever the user asks to "sync upstream", "pull upstream changes", "merge upstream", "run the upstream workflow", "fix the upstream-sync PR", "resolve upstream conflicts", or "check what upstream changed / what we need to update in v2/v3". Also use when looking at an open chore:sync upstream PR that's CONFLICTING, or when a user says something broke after an upstream sync. Prefer this skill over improvising — the workflow has repo-specific gotchas (SSH host alias, `--repo zjean/server` flag, `upstream-main` is workflow-writable only, merge commits not squashes) that are easy to get wrong.
+description: Maintain the zjean/server fork of Sync-in/server — trigger the upstream-sync workflow, resolve the upstream-main→develop merge conflicts it produces, and investigate what custom UI code under `frontend/src/app/applications/custom-v2/` needs to adapt when upstream changes backend contracts. Use this skill whenever the user asks to "sync upstream", "pull upstream changes", "merge upstream", "run the upstream workflow", "fix the upstream-sync PR", "resolve upstream conflicts", or "check what upstream changed / what we need to update in v2/v3". Also use when looking at an open chore:sync upstream PR that's CONFLICTING, or when a user says something broke after an upstream sync. Prefer this skill over improvising — the workflow has repo-specific gotchas (SSH host alias, `--repo zjean/server` flag, `upstream-main` is workflow-writable only, merge commits not squashes) that are easy to get wrong.
 ---
 
 # Sync-in fork maintenance
@@ -34,14 +34,16 @@ Both `origin` and `upstream` remotes use `git@github-prive:...` **not** `git@git
 
 ### Branch protection
 
-- **`main`** — direct pushes are blocked. Everything goes through a PR. The `test` status check must pass before merge.
+- **`develop`** — the default protected base for day-to-day PRs, including the upstream-sync PR. Direct pushes are blocked; everything goes through a PR. The `test` status check must pass before merge.
+- **`main`** — advances only via `develop` → `main` promotion PRs (merge commit). Direct pushes are blocked here too.
 - **`upstream-main`** — a pure mirror of `upstream/main`, writable only by the `upstream-sync.yml` workflow. Human pushes are blocked by PR-equivalent rules. **You cannot resolve conflicts by pushing to `upstream-main`** — see task 2.
 - Feature branches auto-delete on merge.
 
 ### Merge strategy (per PR type)
 
-- **feat / fix / mod / docs / chore** → **Squash and merge.**
-- **Upstream sync PRs (branch → main with upstream lineage)** → **Create a merge commit.** Preserves the merge point so upstream history stays legible on `main`.
+- **Feature / fix / mod / docs / chore PRs (base `develop`) → Squash and merge.** One commit per logical change.
+- **Upstream sync PRs (`upstream-main` → `develop`) → Create a merge commit.** Preserves the merge point.
+- **Release promotion PRs (`develop` → `main`) → Create a merge commit.** Same reason, stronger: a squash here permanently forks `main` from `develop`.
 
 GitHub remembers the last-used strategy per user. Double-check the dropdown on upstream-sync PRs — easy to leave on "squash" from the previous PR and lose the merge point.
 
@@ -52,8 +54,8 @@ The `Upstream Sync` workflow (`.github/workflows/upstream-sync.yml`) runs weekly
 2. Fetches `upstream/main` from `Sync-in/server`.
 3. Fast-forwards `upstream-main` to match `upstream/main`.
 4. Force-pushes `upstream-main` to the fork.
-5. If `main` already contains everything in `upstream-main`, exits.
-6. Otherwise, opens (or updates) a PR `upstream-main` → `main` titled `chore: sync upstream (YYYY-MM-DD)`.
+5. If `develop` already contains everything in `upstream-main`, exits.
+6. Otherwise, opens (or updates) a PR `upstream-main` → `develop` titled `chore: sync upstream (YYYY-MM-DD)`.
 
 ### Procedure
 
@@ -71,7 +73,7 @@ If the run **fails** (non-zero exit), jump to [Failure mode](#failure-mode-the-r
 Once the workflow finishes, check whether it opened a PR:
 
 ```bash
-gh pr list --repo zjean/server --base main --head upstream-main --state open
+gh pr list --repo zjean/server --base develop --head upstream-main --state open
 ```
 
 - **No PR** → upstream had nothing new. Report that and stop.
@@ -100,8 +102,8 @@ gh run view <RUN_ID> --repo zjean/server --log-failed | grep -i "refusing to all
 **Recovery — sync manually from `upstream/main` (not `origin/upstream-main`):**
 
 ```bash
-git fetch upstream main origin main
-git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/main
+git fetch upstream main origin develop
+git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/develop
 git merge upstream/main --no-ff --no-edit      # resolve conflicts per Task 2's guidance
 ```
 
@@ -112,7 +114,7 @@ From here it is exactly Task 2's resolve → verify → commit → PR flow, with
 
 Then open the replacement PR and **merge it with a merge commit** (see Task 2's "Open the replacement PR" and "Aftermath" sections — they apply verbatim). The automation is intentionally left unfixed; this manual path via the skill is the supported recovery.
 
-## Task 2 — Resolve upstream-main → main conflicts
+## Task 2 — Resolve upstream-main → develop conflicts
 
 **Why this is annoying:** the workflow-opened PR has `upstream-main` as its head. If you try to resolve conflicts on `upstream-main` itself, the push is rejected (protected branch, workflow-only). Conflicts must be resolved on a third branch.
 
@@ -120,14 +122,14 @@ Then open the replacement PR and **merge it with a merge commit** (see Task 2's 
 
 ```bash
 # 1) Make sure you have the latest refs.
-git fetch origin main upstream-main
+git fetch origin develop upstream-main
 
 # 2) Close the workflow-opened PR — it will be superseded.
 gh pr close <N> --repo zjean/server \
-  --comment "Superseded by a new PR with conflict resolution (upstream-main → main required a merge-base branch since upstream-main is workflow-only)."
+  --comment "Superseded by a new PR with conflict resolution (upstream-main → develop required a merge-base branch since upstream-main is workflow-only)."
 
-# 3) Branch off main and merge upstream-main into it with --no-ff.
-git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/main
+# 3) Branch off develop and merge upstream-main into it with --no-ff.
+git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/develop
 git merge origin/upstream-main --no-ff --no-edit
 # Expect: "Automatic merge failed; fix conflicts and then commit the result."
 ```
@@ -192,18 +194,18 @@ git push -u origin sync/upstream-$(date +%Y-%m-%d)
 
 ```bash
 gh pr create --repo zjean/server \
-  --base main --head sync/upstream-$(date +%Y-%m-%d) \
+  --base develop --head sync/upstream-$(date +%Y-%m-%d) \
   --title "chore: sync upstream ($(date +%Y-%m-%d)) — conflict resolution" \
   --body "$(cat <<EOF
 ## Summary
 
-Supersedes #<N> (closed — the workflow-opened upstream-main → main PR was CONFLICTING, and upstream-main is workflow-writable only).
+Supersedes #<N> (closed — the workflow-opened upstream-main → develop PR was CONFLICTING, and upstream-main is workflow-writable only).
 
-This branch merges origin/upstream-main into a short-lived sync/upstream-YYYY-MM-DD off main, with conflicts resolved in:
+This branch merges origin/upstream-main into a short-lived sync/upstream-YYYY-MM-DD off develop, with conflicts resolved in:
 - <list conflicted files>
 
 ### Upstream commits pulled in
-<paste git log --oneline origin/main..origin/upstream-main output>
+<paste git log --oneline origin/develop..origin/upstream-main output>
 
 ### Conflicts resolved
 <per-file explanation of what got picked and why>
@@ -224,12 +226,12 @@ Tell the user: "PR #<new> is up. Remember — **merge commit**, not squash, when
 When the user reports the PR is merged, do the local cleanup so the next branch doesn't start from stale state:
 
 ```bash
-git checkout main
+git checkout develop
 git pull --ff-only                            # advance to the merged commit on origin
 git branch -D sync/upstream-$(date +%Y-%m-%d) # delete the local sync branch
 ```
 
-A small wrinkle worth knowing (not a bug): GitHub's "Create a merge commit" produces a *new* merge commit on the server side, distinct from the one you made locally. So after the pull, `git log -1 main` shows a commit SHA you didn't author (e.g. local `ad0979a7` ≠ origin's `07a8bce1`). The tree contents match; only the SHA differs. Don't try to align them — just let `git pull --ff-only` advance.
+A small wrinkle worth knowing (not a bug): GitHub's "Create a merge commit" produces a *new* merge commit on the server side, distinct from the one you made locally. So after the pull, `git log -1 develop` shows a commit SHA you didn't author (e.g. local `ad0979a7` ≠ origin's `07a8bce1`). The tree contents match; only the SHA differs. Don't try to align them — just let `git pull --ff-only` advance.
 
 ## Task 3 — Investigate custom-UI impact (deep)
 
@@ -251,13 +253,13 @@ Worked example — the 2026-06-23 sync (2.4.0, PR #283): two contract changes we
 ### Phase 1 — Inventory upstream commits
 
 ```bash
-git log --oneline origin/main..origin/upstream-main
+git log --oneline origin/develop..origin/upstream-main
 ```
 
 For each commit, list touched files:
 
 ```bash
-for sha in $(git log --format=%H origin/main..origin/upstream-main); do
+for sha in $(git log --format=%H origin/develop..origin/upstream-main); do
   echo "=== $sha ==="
   git show --stat $sha | head -30
 done
@@ -432,15 +434,15 @@ If the user asked you to port the visual side of a classic feature into v2, deli
 ```bash
 gh workflow list --repo zjean/server
 gh run list --repo zjean/server --workflow "Upstream Sync" --limit 5
-gh pr list --repo zjean/server --base main --head upstream-main --state all --limit 3
+gh pr list --repo zjean/server --base develop --head upstream-main --state all --limit 3
 ```
 
 ### See what would come in from an upstream sync without triggering it
 
 ```bash
 git fetch upstream main
-git log --oneline origin/main..upstream/main | head -30
-git diff --stat origin/main...upstream/main
+git log --oneline origin/develop..upstream/main | head -30
+git diff --stat origin/develop...upstream/main
 ```
 
 (This uses the `upstream` remote, which is read-only, not `upstream-main` which is the mirror branch on `origin`.)
