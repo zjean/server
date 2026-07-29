@@ -1,9 +1,9 @@
 name: E2E Workflow
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 # Separate from the `test` workflow ON PURPOSE.
 #
