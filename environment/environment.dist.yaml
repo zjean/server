@@ -408,6 +408,46 @@ applications:
         # Note: when using an external server (e.g.: https://collabora.domain.com), make sure it is accessible from the client/browser.
         # default: null
         externalServer:
+    # File versioning. See docs/plans/2026-07-25-file-versioning-design.md.
+    #
+    # This block must stay in this file even though every value below is also a
+    # class default: `config.loader` validates every SYNCIN_* variable name
+    # against THIS file, so a path that is missing here is silently discarded
+    # with an "Ignoring unknown environment variable" warning. Before it was
+    # added, no SYNCIN_APPLICATIONS_FILES_VERSIONS_* variable had any effect —
+    # not even the one turning the feature off.
+    versions:
+      # enable file versioning
+      # default: false
+      enabled: false
+      # Maximum number of versions kept per file.
+      # Set to `false` or 0 to keep an unlimited number.
+      # default: 20
+      maxVersionsPerFile: 20
+      # Version retention in days per repository type. Set each value to a number
+      # of days to enable automatic cleanup.
+      # Set to `false` or 0 to disable cleanup for that repository type.
+      # default: users/spaces false
+      retentionDays:
+        users: false
+        spaces: false
+      # Maximum fraction of a space's quota that version history may consume.
+      # Versions DO count toward quota. Range: 0.01 - 1.
+      # Set to `false` or 0 to disable the cap.
+      # default: 0.5
+      quotaShare: 0.5
+      # Coalescing window in seconds per (file, author, write origin): a second
+      # write inside the window does not mint a second version.
+      # Applies to every origin without an entry in minIntervalSecondsByOrigin.
+      # Set to 0 to never coalesce.
+      # default: 60
+      minIntervalSeconds: 60
+      # Per-origin overrides of the window above. The document servers decide
+      # when to save, so they need a wider window than a human pressing Save.
+      # default: collabora/onlyoffice 300
+      minIntervalSecondsByOrigin:
+        collabora: 300
+        onlyoffice: 300
   # Client application repository configuration
   appStore:
     # repository: `public` | `local`
