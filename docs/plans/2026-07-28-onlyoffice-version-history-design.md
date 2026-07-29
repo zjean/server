@@ -1,6 +1,6 @@
 # Design — version history inside the OnlyOffice / Euro-Office editor
 
-- **Status:** **Phase 1 approved, built and browser-verified** (#386 backend, #387 frontend, 2026-07-29). Phase 2 is
+- **Status:** **Phase 1 approved, built and browser-verified** (#386 backend, #388 frontend, 2026-07-29). Phase 2 is
   still a decision the maintainer has not taken. Where this document and the handoff's §9 disagree, §9 is what was
   measured — in particular §1's claim that `changeHistory` is one of three things that must change is **wrong**: the flag
   is vestigial in document server 9.x and was left alone.

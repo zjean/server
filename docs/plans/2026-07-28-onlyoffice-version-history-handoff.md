@@ -3,7 +3,7 @@
 - **Date:** 2026-07-28
 - **Implements:** [`2026-07-28-onlyoffice-version-history-design.md`](2026-07-28-onlyoffice-version-history-design.md) — the
   design. This file is the task list, the environment recipe, and the list of things that will bite you.
-- **Status:** **phase 1 is approved and built** — backend in #386, frontend in #387, browser-verified against a real
+- **Status:** **phase 1 is approved and built** — backend in #386, frontend in #388, browser-verified against a real
   document server on 2026-07-29 (§9 records what that settled, including two things this document guessed at).
   Phase 2 remains ungated and unstarted; design §5's second and third decisions still belong to the maintainer.
 - **Audience:** a fresh agent with no memory of the audit that produced the design.

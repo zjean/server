@@ -224,7 +224,7 @@ assertion about an **instance-wide** figure is racing its neighbours: comparing 
 reads (#366). Scope new assertions to a root the case owns, or bracket the aggregate between a snapshot taken before
 and after it — a bracket collapses to exact equality when the file runs alone, so nothing is weakened.
 
-**The OnlyOffice editor has an in-editor version panel as of #386/#387**, gated on `files.versions.enabled` and on the
+**The OnlyOffice editor has an in-editor version panel as of #386/#388**, gated on `files.versions.enabled` and on the
 session being editable. Two things about it are worth knowing before you touch either side. The document server decides
 whether to OFFER the panel from the events alone — `canUseHistory = !!_config.events.onRequestHistory` in its own
 `api.js` — so `document.permissions.changeHistory` is vestigial in 9.x and deliberately left `false`; do not "fix" it.
@@ -237,7 +237,7 @@ they do not all agree:
 
 | Document | Status |
 |---|---|
-| `2026-07-28-onlyoffice-version-history-handoff.md` | **Phase 1 shipped and browser-verified (#386/#387); phase 2 not started.** The task list, the document-server dev recipe, the nine traps — and **§9, which is the authority on this feature**: four things the verification settled, including that `changeHistory` is vestigial and must NOT be flipped. |
+| `2026-07-28-onlyoffice-version-history-handoff.md` | **Phase 1 shipped and browser-verified (#386/#388); phase 2 not started.** The task list, the document-server dev recipe, the nine traps — and **§9, which is the authority on this feature**: four things the verification settled, including that `changeHistory` is vestigial and must NOT be flipped. |
 | `2026-07-28-onlyoffice-version-history-design.md` | Why the OnlyOffice / Euro-Office editor showed neither versions nor diffs, and what it took, in two phases, against upstream ONLYOFFICE's own connector. Phase 1 is now built; its §1.1 was **wrong** (see §9.1 of the handoff) and §5's phase-2 decisions are still open. |
 | `2026-07-29-adr-19-editor-soak.md` | The editor half of the ADR §19 soak, against real OnlyOffice and Collabora containers: the measured cadences, #378 verified live, and two defects it found (versioning is unconfigurable by env var; the old soak recipe no longer opens the coalescing window). |
 | `2026-07-27-nc-android-versioning-soak.md` | The real-device soak: versioning confirmed working in stock NC Android 34.1.0, the capability bug it found, and how to reproduce (incl. the 16 KB page-size emulator crash). |
