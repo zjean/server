@@ -142,6 +142,16 @@ export class OnlyOfficeManager {
 
   async callBack(user: UserModel, space: SpaceEnv, token: string) {
     const callBackData: OnlyOfficeCallBack = await this.jwt.verifyAsync(token, { secret: this.officeConfig.secret })
+    /* Fork: versioning. Classified ONCE here rather than at each of the four
+       save sites — it is a pure function of the body, and having the value
+       before the switch is what lets it be logged. Without this line, whether a
+       save coalesced is invisible: the decision is taken from `forcesavetype`,
+       which nothing else records. */
+    const saveKind: SnapshotOptions['saveKind'] = this.saveKindOf(callBackData)
+    this.logger.debug({
+      tag: this.callBack.name,
+      msg: `status=${callBackData.status} forcesavetype=${callBackData.forcesavetype ?? '-'} saveKind=${saveKind} : ${space.url}`
+    })
     try {
       switch (callBackData.status) {
         case 1:
@@ -156,14 +166,14 @@ export class OnlyOfficeManager {
             this.logger.debug({ tag: this.callBack.name, msg: `document was edited but closed with no changes : ${space.url}` })
           } else {
             this.logger.debug({ tag: this.callBack.name, msg: `document was edited and closed but not saved (let's do it) : ${space.url}` })
-            await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
+            await this.saveDocument(user, space, callBackData.url, saveKind)
           }
           await this.removeFileLock(user.id, space)
           await this.removeDocumentKey(space)
           break
         case 3:
           this.logger.error({ tag: this.callBack.name, msg: `document cannot be saved, an error has occurred (try to save it) : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
+          await this.saveDocument(user, space, callBackData.url, saveKind)
           break
         case 4:
           // No active users on the document
@@ -173,11 +183,11 @@ export class OnlyOfficeManager {
           break
         case 6:
           this.logger.debug({ tag: this.callBack.name, msg: `document is edited but save was requested : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
+          await this.saveDocument(user, space, callBackData.url, saveKind)
           break
         case 7:
           this.logger.error({ tag: this.callBack.name, msg: `document cannot be force saved, an error has occurred (try to save it) : ${space.url}` })
-          await this.saveDocument(user, space, callBackData.url, this.saveKindOf(callBackData))
+          await this.saveDocument(user, space, callBackData.url, saveKind)
           break
         default:
           this.logger.error({ tag: this.callBack.name, msg: 'unhandled case' })

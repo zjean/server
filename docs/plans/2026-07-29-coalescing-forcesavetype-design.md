@@ -125,16 +125,76 @@ the discriminator, not a smaller number, and an `onlyoffice` save that we cannot
 
 ## 5. Verification
 
-`forcesavetype` is being trusted from documentation, not from measurement. That is the one soft spot, and it is the
-thing to check first:
-
-1. **Soak against a real document server** — the rig in soak §2 / §8, re-derived per the "docserver LAN IP moves" note.
-   Log the raw callback body and confirm: Ctrl+S yields status 6 with `forcesavetype: 1`; four saves inside two minutes
-   now yield four versions; closing with unsaved changes yields status 2 with no `forcesavetype`.
-2. **If `forcesavetype` does not arrive as documented**, the `actions: [{ type: 2, userid }]` entry on the same body
-   ("the user clicks the forcesave button") is an independent discriminator for the human case and the fallback.
-   Unremarked in #389 and worth knowing before designing around a missing field.
-3. **Unit** — `only-office-manager.service.spec.ts` for the classification table (every row of §2.2), and
+1. **Unit** — `only-office-manager.service.spec.ts` for the classification table (every row of §2.2), and
    `versioning.service.spec.ts` for the window resolution, including a regression case pinning that an omitted
    `saveKind` behaves exactly as before.
-4. `npm run build -w backend` — vitest's type check does not catch service↔real-class mismatches.
+2. `npm run build -w backend` — vitest's type check does not catch service↔real-class mismatches.
+3. **Soak against a real document server** — done, see §6.
+
+---
+
+## 6. Soak, 2026-07-29 — `forcesavetype` measured, not assumed
+
+The rule shipped trusting `forcesavetype` from OnlyOffice's documentation. That was the one soft spot, and it is now
+closed: both classes were observed on the wire against a real document server, and each was classified as intended.
+
+**Rig** — the soak §2/§8 recipe. Document server **9.4.0-129** (the ADR §19 soak used 9.3.1.2, so this is also a
+second version data point). LAN IP re-derived to `192.168.1.136` — it had moved from the `.177` in the soak doc, again.
+Isolated per soak §2.3: port 8090, database `sync_in_soak`, `dataPath /tmp/sync-in-soak-data`, so a version count is
+never shared with another server. All three legs proven before driving the UI: host→docserver, host→backend,
+`docker exec onlyoffice-soak curl <backend>` → 200.
+
+### 6.1 Every callback body observed
+
+| status | `forcesavetype` | `actions` | `actions[0].type` | ⇒ `saveKind` | n |
+|---|---|---|---|---|---|
+| 1 (connect) | absent | present | 1 | interactive¹ | 3 |
+| 2 (session close) | absent | present | 0 | interactive | 1 |
+| 4 (closed, no changes) | absent | present | 0 | interactive¹ | 1 |
+| 6 (save requested) | **1** | present | **2** | **interactive** | 4 |
+| 6 (save requested) | **2** | **absent** | – | **automatic** | 1 |
+
+¹ statuses 1 and 4 never reach `saveDocument`, so their classification is inert — recorded only because the log line
+computes it for every body.
+
+**The three things §5 asked for, all confirmed:**
+
+- **Ctrl+S ⇒ status 6 with `forcesavetype: 1`.** Four for four. The documentation is correct and the rule is sound.
+- **Four human saves inside two minutes ⇒ four versions.** Four saves in **43 s** produced version ids 2, 3, 4 (plus
+  the pristine 6994-byte id 1 from the first). This is the ADR §19 soak's defect — *four explicit saves, zero
+  versions* — fixed end to end through a real callback.
+- **Status 2 carries no `forcesavetype`.** Confirmed, matching §2.2's claim that the field exists on 6 and 7 only.
+
+### 6.2 Two findings the design note did not predict
+
+**`actions` is ABSENT on a timer save.** The human save carries `actions: [{ type: 2, userid: "1" }]`; the timer save
+carries no `actions` key at all. §5's fallback suggestion was that `actions[].type === 2` could stand in if
+`forcesavetype` went missing — that is now measured to be *genuinely independent*, discriminating on presence alone,
+not merely a second reading of the same signal. Worth knowing, still not needed.
+
+**The automatic branch is not dead code, but reaching it takes deliberate server config.** `forcesavetype: 2` never
+arrived until `services.CoAuthoring.autoAssembly` was switched on in the document server's `local.json`
+(`{enable: true, interval: '1m', step: '10s'}` — it ships `enable: false`). It then fired ~77 s after the last
+keystroke. So with a stock document server and this fork's `autosave: false`, **every** OnlyOffice save really is
+human, exactly as §2.3 argued — and the 300 s override applies only to operators who have turned that timer on. Its
+version was minted (id 5), correctly: 650 s had elapsed since id 4, past the 300 s window.
+
+### 6.3 One assertion only partly exercised
+
+The status-2 case arrived with `notmodified: true`, so it took the "closed with no changes" branch and never called
+`saveDocument`. The contract point §5 asked for (no `forcesavetype` on status 2) is confirmed; the
+`notmodified: false` variant — a genuine unsaved-changes flush, which is what would actually exercise the
+interactive-by-default path — was not reproduced, because the document server had already flushed the change.
+Unit-covered, not soak-covered.
+
+### 6.4 Two corrections to the soak doc's own recipe
+
+- **Screenshots did not hang.** Soak §8 warns that a `screenshot` call blocks for the full timeout while `eval` keeps
+  working. Every screenshot in this run returned promptly, and they were the only way to prove keystrokes had landed.
+- **`mouse click` is not an agent-browser action** (`move`, `down`, `up`, `wheel` are). The click that gives OnlyOffice
+  keyboard focus is `mouse move <x> <y>` then `mouse down` then `mouse up`.
+
+And one confirmation of a rule worth restating: **verify the keystrokes landed before believing an idle period.** A
+first attempt at the timer test idled 4.5 minutes and recorded nothing — because the editor had not survived a
+document-server restart, so nothing had been typed. Same failure shape the soak doc records for Collabora, one
+container restart away in a different editor.
