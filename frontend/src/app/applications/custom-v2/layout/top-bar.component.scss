@@ -166,8 +166,11 @@
     font: inherit;
     font-size: 14px;
 
+    // faint, not ghost: ghost on this field's bg2 surface measured 4.33 and
+    // this placeholder ships on every v2 screen (#397). faint is also what the
+    // per-screen filter inputs use, so all placeholders now agree.
     &::placeholder {
-      color: var(--si-fg-ghost);
+      color: var(--si-fg-faint);
     }
 
     // Kill the WebKit clear button that pushes the kbd hint around.

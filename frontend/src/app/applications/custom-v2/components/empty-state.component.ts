@@ -47,7 +47,11 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         height: 48px;
         border-radius: 24px;
         background: var(--si-bg4);
-        color: var(--si-fg-ghost);
+        // tertiary, not ghost: ghost on bg4 measured 2.59, below the 3:1 that
+        // SC 1.4.11 asks of a meaningful glyph. The icon is arguably decorative
+        // (the title states the same thing), but it was also simply too faint
+        // to read — tertiary lands at 3.76 (#397).
+        color: var(--si-fg-tertiary);
         display: flex;
         align-items: center;
         justify-content: center;
