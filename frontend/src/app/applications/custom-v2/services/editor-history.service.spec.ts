@@ -232,10 +232,31 @@ describe('EditorHistoryService — onRequestRestore', () => {
 })
 
 describe('EditorHistoryService — onRequestHistoryClose', () => {
-  // Upstream does location.reload(true) (editor.js:268), which here would discard
-  // the whole v2 SPA. The only reason upstream needs it — a stale document key
-  // after a restore — is handled at the moment of the restore instead.
-  it('is inert, and in particular does not reload', () => {
+  // The document server exposes NO command to leave history mode — `refreshHistory`
+  // and `setHistoryData` are the only two methods it publishes (api.js:924-925) —
+  // so the integrator has to reinitialize the editor itself: "When the function is
+  // called, the editor must be reinitialized in editing mode" (Docs API,
+  // config/events). Upstream does `location.reload(true)`; here the caller
+  // re-mounts, for the same reason the restore path does.
+  //
+  // This handler was inert until #408, on the premise that upstream's reload
+  // existed only to clear the stale document key after a restore. It does not —
+  // leaving it inert left the panel stuck open and the document read-only.
+  it('signals the caller to re-mount the editor', () => {
+    const onHistoryClosed = vi.fn()
+    const { service } = mount()
+    const { editor } = editorDouble()
+
+    hooks(service, editor, { onHistoryClosed }).onRequestHistoryClose!()
+
+    expect(onHistoryClosed).toHaveBeenCalledOnce()
+  })
+
+  // The hook must still EXIST when no caller is listening: the document server
+  // renders the Close History button off its presence alone
+  // (`canHistoryClose = !!events.onRequestHistoryClose`, api.js:408), and it must
+  // not throw into the editor's own event dispatch.
+  it('does not throw when the caller wired no re-mount', () => {
     const { service } = mount()
     const { editor, calls } = editorDouble()
 

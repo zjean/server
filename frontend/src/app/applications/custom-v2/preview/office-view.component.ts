@@ -144,7 +144,12 @@ export class OfficeViewComponent implements OnDestroy {
       // right after a restore.
       editor: () => window.DocEditor?.instances?.[this.docId()] as OnlyOfficeHistoryEditor | undefined,
       locale: this.locale.language,
-      onRestored: () => this.reloadEditor()
+      onRestored: () => this.reloadEditor(),
+      // Closing the panel needs the same re-mount, for a different reason: the
+      // editor enters history mode read-only and the document server publishes
+      // no command to leave it, so reinitializing is the only way back to an
+      // editable document (#408).
+      onHistoryClosed: () => this.reloadEditor()
     })
   })
 
@@ -227,12 +232,19 @@ export class OfficeViewComponent implements OnDestroy {
   /**
    * Tears the editor down and re-opens it against a freshly fetched config.
    *
-   * Called after an in-editor restore, where it is REQUIRED rather than tidy. A
-   * restore replaces the live bytes and drops the cached OnlyOffice document key
-   * server-side (invariant 7, #378) — but the config held by this page still
-   * carries the OLD key. Without a re-open the editor goes on editing pre-restore
-   * content under a key the document server still honours, and the next save
-   * writes that content back over the restore.
+   * Called from both in-editor history events, and REQUIRED rather than tidy in
+   * each — for two unrelated reasons:
+   *
+   *  - after a RESTORE, because it replaces the live bytes and drops the cached
+   *    OnlyOffice document key server-side (invariant 7, #378) while the config
+   *    held by this page still carries the OLD key. Without a re-open the editor
+   *    goes on editing pre-restore content under a key the document server still
+   *    honours, and the next save writes that content back over the restore.
+   *  - after the panel is CLOSED, because the editor entered history mode
+   *    read-only and the document server publishes no command to leave it. The
+   *    Docs API is explicit that the integrator must reinitialize in editing
+   *    mode; without it the panel stays open over a document that can no longer
+   *    be edited (#408).
    *
    * Clearing `config` unmounts OnlyOfficeComponent, whose ngOnDestroy destroys
    * the DocEditor instance; the new config mounts a fresh one with the new key.

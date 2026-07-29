@@ -245,12 +245,23 @@ reads (#366). Scope new assertions to a root the case owns, or bracket the aggre
 and after it — a bracket collapses to exact equality when the file runs alone, so nothing is weakened.
 
 **The OnlyOffice editor has an in-editor version panel as of #386/#388**, gated on `files.versions.enabled` and on the
-session being editable. Two things about it are worth knowing before you touch either side. The document server decides
+session being editable. Three things about it are worth knowing before you touch either side. The document server decides
 whether to OFFER the panel from the events alone — `canUseHistory = !!_config.events.onRequestHistory` in its own
 `api.js` — so `document.permissions.changeHistory` is vestigial in 9.x and deliberately left `false`; do not "fix" it.
-And an in-editor restore MUST re-mount the editor (`OfficeViewComponent.reloadEditor`), because #378 drops the cached
-document key server-side while the page still holds the old one — without the re-mount the editor keeps editing
-pre-restore content and the next save overwrites the restore. That is invariant 7 seen from the client.
+And **BOTH** history events that end a viewing session MUST re-mount the editor
+(`OfficeViewComponent.reloadEditor`), for two unrelated reasons that are easy to conflate:
+
+- **`onRequestRestore`**, because #378 drops the cached document key server-side while the page still holds the old one
+  — without the re-mount the editor keeps editing pre-restore content and the next save overwrites the restore. That is
+  invariant 7 seen from the client.
+- **`onRequestHistoryClose`**, because the document server publishes **no command for leaving history mode** —
+  `refreshHistory` and `setHistoryData` are the only two methods in `api.js` — and history mode is read-only. The Docs
+  API requires the integrator to reinitialize ("the editor must be reinitialized in editing mode"); upstream does
+  `location.reload(true)`, we re-mount so the SPA survives. This handler shipped **inert** in #388 on the reasoning that
+  the restore already covered the only reason upstream reloads; it does not, and the result was a panel that could not
+  be closed over a document that had gone read-only (fixed in #408). Leaving the handler off entirely is not the
+  alternative — its presence is what renders the Close History button (`api.js:408`), but its absence would strand the
+  user in history mode with no button at all.
 
 **Read the handoff for whatever phase you're touching before touching it.** Six documents describe this feature and
 they do not all agree:

@@ -99,8 +99,11 @@ export class EditorHistoryService {
    * re-mounts, so a captured reference would address a destroyed editor after a
    * restore.
    *
-   * `onRestored` fires after a successful restore, and the caller MUST re-mount
-   * the editor in response — see the note on the handler.
+   * Two of the four events end with the caller re-mounting the editor, and in
+   * both cases that is REQUIRED rather than tidy — see the notes on the handlers.
+   * `onRestored` fires after a successful restore (the document key went stale);
+   * `onHistoryClosed` fires when the user closes the panel (the document server
+   * has no other way out of its read-only history view).
    */
   hooksFor(opts: {
     spacePath: string
@@ -108,6 +111,7 @@ export class EditorHistoryService {
     editor: () => OnlyOfficeHistoryEditor | undefined
     locale: string
     onRestored?: () => void
+    onHistoryClosed?: () => void
     onError?: (e: unknown) => void
   }): OnlyOfficeHistoryHooks {
     const { spacePath, officeToken, editor, locale } = opts
@@ -169,12 +173,21 @@ export class EditorHistoryService {
         }
       },
 
-      // Upstream does `location.reload(true)` (`editor.js:268`). Doing that here
-      // would discard the whole v2 SPA — its route, its file list, any other open
-      // panel — to solve a problem that only exists after a restore, which
-      // `onRestored` already handles at the moment it happens. So closing the
-      // panel is deliberately inert.
-      onRequestHistoryClose: () => undefined
+      // A re-mount, and NOT optional — the document server publishes no command
+      // for leaving history mode. `refreshHistory` and `setHistoryData` are the
+      // only two methods it exposes (`api.js:924-925`), so the only way back to
+      // an editable document is to reinitialize: "When the function is called, the
+      // editor must be reinitialized in editing mode" (Docs API, config/events).
+      // Upstream satisfies that with `location.reload(true)` (`editor.js`); the
+      // caller re-mounts instead, for the same reason the restore path does.
+      //
+      // Inert until #408, on the premise that upstream's reload existed only to
+      // clear the stale document key after a restore. It does not. The editor
+      // enters history mode read-only and stays there, so an inert handler left
+      // the panel stuck open with no way back to editing short of leaving the
+      // file — while still rendering the Close History button, which the document
+      // server offers off this handler's mere presence (`api.js:408`).
+      onRequestHistoryClose: () => opts.onHistoryClosed?.()
     }
   }
 }
