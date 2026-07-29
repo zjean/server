@@ -284,6 +284,10 @@ Create `custom-v2/styles/_prose.scss`. **Every declaration below is a faithful t
 for code backgrounds, not `bg2`), same fallback values. Do not "improve" them: Task 8 later points the editor at this
 partial, and any drift here becomes a visual regression in `file-detail`.
 
+> **Amendment 2026-07-29.** Task 8 has since been done (§13.7 row 4), so this partial is no longer a transcription of a
+> block that still exists elsewhere — it is the only copy, and `markdown-view` consumes it. The header comment quoted
+> below was rewritten accordingly; the version in the file is the current one.
+
 ```scss
 // Markdown typography shared by the folder readme banner (read mode) and,
 // eventually, the markdown editor itself (see the implementation plan's Task 8).
@@ -1684,8 +1688,14 @@ git commit -m "docs(v2): record the folder readme verification matrix"
 
 ## Task 8 (optional): Consolidate the prose styles
 
-Do this **only** after Task 7 confirms read mode and edit mode render identically. Skip it if the maintainer prefers a
-smaller diff — nothing depends on it.
+> **DONE, 2026-07-29 — and its precondition turned out to be false.** See design §13.7 row 4. The instruction below was
+> "only after Task 7 confirms read mode and edit mode render identically"; the review pass established that they
+> *didn't*: the read block is the card's full width with no padding, while `.md-view__editor` is a centred `max-width:
+> 880px` with `24px 32px 48px`. So clicking Edit reflowed the text — exactly what design §4's "same pipeline, so no
+> reflow" argument existed to prevent. Deferring the consolidation was what let that drift go unnoticed, since the
+> duplication's stated cost *is* drift. Both changed together: the editor now uses `.v2-prose`, and inline mode drops the
+> measure and the padding so the banner's two modes lay out identically. The steps below are kept as the record of what
+> was done; step 2's browser check is still owed (§13.8).
 
 **Files:**
 - Modify: `frontend/src/app/applications/custom-v2/preview/markdown-view.component.ts`

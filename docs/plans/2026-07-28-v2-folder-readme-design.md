@@ -147,6 +147,11 @@ The readme also **stays a normal row in the listing** — renaming and deleting 
 
 ## 3. Writeability
 
+> **Superseded twice — read §13.3 and §13.4 before trusting this section.** The expression below is now wrong in one
+> way (it ignores the row's own `root.permissions`, which classic intersects) and the strip described in its first
+> correction has been narrowed. Both changed in the review pass; the reasoning below is preserved because it is still
+> the reason the strip exists at all.
+
 **Decision.** Copy classic's contract verbatim:
 
 ```ts
@@ -291,6 +296,18 @@ benefit (the auto-save on navigate needs the component to survive the hop) but n
 was flagged as a defect during Task 7 verification; recorded here so a future reader does not mistake either for
 unrelated drift.
 
+**Amendment (2026-07-29, review pass).** Two things about that collapse are worth stating more plainly than the
+paragraph above does, because they bear on how much confidence the verification record supports:
+
+- **Its consequences were not all predicted.** The collapse is what made `resetSpaceNameOnAliasChange`
+  (`space-files.component.ts`) necessary — a screen that no longer gets recreated no longer re-reads the space name, so
+  the header kept the previous space's name. That was found by hitting it, not by reasoning about it beforehand. A
+  change to shared navigation infrastructure landing inside a feature PR has a blast radius wider than the feature's own
+  test matrix, and this one demonstrated it.
+- **Neither of the two behaviour changes above has a row in §11.** They reached users verified only by argument. They
+  are both defensible (arguably improvements — the two hop shapes now behave alike), but "recorded" is not "verified",
+  and this section should not be read as claiming otherwise.
+
 With one route entry per screen, the screens are **not** destroyed on folder change, so:
 
 - `MarkdownViewComponent.ngOnDestroy` — the only thing that releases the lock — **does not fire** when the user walks
@@ -324,6 +341,10 @@ folder, so it is the greater harm.
    feature can produce.
 2. **`saveNowIfModified()` never throws** and reports `'clean' | 'saved' | 'failed'`, because its caller is mid-
    teardown and must complete the unmount either way.
+
+**Both now live in `custom-v2/utils/readme-edit-session.ts` and are unit-tested — see §13.5.** Freezing the target
+defended the *mid-edit* half of this hazard and missed the *opening* half, which §13.1 closes. The silent-discard branch
+this section leaves open ("leaving the browse screen entirely does not auto-save") now at least reports itself — §13.6.
 
 **Rationale.** A leaked exclusive lock on a readme is silent for the user who leaked it and total for everyone else —
 the next person to open that folder gets a permanently read-only banner attributed to a colleague who has moved on.
@@ -459,10 +480,10 @@ table instead of splitting the matrix across two documents.
     session's lock. A lock held by another app must render the banner read-only rather than being treated as absent.
 18. **Leaving the browse screen entirely, mid-edit.** With unsaved text, leave via the sidebar to Recents, from
     Personal into a space, and by opening a file in file-detail. Expected in all three: the lock is released (the
-    banner is destroyed, so the editor's own `ngOnDestroy` unlocks). **Known and accepted:** the unsaved text is
-    discarded with no toast, because a destroyed component cannot run the auto-save — documented at
-    `folder-readme.component.ts`. Confirm the lock is genuinely released; do not treat the missing toast as a new
-    defect.
+    banner is destroyed, so the editor's own `ngOnDestroy` unlocks) and the unsaved text is discarded — a destroyed
+    component cannot run the auto-save. **Expectation changed 2026-07-29 (§13.6): the discard must now be
+    reported** (`v2_readme_discarded`). The row below recorded "no toast" as correct; that is no longer the contract, so
+    re-drive this case and treat a *missing* toast as the defect.
 
 ---
 
@@ -520,7 +541,7 @@ Two consequences, both load-bearing for how much this table is worth:
 | 15 | pass | Readme folder → no-readme subfolder → back: content renders again correctly, not an empty banner. Three rapid round-trips between two folders that both have distinct readmes (`QUICK-A` / `QUICK-B`) never showed the other folder's content. No network-throttling capability was available in `agent-browser` to manufacture a worse race than plain rapid navigation; the result is consistent with the `lastLoadKey` cache-key guard in the code but is weaker evidence of the race specifically than a throttled test would be. |
 | 16 | pass | All five required hop shapes tested with concrete evidence: sibling→sibling, root→subfolder, subfolder→root, has-readme→without-readme (unmounts the section mid-save), and inside a space (not just Personal). Every hop: the auto-save toast fired (literal text captured: `Saved "README.md"`), the edited content landed in the **originating** folder only (verified via raw `GET`, destination's own readme left untouched), and the lock read `null` afterward. |
 | 17 | pass | Used a real WebDAV `LOCK` (`curl -X LOCK`, `app: 'WebDAV'`) as the "another app" lock per the task's guidance that this exercises the stranger's-app path properly. With that lock held, the banner rendered read-only (no Edit button) rather than treating the lock as absent; the lock was untouched by navigating in and out of the folder (nothing in our own component could touch it, since no editor could ever open); cleanly released via `curl -X UNLOCK` afterward. The literal two-same-user-tab variant was not separately re-driven — the component's own code comments already document that scenario as an accepted, known limitation (a second same-user/same-app tab's lock **is** treated as our own and closing one editor **does** release the shared lock), which is a different, already-acknowledged trade-off from the stranger's-app path this case is really guarding. |
-| 18 | pass | All three "leave the browse screen entirely" hops tested: sidebar → Recents, Personal → a space, and opening a different file into file-detail. In every case the lock read `null` afterward (confirmed via API) and the unsaved edit was silently discarded with no toast — exactly the documented, accepted behaviour (a destroyed component cannot run the auto-save). |
+| 18 | pass, then **superseded, then re-driven** | All three "leave the browse screen entirely" hops tested: sidebar → Recents, Personal → a space, and opening a different file into file-detail. In every case the lock read `null` afterward (confirmed via API) and the unsaved edit was silently discarded with no toast — the documented, accepted behaviour at the time. §13.6 changed that contract, and §13.8 re-drove it on 2026-07-29: the discard now raises `Unsaved changes to "Readme.md" were discarded.`, with the lock still released and the text still discarded. |
 
 ### Amendment — case 5, after the fix in `3e935a80`
 
@@ -639,3 +660,241 @@ Access control (who can write `Readme.md` in the first place) is governed by the
 every other file in that folder — nothing here changes who can write it, only what happens when it is rendered. The
 pre-existing gap noted in §3 (`file-detail`'s missing `isWriteable` check) is a separate, already-recorded issue on a
 separate surface.
+
+**Amendment (2026-07-29, review pass) — three corrections to the reasoning above, none of which changes the verdict.**
+An independent review re-derived this section against the TipTap sources rather than from the extension list, and the
+conclusion held. But:
+
+1. **Reason 1's mechanism is not quite "the parser drops it".** `@tiptap/markdown` demotes raw-HTML tokens whose tag
+   name is not in the schema's `parseHTML` set to *literal text* (`htmlAsLiteralText`), so a `<script>` never becomes an
+   element at all; tags that *are* recognised are re-parsed through `DOMParser.parseFromString(..., 'text/html')`, an
+   inert document with no browsing context — no script runs and no resource loads — after which ProseMirror keeps only
+   declared attributes, which is what actually strips `onerror` from an `<img>`. Same conclusion, two different
+   mechanisms, and worth knowing which is which before anyone adds an extension.
+2. **There is a fourth control, and it is not ours: the server's CSP.** A remote image in a folder description
+   (`![](https://attacker.example/pixel.png)`) would otherwise make every viewer's browser call an address the *writer*
+   chose — a "who read this folder, and when" beacon, no script needed. What stops it is `imgSrc: ["'self'", 'data:']`
+   in `backend/src/app.constants.ts`, not anything in this feature. **So relaxing `img-src` for some unrelated
+   integration would silently turn every folder description into a tracking surface.** Recorded here so that change,
+   whenever it comes, has a reason to look at this feature.
+3. **`Image` validates nothing.** Only `Link` checks URI schemes. Reason 3's conclusion is right — an `<img src>` is
+   not a script context in any current browser — but it rests on browser behaviour rather than on a control in our code,
+   which is a weaker footing than reason 2 and should be read as such.
+
+**One thing this section did not consider at all: availability.** The content is fetched and parsed with no bound, and
+that *was* a real defect — see §13.2.
+
+---
+
+## 13. Review pass (2026-07-29) — what an independent review changed
+
+A principled review (OWASP / SOLID / DRY / YAGNI / Clean Code, atomising the domain terms and trust boundaries first)
+was run against the whole branch after the §0 port. It found no exploitable security hole — §12's verdict survived
+re-derivation from the TipTap sources — and no data-loss bug. It found six substantive defects and eight smaller ones.
+**All fourteen were addressed on the branch; this section is the record.** Where a fix contradicts an earlier section,
+this section wins.
+
+### 13.1 The listing is now published atomically, so the banner cannot compose a path from two folders
+
+**The defect.** `dirPath` was bound to `currentUploadRoute()`, which derives its answer from the URL and therefore flips
+*synchronously* on navigation. `files` and `permissions` are only written when the listing GET returns. So there is a
+window, one round trip wide, in which the banner holds the **previous** folder's readme row and the **new** folder's
+path — and it is not a hidden window: `loadFiles()` deliberately does not blank `files` while loading, and the banner
+renders *above* the `@if (loading())` block, so the user sees a live readme with a live Edit button over a list that says
+"Loading…". Clicking Edit there builds `<new folder>/<old folder's readme name>`.
+
+It cannot silently write into the wrong file — that is what the frozen `editTarget` of §5 defends, and it holds. When
+the names differ (`Readme.md` vs `README.md`) or the destination has no readme, the lock and the content GET 404, the
+editor lands read-only, and `markdown-view` has by then stored the *error body* as its lock and will fire an UNLOCK for a
+lock it never held. A broken interaction, not a lost file.
+
+**The fix.** `FileBrowserBase` gained `loadedDirPath`, captured when the request is issued and published in the same turn
+as `files`/`permissions` (and set to `''` on the error path, like `permissions`). The banner binds to that. `dirPath`,
+`files` and `permissions` now always describe one response.
+
+This is the same shape as the hazard §5 is about, seen from the other end: §5 asks "can the target move under an *open*
+editor?" and answers no; nobody had asked "can it be wrong at the moment the editor *opens*?"
+
+**Consequence to know:** the navigation effect now fires one round trip later than it used to. It still fires while the
+editor is mounted, because only the session's `close()` unmounts it. There is also one no-op transition at startup, from
+the empty initial path to the first real one.
+
+**Underlying issue left open, and it is not this feature's:** `loadFiles()` has no in-flight generation guard, so a slow
+listing for folder A resolving after a fast one for folder B publishes A's rows while the user is in B. That was
+cosmetic before the banner existed. `loadedDirPath` makes the banner's *pair* consistent, but a request counter in
+`loadFiles` would fix it for every consumer. Worth its own issue.
+
+### 13.2 The render is bounded by size — and deliberately not by mime
+
+**The defect (A04 Insecure Design / CWE-400).** `load()` fetched the whole file and handed it to marked + ProseMirror on
+the main thread with no bound, automatically, for every viewer, with no click. `Readme.md` is an ordinary file: anyone
+with `m` on the folder — this UI, a sync client, WebDAV — can make it 200 MB, and every *other* member of the space then
+freezes or OOMs their tab on opening the folder, repeatedly, while the classic UI shows the folder fine. One write,
+denial of service against colleagues.
+
+Upstream Nextcloud is equally unbounded (`WorkspacePlugin` calls `$file->getContent()` and caches the blob), so this is
+not a divergence — but it is worse here, because upstream pays for the parse once server-side and we pay for it in every
+viewer's browser.
+
+**The fix.** `FOLDER_README_MAX_BYTES` (256 KiB, roughly forty thousand words of prose). Over it, no GET is issued and
+the card shows a one-line notice; `writeable()` also returns false, because handing a quarter-megabyte of "prose" to a
+WYSIWYG editor is not a kindness either. `size` is already on the listing row, so the check costs no request.
+
+**Why the bound is NOT in `pickFolderReadme`, though that is where it looks like it belongs.** That function answers
+"does this folder have a description", and that answer gates the `+ New → Folder description` menu entry. A readme we
+decline to *render* still exists, and reporting otherwise would put the entry back in the menu, where it would try to
+create a file that is already there. Detection and rendering are two different questions about the same row.
+
+**The mime check the review also asked for was not added, and should not be.** The suggestion was to require a text mime
+so that a renamed JPEG cannot render as garbage prose. But `getMimeType()` (`backend/src/applications/files/utils/files.ts`)
+derives mime from `path.extname` alone — a JPEG renamed `Readme.md` is stored as `text-markdown`. The gate could
+therefore never fire for the case that motivated it, while carrying a real tail risk of hiding a legitimate readme on
+any deployment whose stored mime we guessed wrong. Name and mime are the same signal in this backend. Recorded in the
+code so nobody re-derives it.
+
+### 13.3 The own-lock drop is keyed on a path this banner locked, not on the lock's contents
+
+**The defect.** §3's correction is honest about the cost and accepts it; the review's point is that the cost was
+avoidable. The predicate was "any exclusive lock whose `app` is `Sync-in` and whose owner is me" — which is strictly
+wider than the invariant it exists for ("a lock this banner's editor is, or just was, holding"). The banner *knows* when
+it is in that window: it opened the editor. So the wider predicate bought nothing and cost the deletion of locks the
+component never took — every server-side operation lock in §3's list, since `markdown-view` unlocks whatever `lock()`
+returned when it is destroyed. The harm is not that the operation breaks (it keeps writing; its own removal becomes a
+no-op) but that mutual exclusion disappears mid-write: a *third* user can now take an exclusive lock on a file being
+re-uploaded.
+
+**The fix.** `ownedLockPath`, set in `openEditor()` to the exact path the editor is about to lock, and released by an
+effect once a listing arrives in which that path carries no lock. `readme()` drops a lock only when the row's path
+matches. The owner and `app === SERVER_NAME` checks are kept as well — they are not what was too wide, and they are what
+keeps a stranger's or a WebDAV lock opaque.
+
+Release is deliberately **not** on close: the Cancel path emits no `changed()`, so the listing still carries our lock at
+that moment, and dropping the note there would hide the Edit button the user just returned to. The effect also skips
+while editing, when the lock is ours by construction.
+
+**What remains.** A second Sync-in session of the same user editing the *same* file is still indistinguishable —
+`FileLockProps` carries no session discriminator and the lock route passes no options, so `info` is always undefined.
+Closing that to-the-letter needs a backend change. Every other case in §3's list is now out of scope of the drop.
+
+### 13.4 Writeability intersects the row's own root permissions — §3's "verbatim" was wrong a second time
+
+**The defect (classic-UI divergence).** §3 claims classic's contract and enumerates one divergence. There were two.
+Classic computes a file's effective permissions as `intersectPermissions(spacePermissions, file.root.permissions)` when
+the row carries a root (`SpacesBrowserComponent.openViewerDialog`) and only *then* applies the MODIFY-and-not-locked
+test. The banner used the space string alone.
+
+The browse response pre-intersects only when the browsed URL is itself inside a root (`getEnvPermissions`), so at a
+space's **top level** the response carries space permissions while each root entry carries its own, narrower
+`root.permissions`. That is exactly where the banner got it wrong.
+
+Not a security hole — every write is re-authorised server-side, so the worst case is an Edit button leading to a 403 —
+but `CLAUDE.md` is explicit that a frontend diverging from a backend value convention is a real bug regardless, and this
+is the highest-yield finding class in this repo. Reachability is narrow: it needs a root anchor presenting in the listing
+as a *file* named `Readme.md`, which we could not confirm from the code. The fix is one expression either way.
+
+**The fix.** `writeable()` intersects when `file.root?.permissions` is present, using the same shared
+`intersectPermissions` classic imports.
+
+**[Issue #372](https://github.com/zjean/server/issues/372) stays open and gets more urgent.** This is now the *third*
+hand-copy of one rule ("what may this user do to this file"), and the second time a copy drifted.
+
+### 13.5 §5's crux is unit-tested, which required extracting it
+
+**The defect.** Everything §5 calls load-bearing — the frozen target, the queued-intent discard, the re-entrance guard,
+the must-unmount-anyway ordering — had no automated coverage, and could not get any: the harness is `environment: node`
+with no jsdom, while the component built a TipTap `Editor` as a field initializer and called `window.addEventListener`
+in its constructor, so the class could not be instantiated there at all. In a repo whose `CLAUDE.md` lists seven
+invariants "each learned from a bug that reached a green test suite", that is the finding, not a nitpick.
+
+**The fix, in two parts.**
+
+- `custom-v2/utils/readme-edit-session.ts` — `ReadmeEditSession`, a plain injector-free class over signals holding the
+  session state and the `leave(save)` ordering. `custom-v2/utils/readme-edit-session.spec.ts` (21 cases) pins: the
+  target only moves via `open`/`close`; a queued intent fires only in the folder that asked for it and is consumed once;
+  `noteDir` treats the first folder and a repeat as non-changes; and `leave()` closes the session on `'failed'`, on a
+  *throw*, and leaves the guard unstuck afterwards, while two concurrent leaves collapse to one save. That last one is
+  the "one edit becomes two uploads and two toasts" bug, now pinned rather than argued.
+- The component was made constructible without a DOM anyway: `window` is guarded (the base already does this for
+  `localStorage`) and the read-mode `Editor` is built on first use.
+
+This is what §0's forward reference to "§13" was pointing at, alongside `folder-readme.spec.ts`.
+
+**Still not covered, and honestly so:** anything needing a second user account or a space without `m` (§11's cases 8–10)
+— the dev environment has neither, and a unit test of a permission *string* would only re-assert the expression.
+
+### 13.6 Leaving the browse screen now says the text was discarded
+
+**The defect.** The same user action — "I was typing a description and went elsewhere" — auto-saved when the destination
+was another folder in the same screen, and discarded **with no message of any kind** when it was the sidebar, another
+space, or a file. §5's explanation for the second branch is correct as far as it goes (Angular destroys the child first,
+so the content is already gone and a save there would write back the last *saved* text), but that explains why saving is
+impossible, not why saying nothing is acceptable. Silent loss of typed text is indistinguishable from the app losing
+data at random.
+
+**The fix.** `MarkdownViewComponent` pushes its modified state out through a `dirtyChange` output; the banner keeps it in
+a plain field — not a view-query read, because by the time the parent's `ngOnDestroy` runs the child is gone — and
+reports `v2_readme_discarded` from there. It still does not save, deliberately.
+
+The maintainer's open question ("should this path save too?") is untouched by this and stays open.
+
+### 13.7 The eight smaller ones
+
+| # | Was | Now |
+|---|---|---|
+| 1 | An accidentally-created empty `Readme.md` left every viewer a blank bordered card forever — and the `+ New` entry hides itself once the file exists, so there was no undo affordance in the feature | The card is hidden entirely for a blank description a user cannot write, and shows an "Add a folder description…" affordance to one who can. `contentState` is tri-state (`unloaded`/`empty`/`text`) so a description with text is never briefly treated as blank while its content is in flight |
+| 2 | `changed.emit()` on the leave-on-navigate path was a duplicate GET of the folder the user had *moved to*, never a refresh of the row that changed — and on the filter-active path the banner is already unmounted, so it only logged "Unexpected emit for destroyed OutputRef" | Dropped, with the reasoning at the call site. The toast stays |
+| 3 | The banner translated its load error; `markdown-view` rendered the equivalent raw, so its English fallback literal never translated | Both translate. `Failed to load file` added to the custom bundle |
+| 4 | `_prose.scss` was a hand-transcription of `markdown-view`'s own ProseMirror styles, and the two had *already* diverged: read mode is full card width, the editor is a centred 880px with 24/32px padding — so clicking Edit reflowed the text, which is precisely what §4's "same pipeline" argument was supposed to prevent | [Issue #382](https://github.com/zjean/server/issues/382) done here rather than deferred: `markdown-view` uses the shared partial, keeping only the two rules that are about the editor rather than the prose, and inline mode drops the max-width and padding. §4's claim is now true |
+| 5 | Dozens of `file.ts:123` citations in comments — this branch already contains two commits (`281d6d15`, `9411c1f1`) whose entire purpose was repairing citations its own later commits invalidated | Symbol names (`FilesService.openViewerAfterAvailabilityCheck`, `filesLockManager.createOrRefresh`). The *reasons* were the valuable part and are unchanged; the coordinates were the liability |
+| 6 | `newFolderDescription()` cleared the filter before the request, so a failed creation also wiped what the user had typed | The filter is restored on the error path. It still clears *before* the request, and now says why: the gate unmounts the banner, and `startEdit()` reaches it through an optional viewChild, so clearing in the `next` handler would make the edit intent vanish |
+| 7 | The `v2.routes.ts` collapse's blast radius exceeded the feature's own verification | Recorded in §5's amendment |
+| 8 | (mime check) | Not done — see §13.2 for why it could never fire |
+
+### 13.8 Verification of this pass
+
+`npm run -w frontend test` — **344 passed / 8 files** (up from 323 / 7; the new file is the 21-case session spec).
+`npm --ws run lint` — clean, both workspaces. `npm run -w frontend build` — succeeds; the only warning is the
+pre-existing 3.88 MB initial-bundle budget, which this branch does not move (TipTap was already eager via
+`FileDetailComponent`). `npx tsc --noEmit` on the frontend — clean.
+
+**Re-driven in a browser on 2026-07-29**, against the built frontend served by the dev backend on `:8080`, driven with
+`agent-browser`. Zero console messages of any level across the whole session. Fixtures (`readme-mx-*`: rich, long,
+empty, no-readme, and a 307,213-byte oversize) created and deleted through the authenticated API.
+
+| Checked | Result |
+|---|---|
+| §11 rows 1–2 — read render | pass. All eight block types present. `.v2-prose` measurably live: 15px/1.6, near-white on navy, `code` background resolves to a navy token rather than the rgba fallback, and `table` gets `border-collapse: collapse` — which is the proof the global partial reaches ProseMirror's generated DOM |
+| §11 rows 3–4 — collapse, fade | pass. `clientHeight` 173px = exactly 30vh against `scrollHeight` 2935; `::after` fade present at 60px (4em × 15px); "Show more" rendered |
+| §11 row 5 — expand | pass. 346px = exactly 60vh, `overflow-y: auto`, fade removed, "Show less" |
+| Always opens collapsed | pass across an in-screen hop after expanding elsewhere |
+| **§13.7 row 4 — read↔edit reflow** | pass. Editor wrapper carries `v2-prose`, `padding: 0`, `max-width: none`; h1 28.5/34.2/22.8px, p 15/24/7.5px, pre 12/19.2px identical in both modes. Boxes 265×950 read vs 266×948 edit — the 1px per side is `.fr__edit`'s border. Before this fix the discrepancy was ~134px |
+| **§13.3 — the own-lock drop** | pass end to end, which is the scenario that motivated it: type → Save (toast fired) → the refreshed listing reports our own `Sync-in`, exclusive, owner-1 lock → Cancel → editor unmounted, **lock `null`, Edit button back, read mode re-rendered**, edit persisted to the file |
+| §11 rows 8/17 — auto-save on hop | pass. Dirty, then hopped: editor unmounted, text landed in the folder **left**, destination file byte-identical, source lock released, `Saved "Readme.md"` toast captured with a MutationObserver |
+| **§13.6 — discard toast** | pass. Dirty, then left the browse screen for `#/v2/recents`: `Unsaved changes to "Readme.md" were discarded.`, text discarded, lock released, banner gone. This replaces §11 case 18's old "no toast" expectation |
+| **§13.2 — the size bound** | pass, and stronger than asserted. On a fresh document the *only* request touching the oversize folder is the 257-byte listing: no content GET at all, notice shown, no Edit button, and no ProseMirror instance constructed |
+| **§13.7 row 1 — empty affordance** | pass for the writer case: italic "Add a folder description…", no read block, Edit present |
+| No readme at all | pass — no card |
+| Listing error | pass — a 404 folder hides the banner entirely, offers no Edit, and shows "Folder not found" |
+
+**Two things this run could NOT establish, and they should not be read as passing.**
+
+- **§13.1's race window was not reproduced.** It needs a *slow* listing response, and the tooling can abort or mock a
+  request but not delay one — and the HTTP layer retries an aborted listing, so no stable mid-load state was reachable.
+  What was verified is the error half (404 → banner hidden, no Edit) and the absence of regression across roughly a dozen
+  hops. The window itself is verified structurally only: one signal, written in one place, in the same turn as the rows.
+  This belongs in the same category as §11's existing untestable rows, not with the passes above.
+- **The non-writer half of §13.7 row 1**, and anything else needing a second account or a space without `m`. Still no
+  such fixture in this environment — exactly the limitation §11 already records.
+
+**Two false alarms, chased down rather than reported as findings** (recorded because both are easy to hit again):
+
+- An apparent content GET for the oversize readme was **this session's own fixture `UNLOCK`** appearing in a long-lived
+  document's resource timeline; the filter matched any method. `performance.getEntriesByType('resource')` spans hash
+  navigations in a single-page app, so scope such a check to a fresh document and assert on `decodedBodySize`.
+- Bold text looked flat in a screenshot. `<strong>` is present with `font-weight: 700`; headless Chromium simply lacks
+  the Geist bold face. Not a parsing bug — check the DOM before trusting a headless screenshot on anything typographic.
+
+**One incidental find, unrelated to this feature.** The `make` operation's DTO accepts `type: 'file' | 'directory'`
+(`MakeFileDto`, `@IsIn`). Passing `'folder'` 400s. Worth knowing for any future fixture script.
+
+Screenshots (issue #387): `docs/screenshots/2026-07-29-folder-readme-review-{read,empty-affordance,oversize-notice}.png`.
