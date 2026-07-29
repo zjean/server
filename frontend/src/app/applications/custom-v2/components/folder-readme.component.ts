@@ -18,8 +18,7 @@ import {
 } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
-import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
-import { intersectPermissions, SERVER_NAME } from '@sync-in-server/backend/src/common/shared'
+import { SERVER_NAME } from '@sync-in-server/backend/src/common/shared'
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
 import { TaskItem } from '@tiptap/extension-list'
@@ -33,6 +32,7 @@ import { firstValueFrom } from 'rxjs'
 import { StoreService } from '../../../store/store.service'
 import { MarkdownViewComponent } from '../preview/markdown-view.component'
 import { buildFileModelStub } from '../utils/file-model-stub'
+import { isFileWriteable } from '../utils/file-writeable'
 import { pickFolderReadme } from '../utils/folder-readme'
 import { ReadmeEditSession, type ReadmeSaveOutcome } from '../utils/readme-edit-session'
 import { ButtonComponent } from './button.component'
@@ -80,6 +80,14 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
 
         @if (session.editing() && session.target(); as target) {
           <div class="fr__edit">
+            <!-- Deliberately the constant, not writeable(). The session's target is
+                 FROZEN at Edit time and writeable() is not: the permissions input is
+                 live, and becomes the NEXT folder's grant the moment the user
+                 navigates away, and this editor must survive that window to finish
+                 its save (design §5). Binding writeable() would flip the child
+                 read-only mid-teardown, making saveNowIfModified() report 'failed'
+                 and discard text the user typed. Reaching this branch at all already
+                 required writeable() to be true — openEditor() checks it. -->
             <app-v2-preview-markdown-view
               [path]="target.path"
               [file]="target.file"
@@ -453,22 +461,15 @@ export class FolderReadmeComponent implements OnDestroy {
   protected readonly headerName = computed(() => this.session.target()?.file.name ?? this.readme()?.name ?? '')
 
   protected readonly writeable = computed(() => {
-    const file = this.readme()
-    if (!file) return false
     // Nothing to edit in a file we decline to load, and handing 256 KiB+ of
-    // "prose" to a WYSIWYG editor is not a kindness either.
+    // "prose" to a WYSIWYG editor is not a kindness either. This half is the
+    // banner's own and stays here — it is about the SIZE cap this component
+    // imposes, not about permissions.
     if (this.oversized()) return false
-    // Classic's contract: SpacesBrowserComponent.openViewerDialog intersects the
-    // space's permission string with the row's OWN root permissions before
-    // FilesService.openViewerAfterAvailabilityCheck tests MODIFY. The browse
-    // response only pre-intersects when the browsed URL is itself inside a root
-    // (SpacesBrowserService via getEnvPermissions), so at a space's top level the
-    // narrower per-root grant arrives on the row and has to be applied here.
-    const space = this.permissions()
-    const effective = file.root?.permissions ? intersectPermissions(space, file.root.permissions) : space
-    // readme() has already stripped a lock of our own, so any lock left is a
-    // stranger's.
-    return effective.includes(SPACE_OPERATION.MODIFY) && !file.lock?.isExclusive
+    // The permission + lock half is the shared contract (utils/file-writeable.ts).
+    // `readme()` rather than `rawReadme()` is load-bearing: it has already stripped
+    // a lock of our own, so any lock the helper still sees is a stranger's.
+    return isFileWriteable(this.readme(), this.permissions())
   })
 
   constructor() {

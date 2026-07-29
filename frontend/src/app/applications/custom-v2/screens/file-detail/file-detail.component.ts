@@ -37,6 +37,7 @@ import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.
 import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
+import { isFileWriteable } from '../../utils/file-writeable'
 import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { isOfficeEditorEnabled, isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
@@ -96,6 +97,10 @@ export class FileDetailComponent implements OnInit {
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly file = signal<FileProps | null>(null)
+  // The parent folder's permission string, from the same browse response the file
+  // row comes from. It was already being fetched and thrown away, which is how the
+  // text and markdown editors came to mount with no permission check at all (#372).
+  protected readonly permissions = signal<string>('')
   protected readonly currentPath = signal<string>('')
   protected readonly parentPath = signal<string>('')
   protected readonly siblings = signal<FileProps[]>([])
@@ -195,6 +200,19 @@ export class FileDetailComponent implements OnInit {
     const parts = this.currentPath().split('/').filter(Boolean)
     const alias = parts[1] ?? ''
     return !!this.file() && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES
+  })
+
+  // Whether the embedded text / markdown editors may offer editing. The shared
+  // contract does the permission and lock test (utils/file-writeable.ts); the
+  // repository-level narrowing is this caller's job, exactly as it is in classic —
+  // SpacesBrowserComponent.openViewerDialog passes '' for a trash file before the
+  // MODIFY test ever runs, because a deleted file is not editable in place. No v2
+  // screen currently navigates here with a trash path, so this is a guard against a
+  // hand-typed one rather than a live route.
+  protected readonly fileWriteable = computed(() => {
+    const alias = this.currentPath().split('/').filter(Boolean)[1] ?? ''
+    if (alias === SPACE_ALIAS.TRASH) return false
+    return isFileWriteable(this.file(), this.permissions())
   })
 
   constructor() {
@@ -399,6 +417,9 @@ export class FileDetailComponent implements OnInit {
     this.pdfStage.set('pdf')
     this.resolution.set('')
     this.loadError.set(null)
+    // Cleared, not left stale: a failed or still-pending browse must not let the
+    // previous folder's grant decide whether this file is editable.
+    this.permissions.set('')
     this.currentPath.set(path)
 
     const parts = path.split('/').filter(Boolean)
@@ -424,6 +445,7 @@ export class FileDetailComponent implements OnInit {
             return
           }
           this.file.set(match)
+          this.permissions.set(result.permissions ?? '')
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
           this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), ...this.folderTrail(path), { label: match.name }])

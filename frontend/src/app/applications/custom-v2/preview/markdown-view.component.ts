@@ -410,7 +410,13 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
 
   readonly path = input.required<string>()
   readonly file = input.required<FileProps | null>()
-  readonly isWriteable = input<boolean>(true)
+  // The RESOLVED writeability verdict, not one half of it: the embedder owns the
+  // whole contract (utils/file-writeable.ts) because only the embedder holds the
+  // permission string, and only the embedder can know whether an exclusive lock on
+  // the row is a stranger's or its own. Defaulted to false so an embedder that
+  // forgets to bind gets a read-only editor rather than an editable-looking one it
+  // has no right to — which is exactly what file-detail did until #372.
+  readonly isWriteable = input<boolean>(false)
   // Inline mode: the component is embedded in a bounded container (the folder
   // readme banner) rather than filling the file-detail stage. Adds a Cancel
   // control and drops the height:100% assumption.
@@ -712,7 +718,12 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     this.resetState()
     this.loading.set(true)
     this.stub = buildFileModelStub(file, path)
-    this.writeable.set(this.isWriteable() && !file.lock?.isExclusive)
+    this.writeable.set(this.isWriteable())
+    // The lock is still read here, but for a different question: not "may I write"
+    // (isWriteable() already answered that, lock included) but "who is holding it",
+    // so the header can name them. An embedder that legitimately owns the lock — the
+    // folder readme banner — passes a row with it stripped, so this branch is
+    // correctly skipped for it.
     if (file.lock?.isExclusive) {
       this.lockOwner.set(fileLockPropsToString(file.lock))
       this.readonly.set(true)
