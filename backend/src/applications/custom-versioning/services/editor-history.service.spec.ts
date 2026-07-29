@@ -243,16 +243,56 @@ describe(EditorHistoryService.name, () => {
     expect('user' in entry).toBe(false)
   })
 
-  // Nothing records who wrote the content that is live NOW: a version row's
-  // author is the author of the SUPERSEDED content, so borrowing the newest
-  // row's author would name the wrong person.
-  it('omits `user` on the live entry even when history has authors', async () => {
-    versioning.listVersions.mockResolvedValue(rows({ author: { login: 'bob', fullName: 'Bob Brown' } }))
+  // The live entry's author IS knowable, and it is the NEWEST row's.
+  //
+  // `snapshot` records `authorId = user.id` for the user performing the
+  // OVERWRITE (versioning.service.ts:168) — the row holds the bytes that were
+  // replaced, but it names the person who replaced them. So the newest row names
+  // whoever wrote the content that is live NOW.
+  //
+  // This inverts the previous reading, which omitted `user` here on the premise
+  // that a row's author is the author of the SUPERSEDED content. The visible cost
+  // was the panel labelling the CURRENT version "Anonymous" — `username:
+  // version.user.name || this.textAnonymous` (web-apps,
+  // documenteditor/main/app/controller/Main.js:764) — i.e. the one row the user
+  // is certain to recognise, inside their own editing session.
+  it('names the live entry from the NEWEST row author, who is who wrote the live bytes', async () => {
+    // listVersions hands rows back newest-first, so this is newest then oldest.
+    versioning.listVersions.mockResolvedValue(
+      rows({ author: { login: 'bob', fullName: 'Bob Brown' } }, { author: { login: 'carol', fullName: 'Carol Clark' } })
+    )
 
     const history = await service.history(user, space())
 
-    expect(history[0].user).toEqual({ id: 'bob', name: 'Bob Brown' })
+    // Ordinal 1 is the OLDEST row, and the live entry is last.
+    expect(history[0].user).toEqual({ id: 'carol', name: 'Carol Clark' })
+    expect(history.at(-1).user).toEqual({ id: 'bob', name: 'Bob Brown' })
+  })
+
+  // Still omitted when genuinely unknown: a file whose newest snapshot was
+  // system-originated, or whose author account has since been deleted
+  // (`authorId` is ON DELETE SET NULL). Upstream falls back to the file's OWNER
+  // (EditorController.php:913-920); we do not, because naming the owner as the
+  // author of a write they may not have made is a false claim, and "Anonymous"
+  // is the honest rendering of "we do not know".
+  it('omits `user` on the live entry when the newest row has no author', async () => {
+    versioning.listVersions.mockResolvedValue(rows({ author: undefined }, { author: { login: 'carol', fullName: 'Carol Clark' } }))
+
+    const history = await service.history(user, space())
+
     expect('user' in history.at(-1)).toBe(false)
+  })
+
+  // A file with no history at all: there is no row to borrow from, so the live
+  // entry stays anonymous rather than claiming the viewing session's user wrote
+  // bytes they may never have touched.
+  it('omits `user` on the live entry of a file with no versions', async () => {
+    versioning.listVersions.mockResolvedValue([])
+
+    const history = await service.history(user, space())
+
+    expect(history).toHaveLength(1)
+    expect('user' in history[0]).toBe(false)
   })
 
   /* ------------------------------------------------------- live document key */
