@@ -126,11 +126,50 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         display: block;
       }
       .fr {
+        /* One prose measure for the card, read by BOTH the read block below and
+           — through this inherited variable — the embedded editor's text column
+           (markdown-view.component.ts .md-view--inline .md-view__editor), so the
+           two cannot drift apart. That parity is what #382 fixed.
+
+           880px is not a new number: it is the measure the same markdown editor
+           already uses for its full-screen mode. Inline mode dropped the cap only
+           in order to match the read block, and the read block was never capped
+           either — so a folder description's lines grew as wide as the window,
+           which on a wide monitor is unreadable.
+
+           It caps the TEXT, never the editor's frame: the frame carries the
+           toolbar and the Save button, and a control surface that stops short of
+           its card's edge reads as a misalignment rather than as a measure. */
+        --v2-inline-measure: 880px;
+
         background: var(--si-bg1);
-        border: 1px solid var(--si-border);
+        /* --si-line, not --si-border (which is --si-line-strong, opaque). The
+           strong line belongs to the FLOATING surfaces — context menu, dialogs,
+           tree picker — which sit over arbitrary content and need to cut
+           themselves out of it. This card sits in the flow of a screen that is
+           deliberately borderless (.file-row "no per-row divider",
+           .file-table__head "no bottom rule"), so it takes the quieter in-flow
+           line the filter input uses. */
+        border: 1px solid var(--si-line);
+        /* Matches .file-row's highlight radius, which the margin below makes
+           this card's left edge flush with. */
         border-radius: 12px;
         padding: 12px 16px;
-        margin-bottom: 12px;
+        /* 12px here + the 16px padding above = the 28px content margin the page
+           title, the filter and the checkbox column all sit on
+           (file-browser.component.scss:259-261) — and the 12px puts this card's
+           border exactly on .file-row's rounded highlight edge, so the card
+           and the rows below it share one vertical line. Without this margin the
+           card was the one full-bleed block on the screen: its border sat 28px
+           left of the title above it and the file names below it. */
+        margin: 0 12px 12px;
+      }
+      /* Rows drop their inner padding to 12px below 768px
+         (file-browser.component.scss:691-695). Follow them, so the description
+         keeps sharing the list's content margin on a narrow viewport instead of
+         sitting 4px inside it. */
+      :host-context(.layout-v2--mobile) .fr {
+        padding: 12px;
       }
       .fr__head {
         display: flex;
@@ -153,10 +192,16 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
          column collapses. */
       .fr__edit {
         height: min(60vh, 520px);
+        /* Deliberately NOT capped at --v2-inline-measure: the text inside it is
+           (see the variable's note), but the frame spans the card so its toolbar
+           and Save button stay on the card's own right edge. */
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--si-border);
-        border-radius: 8px;
+        /* Quieter than the card's own line and a token instead of the previous
+           magic 8px: this is a frame nested 16px inside another frame, so it
+           should not read as a second card. */
+        border: 1px solid var(--si-line);
+        border-radius: var(--si-r1);
         overflow: hidden;
       }
       .fr__error {
@@ -193,6 +238,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
       .fr__read {
         position: relative;
         overflow: hidden;
+        max-width: var(--v2-inline-measure);
       }
       /* 30vh collapsed matches Nextcloud's RichWorkspace.vue. */
       .fr__read--collapsed {

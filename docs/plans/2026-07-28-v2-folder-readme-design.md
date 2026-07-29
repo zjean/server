@@ -898,3 +898,101 @@ empty, no-readme, and a 307,213-byte oversize) created and deleted through the a
 (`MakeFileDto`, `@IsIn`). Passing `'folder'` 400s. Worth knowing for any future fixture script.
 
 Screenshots (issue #387): `docs/screenshots/2026-07-29-folder-readme-review-{read,empty-affordance,oversize-notice}.png`.
+
+---
+
+## 14. Styling pass (2026-07-29) — the banner was the one full-bleed block on the screen
+
+Maintainer feedback on §13.8's screenshots: *"fix the margins … it is too wide … check styling of borders and such
+too."* Two real defects, and in both cases the codebase already contained the right answer — this section is the record
+so neither gets re-derived.
+
+### 14.1 The card ignored the screen's content margin
+
+`.fr` carried no inline margin, so inside `.personal__body` (which has none either) it painted from the scroll
+container's very edge. Measured at 1280px, before:
+
+| | left | right | width |
+|---|---|---|---|
+| scroll container | 248 | 1232 | 984 |
+| **readme card** | **248** | **1232** | **984** |
+| `.file-table__head` / `.file-row` | 260 | 1220 | 960 |
+| page title, filter input | 276 | — | — |
+
+So the card's border sat 28px left of the title above it *and* 12px left of the row highlight below it — the only block
+on the screen not on the grid. `file-browser.component.scss:259-261` states that grid explicitly: `.file-table` takes
+`padding: 0 12px` and `.file-row` `padding: 0 16px` so "the row block (and its rounded highlight) lines up with the page
+title + toolbar".
+
+**Fix:** `margin: 0 12px 12px` on `.fr`, keeping its 16px padding. 12 + 16 = the same 28px. After:
+
+| | left | right | width |
+|---|---|---|---|
+| readme card | **260** | **1220** | **960** |
+| `.file-table__head` / `.file-row` | 260 | 1220 | 960 |
+
+The card's border box is now **byte-identical** to a file row's, so the card and the rows share one vertical line down
+both edges. Its text lands at 277 against the title's 276: the 1px is the card's own border, which the rows do not have.
+Deliberately not "fixed" with a 15px padding — matching the rows' 16px is worth more than removing an invisible pixel.
+
+**Mobile.** Rows drop to `padding: 0 12px` below 768px (`:host-context(.layout-v2--mobile)`, lines 691-695), so the card
+follows with `padding: 12px`. Verified at 390×844 with the class actually applied: card box 12→330, row box 12→330,
+identical. The toolbar keeps 28px there, so on mobile the card sides with the rows rather than the title — that
+toolbar/row disagreement is pre-existing and not this feature's to settle.
+
+### 14.2 Prose had no measure
+
+The read block was capped in height (30vh/60vh, §7) but never in width, so line length grew with the window: 950px at
+1280, and 1600px — roughly 230 characters — at 1920. `markdown-view.component.ts` already caps *the same editor* at
+`max-width: 880px` for its full-screen mode; inline mode dropped the cap with the comment "the readme's read block is
+the card's full width … so the editor must be too", which was true and is exactly how both ended up uncapped.
+
+**Fix:** `--v2-inline-measure: 880px` on `.fr`, read by `.fr__read` and — through inheritance — by
+`.md-view--inline .md-view__editor` (fallback `none`, so any other future inline embedder is unaffected). One value,
+two consumers, so the read/edit parity #382 fixed cannot silently regress.
+
+**The cap is on the TEXT, never on the editor's frame.** Capping `.fr__edit` was tried first and looked wrong
+immediately: the frame carries the toolbar and the Save button, and at 880px inside a 960px card it left a 63px dead
+strip with Save floating short of the card's edge. A control surface stopping short of its container reads as a
+misalignment, not as a measure. The frame now fills the card's content box (926px) while the text column inside it
+stays at 880px.
+
+### 14.3 Borders
+
+- **`.fr` moved from `--si-border` to `--si-line`.** `--si-border` is `--si-line-strong` — opaque `oklch(0.62 0.05 255)`
+  — and every other consumer of it is a *floating* surface (context menu, tree picker, confirm dialog, share dialog)
+  that has to cut itself out of arbitrary content behind it. This card sits in the flow of a screen that is
+  deliberately borderless (`.file-row` "no per-row divider"; `.file-table__head` "no bottom rule"), so it takes the
+  quieter in-flow line the filter input uses. `--si-bg1` + a border is kept: that pairing *is* v2's raised-panel
+  convention, used the same way by twelve other surfaces. The fade gradient still resolves against `--si-bg1`.
+- **`.fr__edit`'s `border-radius: 8px` → `var(--si-r1)` (6px), border → `--si-line`.** 8px matched no token
+  (`--si-r1..r4` are 6/10/14/20), and this is a frame nested 16px inside another frame — it should not read as a second
+  card. `.fr`'s own `border-radius: 12px` stays: it is `.file-row`'s highlight radius, and the two are now flush.
+
+### 14.4 Verification (2026-07-29, second browser run)
+
+Same recipe as §13.8 — built frontend served by the dev backend on `localhost:8080`, `agent-browser`, fixture folders
+`readme-margin-{check,empty,big}` created through the API. **Zero console messages of any level.**
+
+- Card/row geometry as tabulated in §14.1, at 1280 and at 1920 (card 260→1860 = rows 260→1860; prose still 880).
+- **Read↔edit parity re-measured**, because §14.2 touches both: read block 277/880, edit text column 278/880, h1
+  28.5/34.2px and p 15/24px identical in both. The 1px is `.fr__edit`'s border, the same relationship §13.8 recorded.
+- Collapse/expand untouched: `clientHeight` 173px = exactly 30vh, 346px = exactly 60vh with `overflow-y: auto`.
+- Empty affordance and oversize notice both align at 260→1220 with text at 277.
+- Mobile at 390×844 with `.layout-v2--mobile` genuinely applied (loaded fresh at that size — `agent-browser` fires no
+  resize events, so a mid-session viewport change would not re-apply the class).
+- `npm --ws run lint`, `npm run -w frontend test` (344/8), `npm run -w frontend build`, `npx tsc --noEmit` all green.
+
+Screenshots: `docs/screenshots/2026-07-29-folder-readme-margins-{before,after,mobile}.png`. The before/after pair is the
+same fixture folder at the same viewport, captured by stashing the two files and rebuilding, so the only difference in
+frame is the fix.
+
+**One trap worth naming, hit twice.** These styles live in a template literal inside the component's `styles` array, so
+a **backtick inside a CSS comment terminates it**. Both times the build failed with `FatalDiagnosticError: Code: 1010, Message: Failed to
+resolve styles at position N to a string`, which names neither the file nor the line. Write CSS-comment references to
+selectors without backticks.
+
+**Also settled: the dev backend serves `dist/static` with caching, and the browser holds `index.html`.** A rebuild is
+not visible on a plain reload — a stale bundle reported the *old* custom property while the new CSS was on disk, which
+looks exactly like a broken selector. Reload with a cache-busting query (`/?cb=$(date +%s)#/v2/…`) after every rebuild,
+and assert on a value the new code introduces before trusting any measurement.

@@ -365,14 +365,17 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         max-width: 880px;
         margin: 0 auto;
       }
-      /* Inline mode (folder readme banner): the readme's read block is the card's
-         full width with no padding of its own, so the editor must be too —
-         otherwise clicking Edit reflows the text the user was reading. The centred
-         880px measure is for the file-detail stage, which has a viewport to centre
-         in. */
+      /* Inline mode (folder readme banner): the text column must line up with the
+         embedder's read block, or clicking Edit reflows the text being read. So
+         the padding and the centring both go, and the measure comes from the
+         embedder — the readme card sets --v2-inline-measure and its read block
+         obeys the same value, which is what keeps the two identical. The fallback
+         of none means an embedder that sets nothing still gets the old full-width
+         behaviour. The 880px centred default above is for the file-detail stage,
+         which has a viewport to centre in. */
       .md-view--inline .md-view__editor {
         padding: 0;
-        max-width: none;
+        max-width: var(--v2-inline-measure, none);
         margin: 0;
       }
       /* Everything about how markdown BODY text looks now comes from the shared
