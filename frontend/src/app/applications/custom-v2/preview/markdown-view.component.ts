@@ -213,7 +213,10 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         @if (loading()) {
           <div class="md-view__state">{{ 'Loading…' | translate: locale.language }}</div>
         } @else if (loadError(); as err) {
-          <div class="md-view__state md-view__state--error">{{ err }}</div>
+          <!-- Translated like the folder-readme banner's equivalent: the value is
+               either a server message (no key, so it falls through to itself) or one
+               of the English literals below, which the custom bundle translates. -->
+          <div class="md-view__state md-view__state--error">{{ err | translate: locale.language }}</div>
         } @else if (sourceMode()) {
           <code-editor
             #sourceEditor
@@ -228,7 +231,10 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             [lineWrapping]="true"
           />
         } @else {
-          <div class="md-view__editor">
+          <!-- v2-prose is the shared markdown typography (styles/_prose.scss), the
+               same partial the folder-readme banner's read mode uses, so switching
+               between the two cannot reflow the text. -->
+          <div class="md-view__editor v2-prose">
             <tiptap-editor class="md-view__editor-host" [editor]="editor"></tiptap-editor>
           </div>
         }
@@ -359,89 +365,24 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         max-width: 880px;
         margin: 0 auto;
       }
+      /* Inline mode (folder readme banner): the readme's read block is the card's
+         full width with no padding of its own, so the editor must be too —
+         otherwise clicking Edit reflows the text the user was reading. The centred
+         880px measure is for the file-detail stage, which has a viewport to centre
+         in. */
+      .md-view--inline .md-view__editor {
+        padding: 0;
+        max-width: none;
+        margin: 0;
+      }
+      /* Everything about how markdown BODY text looks now comes from the shared
+         .v2-prose partial on the wrapper above (styles/_prose.scss), which is
+         global under .v2-root and so reaches ProseMirror's generated DOM without
+         ::ng-deep. Only the two rules that are about the editor rather than the
+         prose stay here. */
       .md-view__editor-host ::ng-deep .ProseMirror {
         outline: none;
         min-height: 200px;
-        font-size: 15px;
-        line-height: 1.6;
-        color: var(--si-fg);
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h1 {
-        font-size: 1.9em;
-        margin: 0.8em 0 0.4em;
-        font-weight: 700;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h2 {
-        font-size: 1.5em;
-        margin: 0.8em 0 0.4em;
-        font-weight: 700;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror h3 {
-        font-size: 1.25em;
-        margin: 0.7em 0 0.3em;
-        font-weight: 600;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror p {
-        margin: 0.5em 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul,
-      .md-view__editor-host ::ng-deep .ProseMirror ol {
-        padding-left: 1.4em;
-        margin: 0.5em 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] {
-        list-style: none;
-        padding-left: 0.2em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] li {
-        display: flex;
-        gap: 0.4em;
-        align-items: flex-start;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror ul[data-type='taskList'] li > label {
-        flex-shrink: 0;
-        margin-top: 0.2em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror blockquote {
-        margin: 0.5em 0;
-        padding-left: 1em;
-        border-left: 3px solid var(--si-border, rgba(0, 0, 0, 0.18));
-        color: var(--si-fg-muted, #555);
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror code {
-        background: var(--si-bg3, rgba(0, 0, 0, 0.06));
-        padding: 1px 4px;
-        border-radius: 4px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 0.92em;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror pre {
-        background: var(--si-bg3, rgba(0, 0, 0, 0.06));
-        padding: 12px;
-        border-radius: 6px;
-        overflow: auto;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror pre code {
-        background: none;
-        padding: 0;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror a {
-        color: var(--si-accent, #0a5fb8);
-        text-decoration: underline;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror table {
-        border-collapse: collapse;
-        margin: 0.6em 0;
-        width: 100%;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror th,
-      .md-view__editor-host ::ng-deep .ProseMirror td {
-        border: 1px solid var(--si-border, rgba(0, 0, 0, 0.18));
-        padding: 6px 8px;
-      }
-      .md-view__editor-host ::ng-deep .ProseMirror img {
-        max-width: 100%;
-        height: auto;
       }
       .md-view__state {
         padding: 24px;
@@ -473,6 +414,13 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   readonly inline = input<boolean>(false)
   readonly done = output<void>()
   readonly saved = output<void>()
+  // Pushed on every change of the modified state, for an embedding parent that has
+  // to know about unsaved text at a moment when it can no longer ASK. The folder
+  // readme banner is destroyed together with its browse screen when the user leaves
+  // it, and Angular destroys this child first — so by the time the parent's
+  // ngOnDestroy runs it can neither serialize the content nor resolve this
+  // component through its view query. A pushed boolean survives both.
+  readonly dirtyChange = output<boolean>()
 
   protected readonly editor = new Editor({
     extensions: [
@@ -525,6 +473,12 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
       if (!this.editor.isDestroyed) {
         untracked(() => this.editor.setEditable(editable, false))
       }
+    })
+    // One place to mirror the modified state outwards, rather than an emit beside
+    // each of the four writers to isModified.
+    effect(() => {
+      const dirty = this.isModified()
+      untracked(() => this.dirtyChange.emit(dirty))
     })
     this.layoutService.switchTheme.subscribe((t: string) => this.theme.set(t === themeDark ? 'dark' : 'light'))
   }

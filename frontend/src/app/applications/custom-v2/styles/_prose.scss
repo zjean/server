@@ -1,11 +1,12 @@
-// Markdown typography shared by the folder readme banner (read mode) and,
-// eventually, the markdown editor itself (see the implementation plan's Task 8).
-// Global under .v2-root because v2.scss is loaded with encapsulation:None by
-// LayoutV2Component — so no ::ng-deep is needed to reach ProseMirror's
-// generated DOM.
+// The ONE definition of markdown body typography in v2. Used by the folder readme
+// banner's read mode and by MarkdownViewComponent's editor, which is what makes
+// clicking Edit on a folder description not reflow the text being read.
 //
-// Transcribed from markdown-view.component.ts:362-445. Keep the two in sync
-// until Task 8 removes the duplicate.
+// Global under .v2-root because v2.scss is loaded with encapsulation:None by
+// LayoutV2Component — so no ::ng-deep is needed to reach ProseMirror's generated
+// DOM. Consumers put the class on a WRAPPER of the ProseMirror element rather than
+// on the element itself: the base font/colour rules then inherit inwards, and each
+// consumer keeps its own editor-specific rules (outline, min-height) locally.
 .v2-root .v2-prose {
   outline: none;
   font-size: 15px;

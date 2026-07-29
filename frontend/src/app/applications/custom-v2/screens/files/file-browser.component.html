@@ -93,7 +93,7 @@
 
     @if (!filter() || readmeBanner()?.isEditing()) {
       <app-v2-folder-readme
-        [dirPath]="currentUploadRoute()"
+        [dirPath]="loadedDirPath()"
         [files]="files()"
         [permissions]="permissions()"
         (changed)="refresh()"

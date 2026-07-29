@@ -83,6 +83,7 @@
   "v2_saved_one": "Saved \"{{ name }}\"",
   "v2_discard_unsaved_changes": "Discard unsaved changes to \"{{ name }}\"?",
   "v2_readme_autosave_failed": "Could not save \"{{ name }}\" — your changes were lost.",
+  "v2_readme_discarded": "Unsaved changes to \"{{ name }}\" were discarded.",
   "v2_space_disabled_in_trash": "{{ name }}: Space is disabled",
   "v2_share_n_created": "{{ nb }} items shared",
   "v2_share_n_partial_fail": "Shared {{ created }} · {{ failed }} failed",
@@ -220,6 +221,9 @@
   "v2_versions_purged": "Purged {{ count }} versions ({{ bytes }})",
   "v2_versions_purge_kept": "{{ count }} named versions were kept",
   "Failed to load folder description": "Failed to load folder description",
+  "Failed to load file": "Failed to load file",
+  "Add a folder description…": "Add a folder description…",
+  "This folder description is too large to be shown here.": "This folder description is too large to be shown here.",
   "Show more": "Show more",
   "Show less": "Show less"
 }
