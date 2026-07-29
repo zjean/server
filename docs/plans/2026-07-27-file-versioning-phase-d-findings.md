@@ -423,8 +423,10 @@ Phase D is complete and merged: **#324** (D1), **#325** (D2), **#326** (D3/D4). 
   both editors** ([`2026-07-29-adr-19-editor-soak.md`](2026-07-29-adr-19-editor-soak.md)) and for NC Android
   ([`2026-07-27-nc-android-versioning-soak.md`](2026-07-27-nc-android-versioning-soak.md)). **NC iOS is the only leg
   left.** The editor soak also found a release-relevant defect that is not a versioning bug at all: no
-  `SYNCIN_APPLICATIONS_FILES_VERSIONS_*` env var has any effect, because that path is missing from
-  `environment.dist.yaml` — so on the Docker deployment the flag cannot even be turned off without mounting a YAML file.
+  `SYNCIN_APPLICATIONS_FILES_VERSIONS_*` env var had any effect, because that path was missing from
+  `environment.dist.yaml` — so on the Docker deployment the flag could not even be turned off without mounting a YAML
+  file. **Fixed 2026-07-29 in #395**, which added the block; those env vars now resolve. See `CLAUDE.md` for the current
+  rule and the naming trap that survives it.
 - **Version history inside the office editor** — proposed, not scheduled, and not owed by any earlier phase. The
   OnlyOffice / Euro-Office editor shows neither versions nor diffs today, and
   [`2026-07-28-onlyoffice-version-history-design.md`](2026-07-28-onlyoffice-version-history-design.md) scopes what it

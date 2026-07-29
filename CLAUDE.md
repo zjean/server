@@ -209,9 +209,18 @@ Shipped behind `files.versions.enabled`, **default off**. Phases A–D are compl
 (browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in.** The ADR §19 soak
 (#348) is done for **both editors** against real containers and for **NC Android**; only **NC iOS** is unrun. Two things
 that soak settled and you should not re-derive: OnlyOffice has no automatic save of any kind (so every version it mints
-is a human pressing Save), while Collabora saves unprompted ~15 s after the last keystroke. And **versioning cannot be
-configured by `SYNCIN_*` environment variable at all** — `applications.files.versions` is absent from
-`environment.dist.yaml`, which is the schema those names are validated against, so every such var is silently discarded.
+is a human pressing Save), while Collabora saves unprompted ~15 s after the last keystroke.
+
+**Versioning IS configurable by `SYNCIN_*` environment variable** — since #395 added the `versions:` block to
+`environment.dist.yaml`. It was not before, and both the soak's §7.1 and the phase-D findings still record that older
+state; they are dated findings, not current truth. Verified by running `configLoader()` directly:
+`SYNCIN_APPLICATIONS_FILES_VERSIONS_ENABLED=false` against a yaml saying `true` now resolves to `false`.
+
+The one trap: `config.loader.ts` splits the name on `_` and matches each segment with `key.toUpperCase() === segment`,
+so a **camelCase key is a single segment** — `MAXVERSIONSPERFILE`, never `MAX_VERSIONS_PER_FILE`. A path that does not
+match logs `Ignoring unknown environment variable: "…"` and leaves the default in place, so it fails as a **warning, not
+an error**. Grep the boot log for `Ignoring unknown` after touching these. Anything newly added under
+`applications.*` must land in `environment.dist.yaml` too, or its env var is discarded the same silent way (#384).
 
 **There is an operator surface as of #342** — `VersionsAdminController` (`custom-versioning/versions-admin.controller.ts`)
 plus a panel on the v2 admin Tools screen: instance-wide usage, heaviest roots, and a per-root purge. Two things about

@@ -177,6 +177,12 @@ and an automatic save differently without a per-origin fudge.
 
 ### 7.1 `applications.files.versions` cannot be configured by environment variable at all
 
+> **FIXED 2026-07-29 in #395** — which added the `versions:` block to `environment.dist.yaml`, exactly the
+> `mod(config)` this section's Impact paragraph asks for. Every `SYNCIN_APPLICATIONS_FILES_VERSIONS_*` name now
+> resolves; re-verified by running `configLoader()` with `…_ENABLED=false` against a yaml saying `true` and getting
+> `false`. The section is kept as the dated finding that motivated the fix — see `CLAUDE.md` for the current rule and
+> the one naming trap that survives it (camelCase keys are a single `_`-delimited segment).
+
 `environment.dist.yaml` — the file `getEnvOverrides` validates every `SYNCIN_*` name against
 (`config.loader.ts:96-140`) — has **no `versions` block**. So every versioning env var is silently discarded:
 
