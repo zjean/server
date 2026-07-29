@@ -29,7 +29,9 @@
     flex-direction: column;
     gap: 14px;
     background: var(--si-bg2);
-    transition: background var(--dur-1, 120ms) ease;
+    // 120ms literal: there is no duration token yet, and --dur-1 was never
+    // declared so this always fell back anyway. Tokenised by #398.
+    transition: background 120ms ease;
 
     // Selection mode: lift the toolbar to a clean neutral surface so the
     // screen reads as a different state — a warm accent wash over the navy
@@ -331,7 +333,7 @@
 
   &--drop-hover {
     background: var(--si-accent-soft, rgba(58, 122, 254, 0.18));
-    outline: 2px solid var(--si-accent, #3a7afe);
+    outline: 2px solid var(--si-accent);
     outline-offset: -2px;
   }
 
@@ -469,8 +471,8 @@
   }
 
   &--drop-hover {
-    border-color: var(--si-accent, #3a7afe);
-    box-shadow: inset 0 0 0 2px var(--si-accent, #3a7afe);
+    border-color: var(--si-accent);
+    box-shadow: inset 0 0 0 2px var(--si-accent);
   }
 
   &__select {
@@ -594,9 +596,9 @@
   }
 
   &--drop-hover {
-    border-color: var(--si-accent, #3a7afe);
+    border-color: var(--si-accent);
     box-shadow:
-      inset 0 0 0 2px var(--si-accent, #3a7afe),
+      inset 0 0 0 2px var(--si-accent),
       var(--si-shadow1);
   }
 
@@ -624,8 +626,15 @@
 
   &__stage {
     aspect-ratio: 4 / 3;
-    background: linear-gradient(135deg, var(--fc-bg, var(--si-bg4)), var(--si-bg3));
-    color: var(--fc-fg, var(--si-fg-muted));
+    // --fc-bg / --fc-fg were never declared anywhere — not in _tokens.scss and
+    // not set inline by this component — so this always painted the fallbacks.
+    // The intent was to echo the per-file-type ramp (--fc-image-*, --fc-doc-*,
+    // …) onto the grid tile, which means the component has to set the pair per
+    // row; that is a behaviour change, so it is left for a follow-up rather
+    // than smuggled into a consistency pass. Written out as what it actually
+    // renders, so nothing reads as wired when it is not.
+    background: linear-gradient(135deg, var(--si-bg4), var(--si-bg3));
+    color: var(--si-fg-muted);
     display: flex;
     align-items: center;
     justify-content: center;

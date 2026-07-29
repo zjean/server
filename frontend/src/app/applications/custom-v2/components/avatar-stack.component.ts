@@ -135,7 +135,11 @@ export class AvatarStackComponent {
     const visible = this.shown().length
     return total === undefined ? Math.max(0, this.users().length - visible) : Math.max(0, total - visible)
   })
-  readonly extraFontSize = computed(() => Math.round(this.size() * 0.4 * 10) / 10)
+  // Floored at 10px. The bare size*0.4 produced 8.8px at the default size of 22
+  // — the smallest text anywhere in v2, and a value no type scale would ever
+  // contain because it is computed rather than chosen (#399). 10px is the
+  // smallest size the rest of the app uses.
+  readonly extraFontSize = computed(() => Math.max(10, Math.round(this.size() * 0.4 * 10) / 10))
 
   // Names surfaced in the hover tooltip — only the identities we actually have.
   readonly labels = computed(() =>

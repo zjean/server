@@ -198,7 +198,13 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
               <span class="as-col-members">{{ s.counts?.users ?? 0 }}+{{ s.counts?.groups ?? 0 }}</span>
               <span class="as-col-modified">{{ formatAgo(s.modifiedAt) }}</span>
               <span class="as-col-actions">
-                <button type="button" class="au-row__action" (click)="openEdit(s)" [attr.title]="'Edit' | translate: locale.language">
+                <button
+                  type="button"
+                  class="au-row__action"
+                  (click)="openEdit(s)"
+                  [attr.title]="'Edit' | translate: locale.language"
+                  [attr.aria-label]="'Edit' | translate: locale.language"
+                >
                   <app-v2-icon name="pencil" [size]="12" />
                 </button>
               </span>
@@ -486,8 +492,8 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         }
       }
       .au-row__action {
-        width: 22px;
-        height: 22px;
+        width: 24px;
+        height: 24px;
         border-radius: 5px;
         background: transparent;
         border: none;

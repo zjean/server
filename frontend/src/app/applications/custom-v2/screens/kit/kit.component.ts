@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core'
+import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core'
+import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { AvatarComponent, AvatarUser } from '../../components/avatar.component'
 import { ButtonComponent, ButtonKind, ButtonSize } from '../../components/button.component'
@@ -24,7 +25,16 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
     IconButtonComponent
   ]
 })
-export class KitComponent {
+export class KitComponent implements OnInit {
+  private readonly breadcrumbs = inject(V2BreadcrumbService)
+
+  // Every other screen sets its own breadcrumb; this one did not, so the bar
+  // kept whatever the previous route left there — landing on /v2/_kit from
+  // Recents showed "Recents" above the Component kit (#399).
+  ngOnInit(): void {
+    this.breadcrumbs.setBreadcrumbs([{ label: 'Component kit', icon: 'sparkle' }])
+  }
+
   readonly iconNames: IconV2Name[] = [
     'home',
     'folder',

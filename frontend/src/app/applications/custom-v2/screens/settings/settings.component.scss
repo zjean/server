@@ -14,9 +14,13 @@
   overflow: auto;
   padding: 32px 32px 40px;
   gap: 24px;
+  // Left-aligned, NOT centred (#399). `margin: 0 auto` put this screen's content
+  // at x=386 while every other v2 screen starts at x=276, so moving into
+  // Settings visibly shifted the whole page sideways. The max-width stays — a
+  // form column should not stretch to 1250px — it just anchors to the same
+  // gutter as everything else. Kept in step with the admin Tools column.
   max-width: 820px;
   width: 100%;
-  margin: 0 auto;
 
   &__hero {
     display: flex;
@@ -207,7 +211,7 @@
 
   &__field-error {
     font-size: 11px;
-    color: var(--si-rose, #c0392b);
+    color: var(--si-rose);
   }
 
   &__form-row {
