@@ -3,8 +3,7 @@ import type { GlobalConfig } from './config.validation'
 import { removedMaxVersionsPerFileConfig } from './config.environment'
 
 // A config object shaped only as far as this function reaches into it.
-const configWith = (versions: Record<string, unknown>): GlobalConfig =>
-  ({ applications: { files: { versions } } }) as unknown as GlobalConfig
+const configWith = (versions: Record<string, unknown>): GlobalConfig => ({ applications: { files: { versions } } }) as unknown as GlobalConfig
 
 describe('removedMaxVersionsPerFileConfig', () => {
   let warn: ReturnType<typeof vi.spyOn>

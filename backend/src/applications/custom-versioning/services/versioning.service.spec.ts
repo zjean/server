@@ -119,9 +119,7 @@ class FakeQueries {
   // EVERY version of one file within one root, newest first, labels included —
   // the thinner filters labels itself (see versions-thinning.ts).
   async byFileIdNewestFirst(versionsRoot: string, fileId: number) {
-    return [...this.rows]
-      .filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId)
-      .sort((a, b) => b.mtime - a.mtime || b.id - a.id)
+    return [...this.rows].filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId).sort((a, b) => b.mtime - a.mtime || b.id - a.id)
   }
   async listByFileIds(fileIds: number[]) {
     return this.rows.filter((r) => fileIds.includes(r.fileId))

@@ -3,7 +3,7 @@ import { THINNING_BANDS, ThinnableVersion, versionsToExpire } from './versions-t
 // Nextcloud's curve, verbatim (apps/files_versions/lib/Storage.php:69-81). These
 // numbers are a THIRD PARTY's contract, so they are pinned rather than derived.
 describe('THINNING_BANDS', () => {
-  it('is Nextcloud\'s six bands in ascending order', () => {
+  it("is Nextcloud's six bands in ascending order", () => {
     expect(THINNING_BANDS.map((b) => [b.endsAfterSeconds, b.stepSeconds])).toEqual([
       [10, 2],
       [60, 10],
