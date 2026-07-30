@@ -90,8 +90,8 @@ applications:
     # editors, whose cadence is set by the document server rather than by a
     # person: Collabora's own defaults save after 30 idle seconds and every 300
     # seconds of continuous typing, so 300 keeps an hour of editing from minting
-    # ~10 versions and evicting half the file's distinct history via
-    # maxVersionsPerFile.
+    # ~10 versions that age-tiered thinning would otherwise have to work through
+    # right away.
     #
     # Zero everything for development. Measuring an editor's real cadence needs
     # 0 here too, or you measure the window instead of the editor.

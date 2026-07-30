@@ -56,6 +56,7 @@ function loadConfiguration(): GlobalConfig {
   // DEPRECATIONS
   deprecatedFilesEditorsConfig(config)
   deprecatedFilesContentIndexingConfig(config)
+  removedMaxVersionsPerFileConfig(config)
 
   return transformAndValidate(
     GlobalConfig,
@@ -129,5 +130,34 @@ function deprecatedFilesContentIndexingConfig(config: GlobalConfig): void {
   console.warn(
     '[DEPRECATED][CONFIGURATION] applications.files.contentIndexing is deprecated and will be removed in a future version. ' +
       'Please use applications.files.contentIndexing.enabled instead.'
+  )
+}
+
+// applications.files.versions.maxVersionsPerFile was REMOVED: age-tiered thinning
+// replaced the per-file FIFO cap
+// (docs/superpowers/specs/2026-07-29-version-thinning-design.md).
+//
+// Warned about rather than ignored, because ignoring it is SILENT here. Config
+// validation runs with no `whitelist`/`forbidNonWhitelisted`, so an unknown yaml
+// key is simply dropped and the operator's retention behaviour changes with no
+// signal — the #384 failure class. (The env-var form is already loud: its path is
+// validated against environment.dist.yaml, which logs "Ignoring unknown
+// environment variable".) Deleted from the object as well as warned about, since
+// plainToInstance would otherwise copy it onto the instance as an untyped field.
+//
+// EXPORTED only so it can be unit-tested: the env path is rejected before a
+// config object exists and the yaml path would need a fixture on disk, so a
+// direct call is the only way to exercise it. The sibling deprecatedFiles*
+// helpers stay private because nothing about them is testable either way.
+export function removedMaxVersionsPerFileConfig(config: GlobalConfig): void {
+  const versions = config.applications?.files?.versions as unknown as Record<string, unknown> | undefined
+  if (!versions || !('maxVersionsPerFile' in versions)) {
+    return
+  }
+  delete versions.maxVersionsPerFile
+  console.warn(
+    '[REMOVED][CONFIGURATION] applications.files.versions.maxVersionsPerFile no longer applies and has been ignored. ' +
+      'Version history is now shaped by age-tiered thinning and bounded by applications.files.versions.quotaShare ' +
+      'and applications.files.versions.retentionDays.'
   )
 }

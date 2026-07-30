@@ -199,9 +199,9 @@ export class OnlyOfficeManager {
     return { error: 0 }
   }
 
-  /* Fork: versioning. Classifies a save callback as human-triggered or
-     automatic, for the coalescing window only (#389, and
-     docs/plans/2026-07-29-coalescing-forcesavetype-design.md).
+  /* Fork: versioning. Classifies a save callback as PROVEN human, automatic,
+     or (unprovable but) interactive, for the coalescing window only (#389,
+     and docs/plans/2026-07-29-coalescing-forcesavetype-design.md).
 
      THIS IS THE ONLY PLACE THAT CAN DECIDE, because the status is half the
      answer and saveDocument never sees it. `forcesavetype` is documented as
@@ -226,9 +226,15 @@ export class OnlyOfficeManager {
         return 'automatic'
       // 1 = the saving is done, e.g. the Save button was clicked.
       // 3 = the form was submitted (Complete & Submit).
+      //
+      // PROVEN human, and the strongest claim available on this wire. It resolves
+      // to a zero window: every one of these is a person asking for a restore
+      // point, and a rate limit that discards one is discarding the user's
+      // explicit request. Measured 2026-07-29 — two Ctrl+S presses 34s apart
+      // produced one version under the old 60s scalar.
       case 1:
       case 3:
-        return 'interactive'
+        return 'human'
       default:
         return 'interactive'
     }

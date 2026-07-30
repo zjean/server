@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { and, asc, count, countDistinct, desc, eq, gt, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
+import { and, asc, count, countDistinct, desc, eq, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -265,34 +265,24 @@ export class VersioningQueries {
 
   // --- retention / GC support (B5) ---
 
-  // Version count for ONE file within ONE root — the gate for the per-file cap
-  // on the write path, where the caller holds a single fileId and the whole-root
-  // groupBy of fileIdsExceeding would be pure waste.
+  // EVERY version of one file within one root, newest first, labels included.
+  // The thinner needs labeled rows in the list: it filters them itself, and
+  // handing it a pre-filtered list would make a labeled version invisible in a
+  // way that changes nothing today but would silently diverge if the thinner
+  // ever anchored spacing on labels.
   //
-  // Root-scoped for the same reason fileIdsExceeding is: a file whose versions
-  // span two roots (it was moved between spaces) has a different total per root,
-  // so pairing a GLOBAL count with the per-root candidate list below
-  // over-deletes in one root while under-enforcing in the other. Labeled rows
-  // are counted here — the cap keeps them AND charges them to the budget.
-  async countByFileId(versionsRoot: string, fileId: number): Promise<number> {
-    const [row] = await this.db
-      .select({ n: count() })
-      .from(customFilesVersions)
-      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId)))
-    return Number(row?.n ?? 0)
-  }
-
-  // Oldest-first, unlabeled only — the trim order for maxVersionsPerFile.
-  // Oldest-first trim candidates for one file WITHIN one root — see
-  // fileIdsExceeding for why the root filter belongs in the query rather than in
-  // a caller-side .filter() over a global list.
-  async unlabeledByFileIdOldestFirst(versionsRoot: string, fileId: number, limit: number): Promise<VersionRow[]> {
+  // Unpaged, deliberately. The row count for ONE file is bounded by the thinner
+  // itself on every write, so the pathological case this would page for cannot
+  // persist past the next save. The query is root-scoped for the same reason
+  // every retention query here is: a file whose versions span two roots (it was
+  // moved between spaces) has a different total per root, so a GLOBAL read
+  // would over-thin in one root while under-thinning in the other.
+  async byFileIdNewestFirst(versionsRoot: string, fileId: number): Promise<VersionRow[]> {
     return this.db
       .select()
       .from(customFilesVersions)
-      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId), isNull(customFilesVersions.label)))
-      .orderBy(asc(customFilesVersions.createdAt), asc(customFilesVersions.id))
-      .limit(limit)
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId)))
+      .orderBy(desc(customFilesVersions.mtime), desc(customFilesVersions.id))
   }
 
   // Paged: the FIRST run after enabling retention on a populated install can
@@ -315,23 +305,6 @@ export class VersioningQueries {
   async distinctRoots(): Promise<string[]> {
     const rows = await this.db.selectDistinct({ versionsRoot: customFilesVersions.versionsRoot }).from(customFilesVersions)
     return rows.map((r) => r.versionsRoot)
-  }
-
-  // Files with more than `keep` versions IN THIS ROOT, returned with that count.
-  //
-  // The count comes back with the id on purpose. A file whose versions span two
-  // roots (it was moved between spaces) has a different total per root, and
-  // mixing a per-root candidate list with a global total silently over-deletes
-  // in one root while under-enforcing in the other. Gate, count and trim all
-  // have to agree on scope, and the sweep's scope is one root.
-  async fileIdsExceeding(versionsRoot: string, keep: number): Promise<{ fileId: number; count: number }[]> {
-    const rows = await this.db
-      .select({ fileId: customFilesVersions.fileId, n: count() })
-      .from(customFilesVersions)
-      .where(eq(customFilesVersions.versionsRoot, versionsRoot))
-      .groupBy(customFilesVersions.fileId)
-      .having(gt(count(), keep))
-    return rows.map((r) => ({ fileId: r.fileId, count: Number(r.n) }))
   }
 
   async distinctFileIdsByRoot(versionsRoot: string): Promise<number[]> {

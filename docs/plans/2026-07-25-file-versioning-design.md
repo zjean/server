@@ -1,5 +1,13 @@
 # ADR — File Versioning (zjean/server fork)
 
+> **SUPERSEDED, in part, by `docs/superpowers/specs/2026-07-29-version-thinning-design.md` and this document's own
+> §5.3.** §5.3 (below) already amends §5's coalescing rules — read it before trusting anything in §5.1/§5.2, including
+> :205's "statuses 2/3 are treated as human" (they are classified `interactive` and get the scalar, not `human`; only
+> proven `forcesavetype` 1/3 gets `human`'s zero window). §5.3 does **not** amend §6/§7: :247's config-class listing
+> still shows the retired `maxVersionsPerFile`, and :255's "an NC-style thinning ladder is explicitly deferred" is
+> false — it shipped, replacing the per-file FIFO cap entirely. See the thinning spec and ADR §5.3 for the current
+> shape.
+
 - **Status:** Accepted
 - **Date:** 2026-07-25
 - **Implements:** [`2026-07-25-file-versioning-implementation-plan.md`](2026-07-25-file-versioning-implementation-plan.md) Phase A / Task A1
@@ -196,6 +204,39 @@ Three things this deliberately does not do, each of which was considered:
 
 The discriminator is OnlyOffice's `forcesavetype`, which exists on callback statuses 6 and 7 **only** — so statuses 2 (the session-close flush) and 3 (a save-error retry) carry nothing, and are treated as human on the grounds that both are the tail of a human action and neither is a storm. Collabora's WOPI `PutFile` carries no equivalent, so it never claims either way and keeps the override by construction. Full reasoning, the classification table, and the verification still owed: **`docs/plans/2026-07-29-coalescing-forcesavetype-design.md`** (#389).
 
+### 5.3 AMENDED after the 2026-07-29 measurement — the human window is 0, and the FIFO cap is replaced by thinning
+
+§5.2's resolution — a proven human save falls back to the scalar, `minIntervalSeconds` (60) — was itself measured
+**insufficient**. Reproduced against `onlyoffice/documentserver` 9.4.0 with the shipped default, three explicit Ctrl+S
+presses on one file:
+
+| Save | Time | Δ since previous | Callback | Version row |
+|---|---|---|---|---|
+| A | 20:53:11 | — | `status=6 forcesavetype=1 saveKind=interactive` | created |
+| B | 20:53:45 | +34 s | `status=6 forcesavetype=1 saveKind=interactive` | **none** |
+| C | 20:55:51 | +126 s | `status=6 forcesavetype=1 saveKind=interactive` | created |
+
+Same action, same classification — only elapsed time differs, so the 60 s window is provably the gate. The user
+report that triggered the measurement ("the versions panel is not updated every time a new version is created, need to
+reopen the doc first") is the same mechanism seen from the UI: reopening burns more than 60 s, so the next save lands
+outside the window.
+
+**Superseded:** a proven human save is governed by the scalar `minIntervalSeconds`. **Now:** `coalescingWindow` returns
+**0** for a proven human save — the discriminator is unchanged from §5.2 (`forcesavetype` ∈ {1, 3}) — so every explicit
+Save mints a restore point, full stop.
+
+Setting the window to 0 in isolation would only trade one loss for another. §5.1's own argument for a wide window was
+never row count — it was that FIFO eviction with `maxVersionsPerFile` at 20 evicts genuinely distinct older revisions
+once minting speeds up, and a zero window on a save-happy afternoon mints fast enough to do exactly that to last week's
+history. So this change also **replaces the per-file FIFO cap with age-tiered thinning** — Nextcloud's keep-density
+curve, dense for recent versions and sparse for old ones — as the sole shaper of history; §6's `quotaShare` and
+`retentionDays` remain the size backstops, unchanged. Relaxing the window without reshaping eviction would have been a
+regression wearing a fix's clothes.
+
+Full design, including the walk's divergence from NC's own and the `createdAt` floor that keeps a client-controlled
+`mtime` from expiring a version inside the call that created it:
+`docs/superpowers/specs/2026-07-29-version-thinning-design.md`.
+
 ## 6. Retention — mirror the trash retention config shape
 
 **Decision.** `FilesVersionsConfig`, added to `files/files.config.ts`, mirroring `FilesTrashRetentionConfig` (:51-63) **including its `0 → false` Transform + `ValidateIf` idiom** so `0` means "off" rather than "immediately expire everything":
@@ -211,7 +252,7 @@ class FilesVersionsConfig {
 }
 ```
 
-v1 enforces `maxVersionsPerFile` + `retentionDays` + `quotaShare`. An NC-style thinning ladder (keep-per-hour/day/week) is explicitly **deferred**.
+~~v1 enforces `maxVersionsPerFile` + `retentionDays` + `quotaShare`. An NC-style thinning ladder (keep-per-hour/day/week) is explicitly **deferred**.~~ **STALE — see the top-of-file note.** The thinning ladder shipped and replaced `maxVersionsPerFile` outright; v1 (as actually released) enforces age-tiered thinning + `retentionDays` + `quotaShare`. Full design: `docs/superpowers/specs/2026-07-29-version-thinning-design.md`.
 
 ## 7. Quota — versions count, capped eagerly, and the unachievable promise is dropped
 

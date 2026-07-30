@@ -13,7 +13,6 @@ vi.mock('../../../configuration/config.environment', () => ({
         tmpPath: '',
         versions: {
           enabled: true,
-          maxVersionsPerFile: 20,
           retentionDays: { users: false, spaces: false },
           quotaShare: 0.5,
           minIntervalSeconds: 60,
@@ -52,6 +51,7 @@ import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
+import { blobPathFromRoot } from '../utils/paths'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
 
@@ -116,17 +116,10 @@ class FakeQueries {
       .filter((r) => r.versionsRoot === versionsRoot && !r.label)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)[0]
   }
-  // Both root-scoped, matching the real queries: a global count paired with a
-  // per-root candidate list is the exact mismatch the retention sweep's comment
-  // warns about, and a fake that ignored the root would hide it.
-  async countByFileId(versionsRoot: string, fileId: number) {
-    return this.rows.filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId).length
-  }
-  async unlabeledByFileIdOldestFirst(versionsRoot: string, fileId: number, limit: number) {
-    return [...this.rows]
-      .filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId && !r.label)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)
-      .slice(0, limit)
+  // EVERY version of one file within one root, newest first, labels included —
+  // the thinner filters labels itself (see versions-thinning.ts).
+  async byFileIdNewestFirst(versionsRoot: string, fileId: number) {
+    return [...this.rows].filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId).sort((a, b) => b.mtime - a.mtime || b.id - a.id)
   }
   async listByFileIds(fileIds: number[]) {
     return this.rows.filter((r) => fileIds.includes(r.fileId))
@@ -172,7 +165,6 @@ describe(VersioningService.name, () => {
     versionsConfig.minIntervalSeconds = 60
     versionsConfig.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 }
     versionsConfig.quotaShare = 0.5
-    versionsConfig.maxVersionsPerFile = 20
 
     filePath = path.join(tmpRoot, 'users', 'alice', 'files', 'docs', 'report.txt')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
@@ -247,6 +239,25 @@ describe(VersioningService.name, () => {
       .stat(p)
       .then(() => true)
       .catch(() => false)
+
+  // Backdates the live file's mtime before the NEXT snapshot captures it.
+  //
+  // Needed only because eager thinning (thinFile) now runs synchronously inside
+  // every snapshotBeforeOverwrite call, keyed on mtime — versions-thinning.ts's
+  // first band requires >=2s of spacing for anything under 10s old. A test that
+  // fires two or three real fs.writeFile + snapshot round trips back to back, as
+  // plenty here do to exercise coalescing/dedup/listing, otherwise produces
+  // versions whose real wall-clock mtimes land a few MILLISECONDS apart — inside
+  // that band — so the thinner (correctly, per its own design) collapses them
+  // before the test ever gets a chance to assert on them. Unlike `createdAt`,
+  // `mtime` cannot be patched after the fact: dropVersion has already run by the
+  // time control returns to the test body. Call this between writes, with
+  // strictly decreasing `secondsAgo`, to give successive captures real
+  // separation instead.
+  async function ageFile(secondsAgo: number): Promise<void> {
+    const t = new Date(Date.now() - secondsAgo * 1000)
+    await fs.utimes(filePath, t, t)
+  }
 
   async function blobFiles(): Promise<string[]> {
     const found: string[] = []
@@ -386,6 +397,7 @@ describe(VersioningService.name, () => {
   // for every later file with that content.
   it('names each blob after the hash of its own stored bytes', async () => {
     versionsConfig.minIntervalSeconds = 0
+    await ageFile(120)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await fs.writeFile(filePath, 'a different revision entirely')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
@@ -428,6 +440,7 @@ describe(VersioningService.name, () => {
   })
 
   it('anchors on the id the ensurer returns, reusing it across snapshots of the same file', async () => {
+    await ageFile(120)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await fs.writeFile(filePath, 'second revision')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'webdav' })
@@ -463,7 +476,12 @@ describe(VersioningService.name, () => {
 
   it('deduplicates identical content within one versions root: two rows, one blob', async () => {
     versionsConfig.minIntervalSeconds = 0
+    // No content change between the two calls, so mtime must be moved by hand —
+    // otherwise the second call's eager thinning ties the two rows' mtime
+    // (same, untouched content) and collapses one before either assertion runs.
+    await ageFile(300)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
 
     expect(queries.rows).toHaveLength(2)
@@ -492,11 +510,19 @@ describe(VersioningService.name, () => {
     // The pre-session state is already captured; an editor autosaving must not
     // mint a version per save.
     expect(queries.rows).toHaveLength(1)
+    // IDENTITY, not just count: eager thinning collapsing the two captures
+    // (mtime a few ms apart) would also leave exactly one row, but the wrong
+    // one — the 'autosave 2' write, not the pre-session state this feature
+    // exists to preserve. Coalescing must mean the SECOND call never inserted
+    // at all, so the survivor is still the original 41-byte capture.
+    expect(queries.rows[0].size).toBe(CONTENT.length)
   })
 
   it('does not coalesce across a different origin or author', async () => {
+    await ageFile(300)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
     await fs.writeFile(filePath, 'via webdav')
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'webdav' })
     await fs.writeFile(filePath, 'other author')
     await service.snapshotBeforeOverwrite({ ...user, id: 99 } as UserModel, personalSpace(), { origin: 'collabora' })
@@ -528,12 +554,17 @@ describe(VersioningService.name, () => {
 
   it('coalescing is disabled by minIntervalSeconds = 0 for the origins the scalar governs', async () => {
     versionsConfig.minIntervalSeconds = 0
+    // No content change between the two calls, so mtime must be moved by hand —
+    // ageFile is the only thing distinguishing the two captures.
+    await ageFile(300)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(queries.rows).toHaveLength(2)
   })
 
   it('takes a new version once the window has elapsed', async () => {
+    await ageFile(120)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
     // 301s: collabora's own window is 300, not the 60 the scalar carries.
     queries.rows[0].createdAt = new Date(Date.now() - 301_000)
@@ -548,14 +579,20 @@ describe(VersioningService.name, () => {
   // orders of magnitude apart: an editor's is set by the document server
   // (Collabora saves after 30 idle seconds), an interactive save is a human
   // decision. One scalar cannot serve both — at 60 an hour of editing mints ~10
-  // versions and, with maxVersionsPerFile at 20, evicts half the file's
-  // genuinely distinct older revisions.
+  // versions, which under the FIFO cap this config used to carry would have
+  // evicted half the file's genuinely distinct older revisions. Age-tiered
+  // thinning is what removed that trade-off.
   describe('per-origin coalescing window', () => {
     // THE test: the same elapsed time, two origins, two answers.
     it('coalesces an editor save that an interactive save of the same age would not', async () => {
       const hundredSecondsAgo = () => new Date(Date.now() - 100_000)
 
+      // No content change between these two, so mtime must be moved by hand —
+      // otherwise thinning (keyed on mtime, unrelated to this origin/author
+      // coalescing check) would collapse them before the test can assert on them.
+      await ageFile(300)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await ageFile(150)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
       expect(queries.rows).toHaveLength(2)
       for (const row of queries.rows) row.createdAt = hundredSecondsAgo()
@@ -577,11 +614,15 @@ describe(VersioningService.name, () => {
 
       // Two minutes is past the 60s scalar but inside the 300s editor window.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'two minutes later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     it.each(['web', 'web-patch', 'webdav', 'sync', 'sync-make', 'nc-chunked', 'nc-text'] as const)(
       'falls back to the scalar for %s, which has no override',
       async (origin) => {
+        await ageFile(120)
         await service.snapshotBeforeOverwrite(user, personalSpace(), { origin })
         queries.rows[0].createdAt = new Date(Date.now() - 61_000)
         await fs.writeFile(filePath, 'just over a minute later')
@@ -597,7 +638,10 @@ describe(VersioningService.name, () => {
       versionsConfig.minIntervalSeconds = 60
       versionsConfig.minIntervalSecondsByOrigin = { collabora: 0, onlyoffice: 300 }
 
+      // No content change between the two calls, so mtime must be moved by hand.
+      await ageFile(300)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
+      await ageFile(150)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
 
       expect(queries.rows).toHaveLength(2)
@@ -612,6 +656,14 @@ describe(VersioningService.name, () => {
 
       // The scalar says "never coalesce"; collabora's own override still does.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: there is no content change between the two calls here, so a
+      // size check cannot distinguish "coalesced" from "inserted twice, then
+      // thinned back to one" — both leave a CONTENT.length row. The id can:
+      // coalescing means the SECOND call never called insertVersion at all, so
+      // FakeQueries' counter never advances past 1. If thinning were doing the
+      // suppressing instead, the survivor would be the SECOND insert (id 2),
+      // since two identical-mtime rows tie-break newest-id-first.
+      expect(queries.rows[0].id).toBe(1)
     })
 
     // An environment.yaml written before this block existed leaves it undefined.
@@ -619,6 +671,7 @@ describe(VersioningService.name, () => {
     it('falls back to the scalar for every origin when the block is absent', async () => {
       versionsConfig.minIntervalSecondsByOrigin = undefined
 
+      await ageFile(120)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'collabora' })
       queries.rows[0].createdAt = new Date(Date.now() - 61_000)
       await fs.writeFile(filePath, 'just over the scalar window')
@@ -642,6 +695,7 @@ describe(VersioningService.name, () => {
     it('releases a human editor save that an automatic one of the same age would coalesce', async () => {
       const ninetySecondsAgo = () => new Date(Date.now() - 90_000)
 
+      await ageFile(120)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
       queries.rows[0].createdAt = ninetySecondsAgo()
       await fs.writeFile(filePath, 'a human pressed Ctrl+S again')
@@ -662,6 +716,10 @@ describe(VersioningService.name, () => {
     // The regression this whole change exists to prevent, in the soak's own
     // terms: four explicit saves inside two minutes produced zero new versions.
     it('mints a version for each of four human saves inside two minutes', async () => {
+      // The four real saves land milliseconds apart in test time; ageFile gives
+      // each one a distinct mtime so the thinner (keyed on mtime, unrelated to
+      // this test's createdAt-driven coalescing check) does not collapse them.
+      await ageFile(400)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
 
       for (let i = 2; i <= 4; i++) {
@@ -669,6 +727,7 @@ describe(VersioningService.name, () => {
         // inside onlyoffice's 300s override.
         for (const row of queries.rows) row.createdAt = new Date(row.createdAt.getTime() - 61_000)
         await fs.writeFile(filePath, `human save ${i}`)
+        await ageFile(400 - (i - 1) * 100)
         await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
       }
 
@@ -683,6 +742,9 @@ describe(VersioningService.name, () => {
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
 
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'saved again immediately' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // Collabora's PutFile carries no discriminator, so its caller never sets
@@ -696,6 +758,9 @@ describe(VersioningService.name, () => {
 
       // Two minutes is past the 60s scalar but inside collabora's 300s window.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'two minutes later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // A human save reads the SCALAR, not a hardcoded 60. An operator who
@@ -709,6 +774,9 @@ describe(VersioningService.name, () => {
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
 
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'ninety seconds later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // `0` on the scalar means "never coalesce" and must survive being reached
@@ -717,6 +785,7 @@ describe(VersioningService.name, () => {
     it('treats a scalar of 0 as "never coalesce" for interactive editor saves', async () => {
       versionsConfig.minIntervalSeconds = 0
 
+      await ageFile(120)
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
       await fs.writeFile(filePath, 'immediately again')
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
@@ -732,6 +801,32 @@ describe(VersioningService.name, () => {
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'restore', saveKind: 'automatic' })
 
       expect(queries.rows.filter((r) => r.origin === 'restore')).toHaveLength(2)
+    })
+  })
+
+  // Task 6 (#389 follow-up): a save PROVEN human (forcesavetype 1 or 3) never
+  // coalesces at all, regardless of the origin's own override. The soak found
+  // two deliberate Ctrl+S presses 34s apart, both classified 'interactive'
+  // under the old two-way split, and the second was swallowed by onlyoffice's
+  // 300s override. `coalescingWindow` is a pure function of (origin, saveKind),
+  // so it is tested directly here rather than through a full snapshot round
+  // trip.
+  describe('a PROVEN human save never coalesces (task 6)', () => {
+    it('never coalesces a PROVEN human save, whatever the origin override says', () => {
+      versionsConfig.minIntervalSeconds = 60
+      versionsConfig.minIntervalSecondsByOrigin.onlyoffice = 300
+      expect(service['coalescingWindow']('onlyoffice', 'human')).toBe(0)
+    })
+
+    // The regression that motivated this: two deliberate Ctrl+S presses 34s
+    // apart both arrive as forcesavetype 1, and the second used to be
+    // swallowed.
+    it('keeps the scalar for an UNPROVABLE interactive save and the override for an automatic one', () => {
+      versionsConfig.minIntervalSeconds = 60
+      versionsConfig.minIntervalSecondsByOrigin.onlyoffice = 300
+      expect(service['coalescingWindow']('onlyoffice', 'interactive')).toBe(60)
+      expect(service['coalescingWindow']('onlyoffice', 'automatic')).toBe(300)
+      expect(service['coalescingWindow']('onlyoffice', undefined)).toBe(300)
     })
   })
 
@@ -840,12 +935,17 @@ describe(VersioningService.name, () => {
     versionsConfig.minIntervalSeconds = 0
     const space = personalSpace({ storageQuota: 100 }) // ceiling 50
     await fs.writeFile(filePath, 'x'.repeat(80))
+    // No content change between the two calls below, so mtime must be moved by
+    // hand or the second call's eager thinning (unlike the first, which is
+    // exempt as a restore snapshot) ties the two rows' mtime and collapses one.
+    await ageFile(300)
     await service.snapshotBeforeOverwrite(user, space, { origin: 'restore' })
     expect(queries.rows).toHaveLength(1)
     expect(await blobFiles()).toHaveLength(1)
 
     // Identical bytes, so this write dedups against that blob and grows the store
     // by nothing. 80 > the 50-byte ceiling, and it must still be versioned.
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, space, { origin: 'web' })
 
     expect(queries.rows).toHaveLength(2)
@@ -1065,153 +1165,132 @@ describe(VersioningService.name, () => {
     expect(queries.rows).toHaveLength(2)
   })
 
-  /* ------------------------------------------------- maxVersionsPerFile (#340) */
+  /* ------------------------------------------------------- eager thinning (#340) */
 
-  // The cap used to be enforced ONLY by the 3AM sweep, so one file's row count
-  // was unbounded for up to 24 hours: the coalescing window limits the RATE, not
-  // the total, and the quota cap is skipped entirely whenever rootQuota() cannot
-  // match the versions root to the env's scope (the share-with-external-path
-  // case). A day of editing in Collabora blew past 20 and the UI listed all of
-  // them. These cases pin the eager trim; the sweep's own cases stay where they
-  // are, because it is still the backstop.
-  describe('maxVersionsPerFile on the write path', () => {
-    // Explicit ages, because oldest-first is (createdAt, id) — the same order the
-    // real query uses. Every row lands in user:alice for FILE_ID unless told
-    // otherwise, so a case only states what it varies.
-    async function seedVersion(over: Partial<VersionRow> & { ageSeconds?: number } = {}): Promise<VersionRow> {
-      const { ageSeconds = 0, ...rest } = over
-      await queries.insertVersion({
-        fileId: FILE_ID,
-        versionsRoot: 'user:alice',
-        checksum: crypto.randomBytes(32).toString('hex'),
-        size: 10,
-        mtime: 1,
-        origin: 'web',
-        ...rest
-      } as VersionInsert)
-      const row = queries.rows[queries.rows.length - 1]
-      row.createdAt = new Date(Date.now() - ageSeconds * 1000)
-      return row
-    }
+  // Fixtures are cast: versionsToExpire takes a structural ThinnableVersion
+  // (id, mtime, label, createdAt), and spelling out origin/scope on every
+  // fixture would obscure what each case is actually about. createdAt is
+  // pinned to the epoch — long held, so the createdAt floor (versions-thinning)
+  // never exempts these rows and Task 3's pre-floor expectations are unchanged.
+  const row = (id: number, secondsAgo: number, label: string | null = null) =>
+    ({
+      id,
+      fileId: 7,
+      versionsRoot: '/root',
+      mtime: Date.now() - secondsAgo * 1000,
+      label,
+      checksum: `c${id}`,
+      size: 1,
+      createdAt: new Date(0)
+    }) as unknown as VersionRow
 
-    const idsFor = (fileId: number, versionsRoot = 'user:alice') =>
-      queries.rows.filter((r) => r.fileId === fileId && r.versionsRoot === versionsRoot).map((r) => r.id)
-
-    beforeEach(() => {
+  describe('VersioningService — eager thinning', () => {
+    // Critical: everything else in this block calls `thinFile` directly, which
+    // proves the FUNCTION is correct but not that it is WIRED into the write
+    // path — a later refactor or upstream sync could drop the call site in
+    // `snapshot()` and this whole suite would stay green. This one drives
+    // thinning exclusively through `snapshotBeforeOverwrite`, the real caller,
+    // with no `ageFile` spacing: two real writes land milliseconds apart,
+    // squarely inside the first band's 2s requirement, so the older capture
+    // must be gone if — and only if — eager thinning actually runs on a write.
+    it('thins on the write path, not only nightly', async () => {
       versionsConfig.minIntervalSeconds = 0
-      versionsConfig.minIntervalSecondsByOrigin = {}
-      // personalSpace's storageQuota is 0, so rootQuota() is null and the quota
-      // cap does not run. That isolation is the point: these cases must fail for
-      // the per-file rule, never because eviction happened to fire.
-      versionsConfig.maxVersionsPerFile = 3
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures CONTENT
+      // The createdAt floor (versions-thinning.ts) exempts a row until it has
+      // been HELD for at least the step its own mtime-age band judges it by —
+      // 2s here, since the capture above is seconds old. FakeQueries.insertVersion
+      // stamps createdAt with the real `new Date()`, same as a DB NOW() default,
+      // so without this the CONTENT row would still be within its own 2s grace
+      // window when the second snapshot's thinFile runs a few ms later, and the
+      // floor (correctly) would keep it — this test would then no longer be
+      // exercising the band's spacing rule at all, only the floor's grace period.
+      queries.rows[0].createdAt = new Date(Date.now() - 3_000)
+      await fs.writeFile(filePath, 'second')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures 'second'
+
+      // Two captures milliseconds apart are inside the 2s band: the older
+      // (CONTENT, 41 bytes) is expired and only the newer survives.
+      expect(queries.rows).toHaveLength(1)
+      expect(queries.rows[0].size).toBe('second'.length)
     })
 
-    it('drops the oldest unlabeled versions beyond the cap as soon as the new one is written', async () => {
-      const [oldest, middle, newest] = [
-        await seedVersion({ ageSeconds: 300 }),
-        await seedVersion({ ageSeconds: 200 }),
-        await seedVersion({ ageSeconds: 100 })
-      ]
+    it('expires the versions the thinner selects, through dropVersion', async () => {
+      // Two rows 34s apart, both older than a minute: the 60s band collapses them.
+      const rows = [row(11, 120), row(12, 154)]
+      queries.rows.push(...rows)
+      const deleteSpy = vi.spyOn(queries, 'deleteById')
 
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      await service['thinFile']('/root', 7)
 
-      // Four rows existed for a heartbeat; the cap is 3, so the oldest went.
-      expect(idsFor(FILE_ID)).toHaveLength(3)
-      expect(idsFor(FILE_ID)).not.toContain(oldest.id)
-      expect(idsFor(FILE_ID)).toEqual(expect.arrayContaining([middle.id, newest.id]))
-      // The blob of the version just taken is still on disk with the old bytes —
-      // the trim removed a different one, not the fresh row's own blob.
-      const fresh = queries.rows.find((r) => r.size === CONTENT.length)
-      expect(fresh).toBeDefined()
-      expect(await fs.readFile(path.join(versionsDir(), fresh.checksum.slice(0, 2), fresh.checksum), 'utf8')).toBe(CONTENT)
+      expect(deleteSpy).toHaveBeenCalledWith(12)
+      expect(deleteSpy).not.toHaveBeenCalledWith(11)
     })
 
-    // The exemption that matters. A labeled row is over and above the cap, so
-    // naming the OLDEST version — exactly what an oldest-first rule reaches for
-    // first — must not save it from being reached for; it must be skipped.
-    it('never trims a labeled version, even when it is the oldest candidate', async () => {
-      versionsConfig.maxVersionsPerFile = 2
-      const pinned = await seedVersion({ ageSeconds: 300, label: 'pinned' })
-      const a = await seedVersion({ ageSeconds: 200 })
-      const b = await seedVersion({ ageSeconds: 100 })
-
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
-
-      // The two unlabeled middles went; the named one survived despite being the
-      // oldest row in the file's history.
-      expect(idsFor(FILE_ID)).toContain(pinned.id)
-      expect(idsFor(FILE_ID)).not.toContain(a.id)
-      expect(idsFor(FILE_ID)).not.toContain(b.id)
-      expect(queries.rows.find((r) => r.id === pinned.id).label).toBe('pinned')
+    it('does not throw when thinning fails, so a committed save is never reported as unversioned', async () => {
+      vi.spyOn(queries, 'byFileIdNewestFirst').mockRejectedValue(new Error('db gone'))
+      await expect(service['thinFile']('/root', 7)).resolves.toBeUndefined()
     })
+  })
 
-    // `false` is "no cap", and it reaches the code as a falsy value that a
-    // `Number(keep)` or `keep ?? 0` would turn into 0 — an excess equal to the
-    // whole count, i.e. delete every unlabeled version of the file on the first
-    // write. This is the case that proves the disable path is a disable path.
-    it('trims nothing when maxVersionsPerFile is false', async () => {
-      versionsConfig.maxVersionsPerFile = false
-      for (const ageSeconds of [500, 400, 300, 200, 100]) await seedVersion({ ageSeconds })
+  // Regression guard for the `origin !== 'restore'` guard at the thinFile call
+  // site in `snapshot()`. Without it, a restore's own safety snapshot would run
+  // eager thinning over EVERY row of the file — including the very revision the
+  // user just restored — and a long-held row sitting in the 1-week band
+  // (>=30 days old) with a same-band neighbour close enough in mtime is exactly
+  // what the thinner is supposed to collapse. The restore's write still
+  // succeeds (the blob is pinned open before this runs — invariant 3), but the
+  // row the user clicked "Restore" on would vanish from the list underneath
+  // them.
+  //
+  // Both seeded rows need a backdated `createdAt`, not just a backdated
+  // `mtime`: the createdAt floor (versions-thinning.ts) exempts anything held
+  // less than its own band's step, and FakeQueries.insertVersion stamps
+  // createdAt with a fresh `new Date()` — a few milliseconds old — which would
+  // mask the bug regardless of how old `mtime` claims the content is.
+  it('does not let its own safety snapshot thin away the revision being restored', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace()
+    const sixMonthsAgo = 180 * 86_400 // seconds; lands in the 1-week/604800s band
 
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const oldContent = 'the six-month-old revision being restored'
+    const oldChecksum = crypto.createHash('sha512-256').update(oldContent).digest('hex')
+    await queries.insertVersion({
+      fileId: FILE_ID,
+      versionsRoot: 'user:alice',
+      checksum: oldChecksum,
+      size: oldContent.length,
+      mtime: Date.now() - sixMonthsAgo * 1000,
+      origin: 'web'
+    } as VersionInsert)
+    const oldRevisionId = queries.rows[0].id
+    queries.rows[0].createdAt = new Date(Date.now() - sixMonthsAgo * 1000)
 
-      expect(idsFor(FILE_ID)).toHaveLength(6)
-    })
+    // A neighbour 3 days closer to now — well within the 1-week band's step —
+    // long held too, so it is the neighbour that would make the thinner expire
+    // the row above rather than this one.
+    await queries.insertVersion({
+      fileId: FILE_ID,
+      versionsRoot: 'user:alice',
+      checksum: 'b'.repeat(64),
+      size: 5,
+      mtime: Date.now() - (sixMonthsAgo - 3 * 86_400) * 1000,
+      origin: 'web'
+    } as VersionInsert)
+    queries.rows[1].createdAt = new Date(Date.now() - (sixMonthsAgo - 3 * 86_400) * 1000)
 
-    // Same exemption the quota cap takes, and it bites harder here: the
-    // candidates are THIS file's oldest unlabeled versions, which when restoring
-    // the oldest revision is precisely the version being restored. The pinned
-    // descriptor would keep the restore correct either way (ADR §9), but the row
-    // the user just acted on would vanish from the list underneath them.
-    it('does not trim on a restore’s own safety snapshot', async () => {
-      versionsConfig.maxVersionsPerFile = 1
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
-      const versionId = queries.rows[0].id
-      await fs.writeFile(filePath, 'content written after the version was taken')
+    // The real blob for the revision being restored: restoreVersion opens it
+    // from disk before it does anything else.
+    const blobPath = blobPathFromRoot('user:alice', oldChecksum)!
+    await fs.mkdir(path.dirname(blobPath), { recursive: true })
+    await fs.writeFile(blobPath, oldContent)
 
-      await service.restoreVersion(user, personalSpace(), versionId)
+    await service.restoreVersion(user, space, oldRevisionId)
 
-      expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
-      // Over the cap by one, deliberately: the next ordinary write or the
-      // nightly sweep reclaims it.
-      expect(idsFor(FILE_ID)).toHaveLength(2)
-      expect(idsFor(FILE_ID)).toContain(versionId)
-    })
-
-    // Gate, count and candidates all agree on ONE root and ONE file. A global
-    // count paired with a per-root candidate list is the mismatch the sweep's
-    // comment records: it over-deletes in one root and under-enforces in the
-    // other for a file that was moved between spaces.
-    it('trims only the versioned file’s own rows in its own root', async () => {
-      versionsConfig.maxVersionsPerFile = 1
-      const otherFile = await seedVersion({ fileId: 9999, ageSeconds: 900 })
-      const otherRoot = await seedVersion({ versionsRoot: 'user:bob', ageSeconds: 800 })
-      const mine = await seedVersion({ ageSeconds: 700 })
-
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
-
-      expect(idsFor(FILE_ID)).toHaveLength(1)
-      expect(idsFor(FILE_ID)).not.toContain(mine.id)
-      expect(idsFor(9999)).toEqual([otherFile.id])
-      expect(idsFor(FILE_ID, 'user:bob')).toEqual([otherRoot.id])
-    })
-
-    // Log and continue. The row is already committed when the trim runs, so
-    // rethrowing would reach snapshotBeforeOverwrite's catch, which logs "the
-    // save proceeds unversioned" — false once the row exists — and would report
-    // a successful snapshot as a failed one.
-    it('keeps the version and the save when the trim itself fails', async () => {
-      vi.spyOn(queries, 'countByFileId').mockRejectedValueOnce(new Error('injected DB failure'))
-      await seedVersion({ ageSeconds: 300 })
-      await seedVersion({ ageSeconds: 200 })
-      await seedVersion({ ageSeconds: 100 })
-
-      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
-
-      // The snapshot stands, over the cap, and nothing was logged as an error.
-      expect(idsFor(FILE_ID)).toHaveLength(4)
-      expect(loggedErrors).not.toHaveBeenCalled()
-    })
+    expect(await fs.readFile(filePath, 'utf8')).toBe(oldContent)
+    // THE ASSERTION. With the guard in place this row survives; deleting the
+    // `origin !== 'restore'` guard at the thinFile call site makes it vanish —
+    // proven live below rather than asserted on faith.
+    expect(queries.rows.find((r) => r.id === oldRevisionId)).toBeDefined()
   })
 
   /* ------------------------------------------------------- never throws to caller */
@@ -1252,6 +1331,7 @@ describe(VersioningService.name, () => {
 
   it('lists history newest-first with the author attached', async () => {
     versionsConfig.minIntervalSeconds = 0
+    await ageFile(120)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await fs.writeFile(filePath, 'v2')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'webdav' })
@@ -1732,7 +1812,12 @@ describe(VersioningService.name, () => {
 
   it('deleting a version removes its blob only when nothing else references it', async () => {
     versionsConfig.minIntervalSeconds = 0
+    // No content change between the two calls, so mtime must be moved by hand —
+    // otherwise the second call's eager thinning ties the two rows' mtime and
+    // collapses one before the refcount assertions below can run.
+    await ageFile(300)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(await blobFiles()).toHaveLength(1)
 
@@ -1748,6 +1833,7 @@ describe(VersioningService.name, () => {
 
   it('purges a file’s versions and their blobs', async () => {
     versionsConfig.minIntervalSeconds = 0
+    await ageFile(120)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     await fs.writeFile(filePath, 'v2')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })

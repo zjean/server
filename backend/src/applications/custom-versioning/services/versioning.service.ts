@@ -27,6 +27,7 @@ import { DEPTH } from '../../webdav/constants/webdav'
 import { SnapshotOptions, VersionOrigin, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
 import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from '../utils/paths'
 import { VERSIONS_STAGING_DIR } from '../constants/versioning'
+import { versionsToExpire } from '../utils/versions-thinning'
 import { VersioningQueries } from './versioning-queries.service'
 
 // File versioning. See docs/plans/2026-07-25-file-versioning-design.md.
@@ -173,28 +174,16 @@ export class VersioningService {
       await removeFiles(staged.stagePath).catch(() => undefined)
       throw e
     }
-    // The per-file cap, enforced EAGERLY (#340). It used to live only in the
-    // nightly sweep, which left the row count for one file unbounded for up to
-    // 24 hours — the coalescing window bounds the RATE, not the total, and the
-    // quota cap is skipped entirely whenever rootQuota() cannot match scopes.
+    // Thinning, with its OWN error boundary and OUTSIDE the try above: the
+    // version is already committed here, so a failure must not be rethrown into
+    // snapshotBeforeOverwrite — that logs "the save proceeds unversioned", which
+    // would be a lie once the row exists. The nightly rule is the backstop, so
+    // the worst case is a delay in shape, not a permanent breach.
     //
-    // OUTSIDE the try above, with its OWN error boundary, for the same reason
-    // refreshScope below has one: the version is already committed at this
-    // point, so a trim failure must not be rethrown into
-    // snapshotBeforeOverwrite — that logs "the save proceeds unversioned",
-    // which would be a lie once the row exists. Log and continue; the nightly
-    // rule is still the backstop, so the worst case is a delay rather than a
-    // permanent breach of the cap.
-    //
-    // NOT for a restore's own safety snapshot. That is the same exemption the
-    // quota cap takes above, and it bites harder here: the candidates are THIS
-    // FILE's oldest unlabeled versions, which when restoring the oldest revision
-    // is precisely the version being restored. The overshoot is one row, cleared
-    // by the next ordinary write to the file or by the nightly rule.
+    // NOT for a restore's own safety snapshot: the candidate set for an
+    // oldest-revision restore includes the version being restored.
     if (options.origin !== 'restore') {
-      await this.trimToMaxVersionsPerFile(versionsRoot, fileId).catch((e: unknown) => {
-        this.logger.warn({ tag: this.snapshot.name, msg: `unable to trim versions of file ${fileId} in ${versionsRoot}: ${e}` })
-      })
+      await this.thinFile(versionsRoot, fileId)
     }
     // Keeps the denormalized scope columns of this file's OTHER rows current
     // after a move. They are never authoritative (ADR §15), so this is a cache
@@ -239,16 +228,33 @@ export class VersioningService {
   // The window for one origin: its own override if configured, otherwise the
   // scalar fallback (ADR §5).
   //
-  // AN INTERACTIVE SAVE SKIPS THE OVERRIDE ENTIRELY. The override exists for
-  // one stated reason — "an editor's cadence is set by the document server, not
-  // by a human" (ADR §5.1) — so a save we can PROVE a human triggered falsifies
-  // its premise and gets the interactive number, which is what the scalar is.
-  // The §19 soak is what forced this: OnlyOffice has no autosave at all, so its
-  // 300 was being applied exclusively to human saves, and four Ctrl+S presses
-  // inside two minutes produced zero versions. Deliberately not a new config
-  // key — see the design note. `saveKind` is only ever set where a
-  // discriminator is on the wire (`forcesavetype`, statuses 6/7), so Collabora
-  // and every non-editor origin resolve exactly as before.
+  // THE OVERRIDE EXISTS FOR ONE STATED REASON — "an editor's cadence is set by
+  // the document server, not by a human" (ADR §5.1). Positive proof that a
+  // human triggered the write falsifies that premise, but "proof" comes in two
+  // strengths and they get two different answers, not one:
+  //
+  //   - `human` (forcesavetype 1/3 — a proven Save-button-click or form
+  //     submit) falsifies the premise OUTRIGHT and skips the override
+  //     entirely: window 0, never rate-limited. The §19 soak is what forced
+  //     this: OnlyOffice has no autosave at all, so its 300s override was
+  //     being applied exclusively to human saves, and four Ctrl+S presses
+  //     inside two minutes produced zero versions. #395 shipped a fix that
+  //     routed these through the scalar instead of the override — better, but
+  //     still a rate limit on an explicit user request — and it was still
+  //     possible to lose one: two deliberate Ctrl+S presses 34s apart both
+  //     landed in the one bucket #395 had, and the second was swallowed by the
+  //     60s scalar. Splitting `human` out with its own zero window (task 6) is
+  //     what actually closes that gap.
+  //   - `interactive` is the WEAKER, unprovable claim: no discriminator was on
+  //     the wire at all (statuses 2 and 3 carry no `forcesavetype`), but the
+  //     shape of the callback still says a person is likely at the other end.
+  //     It gets the scalar, not zero — there is no proof here to falsify the
+  //     override's premise with, only a good guess.
+  //
+  // Deliberately not a new config key for either — see the design note.
+  // `saveKind` is only ever set where a discriminator is on the wire
+  // (`forcesavetype`, statuses 6/7), so Collabora and every non-editor origin
+  // resolve exactly as before.
   //
   // TESTS FOR A NUMBER, NOT FOR TRUTHINESS. `0` is a meaningful value — "never
   // coalesce this origin" — and `?? fallback` or a truthiness check would
@@ -259,6 +265,9 @@ export class VersioningService {
   // specs mutate `configuration.applications.files.versions` on an
   // already-constructed service.
   private coalescingWindow(origin: VersionOrigin, saveKind?: SnapshotOptions['saveKind']): number {
+    // PROVEN human: never rate-limited. See above.
+    if (saveKind === 'human') return 0
+    // Unprovable but interactive-shaped: the scalar, not zero. See above.
     if (saveKind === 'interactive') return this.config.minIntervalSeconds ?? 0
     const configured = (this.config.minIntervalSecondsByOrigin as Partial<Record<VersionOrigin, number>> | undefined)?.[origin]
     if (typeof configured === 'number') return configured
@@ -387,43 +396,44 @@ export class VersioningService {
     return removed
   }
 
-  // Keeps ONE file's version count in ONE root at or under maxVersionsPerFile,
-  // dropping oldest-unlabeled-first. Called after the row is inserted; the
-  // nightly rule in VersionsRetention.enforceMaxVersionsPerFile stays as the
-  // backstop for roots the write path never touches (and for a cap that was
-  // lowered after the fact).
+  // Shapes ONE file's history in ONE root to the thinning curve.
   //
-  // `false` DISABLES the rule and must never be read as `0`. `!keep` is the same
-  // test the nightly rule uses; a `keep ?? 0` or a `Number(keep)` would compute
-  // an excess of `count` and delete every unlabeled version of the file on the
-  // very first write.
+  // Replaces the FIFO cap this method used to enforce. FIFO bounded the row
+  // count but destroyed long reach: 20 saves in an afternoon evicted last week.
+  // The curve bounds density instead, so recent saves stay dense and old ones
+  // thin out — see docs/superpowers/specs/2026-07-29-version-thinning-design.md
+  // §2.
   //
-  // LABELED VERSIONS ARE KEPT AND COUNTED, exactly as in the nightly rule. The
-  // exemption is not restated here: it is encoded in the candidate query, which
-  // is unlabeled-only, so a file with more labels than the cap simply gets back
-  // fewer rows than the excess and keeps them all. Stating the rule twice is how
-  // this feature produced the same data-loss bug twice.
-  //
-  // THE BLOB UNLINK GOES THROUGH dropVersion, never through a removeFiles here.
-  // That is the one refcount-aware seam — a blob another version in this root
-  // still references must survive — and it is the seam ADR §9's pin-before-read
-  // discipline is written against: a reader that has already opened the blob
-  // keeps its bytes across the unlink, which is why restoreVersion opens the
-  // descriptor before it takes its snapshot. An unlink here would bypass the
-  // refcount and delete blobs other rows still point at.
-  private async trimToMaxVersionsPerFile(versionsRoot: string, fileId: number): Promise<void> {
-    const keep = this.config.maxVersionsPerFile
-    if (!keep) return
-    const excess = (await this.queries.countByFileId(versionsRoot, fileId)) - keep
-    if (excess <= 0) return
-    for (const victim of await this.queries.unlabeledByFileIdOldestFirst(versionsRoot, fileId, excess)) {
-      await this.dropVersion(victim)
-      // Per victim at `log`, not an aggregate at `verbose`: ADR §7 — silently
-      // deleting a user's history deserves an audit trail that names what went.
-      this.logger.log({
-        tag: this.trimToMaxVersionsPerFile.name,
-        msg: `trimmed version ${victim.id} of file ${victim.fileId} (${victim.size} bytes) from ${versionsRoot} to stay under maxVersionsPerFile (${keep})`
-      })
+  // Runs on every write, and again nightly for files nobody is writing to
+  // (VersionsRetention.enforceThinning). Idempotent, so the nightly pass over an
+  // already-shaped file costs one read.
+  // SWALLOWS ITS OWN ERRORS, unlike the trimToMaxVersionsPerFile it replaces
+  // (which threw and relied on a `.catch()` at the call site). Deliberate: the
+  // "never throw into a caller's save path" constraint then holds as a property
+  // of this method rather than of its one call site, which makes it testable
+  // without exercising the private `snapshot`, and keeps it true if a second
+  // caller is ever added.
+  private async thinFile(versionsRoot: string, fileId: number): Promise<void> {
+    try {
+      const rows = await this.queries.byFileIdNewestFirst(versionsRoot, fileId)
+      for (const id of versionsToExpire(rows, Date.now())) {
+        const victim = rows.find((r) => r.id === id)
+        if (!victim) continue
+        await this.dropVersion(victim)
+        // Per victim at `log`, not an aggregate at `verbose`: ADR §7 — silently
+        // deleting a user's history deserves an audit trail that names what went.
+        // Thinning removes MORE than the FIFO cap did, so this matters more.
+        this.logger.log({
+          tag: this.thinFile.name,
+          msg: `thinned version ${victim.id} of file ${victim.fileId} (${victim.size} bytes) from ${versionsRoot}`
+        })
+      }
+    } catch (e) {
+      // The version is already committed by the time this runs, so rethrowing
+      // would make snapshotBeforeOverwrite log "the save proceeds unversioned" —
+      // a lie once the row exists. The nightly rule is the backstop, so the worst
+      // case is a delay in shape, never a lost version.
+      this.logger.warn({ tag: this.thinFile.name, msg: `unable to thin versions of file ${fileId} in ${versionsRoot}: ${e}` })
     }
   }
 

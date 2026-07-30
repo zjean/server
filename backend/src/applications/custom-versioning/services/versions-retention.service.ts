@@ -13,6 +13,7 @@ import { users } from '../../users/schemas/users.schema'
 import { VERSIONS_ROOT_SPACE_PREFIX, VERSIONS_ROOT_USER_PREFIX, VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionRow } from '../interfaces/version.interface'
 import { spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot } from '../utils/paths'
+import { versionsToExpire } from '../utils/versions-thinning'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
 
@@ -76,7 +77,7 @@ export class VersionsRetention {
         // Each rule is independently guarded: a broken root must not stop the
         // sweep for every other root.
         await this.runRule('retentionDays', versionsRoot, () => this.enforceRetentionDays(versionsRoot))
-        await this.runRule('maxVersionsPerFile', versionsRoot, () => this.enforceMaxVersionsPerFile(versionsRoot))
+        await this.runRule('thinning', versionsRoot, () => this.enforceThinning(versionsRoot))
         await this.runRule('quotaShare', versionsRoot, () => this.enforceQuotaShare(versionsRoot))
       }
       // Filesystem rules need a DIFFERENT root list. distinctRoots() reads the
@@ -133,28 +134,26 @@ export class VersionsRetention {
     }
   }
 
-  // Keep at most maxVersionsPerFile per file IN THIS ROOT, dropping oldest
-  // unlabeled first. Labeled versions are kept AND counted, so a file with more
-  // labels than the cap simply keeps them all.
+  // Thin every file in this root to the curve.
   //
-  // BACKSTOP, not the only enforcement point. VersioningService trims the file it
-  // just versioned on every write (#340); this sweep still has to run, because it
-  // is the only thing that reaches a root nobody writes to and the only thing
-  // that reacts to a cap that was lowered after the versions were minted.
+  // BACKSTOP, not the only enforcement point. VersioningService thins the file it
+  // just versioned on every write; this sweep is the only thing that reaches a
+  // root nobody writes to. Thinning is idempotent, so re-examining an
+  // already-shaped file costs a read and nothing else.
   //
-  // Gate, count and candidate list are all per root. They used to disagree — a
-  // per-root gate, a global count, and a global candidate list filtered down —
-  // which for a file whose versions span two roots (moved between spaces)
-  // over-deleted in one root and under-enforced in the other.
-  private async enforceMaxVersionsPerFile(versionsRoot: string): Promise<number> {
-    const keep = this.config.maxVersionsPerFile
-    if (!keep) return 0
+  // Per root, like every other row rule here: a file whose versions span two
+  // roots (it was moved between spaces) must be thinned per root, or one root
+  // over-deletes while the other under-enforces.
+  private async enforceThinning(versionsRoot: string): Promise<number> {
     let removed = 0
-    for (const { fileId, count } of await this.queries.fileIdsExceeding(versionsRoot, keep)) {
-      const excess = count - keep
-      if (excess <= 0) continue
-      const candidates = await this.queries.unlabeledByFileIdOldestFirst(versionsRoot, fileId, excess)
-      removed += await this.dropAll(candidates, 'maxVersionsPerFile')
+    for (const fileId of await this.queries.distinctFileIdsByRoot(versionsRoot)) {
+      const rows = await this.queries.byFileIdNewestFirst(versionsRoot, fileId)
+      const expiring = versionsToExpire(rows, Date.now())
+      if (expiring.length === 0) continue
+      removed += await this.dropAll(
+        rows.filter((r) => expiring.includes(r.id)),
+        'thinning'
+      )
     }
     return removed
   }

@@ -29,7 +29,12 @@ export interface SnapshotOptions {
   // because this fork sends `autosave: false`, so an origin-based hardcode
   // would be silently wrong the day that flips or an operator enables the
   // document server's own forcesave timer.
-  saveKind?: 'interactive' | 'automatic'
+  //
+  // `human` is a PROVEN human trigger and never coalesces at all — the window is
+  // 0. `interactive` is the weaker claim "no discriminator was available, and the
+  // shape of the callback says a person is at the other end"; it takes the scalar.
+  // `automatic` is a proven timer and keeps the per-origin override.
+  saveKind?: 'interactive' | 'automatic' | 'human'
   // An ALREADY-PROVEN `files.id` for the file being snapshotted, letting the
   // service skip a resolution it would otherwise repeat. Set it only when the
   // caller has resolved the id for this same space env — restoreVersion does,

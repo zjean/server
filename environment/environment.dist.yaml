@@ -420,10 +420,6 @@ applications:
       # enable file versioning
       # default: false
       enabled: false
-      # Maximum number of versions kept per file.
-      # Set to `false` or 0 to keep an unlimited number.
-      # default: 20
-      maxVersionsPerFile: 20
       # Version retention in days per repository type. Set each value to a number
       # of days to enable automatic cleanup.
       # Set to `false` or 0 to disable cleanup for that repository type.
@@ -443,12 +439,16 @@ applications:
       # default: 60
       minIntervalSeconds: 60
       # Per-origin overrides of the window above. The document servers decide
-      # when to save, so they need a wider window than a human pressing Save.
-      # Applies only to saves the server did NOT trigger: when an editor tells us
-      # a person pressed Save (OnlyOffice reports this), that save uses
-      # minIntervalSeconds above instead, since the reason for the wider window
-      # does not hold. Collabora reports nothing, so all of its saves use the
-      # override.
+      # when to save, so they need a wider window than a human pressing Save —
+      # but only when we cannot prove otherwise. Three cases, not two:
+      #  - a save an editor proves a person triggered (OnlyOffice's
+      #    forcesavetype 1/3, an explicit Save or form submit) is NEVER
+      #    coalesced: every one of those mints a version, full stop.
+      #  - a save we cannot prove was human- or timer-triggered falls back to
+      #    the scalar minIntervalSeconds above.
+      #  - a save an editor proves its OWN timer triggered uses the override
+      #    below. Collabora reports no discriminator at all, so all of its
+      #    saves fall into this case and use the override.
       # default: collabora/onlyoffice 300
       minIntervalSecondsByOrigin:
         collabora: 300

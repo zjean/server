@@ -93,10 +93,10 @@ export class FilesVersionsRetentionConfig {
 //     Collabora's own coolwsd.xml defaults are `idlesave_duration_secs: 30`
 //     and `autosave_duration_secs: 300`, so a PutFile can arrive every 30
 //     seconds of edit-then-pause. At a 60-second window an hour of active
-//     editing mints ~10 versions — which, with `maxVersionsPerFile` at 20,
-//     evicts about half of that file's genuinely distinct older revisions.
-//     Autosave noise consuming the retention budget is the real harm, not the
-//     row count.
+//     editing mints ~10 versions — which under the FIFO cap this config used to
+//     carry would have evicted about half of the file's genuinely distinct older
+//     revisions. Age-tiered thinning is what removed that trade-off; the window
+//     now bounds only the write rate, not the reach of history.
 //   - An INTERACTIVE write is a human pressing Save. Each one is a decision,
 //     and collapsing four of them into one leaves the intermediate states
 //     unrecoverable. 60 seconds is right there.
@@ -109,13 +109,20 @@ export class FilesVersionsRetentionConfig {
 //
 // AMENDED after the ADR §19 soak (#389). "Barely needs one" was too generous:
 // OnlyOffice has no automatic save AT ALL, so its 300 was being applied
-// exclusively to HUMAN saves — the category the scalar's 60 is for — and four
-// Ctrl+S presses inside two minutes minted zero versions. The values below are
-// unchanged; what changed is that a save OnlyOffice reports as human-triggered
-// (`forcesavetype`) now resolves to the scalar instead, because the premise
-// above — the document server decides when to save — is false for that save.
-// Collabora reports no such thing and keeps the override for every save. See
-// docs/plans/2026-07-29-coalescing-forcesavetype-design.md.
+// exclusively to HUMAN saves, and four Ctrl+S presses inside two minutes
+// minted zero versions. #395 first routed a
+// save OnlyOffice reports as human-triggered (`forcesavetype` 1/3) through the
+// scalar instead of this override — better, but still a rate limit on an
+// explicit user request, and two deliberate Ctrl+S presses 34s apart could
+// still land in the same 60s bucket and lose one. §5.3's later fix: a PROVEN
+// human save (forcesavetype 1/3) now skips coalescing entirely (window 0,
+// never rate-limited); an OnlyOffice callback carrying no `forcesavetype`
+// (cannot be proven either way) still falls back to the scalar; only a save
+// an editor PROVES its own timer made uses the override below. Collabora
+// reports no discriminator at all — it never sets `forcesavetype` — so every
+// one of its saves keeps the override. See
+// docs/plans/2026-07-29-coalescing-forcesavetype-design.md and §5.3 of
+// docs/plans/2026-07-25-file-versioning-design.md.
 //
 // `0` means "never coalesce this origin" and is distinguishable from "not
 // configured" — the lookup tests for a number, not for truthiness. Any origin
@@ -142,12 +149,6 @@ export class FilesVersionsOriginIntervalsConfig {
 export class FilesVersionsConfig {
   @IsBoolean()
   enabled: boolean = false
-
-  @Transform(({ value }) => (value === 0 ? false : value))
-  @ValidateIf((o: FilesVersionsConfig) => o.maxVersionsPerFile !== false)
-  @IsInt()
-  @Min(1)
-  maxVersionsPerFile: number | false = 20
 
   @IsNotEmptyObject()
   @ValidateNested()

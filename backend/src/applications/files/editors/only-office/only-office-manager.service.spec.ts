@@ -403,12 +403,12 @@ describe(OnlyOfficeManager.name, () => {
        See docs/plans/2026-07-29-coalescing-forcesavetype-design.md §2.2. */
     describe('classifying a save as human or automatic (#389)', () => {
       const CLASSIFICATIONS = [
-        [6, { forcesavetype: 1 }, 'interactive', 'the Save button was clicked'],
-        [6, { forcesavetype: 3 }, 'interactive', 'the form was submitted'],
+        [6, { forcesavetype: 1 }, 'human', 'the Save button was clicked'],
+        [6, { forcesavetype: 3 }, 'human', 'the form was submitted'],
         [6, { forcesavetype: 2 }, 'automatic', 'by the document server timer'],
         [6, { forcesavetype: 0 }, 'automatic', 'via the command service'],
         [6, {}, 'interactive', 'forcesavetype absent where the contract says it cannot be'],
-        [7, { forcesavetype: 1 }, 'interactive', 'a human save, retried after an error'],
+        [7, { forcesavetype: 1 }, 'human', 'a human save, retried after an error'],
         [7, { forcesavetype: 2 }, 'automatic', 'a timer save, retried after an error'],
         [2, { notmodified: false }, 'interactive', 'session-close flush, no discriminator'],
         [3, {}, 'interactive', 'save-error retry, trigger already lost']
@@ -418,6 +418,25 @@ describe(OnlyOfficeManager.name, () => {
         await expectSuccessfulSaveCallback(mockDocumentUrl, { status, ...extra })
 
         expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceEnv, { origin: 'onlyoffice', saveKind })
+      })
+    })
+
+    // Task 6 (#389 follow-up): forcesavetype 1 and 3 are a PROVEN human
+    // trigger, not merely the "no better claim available" 'interactive'
+    // default. Keying the coalescing window on the raw forcesavetype value —
+    // not on the derived saveKind — is what keeps this classification from
+    // also exempting the document server's own timer saves on an installation
+    // with autoAssembly enabled.
+    describe('classifying a PROVEN human save (task 6)', () => {
+      it('classifies forcesavetype 1 and 3 as PROVEN human', () => {
+        expect(service['saveKindOf']({ forcesavetype: 1 } as any)).toBe('human')
+        expect(service['saveKindOf']({ forcesavetype: 3 } as any)).toBe('human')
+      })
+
+      it('still classifies 0 and 2 as automatic, and an absent discriminator as interactive', () => {
+        expect(service['saveKindOf']({ forcesavetype: 0 } as any)).toBe('automatic')
+        expect(service['saveKindOf']({ forcesavetype: 2 } as any)).toBe('automatic')
+        expect(service['saveKindOf']({} as any)).toBe('interactive')
       })
     })
 

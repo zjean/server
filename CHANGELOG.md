@@ -38,6 +38,26 @@ is disabled.
   advertised as a capability; it exists because NC Android renders its file-detail list — file versions included — only
   when the activities call returns a parseable OCS body.
 
+### Changed
+
+* **custom-versioning:** version history is now shaped by age-tiered thinning (Nextcloud's keep-density curve) instead
+  of a per-file FIFO cap. Recent versions stay dense; older ones thin to daily and then weekly, so history reaches
+  back much further.
+* **custom-versioning:** OnlyOffice saves that are proven human-triggered (`forcesavetype` 1/3) are never coalesced —
+  every explicit Save mints a restore point.
+* **custom-versioning:** the nightly retention log's rule name changed from `maxVersionsPerFile` to `thinning`.
+
+### Removed
+
+* `applications.files.versions.maxVersionsPerFile`. It is warned about and ignored if still present. Size is bounded
+  by `quotaShare` and `retentionDays`.
+
+### Upgrade note
+
+* The first thinning pass on an existing install can remove more versions than the old cap ever did — a file holding
+  20 versions minted minutes apart inside the last hour thins toward one per minute. Every removal is audited in the
+  retention log. This is not reversible.
+
 ### Bug Fixes
 
 * **custom-mobile-compat:** `user_status` now carries `supports_emoji`, `restore` and `supports_busy`. NC Android reads
