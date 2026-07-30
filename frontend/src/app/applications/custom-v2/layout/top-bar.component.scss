@@ -6,7 +6,7 @@
   // .layout-v2__content, which becomes the sticky containing block.
   position: sticky;
   top: 0;
-  z-index: 5;
+  z-index: var(--si-z-sticky);
 }
 
 .topbar {

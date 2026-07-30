@@ -579,7 +579,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 90;
+        z-index: var(--si-z-dialog);
       }
       .au-dialog {
         position: fixed;
@@ -589,7 +589,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         width: 520px;
         max-height: 80vh;
         overflow: auto;
-        z-index: 91;
+        z-index: calc(var(--si-z-dialog) + 1);
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);

@@ -79,7 +79,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.45);
-        z-index: 60;
+        z-index: var(--si-z-popover);
         animation: as-fade-in 140ms ease-out;
       }
       .as {
@@ -87,7 +87,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         left: 12px;
         right: 12px;
         bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-        z-index: 61;
+        z-index: calc(var(--si-z-popover) + 1);
         background: var(--si-bg1);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);

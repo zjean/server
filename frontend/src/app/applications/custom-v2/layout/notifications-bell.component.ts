@@ -140,7 +140,7 @@ import { ToastService } from '../components/toast.service'
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
         box-shadow: var(--si-shadow2, 0 8px 24px rgba(0, 0, 0, 0.25));
-        z-index: 80;
+        z-index: var(--si-z-popover);
         overflow: hidden;
       }
       .nb__panel-head {

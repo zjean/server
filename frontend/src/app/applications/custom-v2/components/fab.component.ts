@@ -42,7 +42,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         align-items: center;
         justify-content: center;
         box-shadow: var(--si-shadow3);
-        z-index: 20;
+        z-index: calc(var(--si-z-overlay) + 1);
         transition:
           background 120ms ease,
           transform 120ms ease;

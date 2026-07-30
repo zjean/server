@@ -79,7 +79,7 @@ const VIEWPORT_GUTTER = 8
       }
       .ctx-menu {
         position: fixed;
-        z-index: 60;
+        z-index: var(--si-z-popover);
         min-width: ${MENU_WIDTH}px;
         padding: 4px;
         background: var(--si-bg1);

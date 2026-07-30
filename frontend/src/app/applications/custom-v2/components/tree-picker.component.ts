@@ -134,14 +134,14 @@ const ROOT_SHARES: FileTree = {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 70;
+        z-index: var(--si-z-dialog);
       }
       .tree-picker {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 71;
+        z-index: calc(var(--si-z-dialog) + 1);
         width: 420px;
         max-height: 560px;
         display: flex;
