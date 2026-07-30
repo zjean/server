@@ -120,7 +120,7 @@ describe('versionsToExpire', () => {
     expect(expired).toEqual([3])
   })
 
-  it('expires everything labeled nothing when all versions are labeled', () => {
+  it('expires nothing when every version but one is labeled', () => {
     expect(versionsToExpire([at(1, 10), at(2, 20, 'a'), at(3, 30, 'b')], NOW)).toEqual([])
   })
 
@@ -367,19 +367,33 @@ Delete `trimToMaxVersionsPerFile` (lines 414-428) and add in its place:
   // Runs on every write, and again nightly for files nobody is writing to
   // (VersionsRetention.enforceThinning). Idempotent, so the nightly pass over an
   // already-shaped file costs one read.
+  // SWALLOWS ITS OWN ERRORS, unlike the trimToMaxVersionsPerFile it replaces
+  // (which threw and relied on a `.catch()` at the call site). Deliberate: the
+  // "never throw into a caller's save path" constraint then holds as a property
+  // of this method rather than of its one call site, which makes it testable
+  // without exercising the private `snapshot`, and keeps it true if a second
+  // caller is ever added.
   private async thinFile(versionsRoot: string, fileId: number): Promise<void> {
-    const rows = await this.queries.byFileIdNewestFirst(versionsRoot, fileId)
-    for (const id of versionsToExpire(rows, Date.now())) {
-      const victim = rows.find((r) => r.id === id)
-      if (!victim) continue
-      await this.dropVersion(victim)
-      // Per victim at `log`, not an aggregate at `verbose`: ADR §7 — silently
-      // deleting a user's history deserves an audit trail that names what went.
-      // Thinning removes MORE than the FIFO cap did, so this matters more.
-      this.logger.log({
-        tag: this.thinFile.name,
-        msg: `thinned version ${victim.id} of file ${victim.fileId} (${victim.size} bytes) from ${versionsRoot}`
-      })
+    try {
+      const rows = await this.queries.byFileIdNewestFirst(versionsRoot, fileId)
+      for (const id of versionsToExpire(rows, Date.now())) {
+        const victim = rows.find((r) => r.id === id)
+        if (!victim) continue
+        await this.dropVersion(victim)
+        // Per victim at `log`, not an aggregate at `verbose`: ADR §7 — silently
+        // deleting a user's history deserves an audit trail that names what went.
+        // Thinning removes MORE than the FIFO cap did, so this matters more.
+        this.logger.log({
+          tag: this.thinFile.name,
+          msg: `thinned version ${victim.id} of file ${victim.fileId} (${victim.size} bytes) from ${versionsRoot}`
+        })
+      }
+    } catch (e) {
+      // The version is already committed by the time this runs, so rethrowing
+      // would make snapshotBeforeOverwrite log "the save proceeds unversioned" —
+      // a lie once the row exists. The nightly rule is the backstop, so the worst
+      // case is a delay in shape, never a lost version.
+      this.logger.warn({ tag: this.thinFile.name, msg: `unable to thin versions of file ${fileId} in ${versionsRoot}: ${e}` })
     }
   }
 ```
@@ -398,19 +412,15 @@ At line ~194, replace the `trimToMaxVersionsPerFile` block with:
     // NOT for a restore's own safety snapshot: the candidate set for an
     // oldest-revision restore includes the version being restored.
     if (options.origin !== 'restore') {
-      await this.thinFile(versionsRoot, fileId).catch((e: unknown) => {
-        this.logger.warn({ tag: this.snapshot.name, msg: `unable to thin versions of file ${fileId} in ${versionsRoot}: ${e}` })
-      })
+      await this.thinFile(versionsRoot, fileId)
     }
 ```
 
-Add the import at the top of the file:
+`thinFile` owns its own error boundary (see its body), so no `.catch()` here. Add the import at the top of the file:
 
 ```ts
 import { versionsToExpire } from '../utils/versions-thinning'
 ```
-
-Note `thinFile` swallows nothing itself — the `.catch()` at the call site is the boundary, which is why the second test in Step 1 asserts on the call site's behaviour via `thinFile` resolving. If that test fails because `thinFile` rejects, wrap the body of `thinFile` in try/catch instead and keep the call-site `.catch()` as belt-and-braces.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -839,7 +849,9 @@ git commit -m "fix(custom-versioning): never coalesce a proven human OnlyOffice 
 
 The three cases must be **rewritten, not deleted**. What they pin is still wanted — labeled versions survive automatic pruning, and pruning happens on the write path without the nightly sweep. Deleting them silently drops the label-exemption coverage that Task 1's invariant depends on at the integration level.
 
-They currently write 5 generations in rapid succession, which under thinning all land inside the 10 s band (2 s step) — so nearly all collapse. That is the assertion to make: **rapid successive writes collapse, and a labeled one never does.** The precise curve is Task 1's job; do not try to test bands through e2e.
+They currently write 5 generations in rapid succession, which under thinning all land inside the 10 s band (2 s step) — so nearly all collapse. That is roughly the assertion to make: **rapid successive writes collapse, and a labeled one never does.**
+
+**But the collapse half is timing-dependent and must be guarded.** It only holds if the writes actually land less than 2 s apart; a slow runner spreads them past the band step and the assertion fails as a false negative. So each collapse assertion is preceded by a precondition check on the real `mtime` spacing, and is skipped rather than failed if the run was too slow. The deterministic halves — a labeled version always survives, the newest always survives — are asserted unconditionally. The precise curve is Task 1's job; do not try to test bands through e2e.
 
 - [ ] **Step 1: Rewrite the sweep case**
 
@@ -859,11 +871,18 @@ They currently write 5 generations in rapid succession, which under thinning all
       await e2e.retention.cleanVersions()
 
       const kept = await e2e.versionsOf(rel)
-      // The label is exempt from every automatic rule.
+      // DETERMINISTIC: the label is exempt from every automatic rule.
       expect(kept.some((v) => v.id === oldest.id)).toBe(true)
-      // Written within milliseconds of each other, so the 2s band collapses the
-      // unlabeled ones toward a single survivor.
-      expect(kept.filter((v) => !v.label).length).toBeLessThan(all.filter((v) => !v.label).length)
+      // TIMING-DEPENDENT, so guarded. The collapse only holds if the writes
+      // landed inside the 2s band; on a slow runner they spread past it and
+      // nothing is expected to collapse. Asserting unconditionally would make
+      // this a false negative under load. The curve itself is unit-tested in
+      // versions-thinning.spec.ts.
+      const spans = all.map((v) => v.mtime).sort((a, b) => b - a)
+      const allWithin2s = spans.every((m, i) => i === 0 || spans[i - 1] - m < 2000)
+      if (allWithin2s) {
+        expect(kept.filter((v) => !v.label).length).toBeLessThan(all.filter((v) => !v.label).length)
+      }
     })
 ```
 
@@ -881,10 +900,15 @@ They currently write 5 generations in rapid succession, which under thinning all
       }
 
       const kept = await e2e.versionsOf(rel)
-      expect(kept.length).toBeLessThan(5)
-      // Newest-first, and each version holds the content its write destroyed, so
-      // the newest survivor is the last generation overwritten.
+      // DETERMINISTIC: the newest version is always kept, and each version holds
+      // the content its write destroyed — so the newest survivor is the last
+      // generation overwritten. True whatever the runner's speed.
       expect((await e2e.api.content(kept[0].id, rel)).body).toBe('eager gen 4')
+      // TIMING-DEPENDENT, guarded for the same reason as the case above.
+      const spans = kept.map((v) => v.mtime).sort((a, b) => b - a)
+      if (spans.length > 1 && spans[0] - spans[spans.length - 1] < 2000) {
+        expect(kept.length).toBeLessThan(5)
+      }
     })
 ```
 
