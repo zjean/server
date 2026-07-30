@@ -1156,10 +1156,21 @@ describe(VersioningService.name, () => {
   /* ------------------------------------------------------- eager thinning (#340) */
 
   // Fixtures are cast: versionsToExpire takes a structural ThinnableVersion
-  // (id, mtime, label), and spelling out createdAt/origin/scope on every
-  // fixture would obscure what each case is actually about.
+  // (id, mtime, label, createdAt), and spelling out origin/scope on every
+  // fixture would obscure what each case is actually about. createdAt is
+  // pinned to the epoch — long held, so the createdAt floor (versions-thinning)
+  // never exempts these rows and Task 3's pre-floor expectations are unchanged.
   const row = (id: number, secondsAgo: number, label: string | null = null) =>
-    ({ id, fileId: 7, versionsRoot: '/root', mtime: Date.now() - secondsAgo * 1000, label, checksum: `c${id}`, size: 1 }) as unknown as VersionRow
+    ({
+      id,
+      fileId: 7,
+      versionsRoot: '/root',
+      mtime: Date.now() - secondsAgo * 1000,
+      label,
+      checksum: `c${id}`,
+      size: 1,
+      createdAt: new Date(0)
+    }) as unknown as VersionRow
 
   describe('VersioningService — eager thinning', () => {
     // Critical: everything else in this block calls `thinFile` directly, which
@@ -1173,6 +1184,15 @@ describe(VersioningService.name, () => {
     it('thins on the write path, not only nightly', async () => {
       versionsConfig.minIntervalSeconds = 0
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures CONTENT
+      // The createdAt floor (versions-thinning.ts) exempts a row until it has
+      // been HELD for at least the step its own mtime-age band judges it by —
+      // 2s here, since the capture above is seconds old. FakeQueries.insertVersion
+      // stamps createdAt with the real `new Date()`, same as a DB NOW() default,
+      // so without this the CONTENT row would still be within its own 2s grace
+      // window when the second snapshot's thinFile runs a few ms later, and the
+      // floor (correctly) would keep it — this test would then no longer be
+      // exercising the band's spacing rule at all, only the floor's grace period.
+      queries.rows[0].createdAt = new Date(Date.now() - 3_000)
       await fs.writeFile(filePath, 'second')
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures 'second'
 

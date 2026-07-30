@@ -31,6 +31,10 @@ export interface ThinnableVersion {
   id: number
   mtime: number
   label: string | null
+  // When WE captured this version. Server-set and monotonic, unlike `mtime`,
+  // which arrives from the client via touchFile — see the floor in
+  // versionsToExpire for what that difference is load-bearing for.
+  createdAt: Date
 }
 
 // The ids to expire, given a file's versions and the current time.
@@ -56,6 +60,21 @@ export function versionsToExpire(versions: ThinnableVersion[], nowMs: number): n
       continue
     }
     const step = stepForAge((nowMs - version.mtime) / 1000)
+    // THE FLOOR. Never expire a capture we have not held for at least as long as
+    // the spacing we are judging it by. `mtime` is client-controlled, so without
+    // this a row whose content carries a backdated mtime lands in a coarse band
+    // and is expired inside the same snapshot() call that created it — silently
+    // and unrecoverably, while the caller logs `versioned …`. `createdAt` is set
+    // by us and never rewinds. No new constant: the floor IS the curve, read
+    // against a clock we trust.
+    //
+    // An exempt row still anchors, because it is being kept — and anchoring on it
+    // keeps MORE neighbours, which is the safe direction for a rule that deletes
+    // a user's history.
+    if ((nowMs - version.createdAt.getTime()) / 1000 < step) {
+      lastKeptMtime = version.mtime
+      continue
+    }
     if ((lastKeptMtime - version.mtime) / 1000 >= step) {
       lastKeptMtime = version.mtime
     } else {

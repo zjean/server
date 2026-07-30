@@ -18,10 +18,14 @@ describe('THINNING_BANDS', () => {
 const NOW = 10_000_000_000
 
 // `secondsAgo` is how old the version's CONTENT is, which is what mtime means.
-const at = (id: number, secondsAgo: number, label: string | null = null): ThinnableVersion => ({
+// `heldSeconds` defaults to a year: the floor is not what these cases are about,
+// and a row held that long is past every band's step, so the pre-floor
+// expectations are unchanged.
+const at = (id: number, secondsAgo: number, label: string | null = null, heldSeconds = 31_536_000): ThinnableVersion => ({
   id,
   mtime: NOW - secondsAgo * 1000,
-  label
+  label,
+  createdAt: new Date(NOW - heldSeconds * 1000)
 })
 
 describe('versionsToExpire', () => {
@@ -91,5 +95,47 @@ describe('versionsToExpire', () => {
     const firstPass = versionsToExpire(rows, NOW)
     const survivors = rows.filter((r) => !firstPass.includes(r.id))
     expect(versionsToExpire(survivors, NOW)).toEqual([])
+  })
+})
+
+// mtime is CLIENT-CONTROLLED (touchFile), so it cannot be the only clock. The
+// floor is keyed on createdAt, which the server sets and never rewinds.
+describe('versionsToExpire — the createdAt floor', () => {
+  // THE VECTOR. Content stamped 2 days ago, captured just now: without the floor
+  // it lands in the 24h band (3600s step), sits 30s from its neighbour, and is
+  // expired inside the same snapshot() call that created it.
+  it('never expires a row it has only just captured, however old the content claims to be', () => {
+    const twoDays = 172_800
+    const rows = [at(1, twoDays, null, 31_536_000), at(2, twoDays + 30, null, 0)]
+    expect(versionsToExpire(rows, NOW)).toEqual([])
+  })
+
+  // The floor must not become a blanket exemption: once the row has been held
+  // longer than the step it is judged by, it thins normally.
+  //
+  // NOTE: at this age (~2 days), row 2's own band is the 30-day/86400s-step
+  // band (THINNING_BANDS[4]), not the 24h/3600s-step band — so the held value
+  // must clear 86400s, not 3600s, to actually exercise "held past its band
+  // step". 90_000s (25h) does; 7200s (2h) would not, and the test would then
+  // assert an exemption instead of an expiry.
+  it('expires the same row once it has been held past its band step', () => {
+    const twoDays = 172_800
+    const rows = [at(1, twoDays, null, 31_536_000), at(2, twoDays + 30, null, 90_000)]
+    expect(versionsToExpire(rows, NOW)).toEqual([2])
+  })
+
+  // An exempt row is KEPT, so it anchors — which keeps its neighbour too. The
+  // conservative direction, and the one that cannot cause surprise deletions.
+  it('lets an exempt row anchor spacing, keeping its neighbour as well', () => {
+    const rows = [at(1, 3000, null, 31_536_000), at(2, 3030, null, 0), at(3, 3060, null, 31_536_000)]
+    // id 2 is exempt (held 0s < 60s step) and anchors at mtime NOW-3030s.
+    // id 3 is then 30s from that anchor, under the 60s step, so it goes.
+    expect(versionsToExpire(rows, NOW)).toEqual([3])
+  })
+
+  // The reported regression must still hold: two deliberate saves 34s apart, both
+  // long since captured, still collapse in the 60s band.
+  it('still collapses the 34s-apart pair once both are long held', () => {
+    expect(versionsToExpire([at(1, 120), at(2, 154)], NOW)).toEqual([2])
   })
 })
