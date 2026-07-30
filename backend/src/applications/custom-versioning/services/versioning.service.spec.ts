@@ -525,6 +525,12 @@ describe(VersioningService.name, () => {
     // The pre-session state is already captured; an editor autosaving must not
     // mint a version per save.
     expect(queries.rows).toHaveLength(1)
+    // IDENTITY, not just count: eager thinning collapsing the two captures
+    // (mtime a few ms apart) would also leave exactly one row, but the wrong
+    // one — the 'autosave 2' write, not the pre-session state this feature
+    // exists to preserve. Coalescing must mean the SECOND call never inserted
+    // at all, so the survivor is still the original 41-byte capture.
+    expect(queries.rows[0].size).toBe(CONTENT.length)
   })
 
   it('does not coalesce across a different origin or author', async () => {
@@ -622,6 +628,9 @@ describe(VersioningService.name, () => {
 
       // Two minutes is past the 60s scalar but inside the 300s editor window.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'two minutes later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     it.each(['web', 'web-patch', 'webdav', 'sync', 'sync-make', 'nc-chunked', 'nc-text'] as const)(
@@ -661,6 +670,14 @@ describe(VersioningService.name, () => {
 
       // The scalar says "never coalesce"; collabora's own override still does.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: there is no content change between the two calls here, so a
+      // size check cannot distinguish "coalesced" from "inserted twice, then
+      // thinned back to one" — both leave a CONTENT.length row. The id can:
+      // coalescing means the SECOND call never called insertVersion at all, so
+      // FakeQueries' counter never advances past 1. If thinning were doing the
+      // suppressing instead, the survivor would be the SECOND insert (id 2),
+      // since two identical-mtime rows tie-break newest-id-first.
+      expect(queries.rows[0].id).toBe(1)
     })
 
     // An environment.yaml written before this block existed leaves it undefined.
@@ -739,6 +756,9 @@ describe(VersioningService.name, () => {
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
 
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'saved again immediately' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // Collabora's PutFile carries no discriminator, so its caller never sets
@@ -752,6 +772,9 @@ describe(VersioningService.name, () => {
 
       // Two minutes is past the 60s scalar but inside collabora's 300s window.
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'two minutes later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // A human save reads the SCALAR, not a hardcoded 60. An operator who
@@ -765,6 +788,9 @@ describe(VersioningService.name, () => {
       await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'onlyoffice', saveKind: 'interactive' })
 
       expect(queries.rows).toHaveLength(1)
+      // IDENTITY: eager thinning collapsing the two captures would also leave
+      // one row, but the 'ninety seconds later' one, not the original.
+      expect(queries.rows[0].size).toBe(CONTENT.length)
     })
 
     // `0` on the scalar means "never coalesce" and must survive being reached
@@ -1136,6 +1162,26 @@ describe(VersioningService.name, () => {
     ({ id, fileId: 7, versionsRoot: '/root', mtime: Date.now() - secondsAgo * 1000, label, checksum: `c${id}`, size: 1 }) as unknown as VersionRow
 
   describe('VersioningService — eager thinning', () => {
+    // Critical: everything else in this block calls `thinFile` directly, which
+    // proves the FUNCTION is correct but not that it is WIRED into the write
+    // path — a later refactor or upstream sync could drop the call site in
+    // `snapshot()` and this whole suite would stay green. This one drives
+    // thinning exclusively through `snapshotBeforeOverwrite`, the real caller,
+    // with no `ageFile` spacing: two real writes land milliseconds apart,
+    // squarely inside the first band's 2s requirement, so the older capture
+    // must be gone if — and only if — eager thinning actually runs on a write.
+    it('thins on the write path, not only nightly', async () => {
+      versionsConfig.minIntervalSeconds = 0
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures CONTENT
+      await fs.writeFile(filePath, 'second')
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' }) // captures 'second'
+
+      // Two captures milliseconds apart are inside the 2s band: the older
+      // (CONTENT, 41 bytes) is expired and only the newer survives.
+      expect(queries.rows).toHaveLength(1)
+      expect(queries.rows[0].size).toBe('second'.length)
+    })
+
     it('expires the versions the thinner selects, through dropVersion', async () => {
       // Two rows 34s apart, both older than a minute: the 60s band collapses them.
       const rows = [row(11, 120), row(12, 154)]
