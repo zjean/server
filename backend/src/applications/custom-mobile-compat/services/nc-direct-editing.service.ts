@@ -3,16 +3,59 @@ import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { JwtIdentityPayload } from '../../../authentication/interfaces/jwt-payload.interface'
 import { configuration } from '../../../configuration/config.environment'
+import { ONLY_OFFICE_EXTENSIONS } from '../../files/editors/only-office/only-office.constants'
+import { getMimeType } from '../../files/utils/files'
 import type { UserModel } from '../../users/models/user.model'
 
-// NC iOS gates the Edit affordance on the editor *name* (lowercased) being
-// one of `"nextcloud text"` or `"onlyoffice"` — see
-// `iOSClient/Data/NCManageDatabase+Metadata.swift::isAvailableDirectEditingEditorView`.
-// Anything else and the button never appears, no matter what mimetypes we
-// advertise. When the name matches "nextcloud text", NCViewer.swift hardcodes
-// `editor = "text"` regardless of the advertised id — so the id MUST be "text".
+// Both stock NC clients pick an editor by its *id*, matched against a hardcoded
+// registry, and the id also decides which user agent the host webview uses:
+//   - iOS: `NCDirectEditorAdapter.resolve` keys on the lowercased id and knows
+//     `text`, `onlyoffice`, `eurooffice`, `whiteboard`. `eurooffice` maps onto
+//     the same OnlyOffice user agent and the same view controller.
+//   - Android: `EditorUtils.kt::OFFICE_EDITOR_IDS = setOf("onlyoffice",
+//     "eurooffice")`, matched against `Editor.id`.
+// So an id outside those sets is an editor no client will ever open. Older iOS
+// builds additionally gated on the lowercased *name* being `"nextcloud text"` or
+// `"onlyoffice"` — which is why the names below are chosen to satisfy both the
+// old name check and the current id check.
 export const NC_DIRECT_EDITING_EDITOR_ID = 'text'
 export const NC_DIRECT_EDITING_EDITOR_NAME = 'Nextcloud Text'
+
+// The office entry's id follows whichever document server is configured, with
+// the same precedence OnlyOfficeManager itself uses when both are enabled
+// (only-office-manager.service.ts:83-86) so the advertised editor always names
+// the server that will actually serve it. Null when no office document server is
+// enabled — the catalog then carries the text editor alone, exactly as before.
+export type NcOfficeEditorId = 'onlyoffice' | 'eurooffice'
+
+export function ncOfficeEditorId(): NcOfficeEditorId | null {
+  if (configuration.applications.files.editors.onlyoffice?.enabled === true) return 'onlyoffice'
+  if (configuration.applications.files.editors.eurooffice?.enabled === true) return 'eurooffice'
+  return null
+}
+
+// 'OnlyOffice' deliberately, not upstream's 'ONLYOFFICE': it lowercases to
+// exactly the string older iOS builds compared against.
+const NC_OFFICE_EDITOR_NAMES: Record<NcOfficeEditorId, string> = {
+  onlyoffice: 'OnlyOffice',
+  eurooffice: 'Euro-Office'
+}
+
+// Which of OnlyOffice's five document classes we advertise as editable.
+//
+// `pdf` and `diagram` are left out on purpose. iOS routes every PDF to its own
+// NCViewerPDF before it ever consults the catalog (NCViewer.swift), so
+// advertising `application/pdf` would light up an Edit action on Android alone —
+// an asymmetry with no upside. Diagrams are view-only in OnlyOffice.
+const NC_OFFICE_DOCUMENT_TYPES: ReadonlySet<string> = new Set(['word', 'cell', 'slide'])
+
+// Mimes that an office document class claims but that belong to another editor,
+// or to no editor at all:
+//   - text/csv is already in the text catalog above, where CodeMirror handles it
+//     far better than a spreadsheet round-trip would.
+//   - message/rfc822 is what .mht/.mhtml resolve to; it is the mail mime, and
+//     claiming it would offer to "edit" saved messages.
+const NC_OFFICE_MIME_EXCLUSIONS: ReadonlySet<string> = new Set(['text/csv', 'message/rfc822'])
 
 // Token TTL. Short enough that a leaked editor URL stops working quickly,
 // long enough that a user can open a file, walk away briefly, and still save.
@@ -53,6 +96,34 @@ export const NC_DIRECT_EDITING_MIMETYPES: readonly string[] = Object.freeze([
   'application/x-yaml',
   'application/x-sh'
 ])
+
+// The office editor's mimetypes, DERIVED from the extensions OnlyOfficeManager
+// will actually accept rather than hand-listed.
+//
+// The derivation runs each extension through the very functions the DAV layer
+// uses to emit `d:getcontenttype` — `getMimeType`, then the same first-dash
+// reversal WebDAVFile does — because both clients compare the advertised
+// mimetype to that emitted string with EXACT equality
+// (NCUtility.swift::editorsDirectEditing, EditorUtils.kt::getEditor). A
+// hand-maintained list is exactly how the two drift apart, and a drifted entry
+// fails silently: no Edit affordance, no error anywhere.
+//
+// Extensions `mime-types` does not know (fb2, fodt, hwp, et, fods, dps, …) yield
+// `file`, carry no '/' and drop out here. They are genuinely unaddressable — the
+// server has no mime to advertise them under.
+export const NC_DIRECT_EDITING_OFFICE_MIMETYPES: readonly string[] = Object.freeze(buildOfficeMimetypes())
+
+function buildOfficeMimetypes(): string[] {
+  const mimes = new Set<string>()
+  for (const [extension, documentType] of ONLY_OFFICE_EXTENSIONS) {
+    if (!NC_OFFICE_DOCUMENT_TYPES.has(documentType)) continue
+    const emitted = getMimeType(`f.${extension}`, false).replace('-', '/')
+    if (!emitted.includes('/')) continue
+    if (NC_OFFICE_MIME_EXCLUSIONS.has(emitted)) continue
+    mimes.add(emitted)
+  }
+  return [...mimes].sort()
+}
 
 export interface NcDirectEditor {
   id: string
@@ -121,11 +192,21 @@ export class NcDirectEditingService {
   }
 
   isEditableMime(mime: string | undefined | null): boolean {
-    if (!mime) return false
-    // Sync-in stores mimes with the first `/` replaced by `-`. Normalize
-    // back to the canonical form before comparing against the catalog.
-    const normalized = mime.includes('/') ? mime : mime.replace('-', '/')
-    return NC_DIRECT_EDITING_MIMETYPES.includes(normalized)
+    return matchesCatalog(mime, NC_DIRECT_EDITING_MIMETYPES)
+  }
+
+  // Second layer for the office editor page. The catalog is what makes the Edit
+  // affordance appear; this is what makes the page refuse to open a file the
+  // catalog never claimed — so "advertised" and "served" cannot drift apart.
+  isOfficeMime(mime: string | undefined | null): boolean {
+    return matchesCatalog(mime, NC_DIRECT_EDITING_OFFICE_MIMETYPES)
+  }
+
+  // The office editor id currently advertised, or null when no office document
+  // server is enabled. Exposed so the /open handler can accept it as an
+  // `editorId` without reaching for `configuration` itself.
+  officeEditorId(): NcOfficeEditorId | null {
+    return ncOfficeEditorId()
   }
 
   async mintEditToken(args: { user: UserModel; fileId: number }): Promise<string> {
@@ -155,6 +236,15 @@ export class NcDirectEditingService {
   }
 }
 
+// Sync-in stores mimes with the first `/` replaced by `-`. Normalize back to the
+// canonical form before comparing against a catalog list — callers may hand over
+// either form depending on whether they pulled from the DB or from REST.
+function matchesCatalog(mime: string | undefined | null, catalog: readonly string[]): boolean {
+  if (!mime) return false
+  const normalized = mime.includes('/') ? mime : mime.replace('-', '/')
+  return catalog.includes(normalized)
+}
+
 // Build a JwtIdentityPayload from a UserModel. UserModel carries everything
 // needed; we just whittle it down to the fields the access-token strategy
 // stores. Anything extra (paths, secrets, etc.) is intentionally dropped.
@@ -176,8 +266,14 @@ function identityFromUser(user: UserModel): JwtIdentityPayload {
 // these so the etag iOS sees in capabilities matches the catalog it gets
 // back from /info.
 
+// Key insertion order is load-bearing on Android and nowhere else. Its
+// `getAvailableEditor` returns `editors.firstOrNull { mime in it.mimetypes }`
+// over a Gson-deserialized LinkedHashMap, so on any mimetype two editors claim,
+// the one declared FIRST wins. Text comes first deliberately: it is the cheaper,
+// more faithful editor for anything both could open. (iOS needs no such care —
+// NCViewer.swift forces `["text"]` whenever text matches at all.)
 function buildEditorsCatalog(): Record<string, NcDirectEditor> {
-  return {
+  const catalog: Record<string, NcDirectEditor> = {
     [NC_DIRECT_EDITING_EDITOR_ID]: {
       id: NC_DIRECT_EDITING_EDITOR_ID,
       name: NC_DIRECT_EDITING_EDITOR_NAME,
@@ -188,9 +284,25 @@ function buildEditorsCatalog(): Record<string, NcDirectEditor> {
       secure: false
     }
   }
+  const officeId = ncOfficeEditorId()
+  if (officeId) {
+    catalog[officeId] = {
+      id: officeId,
+      name: NC_OFFICE_EDITOR_NAMES[officeId],
+      mimetypes: [...NC_DIRECT_EDITING_OFFICE_MIMETYPES],
+      optionalMimetypes: [],
+      secure: false
+    }
+  }
+  return catalog
 }
 
 export function ncDirectEditingCatalogEtag(): string {
+  // Must fold EVERY field of the /info body. Android refetches the catalog only
+  // when this etag differs from the one it stored (RefreshFolderOperation, keyed
+  // on DIRECT_EDITING_ETAG), so a change the etag does not cover is a change
+  // Android never sees. `creators` is still literally empty — the day it stops
+  // being, it has to be read from the same place /info reads it.
   const catalog = JSON.stringify({ editors: buildEditorsCatalog(), creators: {} })
   return createHash('sha256').update(catalog).digest('hex').slice(0, 16)
 }

@@ -59,6 +59,15 @@ export const NC_ROUTE = {
   // requests. Euro-Office support is a config selection behind these routes,
   // not a second route family.
   //
+  // NO STOCK CLIENT REACHES THESE. Searching nextcloud/ios, nextcloud/android
+  // and nextcloud/NextcloudKit for `apps/onlyoffice` returns nothing: the only
+  // office surfaces those clients know are the directEditing catalog (which this
+  // fork now serves an office editor through — see NcDirectEditingService and
+  // NcOfficeEditorController) and richdocuments. That resolves U2 of
+  // docs/plans/2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md as Path B,
+  // from source rather than from a device session. The routes are kept for the
+  // ONLYOFFICE Documents app and any client that does speak the connector.
+  //
   // Only ONE of the four below is a route the real connector serves. Checked
   // against ONLYOFFICE/onlyoffice-nextcloud appinfo/routes.php:
   //   ours                 upstream

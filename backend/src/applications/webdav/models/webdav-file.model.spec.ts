@@ -1,4 +1,3 @@
-import mime from 'mime-types'
 import { getMimeType } from '../../files/utils/files'
 import { WebDAVFile } from './webdav-file.model'
 
