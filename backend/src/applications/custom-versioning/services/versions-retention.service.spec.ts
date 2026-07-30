@@ -110,7 +110,9 @@ describe(VersionsRetention.name, () => {
       oldestUnlabeledByRoot: vi.fn().mockResolvedValue(undefined),
       unlabeledByRootOldestFirst: vi.fn().mockResolvedValue([]),
       danglingRows: vi.fn().mockResolvedValue([]),
-      countByBlob: vi.fn().mockResolvedValue(1)
+      countByBlob: vi.fn().mockResolvedValue(1),
+      distinctFileIdsByRoot: vi.fn().mockResolvedValue([]),
+      byFileIdNewestFirst: vi.fn().mockResolvedValue([])
     }
     // Returns a quota so the quota rule actually reaches its destructive path; a
     // stub that always answered "no quota" is why a data-loss bug in that loop
@@ -200,43 +202,45 @@ describe(VersionsRetention.name, () => {
     expect(dropped.map((r) => r.id)).toContain(4)
   })
 
-  /* --------------------------------------------------- maxVersionsPerFile */
+  /* --------------------------------------------------------- thinning */
 
-  it('trims a file down to the cap, oldest unlabeled first', async () => {
-    versionsConfig.maxVersionsPerFile = 3
-    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 5 }])
-    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 1 }), row({ id: 2 })])
+  describe('thinning rule', () => {
+    // secondsAgo is applied to mtime; createdAt is pinned far in the past so
+    // the floor in versionsToExpire (never expire a row younger than the step
+    // it's being judged by) never exempts these fixtures — see task brief.
+    const thinRow = (id: number, secondsAgo: number, label: string | null = null): VersionRow =>
+      row({ id, fileId: 7, versionsRoot: ROOT, mtime: Date.now() - secondsAgo * 1000, label, createdAt: new Date(0) })
 
-    await service.cleanVersions()
+    it('thins every file in the root and returns the number removed', async () => {
+      queries.distinctFileIdsByRoot.mockResolvedValue([7])
+      queries.byFileIdNewestFirst.mockResolvedValue([thinRow(11, 120), thinRow(12, 154)])
 
-    // 5 in this root, keep 3 => ask for exactly the 2 oldest unlabeled.
-    expect(queries.unlabeledByFileIdOldestFirst).toHaveBeenCalledWith(ROOT, 100, 2)
-    expect(dropped.map((r) => r.id)).toEqual([1, 2])
-  })
+      const removed = await service['enforceThinning'](ROOT)
 
-  it('keeps every labeled version even when that exceeds the cap', async () => {
-    versionsConfig.maxVersionsPerFile = 2
-    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 5 }])
-    // All five are labeled, so none are candidates.
-    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([])
+      expect(removed).toBe(1)
+      expect(versioning.dropVersionForRetention).toHaveBeenCalledTimes(1)
+      expect(dropped[0].id).toBe(12)
+    })
 
-    await service.cleanVersions()
+    it('removes nothing from an already-thinned root', async () => {
+      queries.distinctFileIdsByRoot.mockResolvedValue([7])
+      queries.byFileIdNewestFirst.mockResolvedValue([thinRow(11, 120)])
 
-    expect(dropped).toHaveLength(0)
-  })
+      expect(await service['enforceThinning'](ROOT)).toBe(0)
+    })
 
-  it('scopes the trim to this root, so a file moved between spaces is counted per root', async () => {
-    // Gate, count and candidate list must agree on scope. A per-root gate with a
-    // global count over-deleted in one root and under-enforced in the other.
-    versionsConfig.maxVersionsPerFile = 1
-    queries.fileIdsExceeding.mockResolvedValue([{ fileId: 100, count: 3 }])
-    queries.unlabeledByFileIdOldestFirst.mockResolvedValue([row({ id: 2 })])
+    // Exercises the sweep's own wiring, not just the private method in
+    // isolation: the two cases above call enforceThinning directly and would
+    // stay green even if cleanVersions's runRule('thinning', ...) line stopped
+    // calling it. This is what makes the wiring itself falsifiable.
+    it('is reached by the nightly sweep', async () => {
+      queries.distinctFileIdsByRoot.mockResolvedValue([7])
+      queries.byFileIdNewestFirst.mockResolvedValue([thinRow(11, 120), thinRow(12, 154)])
 
-    await service.cleanVersions()
+      await service.cleanVersions()
 
-    expect(queries.fileIdsExceeding).toHaveBeenCalledWith(ROOT, 1)
-    expect(queries.unlabeledByFileIdOldestFirst).toHaveBeenCalledWith(ROOT, 100, 2)
-    expect(dropped.map((r) => r.id)).toEqual([2])
+      expect(dropped.map((r) => r.id)).toContain(12)
+    })
   })
 
   /* --------------------------------------------------------- quotaShare */
