@@ -75,10 +75,10 @@ export interface AvatarStackUser extends AvatarUser {
         z-index: var(--si-z-popover);
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: var(--si-space-1);
         min-width: max-content;
         max-width: 240px;
-        padding: 7px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg1);
         color: var(--si-fg);
         border: 1px solid var(--si-border);

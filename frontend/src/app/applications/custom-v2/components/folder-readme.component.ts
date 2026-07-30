@@ -162,7 +162,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         /* Matches .file-row's highlight radius, which the margin below makes
            this card's left edge flush with. */
         border-radius: 12px;
-        padding: 12px 16px;
+        padding: var(--si-space-6) var(--si-space-8);
         /* 12px here + the 16px padding above = the 28px content margin the page
            title, the filter and the checkbox column all sit on
            (file-browser.component.scss:259-261) — and the 12px puts this card's
@@ -170,20 +170,20 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
            and the rows below it share one vertical line. Without this margin the
            card was the one full-bleed block on the screen: its border sat 28px
            left of the title above it and the file names below it. */
-        margin: 0 12px 12px;
+        margin: 0 var(--si-space-6) var(--si-space-6);
       }
       /* Rows drop their inner padding to 12px below 768px
          (file-browser.component.scss:691-695). Follow them, so the description
          keeps sharing the list's content margin on a narrow viewport instead of
          sitting 4px inside it. */
       :host-context(.layout-v2--mobile) .fr {
-        padding: 12px;
+        padding: var(--si-space-6);
       }
       .fr__head {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
+        gap: var(--si-space-4);
+        margin-bottom: var(--si-space-4);
       }
       .fr__name {
         font-size: var(--si-text-6);
@@ -277,7 +277,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
            (ButtonComponent), so this control is inset like every other small
            control rather than sitting flush against the card's text edge. It also
            widens the hit area beyond the label's glyphs. */
-        padding: 6px 9px 0;
+        padding: var(--si-space-3) 9px 0;
         margin: 0;
         font: inherit;
         font-size: var(--si-text-6);

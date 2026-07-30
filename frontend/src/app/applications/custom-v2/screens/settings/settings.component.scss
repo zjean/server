@@ -12,8 +12,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 32px 32px 40px;
-  gap: 24px;
+  padding: var(--si-space-13) var(--si-space-13) 40px;
+  gap: var(--si-space-11);
   // Left-aligned, NOT centred (#399). `margin: 0 auto` put this screen's content
   // at x=386 while every other v2 screen starts at x=276, so moving into
   // Settings visibly shifted the whole page sideways. The max-width stays — a
@@ -25,7 +25,7 @@
   &__hero {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--si-space-2);
   }
 
   // One page-header pattern across v2 (#405 item 5): h1 + description, which is
@@ -45,7 +45,7 @@
   }
 
   &__lede {
-    margin: 4px 0 0;
+    margin: var(--si-space-2) 0 0;
     font-family: var(--si-sans);
     font-size: var(--si-text-10);
     line-height: 1.4;
@@ -55,8 +55,8 @@
   &__identity {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 18px 20px;
+    gap: var(--si-space-8);
+    padding: var(--si-space-9) var(--si-space-10);
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r3);
@@ -99,7 +99,7 @@
   &__email {
     font-size: var(--si-text-7);
     color: var(--si-fg-muted);
-    margin-top: 2px;
+    margin-top: var(--si-space-1);
   }
 
   &__role {
@@ -108,13 +108,13 @@
     color: var(--si-fg-faint);
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--si-space-5);
   }
 
   &__section-title {
@@ -127,13 +127,13 @@
   }
 
   &__storage {
-    padding: 16px 20px;
+    padding: var(--si-space-8) var(--si-space-10);
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--si-space-4);
   }
 
   &__storage-bar {
@@ -158,23 +158,23 @@
   &__grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
+    gap: var(--si-space-5);
   }
 
   &__about {
-    padding: 16px 20px;
+    padding: var(--si-space-8) var(--si-space-10);
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--si-space-4);
   }
 
   &__about-row {
     display: grid;
     grid-template-columns: 100px 1fr;
-    gap: 10px;
+    gap: var(--si-space-5);
     font-size: var(--si-text-7);
     color: var(--si-fg-muted);
   }
@@ -195,21 +195,21 @@
 
   &__avatar-actions {
     display: inline-flex;
-    gap: 8px;
+    gap: var(--si-space-4);
     margin-left: auto;
   }
 
   &__form {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--si-space-5);
     max-width: 420px;
   }
 
   &__field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--si-space-2);
     font-size: var(--si-text-6);
     color: var(--si-fg-muted);
   }
@@ -222,17 +222,17 @@
   &__form-row {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
   }
 
   &__form-actions {
-    margin-top: 6px;
+    margin-top: var(--si-space-3);
     display: inline-flex;
-    gap: 8px;
+    gap: var(--si-space-4);
   }
 
   &__input {
-    padding: 8px 10px;
+    padding: var(--si-space-4) var(--si-space-5);
     background: var(--si-bg2);
     color: var(--si-fg);
     border: 1px solid var(--si-border);
@@ -280,8 +280,8 @@
 .settings-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: var(--si-space-6);
+  padding: var(--si-space-7) var(--si-space-8);
   background: var(--si-bg3);
   border: 1px solid var(--si-line);
   border-radius: var(--si-r2);
@@ -323,7 +323,7 @@
   &__description {
     font-size: var(--si-text-5);
     color: var(--si-fg-faint);
-    margin-top: 2px;
+    margin-top: var(--si-space-1);
   }
 
   &__chev {

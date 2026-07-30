@@ -65,8 +65,8 @@ interface TabEntry {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 3px;
-        padding: 8px 4px;
+        gap: var(--si-space-2);
+        padding: var(--si-space-4) var(--si-space-2);
         background: transparent;
         border: 0;
         font-family: var(--si-sans);

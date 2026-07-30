@@ -14,11 +14,11 @@
   overflow: auto;
 
   &__toolbar {
-    padding: 32px 28px 20px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-10);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--si-space-2);
     background: var(--si-bg2);
   }
 
@@ -46,14 +46,14 @@
     min-height: 18px;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__divider {
     width: 1px;
     height: 22px;
     background: var(--si-line);
-    margin: 0 6px;
+    margin: 0 var(--si-space-3);
   }
 
   &__state {
@@ -98,8 +98,8 @@
 
 .share-row {
   min-height: 46px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: var(--si-space-3);
+  padding-bottom: var(--si-space-3);
   cursor: pointer;
   background: transparent;
   border-top: none;
@@ -118,7 +118,7 @@
   &__name {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--si-space-6);
     min-width: 0;
   }
 
@@ -139,7 +139,7 @@
   &__description {
     font-size: var(--si-text-3);
     color: var(--si-fg-faint);
-    margin-top: 2px;
+    margin-top: var(--si-space-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

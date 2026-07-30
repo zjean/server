@@ -61,7 +61,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
       }
       .office-view__state,
       .office-view__error {
-        padding: 24px;
+        padding: var(--si-space-11);
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
@@ -69,7 +69,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         color: var(--si-fg);
       }
       .office-view__error-detail {
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
         color: var(--si-fg-muted);
       }
       .office-view__doc {

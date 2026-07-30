@@ -222,10 +222,10 @@ function formatDate(ts: number | null | undefined): string {
         background: var(--si-bg2);
       }
       .at {
-        padding: 22px 28px;
+        padding: 22px var(--si-space-12);
         display: flex;
         flex-direction: column;
-        gap: 20px;
+        gap: var(--si-space-10);
         // 820 to match the Settings column (#399). At 720 these cards stopped
         // ~310px short of the admin tables on the sibling admin screens, which
         // made the section look unfinished — and the per-owner table inside the
@@ -235,7 +235,7 @@ function formatDate(ts: number | null | undefined): string {
       .at__head {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--si-space-2);
       }
       .at__title {
         margin: 0;
@@ -254,8 +254,8 @@ function formatDate(ts: number | null | undefined): string {
       .at-card {
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        padding: 18px 20px;
+        gap: var(--si-space-8);
+        padding: var(--si-space-9) var(--si-space-10);
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
@@ -264,11 +264,11 @@ function formatDate(ts: number | null | undefined): string {
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 14px;
+        gap: var(--si-space-7);
       }
       .at-card__title-wrap {
         display: flex;
-        gap: 12px;
+        gap: var(--si-space-6);
         align-items: flex-start;
       }
       .at-card__icon {
@@ -289,7 +289,7 @@ function formatDate(ts: number | null | undefined): string {
         letter-spacing: -0.1px;
       }
       .at-card__desc {
-        margin-top: 2px;
+        margin-top: var(--si-space-1);
         font-size: var(--si-text-7);
         color: var(--si-fg-muted);
         line-height: 1.4;
@@ -302,7 +302,7 @@ function formatDate(ts: number | null | undefined): string {
 
       .at-badge {
         display: inline-flex;
-        padding: 3px 10px;
+        padding: var(--si-space-2) var(--si-space-5);
         border-radius: var(--si-r4);
         font-size: var(--si-text-3);
         font-weight: 600;
@@ -332,9 +332,9 @@ function formatDate(ts: number | null | undefined): string {
       .at-stats {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 10px;
+        gap: var(--si-space-5);
         margin: 0;
-        padding: 14px;
+        padding: var(--si-space-7);
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
@@ -342,7 +342,7 @@ function formatDate(ts: number | null | undefined): string {
       .at-stat {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: var(--si-space-2);
         min-width: 0;
       }
       .at-stat dt {
@@ -367,7 +367,7 @@ function formatDate(ts: number | null | undefined): string {
 
       .at-actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         justify-content: flex-end;
       }
 
@@ -397,7 +397,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at-table th {
         text-align: left;
-        padding: 8px 12px;
+        padding: var(--si-space-4) var(--si-space-6);
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
@@ -407,7 +407,7 @@ function formatDate(ts: number | null | undefined): string {
         white-space: nowrap;
       }
       .at-table td {
-        padding: 7px 12px;
+        padding: var(--si-space-4) var(--si-space-6);
         border-top: 1px solid var(--si-line);
         color: var(--si-fg);
         vertical-align: middle;
@@ -426,8 +426,8 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at-kind {
         display: inline-block;
-        margin-right: 8px;
-        padding: 1px 7px;
+        margin-right: var(--si-space-4);
+        padding: 1px var(--si-space-4);
         border-radius: var(--si-r4);
         background: var(--si-bg4);
         color: var(--si-fg-muted);

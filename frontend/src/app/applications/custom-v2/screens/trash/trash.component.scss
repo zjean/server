@@ -14,11 +14,11 @@
   overflow: auto;
 
   &__toolbar {
-    padding: 32px 28px 20px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-10);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     background: var(--si-bg2);
     position: sticky;
     top: 0;
@@ -28,7 +28,7 @@
   &__title-group {
     display: flex;
     flex-direction: column;
-    margin-right: 10px;
+    margin-right: var(--si-space-5);
   }
 
   &__title {
@@ -48,21 +48,21 @@
     line-height: 1.4;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__divider {
     width: 1px;
     height: 22px;
     background: var(--si-line);
-    margin: 0 6px;
+    margin: 0 var(--si-space-3);
   }
 
   &__toolbar-right {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
   }
 
   &__state {
@@ -86,7 +86,7 @@
 .bin-row {
   display: grid;
   grid-template-columns: minmax(260px, 2fr) 100px 180px 40px;
-  padding: 0 18px;
+  padding: 0 var(--si-space-9);
   align-items: center;
   border-bottom: 1px solid var(--si-line);
 }
@@ -135,7 +135,7 @@
   &__name {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--si-space-5);
     min-width: 0;
   }
 

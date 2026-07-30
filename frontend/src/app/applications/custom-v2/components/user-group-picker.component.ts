@@ -72,7 +72,7 @@ export interface PickedMember {
         box-sizing: border-box;
         font: inherit;
         font-size: var(--si-text-8);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -96,16 +96,16 @@ export interface PickedMember {
         z-index: calc(var(--si-z-base) + 1);
       }
       .ugp__hint {
-        padding: 10px 12px;
+        padding: var(--si-space-5) var(--si-space-6);
         font-size: var(--si-text-7);
         color: var(--si-fg-muted);
       }
       .ugp__result {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--si-space-4);
         width: 100%;
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: transparent;
         color: var(--si-fg);
         border: none;

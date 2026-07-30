@@ -141,7 +141,7 @@ interface RowMember extends ShareMemberInput {
         transform: translate(-50%, -50%);
         z-index: calc(var(--si-z-dialog) + 1);
         width: min(500px, calc(100vw - 24px));
-        padding: 18px 20px 16px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-8);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
@@ -151,39 +151,39 @@ interface RowMember extends ShareMemberInput {
         font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
-        margin-bottom: 2px;
+        margin-bottom: var(--si-space-1);
       }
       .sd__subject {
         font-size: var(--si-text-7);
         color: var(--si-fg-muted);
-        margin-bottom: 14px;
+        margin-bottom: var(--si-space-7);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .sd__state,
       .sd__empty {
-        padding: 20px 0;
+        padding: var(--si-space-10) 0;
         text-align: center;
         color: var(--si-fg-muted);
         font-size: var(--si-text-8);
       }
       .sd__empty {
-        padding: 10px 0 14px;
+        padding: var(--si-space-5) 0 var(--si-space-7);
       }
       .sd__list {
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        margin-bottom: 12px;
+        gap: var(--si-space-3);
+        margin-bottom: var(--si-space-6);
         max-height: 240px;
         overflow-y: auto;
       }
       .sd__member {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
+        gap: var(--si-space-4);
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         border: 1px solid var(--si-border);
         border-radius: 6px;
@@ -233,7 +233,7 @@ interface RowMember extends ShareMemberInput {
       .sd__preset {
         font: inherit;
         font-size: var(--si-text-7);
-        padding: 5px 8px;
+        padding: var(--si-space-3) var(--si-space-4);
         background: var(--si-bg1);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -246,10 +246,10 @@ interface RowMember extends ShareMemberInput {
         z-index: var(--si-z-popover);
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: var(--si-space-1);
         min-width: max-content;
         max-width: 220px;
-        padding: 7px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg0);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -296,18 +296,18 @@ interface RowMember extends ShareMemberInput {
         color: var(--si-fg);
       }
       .sd__picker-row {
-        margin-bottom: 10px;
+        margin-bottom: var(--si-space-5);
       }
       .sd__error {
         font-size: var(--si-text-5);
         color: var(--si-rose, #c0392b);
-        margin-bottom: 10px;
+        margin-bottom: var(--si-space-5);
       }
       .sd__actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         align-items: center;
-        margin-top: 8px;
+        margin-top: var(--si-space-4);
       }
       .sd__spacer {
         flex: 1;

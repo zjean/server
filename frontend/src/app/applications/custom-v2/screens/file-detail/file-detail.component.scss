@@ -29,11 +29,11 @@
 
   &__toolbar {
     height: 52px;
-    padding: 0 16px;
+    padding: 0 var(--si-space-8);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     // Separated from the preview below by surface tone, not a hard underline.
     background: var(--si-bg2);
   }
@@ -41,7 +41,7 @@
   &__identity {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--si-space-5);
     min-width: 0;
     flex-shrink: 1;
     max-width: 380px;
@@ -76,11 +76,11 @@
     width: 1px;
     height: 22px;
     background: oklch(0.7 0.04 255 / 0.16);
-    margin: 0 6px;
+    margin: 0 var(--si-space-3);
 
     &--small {
       height: 16px;
-      margin: 0 3px;
+      margin: 0 var(--si-space-2);
     }
   }
 
@@ -88,14 +88,14 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--si-space-1);
   }
 
   &__counter {
     font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
-    padding: 0 6px;
+    padding: 0 var(--si-space-3);
   }
 
   &__body {
@@ -112,7 +112,7 @@
     align-items: center;
     justify-content: center;
     background: var(--si-bg1);
-    padding: 32px;
+    padding: var(--si-space-13);
     min-height: 0;
     min-width: 0;
     position: relative;
@@ -162,7 +162,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: var(--si-space-7);
   }
 
   &__audio-glyph {
@@ -189,7 +189,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: var(--si-space-5);
     text-align: center;
     color: var(--si-fg-muted);
   }
@@ -199,13 +199,13 @@
     font-weight: 500;
     font-size: var(--si-text-11);
     color: var(--si-fg);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__no-preview-lede {
     font-size: var(--si-text-8);
     color: var(--si-fg-faint);
-    margin-bottom: 6px;
+    margin-bottom: var(--si-space-3);
   }
 
   // Inspector slides in from the right as an overlay — stage always takes
@@ -235,11 +235,11 @@
   }
 
   &__inspector-head {
-    padding: 14px 16px 12px;
+    padding: var(--si-space-7) var(--si-space-8) var(--si-space-6);
     border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--si-space-5);
     flex-shrink: 0;
   }
 
@@ -262,7 +262,7 @@
     font-size: var(--si-text-6);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    margin-top: 2px;
+    margin-top: var(--si-space-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -270,8 +270,8 @@
 
   &__tabs {
     display: flex;
-    padding: 8px 12px;
-    gap: 4px;
+    padding: var(--si-space-4) var(--si-space-6);
+    gap: var(--si-space-2);
     border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
     background: var(--si-bg1);
     flex-shrink: 0;
@@ -281,11 +281,11 @@
     flex: 1;
     min-width: 0;
     height: 32px;
-    padding: 0 8px;
+    padding: 0 var(--si-space-4);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--si-space-2);
     background: transparent;
     color: var(--si-fg-muted);
     border: none;
@@ -329,11 +329,11 @@
   }
 
   &__placeholder {
-    padding: 28px 18px;
+    padding: var(--si-space-12) var(--si-space-9);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     color: var(--si-fg-faint);
     text-align: center;
   }
@@ -343,7 +343,7 @@
     font-weight: 500;
     font-size: var(--si-text-10);
     color: var(--si-fg);
-    margin-top: 6px;
+    margin-top: var(--si-space-3);
   }
 
   &__placeholder-lede {
@@ -355,7 +355,7 @@
 }
 
 .kv-section {
-  padding: 14px 16px;
+  padding: var(--si-space-7) var(--si-space-8);
   border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
 
   &__title {
@@ -364,7 +364,7 @@
     letter-spacing: 1.2px;
     color: var(--si-fg-faint);
     text-transform: uppercase;
-    margin-bottom: 8px;
+    margin-bottom: var(--si-space-4);
     font-family: var(--si-display);
   }
 }
@@ -372,8 +372,8 @@
 .kv-row {
   display: grid;
   grid-template-columns: 82px 1fr;
-  gap: 8px;
-  padding: 5px 0;
+  gap: var(--si-space-4);
+  padding: var(--si-space-3) 0;
   font-size: var(--si-text-5);
   align-items: center;
 

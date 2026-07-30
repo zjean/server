@@ -57,7 +57,7 @@ import { PromptDialogService } from './prompt-dialog.service'
         z-index: calc(var(--si-z-dialog) + 1);
         min-width: 320px;
         max-width: 420px;
-        padding: 18px 20px 14px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
@@ -67,25 +67,25 @@ import { PromptDialogService } from './prompt-dialog.service'
         font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
-        margin-bottom: 8px;
+        margin-bottom: var(--si-space-4);
       }
       .prompt-dialog__message {
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         line-height: 1.45;
-        margin-bottom: 10px;
+        margin-bottom: var(--si-space-5);
       }
       .prompt-dialog__input {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
         font-size: var(--si-text-8);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
         border-radius: 6px;
-        margin-bottom: 4px;
+        margin-bottom: var(--si-space-2);
         outline: none;
         transition: border-color 120ms ease;
       }
@@ -95,14 +95,14 @@ import { PromptDialogService } from './prompt-dialog.service'
       .prompt-dialog__error {
         font-size: var(--si-text-4);
         color: var(--si-rose, #c0392b);
-        margin-bottom: 10px;
-        margin-top: 4px;
+        margin-bottom: var(--si-space-5);
+        margin-top: var(--si-space-2);
       }
       .prompt-dialog__actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         justify-content: flex-end;
-        margin-top: 14px;
+        margin-top: var(--si-space-7);
       }
     `
   ]

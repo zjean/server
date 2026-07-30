@@ -87,7 +87,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         z-index: calc(var(--si-z-dialog) + 1);
         min-width: 340px;
         max-width: 440px;
-        padding: 18px 20px 14px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
@@ -97,8 +97,8 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 10px;
+        gap: var(--si-space-6);
+        margin-bottom: var(--si-space-5);
       }
       .compress-dialog__title {
         font-size: var(--si-text-11);
@@ -112,7 +112,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       }
       .compress-dialog__row {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .compress-dialog__input {
         flex: 1 1 auto;
@@ -120,7 +120,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         box-sizing: border-box;
         font: inherit;
         font-size: var(--si-text-8);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -134,7 +134,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         box-sizing: border-box;
         font: inherit;
         font-size: var(--si-text-8);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -150,13 +150,13 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       .compress-dialog__error {
         font-size: var(--si-text-4);
         color: var(--si-rose);
-        margin-top: 4px;
+        margin-top: var(--si-space-2);
       }
       .compress-dialog__check {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-top: 12px;
+        gap: var(--si-space-4);
+        margin-top: var(--si-space-6);
         font-size: var(--si-text-8);
         color: var(--si-fg);
         cursor: pointer;
@@ -168,9 +168,9 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       }
       .compress-dialog__actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         justify-content: flex-end;
-        margin-top: 16px;
+        margin-top: var(--si-space-8);
       }
     `
   ]

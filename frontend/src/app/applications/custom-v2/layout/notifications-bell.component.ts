@@ -116,7 +116,7 @@ import { ToastService } from '../components/toast.service'
         right: 2px;
         min-width: 15px;
         height: 15px;
-        padding: 0 4px;
+        padding: 0 var(--si-space-2);
         border-radius: var(--si-r4);
         background: var(--si-rose, oklch(0.72 0.17 20));
         color: #fff;
@@ -147,7 +147,7 @@ import { ToastService } from '../components/toast.service'
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 12px;
+        padding: var(--si-space-5) var(--si-space-6);
         border-bottom: 1px solid var(--si-line);
       }
       .nb__panel-title {
@@ -162,7 +162,7 @@ import { ToastService } from '../components/toast.service'
         border: none;
         color: var(--si-fg-muted);
         cursor: pointer;
-        padding: 4px 6px;
+        padding: var(--si-space-2) var(--si-space-3);
         border-radius: var(--si-r1, 4px);
 
         &:hover {
@@ -171,7 +171,7 @@ import { ToastService } from '../components/toast.service'
         }
       }
       .nb__empty {
-        padding: 24px 14px;
+        padding: var(--si-space-11) var(--si-space-7);
         text-align: center;
         font-size: var(--si-text-6);
         color: var(--si-fg-muted);
@@ -179,7 +179,7 @@ import { ToastService } from '../components/toast.service'
       .nb__list {
         list-style: none;
         margin: 0;
-        padding: 4px 0;
+        padding: var(--si-space-2) 0;
         overflow-y: auto;
         min-height: 0;
         flex: 1 1 auto;
@@ -208,8 +208,8 @@ import { ToastService } from '../components/toast.service'
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 3px;
-        padding: 8px 12px;
+        gap: var(--si-space-2);
+        padding: var(--si-space-4) var(--si-space-6);
         background: transparent;
         border: none;
         text-align: left;
@@ -221,7 +221,7 @@ import { ToastService } from '../components/toast.service'
         display: flex;
         justify-content: space-between;
         align-items: baseline;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .nb-item__author {
         font-size: var(--si-text-6);
@@ -255,8 +255,8 @@ import { ToastService } from '../components/toast.service'
       .nb-item__remove {
         width: 22px;
         align-self: flex-start;
-        margin-top: 8px;
-        margin-right: 6px;
+        margin-top: var(--si-space-4);
+        margin-right: var(--si-space-3);
         height: 22px;
         border-radius: 5px;
         background: transparent;

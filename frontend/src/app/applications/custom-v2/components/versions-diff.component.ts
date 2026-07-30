@@ -49,7 +49,7 @@ interface DiffLine {
       }
       .vd__body {
         margin: 0;
-        padding: 8px 0;
+        padding: var(--si-space-4) 0;
         /* A diff must never widen the panel: long lines scroll inside this box
            rather than pushing the inspector's layout sideways. */
         overflow-x: auto;
@@ -62,7 +62,7 @@ interface DiffLine {
       }
       .vd__line {
         display: block;
-        padding: 0 10px;
+        padding: 0 var(--si-space-5);
         /* Preserves the diff's own indentation. Deliberately on the line, not on
            the container — see the template comment. */
         white-space: pre;

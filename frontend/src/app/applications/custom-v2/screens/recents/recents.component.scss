@@ -18,7 +18,7 @@
   // the page-header consistently.
   // Compact page header, matching the rest of the app (26px title + 14px meta).
   &__header {
-    padding: 32px 28px 18px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
   }
 
   &__title-text {
@@ -32,7 +32,7 @@
   }
 
   &__title-meta {
-    margin: 4px 0 0;
+    margin: var(--si-space-2) 0 0;
     font-size: var(--si-text-10);
     line-height: 1.4;
     color: var(--si-fg-muted);
@@ -40,19 +40,19 @@
   }
 
   &__section {
-    padding: 24px 28px 8px;
+    padding: var(--si-space-11) var(--si-space-12) var(--si-space-4);
 
     &--list {
-      padding-top: 12px;
-      padding-bottom: 28px;
+      padding-top: var(--si-space-6);
+      padding-bottom: var(--si-space-12);
     }
   }
 
   &__section-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: var(--si-space-5);
+    margin-bottom: var(--si-space-7);
   }
 
   &__section-label {
@@ -68,7 +68,7 @@
     display: inline-flex;
     align-items: center;
     height: 18px;
-    padding: 0 8px;
+    padding: 0 var(--si-space-4);
     border-radius: var(--si-r4);
     background: var(--si-bg4);
     color: var(--si-fg-faint);
@@ -81,7 +81,7 @@
   &__pinned-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--si-space-6);
 
     @media (max-width: 1100px) {
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -97,7 +97,7 @@
   &__comments-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--si-space-6);
 
     @media (max-width: 1100px) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -114,8 +114,8 @@
 .pinned-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--si-space-5);
+  padding: var(--si-space-6);
   text-align: left;
   background: var(--si-bg3);
   border: 1px solid var(--si-line);
@@ -152,7 +152,7 @@
     position: absolute;
     bottom: 8px;
     right: 8px;
-    padding: 2px 8px;
+    padding: var(--si-space-1) var(--si-space-4);
     border-radius: var(--si-r4);
     background: rgba(20, 20, 24, 0.62);
     backdrop-filter: blur(8px);
@@ -179,7 +179,7 @@
   &__sub {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--si-space-3);
     font-size: var(--si-text-5);
     color: var(--si-fg-faint);
     min-width: 0;
@@ -201,8 +201,8 @@
 .comment-card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px;
+  gap: var(--si-space-5);
+  padding: var(--si-space-7);
   text-align: left;
   background: var(--si-bg3);
   border: 1px solid var(--si-line);
@@ -227,7 +227,7 @@
   &__file {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     min-width: 0;
   }
 
@@ -245,7 +245,7 @@
   &__author {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     min-width: 0;
   }
 
@@ -289,8 +289,8 @@
 .bucket-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 16px 0 10px;
+  gap: var(--si-space-5);
+  padding: var(--si-space-8) 0 var(--si-space-5);
   position: sticky;
   top: 0;
   background: linear-gradient(var(--si-bg2) 70%, transparent);
@@ -307,8 +307,8 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: var(--si-space-6);
+  padding: var(--si-space-5) var(--si-space-6);
   margin: 0 -12px;
   border-radius: 8px;
   border: none;
@@ -340,8 +340,8 @@
   &__sub {
     display: flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 3px;
+    gap: var(--si-space-3);
+    margin-top: var(--si-space-2);
     font-size: var(--si-text-5);
     color: var(--si-fg-faint);
     min-width: 0;
@@ -371,8 +371,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 56px 20px;
-  margin: 16px 28px 28px;
+  padding: 56px var(--si-space-10);
+  margin: var(--si-space-8) var(--si-space-12) var(--si-space-12);
   color: var(--si-fg-faint);
   text-align: center;
   background: var(--si-bg3);
@@ -389,7 +389,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 14px;
+    margin-bottom: var(--si-space-7);
     border: 1px solid var(--si-line);
   }
 
@@ -402,7 +402,7 @@
   }
 
   &__lede {
-    margin-top: 6px;
+    margin-top: var(--si-space-3);
     font-size: var(--si-text-7);
     color: var(--si-fg-faint);
     max-width: 32ch;

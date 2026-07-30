@@ -122,13 +122,13 @@ interface CommentRow extends Comment {
       .cp {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 12px 14px;
+        gap: var(--si-space-6);
+        padding: var(--si-space-6) var(--si-space-7);
       }
       .cp__compose {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .cp__compose-input {
         resize: vertical;
@@ -137,7 +137,7 @@ interface CommentRow extends Comment {
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         color: var(--si-fg);
         font: inherit;
         font-size: var(--si-text-7);
@@ -156,7 +156,7 @@ interface CommentRow extends Comment {
         justify-content: flex-end;
       }
       .cp__state {
-        padding: 18px 10px;
+        padding: var(--si-space-9) var(--si-space-5);
         font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         text-align: center;
@@ -171,18 +171,18 @@ interface CommentRow extends Comment {
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .cp-comment {
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
       }
       .cp-comment__head {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .cp-comment__avatar {
         width: 22px;
@@ -218,7 +218,7 @@ interface CommentRow extends Comment {
         font-family: var(--si-mono);
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: var(--si-space-3);
       }
       .cp-comment__edited {
         font-style: italic;
@@ -246,7 +246,7 @@ interface CommentRow extends Comment {
         }
       }
       .cp-comment__body {
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
       }
       .cp-comment__content {
         font-size: var(--si-text-7);
@@ -262,7 +262,7 @@ interface CommentRow extends Comment {
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
-        padding: 6px 8px;
+        padding: var(--si-space-3) var(--si-space-4);
         color: var(--si-fg);
         font: inherit;
         font-size: var(--si-text-7);
@@ -276,8 +276,8 @@ interface CommentRow extends Comment {
       .cp-comment__editor-actions {
         display: flex;
         justify-content: flex-end;
-        gap: 6px;
-        margin-top: 6px;
+        gap: var(--si-space-3);
+        margin-top: var(--si-space-3);
       }
     `
   ]

@@ -4,7 +4,7 @@
   width: 100%;
   max-width: 1080px;
   margin: 0 auto;
-  padding: 48px 32px 64px;
+  padding: 48px var(--si-space-13) 64px;
 }
 
 .kit {
@@ -15,7 +15,7 @@
   &__header {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--si-space-4);
   }
 
   // h1 + description, matching every other v2 screen (#405 item 5). 32px was the
@@ -43,8 +43,8 @@
   &__section {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 20px;
+    gap: var(--si-space-7);
+    padding: var(--si-space-10);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r3);
     background: var(--si-bg3);
@@ -59,7 +59,7 @@
     color: var(--si-fg);
     display: flex;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--si-space-5);
   }
 
   &__hint {
@@ -71,7 +71,7 @@
   &__row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--si-space-6);
 
     &--wrap {
       flex-wrap: wrap;
@@ -83,14 +83,14 @@
 
   &__grid {
     display: grid;
-    gap: 18px;
+    gap: var(--si-space-9);
   }
 
   &__btn-group {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px 14px;
+    gap: var(--si-space-4);
+    padding: var(--si-space-6) var(--si-space-7);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     background: var(--si-bg2);
@@ -107,15 +107,15 @@
   &__icons {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-    gap: 4px;
+    gap: var(--si-space-2);
   }
 
   &__icon-cell {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 14px 8px 10px;
+    gap: var(--si-space-3);
+    padding: var(--si-space-7) var(--si-space-4) var(--si-space-5);
     border-radius: var(--si-r2);
     color: var(--si-fg-muted);
     transition: background 120ms ease, color 120ms ease;
@@ -130,7 +130,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     min-width: 60px;
   }
 

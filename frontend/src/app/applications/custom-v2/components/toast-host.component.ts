@@ -32,16 +32,16 @@ import { ToastService } from './toast.service'
       .toast-host {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .toast {
         pointer-events: auto;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--si-space-4);
         min-width: 220px;
         max-width: 360px;
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         border-radius: 8px;
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
@@ -72,7 +72,7 @@ import { ToastService } from './toast.service'
         border: none;
         color: var(--si-fg-muted);
         cursor: pointer;
-        padding: 2px;
+        padding: var(--si-space-1);
         border-radius: 4px;
         display: inline-flex;
       }
