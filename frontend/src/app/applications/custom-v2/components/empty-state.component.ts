@@ -60,7 +60,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
       }
       .empty__title {
         font-family: var(--si-display);
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 500;
         color: var(--si-fg-muted);
         letter-spacing: -0.1px;
@@ -68,7 +68,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
       }
       .empty__lede {
         margin-top: 6px;
-        font-size: 13.5px;
+        font-size: var(--si-text-9);
         color: var(--si-fg-faint);
         max-width: 32ch;
         line-height: 1.5;

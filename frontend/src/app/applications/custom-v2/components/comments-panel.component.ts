@@ -140,7 +140,7 @@ interface CommentRow extends Comment {
         padding: 8px 10px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         line-height: 1.35;
 
         &:focus {
@@ -157,7 +157,7 @@ interface CommentRow extends Comment {
       }
       .cp__state {
         padding: 18px 10px;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         text-align: center;
 
@@ -197,7 +197,7 @@ interface CommentRow extends Comment {
           justify-content: center;
           background: var(--si-bg4);
           color: var(--si-fg-muted);
-          font-size: 11px;
+          font-size: var(--si-text-4);
         }
       }
       .cp-comment__meta {
@@ -207,13 +207,13 @@ interface CommentRow extends Comment {
         flex: 1 1 auto;
       }
       .cp-comment__author {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .cp-comment__time {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
         font-family: var(--si-mono);
         display: flex;
@@ -249,7 +249,7 @@ interface CommentRow extends Comment {
         margin-top: 6px;
       }
       .cp-comment__content {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         line-height: 1.4;
         color: var(--si-fg);
         white-space: pre-wrap;
@@ -265,7 +265,7 @@ interface CommentRow extends Comment {
         padding: 6px 8px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         line-height: 1.35;
 
         &:focus {

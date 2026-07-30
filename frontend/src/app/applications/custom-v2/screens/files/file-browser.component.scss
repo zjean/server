@@ -73,7 +73,7 @@
     // weight, matching Stack's kicker · title · meta triad.
     // margin: 0 — see spaces.component.scss; this really is an <h1> now.
     margin: 0;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -82,7 +82,7 @@
   }
 
   &__title-meta {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     min-height: 18px;
     color: var(--si-fg-muted);
@@ -105,7 +105,7 @@
   }
 
   &__selection-count {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.2px;
@@ -141,7 +141,7 @@
     border: none;
     outline: none;
     color: var(--si-fg);
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
     min-width: 0;
@@ -152,7 +152,7 @@
   }
 
   &__filter-hint {
-    font-size: 10px;
+    font-size: var(--si-text-2);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
     padding: 1px 5px;
@@ -240,14 +240,14 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-weight: 600;
     color: var(--si-fg);
   }
 
   &__state {
     padding: 40px 22px;
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     text-align: center;
 
@@ -274,7 +274,7 @@
     // De-emphasised header: no bottom rule, no all-caps/display-font shouting —
     // a quiet column label in the body sans. Separation now comes from the
     // sticky surface tint, not a border.
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-tertiary);
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -360,7 +360,7 @@
   }
 
   &__name-text {
-    font-size: 15px;
+    font-size: var(--si-text-11);
     color: var(--si-fg);
     letter-spacing: -0.1px;
     font-weight: 500;
@@ -381,7 +381,7 @@
   }
 
   &__size {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.2px;
@@ -389,14 +389,14 @@
   }
 
   &__modified {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
   }
 
   &__modified-pill {
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    font-size: 11.5px;
+    font-size: var(--si-text-5);
     letter-spacing: -0.1px;
     font-variant-numeric: tabular-nums;
   }
@@ -530,7 +530,7 @@
   }
 
   &__name {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.1px;
@@ -540,7 +540,7 @@
   }
 
   &__meta {
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
     margin-top: 3px;
     display: flex;
@@ -656,7 +656,7 @@
   }
 
   &__name {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.1px;
@@ -666,7 +666,7 @@
   }
 
   &__meta {
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
     margin-top: 3px;
     display: flex;

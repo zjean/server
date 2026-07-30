@@ -14,7 +14,7 @@
 
   &__state {
     padding: 60px 22px;
-    font-size: 14px;
+    font-size: var(--si-text-10);
     color: var(--si-fg-muted);
     text-align: center;
     flex: 1;
@@ -52,7 +52,7 @@
   }
 
   &__name {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-weight: 600;
     color: var(--si-fg);
     letter-spacing: -0.15px;
@@ -63,7 +63,7 @@
   }
 
   &__meta {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
     margin-top: 1px;
@@ -92,7 +92,7 @@
   }
 
   &__counter {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     padding: 0 6px;
@@ -127,7 +127,7 @@
   }
 
   &__load-error {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     color: var(--si-fg-muted);
   }
 
@@ -171,7 +171,7 @@
   }
 
   &__audio-name {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-family: var(--si-mono);
     color: var(--si-fg);
     max-width: 480px;
@@ -197,13 +197,13 @@
   &__no-preview-title {
     font-family: var(--si-display);
     font-weight: 500;
-    font-size: 15px;
+    font-size: var(--si-text-11);
     color: var(--si-fg);
     margin-top: 4px;
   }
 
   &__no-preview-lede {
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-faint);
     margin-bottom: 6px;
   }
@@ -248,7 +248,7 @@
   }
 
   &__inspector-name {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-weight: 600;
     color: var(--si-fg);
     letter-spacing: -0.15px;
@@ -259,7 +259,7 @@
   }
 
   &__inspector-meta {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
     margin-top: 2px;
@@ -291,7 +291,7 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-weight: 500;
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
@@ -341,13 +341,13 @@
   &__placeholder-title {
     font-family: var(--si-display);
     font-weight: 500;
-    font-size: 14px;
+    font-size: var(--si-text-10);
     color: var(--si-fg);
     margin-top: 6px;
   }
 
   &__placeholder-lede {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg-faint);
     line-height: 1.45;
     max-width: 240px;
@@ -359,7 +359,7 @@
   border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
 
   &__title {
-    font-size: 11px;
+    font-size: var(--si-text-4);
     font-weight: 600;
     letter-spacing: 1.2px;
     color: var(--si-fg-faint);
@@ -374,7 +374,7 @@
   grid-template-columns: 82px 1fr;
   gap: 8px;
   padding: 5px 0;
-  font-size: 11.5px;
+  font-size: var(--si-text-5);
   align-items: center;
 
   > span:first-child {
@@ -392,6 +392,6 @@
 
   &__mono {
     font-family: var(--si-mono) !important;
-    font-size: 12px;
+    font-size: var(--si-text-6);
   }
 }

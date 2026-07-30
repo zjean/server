@@ -149,7 +149,7 @@ type EditorTheme = 'light' | 'dark'
         border-bottom: 1px solid var(--si-border, rgba(0, 0, 0, 0.08));
       }
       .text-view__status {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted, #666);
         font-variant-numeric: tabular-nums;
       }
@@ -175,7 +175,7 @@ type EditorTheme = 'light' | 'dark'
       }
       .text-view__state {
         padding: 24px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted, #666);
       }
       .text-view__state--error {

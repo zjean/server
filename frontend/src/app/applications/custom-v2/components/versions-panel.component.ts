@@ -219,7 +219,7 @@ interface VersionRow extends VersionModel {
       }
       .vp__state {
         padding: 18px 10px;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         text-align: center;
 
@@ -229,7 +229,7 @@ interface VersionRow extends VersionModel {
       }
       .vp__state-lede {
         margin-top: 4px;
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-faint);
       }
       .vp__list {
@@ -263,13 +263,13 @@ interface VersionRow extends VersionModel {
         flex: 1 1 auto;
       }
       .vp-row__when {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .vp-row__sub {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
         overflow-wrap: anywhere;
       }
@@ -323,7 +323,7 @@ interface VersionRow extends VersionModel {
         padding: 6px 8px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12px;
+        font-size: var(--si-text-6);
 
         &:focus {
           outline: none;
@@ -350,7 +350,7 @@ interface VersionRow extends VersionModel {
         gap: 6px;
       }
       .vp__usage-text {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg-muted);
       }
       .vp__usage-bar {
@@ -368,7 +368,7 @@ interface VersionRow extends VersionModel {
         }
       }
       .vp__usage-note {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
       }
     `

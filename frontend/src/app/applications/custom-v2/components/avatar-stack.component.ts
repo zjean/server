@@ -85,7 +85,7 @@ export interface AvatarStackUser extends AvatarUser {
         border-radius: var(--si-r1);
         box-shadow: var(--si-shadow2);
         font-family: var(--si-sans);
-        font-size: 12px;
+        font-size: var(--si-text-6);
         line-height: 1.35;
         text-align: left;
         white-space: nowrap;
@@ -110,7 +110,7 @@ export interface AvatarStackUser extends AvatarUser {
       .tip__more {
         margin-top: 1px;
         color: var(--si-fg-muted);
-        font-size: 11px;
+        font-size: var(--si-text-4);
       }
     `
   ]

@@ -153,7 +153,7 @@ export interface GroupRef {
         min-width: 0;
       }
       .gmd__eyebrow {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1.1px;
         color: var(--si-fg-faint);
@@ -162,7 +162,7 @@ export interface GroupRef {
       }
       .gmd__title {
         margin: 4px 0 0;
-        font-size: 18px;
+        font-size: var(--si-text-12);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
@@ -199,7 +199,7 @@ export interface GroupRef {
       .gmd__state {
         padding: 30px 12px;
         text-align: center;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
           color: var(--si-rose);
@@ -208,7 +208,7 @@ export interface GroupRef {
       .gmd__counts {
         display: flex;
         gap: 10px;
-        font-size: 11px;
+        font-size: var(--si-text-4);
         font-family: var(--si-mono);
         color: var(--si-fg-muted);
       }
@@ -248,7 +248,7 @@ export interface GroupRef {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 11px;
+        font-size: var(--si-text-4);
       }
       .gmd__info {
         display: flex;
@@ -257,7 +257,7 @@ export interface GroupRef {
         min-width: 0;
       }
       .gmd__name {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
         font-weight: 500;
         overflow: hidden;
@@ -265,7 +265,7 @@ export interface GroupRef {
         white-space: nowrap;
       }
       .gmd__desc {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-muted);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -278,7 +278,7 @@ export interface GroupRef {
         padding: 5px 7px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
 
         &:focus {
           outline: none;
@@ -318,7 +318,7 @@ export interface GroupRef {
         gap: 8px;
       }
       .gmd__foot-label {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);

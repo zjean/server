@@ -213,14 +213,14 @@ function emptyDraft(): GroupDraft {
       }
       .ag__title {
         margin: 0;
-        font-size: 20px;
+        font-size: var(--si-text-13);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
         font-family: var(--si-display);
       }
       .ag__count {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-faint);
         font-family: var(--si-mono);
       }
@@ -243,7 +243,7 @@ function emptyDraft(): GroupDraft {
         border: none;
         padding: 4px 12px;
         font: inherit;
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.8px;
@@ -265,7 +265,7 @@ function emptyDraft(): GroupDraft {
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
         color: var(--si-fg);
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         outline: none;
         &:focus {
           border-color: var(--si-nav);
@@ -274,7 +274,7 @@ function emptyDraft(): GroupDraft {
       .ag__state {
         padding: 60px 20px;
         text-align: center;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
           color: var(--si-rose);
@@ -294,7 +294,7 @@ function emptyDraft(): GroupDraft {
         gap: 14px;
         padding: 10px 16px;
         align-items: center;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
         border-bottom: 1px solid var(--si-line);
 
@@ -303,7 +303,7 @@ function emptyDraft(): GroupDraft {
         }
         &--head {
           background: var(--si-bg3);
-          font-size: 10.5px;
+          font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
           color: var(--si-fg-faint);
@@ -322,13 +322,13 @@ function emptyDraft(): GroupDraft {
       }
       .ag-row__count {
         font-family: var(--si-mono);
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
       }
       .ag-row__count-btn {
         background: transparent;
         border: none;
         color: var(--si-nav);
-        font-size: 10px;
+        font-size: var(--si-text-2);
         text-transform: uppercase;
         letter-spacing: 1px;
         cursor: pointer;
@@ -391,7 +391,7 @@ function emptyDraft(): GroupDraft {
         gap: 14px;
       }
       .ag-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
       }
@@ -406,7 +406,7 @@ function emptyDraft(): GroupDraft {
         gap: 4px;
       }
       .ag-field > span {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -420,7 +420,7 @@ function emptyDraft(): GroupDraft {
         padding: 7px 9px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
 
         &:focus {
           outline: none;
@@ -429,7 +429,7 @@ function emptyDraft(): GroupDraft {
       }
       .ag-dialog__error {
         color: var(--si-rose);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .ag-dialog__actions {
         display: flex;

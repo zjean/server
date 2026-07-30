@@ -273,7 +273,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         flex-wrap: wrap;
       }
       .md-view__status {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted, #666);
         font-variant-numeric: tabular-nums;
         min-width: 90px;
@@ -295,7 +295,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         height: 30px;
         min-width: 30px;
         padding: 0 6px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         line-height: 1;
         display: inline-flex;
         align-items: center;
@@ -323,7 +323,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       }
       .md-tool--mono {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .md-tool__sep {
         width: 1px;
@@ -389,7 +389,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       }
       .md-view__state {
         padding: 24px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted, #666);
       }
       .md-view__state--error {

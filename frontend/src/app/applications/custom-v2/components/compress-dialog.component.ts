@@ -101,12 +101,12 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         margin-bottom: 10px;
       }
       .compress-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
       }
       .compress-dialog__count {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         white-space: nowrap;
       }
@@ -119,7 +119,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         min-width: 0;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         padding: 8px 10px;
         background: var(--si-bg2);
         color: var(--si-fg);
@@ -133,7 +133,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         width: 92px;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         padding: 8px 10px;
         background: var(--si-bg2);
         color: var(--si-fg);
@@ -148,7 +148,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .compress-dialog__error {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-rose);
         margin-top: 4px;
       }
@@ -157,14 +157,14 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         align-items: center;
         gap: 8px;
         margin-top: 12px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg);
         cursor: pointer;
         user-select: none;
       }
       .compress-dialog__check small {
         color: var(--si-fg-muted);
-        font-size: 11px;
+        font-size: var(--si-text-4);
       }
       .compress-dialog__actions {
         display: flex;

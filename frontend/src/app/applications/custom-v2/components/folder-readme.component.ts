@@ -186,7 +186,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         margin-bottom: 8px;
       }
       .fr__name {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         /* --si-mono is the token defined in _tokens.scss. There is no
            --si-font-mono. */
@@ -213,13 +213,13 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         overflow: hidden;
       }
       .fr__error {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         /* --si-rose is v2's error colour (_tokens.scss, used the same way in
            action-sheet.component.ts). There is no --si-danger. */
         color: var(--si-rose, #ff6c5d);
       }
       .fr__notice {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
       /* Reads as prose, behaves as the Edit affordance — the header's Edit button
@@ -231,7 +231,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         padding: 0;
         margin: 0;
         font: inherit;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         font-style: italic;
         color: var(--si-fg-muted);
         cursor: pointer;
@@ -280,7 +280,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         padding: 6px 9px 0;
         margin: 0;
         font: inherit;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         cursor: pointer;
       }

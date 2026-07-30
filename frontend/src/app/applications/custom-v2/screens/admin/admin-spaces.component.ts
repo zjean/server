@@ -328,14 +328,14 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .au__title {
         margin: 0;
-        font-size: 20px;
+        font-size: var(--si-text-13);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
         font-family: var(--si-display);
       }
       .au__count {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-faint);
         font-family: var(--si-mono);
       }
@@ -353,7 +353,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
         color: var(--si-fg);
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         outline: none;
         &:focus {
           border-color: var(--si-nav);
@@ -362,7 +362,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       .au__state {
         padding: 60px 20px;
         text-align: center;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
           color: var(--si-rose);
@@ -382,7 +382,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         gap: 14px;
         padding: 10px 16px;
         align-items: center;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
         border-bottom: 1px solid var(--si-line);
 
@@ -391,7 +391,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         }
         &--head {
           background: var(--si-bg3);
-          font-size: 10.5px;
+          font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
           color: var(--si-fg-faint);
@@ -458,7 +458,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .as-storage-text {
         font-family: var(--si-mono);
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-muted);
         white-space: nowrap;
         overflow: hidden;
@@ -480,7 +480,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         display: inline-flex;
         padding: 1px 7px;
         border-radius: var(--si-r4);
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         font-weight: 600;
         letter-spacing: 0.2px;
         text-transform: uppercase;
@@ -524,7 +524,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r4);
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg);
       }
       .au-chip__avatar,
@@ -542,7 +542,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         justify-content: center;
         background: var(--si-bg4);
         color: var(--si-fg-muted);
-        font-size: 10px;
+        font-size: var(--si-text-2);
       }
       .au-chip__name {
         max-width: 140px;
@@ -570,7 +570,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       .au-field__hint {
         text-transform: none;
         letter-spacing: normal;
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg-faint);
         margin-top: 4px;
       }
@@ -600,7 +600,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         gap: 14px;
       }
       .au-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
@@ -618,7 +618,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         min-width: 0;
       }
       .au-field > span {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -632,7 +632,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         padding: 7px 9px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
 
         &:focus {
           outline: none;
@@ -648,7 +648,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         & > span {
           text-transform: none;
           font-weight: 500;
-          font-size: 12.5px;
+          font-size: var(--si-text-7);
           color: var(--si-fg);
           letter-spacing: normal;
         }
@@ -660,7 +660,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .au-dialog__error {
         color: var(--si-rose);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .au-dialog__actions {
         display: flex;

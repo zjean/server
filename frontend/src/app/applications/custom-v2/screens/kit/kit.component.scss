@@ -25,7 +25,7 @@
     margin: 0;
     font-family: var(--si-display);
     font-weight: 500;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     letter-spacing: -0.018em;
     line-height: 1.15;
     color: var(--si-fg);
@@ -34,7 +34,7 @@
   &__lede {
     margin: 0;
     font-family: var(--si-sans);
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.55;
     color: var(--si-fg-muted);
     max-width: 560px;
@@ -54,7 +54,7 @@
     margin: 0;
     font-family: var(--si-display);
     font-weight: 500;
-    font-size: 14px;
+    font-size: var(--si-text-10);
     letter-spacing: -0.01em;
     color: var(--si-fg);
     display: flex;
@@ -64,7 +64,7 @@
 
   &__hint {
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
   }
 
@@ -98,7 +98,7 @@
 
   &__group-label {
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--si-fg-faint);
@@ -136,7 +136,7 @@
 
   &__icon-label {
     font-family: var(--si-mono);
-    font-size: 10px;
+    font-size: var(--si-text-2);
     color: var(--si-fg-faint);
     letter-spacing: 0.02em;
   }

@@ -158,7 +158,7 @@ const ROOT_SHARES: FileTree = {
       }
       .tree-picker__title {
         flex: 1 1 auto;
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
       }
@@ -190,7 +190,7 @@ const ROOT_SHARES: FileTree = {
         height: 30px;
         padding-right: 12px;
         cursor: pointer;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg);
       }
       .tp-node:hover {
@@ -242,7 +242,7 @@ const ROOT_SHARES: FileTree = {
       .tree-picker__hint {
         flex: 1 1 auto;
         min-width: 0;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
       }
       .tree-picker__path {
@@ -255,7 +255,7 @@ const ROOT_SHARES: FileTree = {
       }
       .tree-picker__error {
         color: var(--si-rose, #c0392b);
-        font-size: 11px;
+        font-size: var(--si-text-4);
         margin-top: 2px;
       }
       .tree-picker__actions {

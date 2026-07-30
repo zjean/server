@@ -50,13 +50,13 @@ import { ConfirmDialogService } from './confirm-dialog.service'
         box-shadow: var(--si-shadow3);
       }
       .confirm-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         margin-bottom: 8px;
       }
       .confirm-dialog__message {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         line-height: 1.45;
         margin-bottom: 16px;

@@ -56,7 +56,7 @@ interface DiffLine {
         max-height: 420px;
         overflow-y: auto;
         font-family: var(--si-mono);
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         line-height: 1.5;
         color: var(--si-fg);
       }

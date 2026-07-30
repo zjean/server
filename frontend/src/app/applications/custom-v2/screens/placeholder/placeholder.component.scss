@@ -30,7 +30,7 @@
     margin: 0;
     font-family: var(--si-display);
     font-weight: 500;
-    font-size: 22px;
+    font-size: var(--si-text-14);
     letter-spacing: -0.02em;
     color: var(--si-fg);
   }
@@ -38,7 +38,7 @@
   &__lede {
     margin: 0 0 6px;
     font-family: var(--si-sans);
-    font-size: 13.5px;
+    font-size: var(--si-text-9);
     line-height: 1.55;
     color: var(--si-fg-muted);
   }

@@ -130,13 +130,13 @@ interface FormState {
         box-shadow: var(--si-shadow3);
       }
       .ld__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         margin-bottom: 2px;
       }
       .ld__subject {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
         margin-bottom: 14px;
         overflow: hidden;
@@ -154,7 +154,7 @@ interface FormState {
         min-width: 0;
         box-sizing: border-box;
         font: inherit;
-        font-size: 12px;
+        font-size: var(--si-text-6);
         padding: 7px 9px;
         background: var(--si-bg2);
         color: var(--si-fg);
@@ -168,7 +168,7 @@ interface FormState {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg);
         cursor: pointer;
         user-select: none;
@@ -187,7 +187,7 @@ interface FormState {
         min-width: 0;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         padding: 8px 10px;
         background: var(--si-bg2);
         color: var(--si-fg);
@@ -203,7 +203,7 @@ interface FormState {
         margin-top: 6px;
       }
       .ld__error {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-rose, #c0392b);
         margin-top: 6px;
       }

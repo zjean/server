@@ -91,7 +91,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         gap: 12px;
       }
       .tfa-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
       }
@@ -101,7 +101,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         gap: 4px;
       }
       .tfa-dialog__field > span {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -111,7 +111,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         width: 100%;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         padding: 8px 10px;
         background: var(--si-bg2);
         color: var(--si-fg);

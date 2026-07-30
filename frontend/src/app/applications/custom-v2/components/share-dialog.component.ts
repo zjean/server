@@ -148,13 +148,13 @@ interface RowMember extends ShareMemberInput {
         box-shadow: var(--si-shadow3);
       }
       .sd__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         margin-bottom: 2px;
       }
       .sd__subject {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
         margin-bottom: 14px;
         overflow: hidden;
@@ -166,7 +166,7 @@ interface RowMember extends ShareMemberInput {
         padding: 20px 0;
         text-align: center;
         color: var(--si-fg-muted);
-        font-size: 13px;
+        font-size: var(--si-text-8);
       }
       .sd__empty {
         padding: 10px 0 14px;
@@ -203,7 +203,7 @@ interface RowMember extends ShareMemberInput {
         justify-content: center;
         background: var(--si-bg3);
         color: var(--si-fg-muted);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .sd__member-meta {
         flex: 1;
@@ -212,7 +212,7 @@ interface RowMember extends ShareMemberInput {
         flex-direction: column;
       }
       .sd__member-name {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         font-weight: 500;
         color: var(--si-fg);
         white-space: nowrap;
@@ -220,7 +220,7 @@ interface RowMember extends ShareMemberInput {
         text-overflow: ellipsis;
       }
       .sd__member-desc {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg-muted);
         white-space: nowrap;
         overflow: hidden;
@@ -232,7 +232,7 @@ interface RowMember extends ShareMemberInput {
       }
       .sd__preset {
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         padding: 5px 8px;
         background: var(--si-bg1);
         color: var(--si-fg);
@@ -255,7 +255,7 @@ interface RowMember extends ShareMemberInput {
         border: 1px solid var(--si-border);
         border-radius: var(--si-r1);
         box-shadow: var(--si-shadow2);
-        font-size: 12px;
+        font-size: var(--si-text-6);
         line-height: 1.35;
         text-align: left;
         white-space: nowrap;
@@ -287,7 +287,7 @@ interface RowMember extends ShareMemberInput {
         color: var(--si-fg-muted);
         border: none;
         border-radius: 5px;
-        font-size: 18px;
+        font-size: var(--si-text-12);
         line-height: 1;
         cursor: pointer;
       }
@@ -299,7 +299,7 @@ interface RowMember extends ShareMemberInput {
         margin-bottom: 10px;
       }
       .sd__error {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-rose, #c0392b);
         margin-bottom: 10px;
       }

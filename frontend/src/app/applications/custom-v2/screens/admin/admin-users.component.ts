@@ -285,14 +285,14 @@ function emptyDraft(isGuest: boolean): UserDraft {
       }
       .au__title {
         margin: 0;
-        font-size: 20px;
+        font-size: var(--si-text-13);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
         font-family: var(--si-display);
       }
       .au__count {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-faint);
         font-family: var(--si-mono);
       }
@@ -315,7 +315,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         border: none;
         padding: 4px 12px;
         font: inherit;
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.8px;
@@ -343,7 +343,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r4);
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg);
       }
       .au-chip__avatar,
@@ -361,7 +361,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         justify-content: center;
         background: var(--si-bg4);
         color: var(--si-fg-muted);
-        font-size: 10px;
+        font-size: var(--si-text-2);
       }
       .au-chip__name {
         max-width: 140px;
@@ -394,7 +394,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
         color: var(--si-fg);
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         outline: none;
         &:focus {
           border-color: var(--si-nav);
@@ -403,7 +403,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
       .au__state {
         padding: 60px 20px;
         text-align: center;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
           color: var(--si-rose);
@@ -423,7 +423,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         gap: 14px;
         padding: 10px 16px;
         align-items: center;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
         border-bottom: 1px solid var(--si-line);
 
@@ -432,7 +432,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         }
         &--head {
           background: var(--si-bg3);
-          font-size: 10.5px;
+          font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
           color: var(--si-fg-faint);
@@ -459,7 +459,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         display: inline-flex;
         padding: 1px 7px;
         border-radius: var(--si-r4);
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         font-weight: 600;
         letter-spacing: 0.2px;
         text-transform: uppercase;
@@ -529,7 +529,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         gap: 14px;
       }
       .au-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
@@ -547,7 +547,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         min-width: 0;
       }
       .au-field > span {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -563,7 +563,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         padding: 7px 9px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
 
         &:focus {
           outline: none;
@@ -582,7 +582,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         & > span {
           text-transform: none;
           font-weight: 500;
-          font-size: 12.5px;
+          font-size: var(--si-text-7);
           color: var(--si-fg);
           letter-spacing: normal;
         }
@@ -593,7 +593,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
       }
       .au-dialog__error {
         color: var(--si-rose);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .au-dialog__actions {
         display: flex;

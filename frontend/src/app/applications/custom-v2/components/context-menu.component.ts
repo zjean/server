@@ -102,7 +102,7 @@ const VIEWPORT_GUTTER = 8
         border-radius: 6px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 15px;
+        font-size: var(--si-text-11);
         text-align: left;
         cursor: pointer;
         transition:

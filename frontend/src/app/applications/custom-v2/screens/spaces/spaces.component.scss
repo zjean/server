@@ -38,7 +38,7 @@
     // otherwise reflow the toolbar. Every other rule here already overrode the
     // UA heading defaults, so the promotion is visually inert.
     margin: 0;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -47,7 +47,7 @@
   }
 
   &__title-meta {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     min-height: 18px;
     color: var(--si-fg-muted);
@@ -64,7 +64,7 @@
 
   &__state {
     padding: 40px 22px;
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     text-align: center;
 
@@ -134,7 +134,7 @@
   }
 
   &__name {
-    font-size: 15px;
+    font-size: var(--si-text-11);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.01em;
@@ -146,7 +146,7 @@
   }
 
   &__description {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg-faint);
     margin-top: 4px;
     line-height: 1.4;
@@ -201,7 +201,7 @@
   }
 
   &__quota-label {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.1px;
@@ -237,13 +237,13 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-variant-numeric: tabular-nums;
   }
 
   &__modified {
-    font-size: 11px;
+    font-size: var(--si-text-4);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
     letter-spacing: -0.1px;

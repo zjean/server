@@ -239,7 +239,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at__title {
         margin: 0;
-        font-size: 20px;
+        font-size: var(--si-text-13);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
@@ -247,7 +247,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at__lede {
         margin: 0;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
 
@@ -283,28 +283,28 @@ function formatDate(ts: number | null | undefined): string {
         flex-shrink: 0;
       }
       .at-card__title {
-        font-size: 14px;
+        font-size: var(--si-text-10);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .at-card__desc {
         margin-top: 2px;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
         line-height: 1.4;
         max-width: 460px;
       }
       .at-card__error {
         color: var(--si-rose);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
 
       .at-badge {
         display: inline-flex;
         padding: 3px 10px;
         border-radius: var(--si-r4);
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         font-weight: 600;
         letter-spacing: 0.8px;
         text-transform: uppercase;
@@ -347,7 +347,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at-stat dt {
         margin: 0;
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -355,7 +355,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at-stat dd {
         margin: 0;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
       }
       .at-stat__mono {
@@ -376,7 +376,7 @@ function formatDate(ts: number | null | undefined): string {
       }
 
       .at-sub {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -393,12 +393,12 @@ function formatDate(ts: number | null | undefined): string {
       .at-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
       }
       .at-table th {
         text-align: left;
         padding: 8px 12px;
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -421,7 +421,7 @@ function formatDate(ts: number | null | undefined): string {
       }
       .at-table__hint {
         display: block;
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
       }
       .at-kind {
@@ -431,7 +431,7 @@ function formatDate(ts: number | null | undefined): string {
         border-radius: var(--si-r4);
         background: var(--si-bg4);
         color: var(--si-fg-muted);
-        font-size: 10px;
+        font-size: var(--si-text-2);
         text-transform: uppercase;
         letter-spacing: 0.6px;
         font-weight: 600;

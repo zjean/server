@@ -100,7 +100,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
       }
       .as__title {
         font-family: var(--si-display);
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -126,7 +126,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         border: 0;
         border-radius: 8px;
         font: inherit;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         text-align: left;
         color: var(--si-fg);
         cursor: pointer;
@@ -159,7 +159,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         border: 0;
         border-radius: 8px;
         font: inherit;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         font-weight: 500;
         color: var(--si-fg-muted);
         cursor: pointer;

@@ -64,13 +64,13 @@ import { PromptDialogService } from './prompt-dialog.service'
         box-shadow: var(--si-shadow3);
       }
       .prompt-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
         margin-bottom: 8px;
       }
       .prompt-dialog__message {
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         line-height: 1.45;
         margin-bottom: 10px;
@@ -79,7 +79,7 @@ import { PromptDialogService } from './prompt-dialog.service'
         width: 100%;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         padding: 8px 10px;
         background: var(--si-bg2);
         color: var(--si-fg);
@@ -93,7 +93,7 @@ import { PromptDialogService } from './prompt-dialog.service'
         border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
       }
       .prompt-dialog__error {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-rose, #c0392b);
         margin-bottom: 10px;
         margin-top: 4px;

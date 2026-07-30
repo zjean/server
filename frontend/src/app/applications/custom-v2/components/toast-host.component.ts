@@ -47,7 +47,7 @@ import { ToastService } from './toast.service'
         border: 1px solid var(--si-border);
         box-shadow: var(--si-shadow2);
         color: var(--si-fg);
-        font-size: 13px;
+        font-size: var(--si-text-8);
         animation: toast-in 140ms ease-out;
       }
       .toast--success {

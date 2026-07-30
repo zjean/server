@@ -76,7 +76,7 @@ interface AdminCard {
       /* Page-title scale shared with every other v2 screen (#405 item 5). */
       .admin__title {
         margin: 0;
-        font-size: 26px;
+        font-size: var(--si-text-15);
         font-weight: 500;
         color: var(--si-fg);
         letter-spacing: -0.018em;
@@ -85,7 +85,7 @@ interface AdminCard {
       }
       .admin__lede {
         margin: 0;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         line-height: 1.4;
         color: var(--si-fg-muted);
       }
@@ -140,13 +140,13 @@ interface AdminCard {
         min-width: 0;
       }
       .admin-card__title {
-        font-size: 13.5px;
+        font-size: var(--si-text-9);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .admin-card__desc {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         line-height: 1.35;
       }
