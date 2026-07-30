@@ -91,12 +91,23 @@ If you can't easily interrupt mid-upload (devices are fast), you can simulate by
 
 ### Results
 
-_Fill in below after the test session._
+**The on-device session was never run** — these fields are still open, and the checklist above is still the recipe:
 
 - Upload size: [____ MB]
 - First-attempt progress before interrupt: [__%]
 - Second-attempt total bytes pushed: [____ MB] (expected: roughly `size × (1 - first-attempt%)`)
 - Final file checksum matches source: [yes / no]
+
+**What IS verified, as of 2026-07-30:** the server side of the same scenario, automatically, in
+`backend/src/applications/custom-mobile-compat/controllers/nc-chunked-upload.e2e-spec.ts`. It stages two of three
+chunks, probes with `Depth: 1`, computes `nextByte` from the response exactly as `ChunkedFileUploadRemoteOperation`
+does — summing the children and excluding the collection — and requires that offset to be the byte count really on
+disk. Then it resumes, assembles, and compares byte for byte. Four supporting cases pin numeric (not lexical) chunk
+ordering, the depth-0 collection-only shape, the `OC-Total-Length` mismatch refusal leaving nothing at the destination,
+and staging-dir cleanup after the MOVE.
+
+That covers "the offset we report is true and assembly from it is correct", which is what the original bug got wrong.
+It does **not** cover "Android believes us" — the two are different claims, and only a device can settle the second.
 - PROPFIND response includes per-chunk `<d:getcontentlength>` entries: [yes / no / not captured]
 
 ## U2 — iOS OnlyOffice trigger path
