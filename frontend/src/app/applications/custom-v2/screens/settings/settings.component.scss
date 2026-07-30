@@ -242,6 +242,34 @@
   &__input:focus {
     border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
   }
+
+  // A <select> keeps the platform chevron unless `appearance` is cleared, which
+  // put a native glyph next to otherwise custom controls. The replacement is an
+  // app-v2-icon rather than a masked data URI: an SVG data URI cannot reference
+  // a CSS variable, so it would have had to hard-code a hex and reintroduce the
+  // raw-literal drift #403 removed. The icon draws in currentColor, so the glyph
+  // stays on the text tier by inheritance.
+  &__select {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    color: var(--si-fg-faint);
+  }
+
+  &__select .settings__input {
+    appearance: none;
+    // Room for the chevron: 10px gutter + 12px glyph + 8px gap to the text.
+    padding-right: 30px;
+  }
+
+  &__select-chev {
+    position: absolute;
+    right: 10px;
+    display: inline-flex;
+    // The chevron is decoration over a control that already announces itself;
+    // clicks must reach the <select> underneath.
+    pointer-events: none;
+  }
 }
 
 .settings-card {

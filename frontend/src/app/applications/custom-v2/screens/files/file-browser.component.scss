@@ -626,15 +626,15 @@
 
   &__stage {
     aspect-ratio: 4 / 3;
-    // --fc-bg / --fc-fg were never declared anywhere — not in _tokens.scss and
-    // not set inline by this component — so this always painted the fallbacks.
-    // The intent was to echo the per-file-type ramp (--fc-image-*, --fc-doc-*,
-    // …) onto the grid tile, which means the component has to set the pair per
-    // row; that is a behaviour change, so it is left for a follow-up rather
-    // than smuggled into a consistency pass. Written out as what it actually
-    // renders, so nothing reads as wired when it is not.
-    background: linear-gradient(135deg, var(--si-bg4), var(--si-bg3));
-    color: var(--si-fg-muted);
+    // --fc-bg / --fc-fg ARE wired, contrary to what #403 assumed when it
+    // replaced this pair with its own fallbacks: the template sets them per row
+    // from the file's type (see the [style.--fc-bg] binding on this element),
+    // and they resolve against the --fc-<type>-bg / -fg ramp in _tokens.scss.
+    // Measured in-browser — a gallery of ten file types yields ten distinct
+    // tints, e.g. a .docx row resolves --fc-bg to oklch(.8 .13 240 / .2).
+    // The literal fallbacks are kept as the unmapped-type floor.
+    background: linear-gradient(135deg, var(--fc-bg, var(--si-bg4)), var(--si-bg3));
+    color: var(--fc-fg, var(--si-fg-muted));
     display: flex;
     align-items: center;
     justify-content: center;

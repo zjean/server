@@ -14,6 +14,7 @@ import { LayoutService } from '../../../../layout/layout.service'
 import { i18nLanguageText } from '../../../../../i18n/l10n'
 import { ButtonComponent } from '../../components/button.component'
 import { ToastService } from '../../components/toast.service'
+import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 
 @Component({
@@ -21,7 +22,7 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
-  imports: [ButtonComponent, FormsModule, ToBytesPipe, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [ButtonComponent, FormsModule, IconV2Component, ToBytesPipe, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class SettingsComponent implements OnInit {
   private readonly store = inject(StoreService)
