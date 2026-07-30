@@ -990,6 +990,154 @@ The PR body must carry the spec's §1 measurement table (it is the evidence the 
 
 ---
 
+## Task 9: The `createdAt` floor (added mid-execution; run BEFORE Task 4)
+
+**Why this exists.** Task 3's review established that `mtime` is **client-controlled** — sync clients set it through
+`touchFile` (`files/utils/files.ts:182`, reached from `files-manager.service.ts:403` and `sync-manager`). Two
+consequences the spec's §3.3 did not account for: a capture whose content carries a backdated mtime lands in an old,
+coarse band and can be **expired inside the same `snapshot()` call that created it** (unrecoverably, while the log says
+`versioned …`); and a backdated row can sort as "older" than a genuinely older row, so "always keep the newest" may not
+keep the most recently captured state. FIFO was immune because it ordered by `createdAt`. A client writing odd mtimes
+could keep history from ever accumulating.
+
+**The decision** (maintainer, mid-execution): keep `mtime` for banding and spacing — it preserves distinct content
+states, which is the point of §3.3 — and add a floor keyed on `createdAt`, which is server-set and monotonic.
+
+**The rule:** a version is exempt from expiry while it has been *held* for less than the band step it is being judged
+by. No new magic number — the floor is the same curve, read against a trustworthy clock. An exempt row still acts as a
+spacing anchor, because it is being kept, and anchoring on it keeps *more* neighbours: the safe direction.
+
+**Files:**
+- Modify: `backend/src/applications/custom-versioning/utils/versions-thinning.ts`
+- Modify: `backend/src/applications/custom-versioning/utils/versions-thinning.spec.ts`
+- Modify: `backend/src/applications/custom-versioning/services/versioning.service.spec.ts` (row fixtures need `createdAt`)
+
+**Interfaces:**
+- Consumes: Task 1's `versionsToExpire`, `ThinnableVersion`, `THINNING_BANDS`.
+- Produces: `ThinnableVersion` gains a required `createdAt: Date`. `versionsToExpire`'s signature is unchanged.
+  `VersionRow` already carries `createdAt: Date`, so both call sites keep compiling with no change.
+
+- [ ] **Step 1: Extend the test helper, defaulting createdAt so existing cases keep their meaning**
+
+In `versions-thinning.spec.ts`, the `at()` helper gains a third parameter. It must default to a LONG-HELD row, so every
+existing case continues to assert exactly what it asserted before the floor existed:
+
+```ts
+// `heldSeconds` defaults to a year: the floor is not what these cases are about,
+// and a row held that long is past every band's step, so the pre-floor
+// expectations are unchanged.
+const at = (id: number, secondsAgo: number, label: string | null = null, heldSeconds = 31_536_000): ThinnableVersion => ({
+  id,
+  mtime: NOW - secondsAgo * 1000,
+  label,
+  createdAt: new Date(NOW - heldSeconds * 1000)
+})
+```
+
+- [ ] **Step 2: Write the failing tests**
+
+Add a new describe block:
+
+```ts
+// mtime is CLIENT-CONTROLLED (touchFile), so it cannot be the only clock. The
+// floor is keyed on createdAt, which the server sets and never rewinds.
+describe('versionsToExpire — the createdAt floor', () => {
+  // THE VECTOR. Content stamped 2 days ago, captured just now: without the floor
+  // it lands in the 24h band (3600s step), sits 30s from its neighbour, and is
+  // expired inside the same snapshot() call that created it.
+  it('never expires a row it has only just captured, however old the content claims to be', () => {
+    const twoDays = 172_800
+    const rows = [at(1, twoDays, null, 31_536_000), at(2, twoDays + 30, null, 0)]
+    expect(versionsToExpire(rows, NOW)).toEqual([])
+  })
+
+  // The floor must not become a blanket exemption: once the row has been held
+  // longer than the step it is judged by, it thins normally.
+  it('expires the same row once it has been held past its band step', () => {
+    const twoDays = 172_800
+    const rows = [at(1, twoDays, null, 31_536_000), at(2, twoDays + 30, null, 7200)]
+    expect(versionsToExpire(rows, NOW)).toEqual([2])
+  })
+
+  // An exempt row is KEPT, so it anchors — which keeps its neighbour too. The
+  // conservative direction, and the one that cannot cause surprise deletions.
+  it('lets an exempt row anchor spacing, keeping its neighbour as well', () => {
+    const rows = [at(1, 3000, null, 31_536_000), at(2, 3030, null, 0), at(3, 3060, null, 31_536_000)]
+    // id 2 is exempt (held 0s < 60s step) and anchors at mtime NOW-3030s.
+    // id 3 is then 30s from that anchor, under the 60s step, so it goes.
+    expect(versionsToExpire(rows, NOW)).toEqual([3])
+  })
+
+  // The reported regression must still hold: two deliberate saves 34s apart, both
+  // long since captured, still collapse in the 60s band.
+  it('still collapses the 34s-apart pair once both are long held', () => {
+    expect(versionsToExpire([at(1, 120), at(2, 154)], NOW)).toEqual([2])
+  })
+})
+```
+
+Run: `cd /Users/janwiebe/prive/sync-in-server/backend && npx vitest run src/applications/custom-versioning/utils/versions-thinning.spec.ts`
+Expected: FAIL — `createdAt` is not a property of `ThinnableVersion`.
+
+- [ ] **Step 3: Add `createdAt` to the interface**
+
+```ts
+export interface ThinnableVersion {
+  id: number
+  mtime: number
+  label: string | null
+  // When WE captured this version. Server-set and monotonic, unlike `mtime`,
+  // which arrives from the client via touchFile — see the floor in
+  // versionsToExpire for what that difference is load-bearing for.
+  createdAt: Date
+}
+```
+
+- [ ] **Step 4: Apply the floor**
+
+Inside `versionsToExpire`'s loop, after `step` is computed and before the spacing comparison:
+
+```ts
+    const step = stepForAge((nowMs - version.mtime) / 1000)
+    // THE FLOOR. Never expire a capture we have not held for at least as long as
+    // the spacing we are judging it by. `mtime` is client-controlled, so without
+    // this a row whose content carries a backdated mtime lands in a coarse band
+    // and is expired inside the same snapshot() call that created it — silently
+    // and unrecoverably, while the caller logs `versioned …`. `createdAt` is set
+    // by us and never rewinds. No new constant: the floor IS the curve, read
+    // against a clock we trust.
+    //
+    // An exempt row still anchors, because it is being kept — and anchoring on it
+    // keeps MORE neighbours, which is the safe direction for a rule that deletes
+    // a user's history.
+    if ((nowMs - version.createdAt.getTime()) / 1000 < step) {
+      lastKeptMtime = version.mtime
+      continue
+    }
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd /Users/janwiebe/prive/sync-in-server/backend && npx vitest run src/applications/custom-versioning/utils/versions-thinning.spec.ts`
+Expected: PASS, 15 tests.
+
+Then the callers. `VersionRow` already has `createdAt: Date`, so `versioning.service.ts` and the query need no change —
+but the **row fixtures in `versioning.service.spec.ts`** (the `row(...)` helper from Task 3, and any inline literals it
+passes to `byFileIdNewestFirst`) now need a `createdAt`. Give them an old one (`new Date(0)`) so Task 3's expectations
+are unchanged, and confirm:
+
+Run: `cd /Users/janwiebe/prive/sync-in-server/backend && npx vitest run src/applications/custom-versioning 2>&1 | tail -20`
+Expected: PASS. Then `cd /Users/janwiebe/prive/sync-in-server && npm -w backend run build` — TSC 0 issues.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add backend/src/applications/custom-versioning/utils/versions-thinning.ts backend/src/applications/custom-versioning/utils/versions-thinning.spec.ts backend/src/applications/custom-versioning/services/versioning.service.spec.ts
+git commit -m "fix(custom-versioning): floor thinning on createdAt, which the client cannot set"
+```
+
+---
+
 ## Verification before the PR is considered ready
 
 - [ ] `npm -w backend run test` — all pass
