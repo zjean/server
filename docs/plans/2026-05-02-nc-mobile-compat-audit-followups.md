@@ -49,6 +49,14 @@ The empty-result wire shape ships in the audit-1 branch so this is purely a quer
 ### 6. Android chunked-upload resume
 
 > **Status (2026-05-28):** Fix shipped on branch `fix/nc-compat-u1-u2-u3-verification`. PROPFIND on the upload staging dir now enumerates already-uploaded chunks (one `<d:response>` per chunk with `<d:getcontentlength>` + `<d:getlastmodified>` + empty `<d:resourcetype/>`) when `Depth: 1`/infinity. Depth 0 keeps the original collection-only shape. Manual Android verification tracked in [`2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md`](2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md) §#6.
+>
+> **Update (2026-07-30):** the **server half is now covered by e2e** — `nc-chunked-upload.e2e-spec.ts` interrupts a
+> three-chunk transfer, parses the depth-1 PROPFIND the way the client does (sum the children's `getcontentlength`,
+> exclude the collection), asserts the offset equals the bytes really on disk, resumes from it and requires the assembled
+> file to match byte for byte. It also pins that no chunk is readable as a directory, which is *how* the size disappears.
+> That closes the #348 comment item for PR #362, whose compact/explicitly-closed wire change feeds only this path.
+> **Still unrun: the on-device half** — that stock Android actually resumes rather than restarting. The server can now
+> only fail this by regressing an assertion, but "Android parses what we emit" is not something an e2e can claim.
 
 **Severity:** HIGH (originally audit item #3, kept on the followups list because it's larger than the audit-1 PR scope)
 
