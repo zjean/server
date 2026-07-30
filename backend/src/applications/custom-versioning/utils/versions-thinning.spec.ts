@@ -120,12 +120,12 @@ describe('versionsToExpire — future-skewed mtime', () => {
   it('bands by createdAt instead of pinning a future-mtime row in band 1 forever', () => {
     // Both rows were genuinely captured 40 days ago (createdAt), well past
     // band 6's 604800s step, but their (skewed) mtime claims they are barely
-    // 100_000s apart and still in the future relative to NOW. Mtime-only
-    // banding would put both in band 1 (any negative age matches its "<= 10"
-    // check) and 100_000s of spacing clears that 2s step easily, so the buggy
-    // code keeps both forever. The fix bands both by their true createdAt age
-    // (band 6, 604800s step), under which 100_000s of spacing is NOT enough,
-    // so the older of the two is expired.
+    // 100s apart (500_000ms - 400_000ms) and still in the future relative to
+    // NOW. Mtime-only banding would put both in band 1 (any negative age
+    // matches its "<= 10" check) and 100s of spacing clears that 2s step
+    // easily, so the buggy code keeps both forever. The fix bands both by
+    // their true createdAt age (band 6, 604800s step), under which 100s of
+    // spacing is NOT enough, so the older of the two is expired.
     const heldSeconds = 3_456_000 // 40 days
     const rows: ThinnableVersion[] = [
       { id: 1, mtime: NOW + 500_000, label: null, createdAt: new Date(NOW - heldSeconds * 1000) },
@@ -184,8 +184,12 @@ describe('versionsToExpire — the createdAt floor', () => {
   // conservative direction, and the one that cannot cause surprise deletions.
   it('lets an exempt row anchor spacing, keeping its neighbour as well', () => {
     const rows = [at(1, 3000, null, 31_536_000), at(2, 3030, null, 0), at(3, 3060, null, 31_536_000)]
-    // id 2 is exempt (held 0s < 60s step) and anchors at mtime NOW-3030s.
-    // id 3 is then 30s from that anchor, under the 60s step, so it goes.
+    // id 2 is exempt (held 0s < 60s step, its own band from a 3030s mtime age)
+    // and anchors at mtime NOW-3030s. id 3's heldSeconds of 31_536_000 makes
+    // max() pick its createdAt age for banding, landing it in the final band
+    // (604800s step), so it is NOT exempt (held far longer than 604800s) and
+    // is judged against that step: 30s from the anchor is nowhere near
+    // 604800s, so it goes.
     expect(versionsToExpire(rows, NOW)).toEqual([3])
   })
 

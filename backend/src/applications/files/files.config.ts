@@ -116,10 +116,11 @@ export class FilesVersionsRetentionConfig {
 // explicit user request, and two deliberate Ctrl+S presses 34s apart could
 // still land in the same 60s bucket and lose one. §5.3's later fix: a PROVEN
 // human save (forcesavetype 1/3) now skips coalescing entirely (window 0,
-// never rate-limited); a save that cannot be proven either way (no
-// discriminator on the wire) still falls back to the scalar; only a save an
-// editor PROVES its own timer made uses the override below. Collabora reports
-// no discriminator at all, so every one of its saves keeps the override. See
+// never rate-limited); an OnlyOffice callback carrying no `forcesavetype`
+// (cannot be proven either way) still falls back to the scalar; only a save
+// an editor PROVES its own timer made uses the override below. Collabora
+// reports no discriminator at all — it never sets `forcesavetype` — so every
+// one of its saves keeps the override. See
 // docs/plans/2026-07-29-coalescing-forcesavetype-design.md and §5.3 of
 // docs/plans/2026-07-25-file-versioning-design.md.
 //

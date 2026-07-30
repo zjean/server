@@ -99,28 +99,35 @@ not a port, and has been verified only against this fork's own table-driven test
 behaviour. A spec implying we inherited NC's proven walk when we inherited only its numbers is the kind of claim this
 repo treats as a defect.
 
-### 3.3 Thin on `mtime`, not `createdAt`
+### 3.3 Spacing on `mtime`; banding on whichever clock says a row is older
 
-Our rows carry both, and NC has no equivalent choice to make. Use **`mtime`** — the content state's own time.
+Our rows carry both, and NC has no equivalent choice to make. Use **`mtime`** for spacing — the content state's own
+time.
 
 It is the timeline of distinct content states, and it is what the panel already displays (`created: mtime / 1000`), so
 the surviving rows read as evenly spaced to the user. `createdAt` would bunch a burst of captures whose contents
 actually span days — e.g. a file untouched for a week, then overwritten twice in a minute, has two rows whose
-*contents* are a week apart.
+*contents* are a week apart. This argument is about spacing only and is unaffected by the banding correction below.
 
-**But banding on `mtime` alone is unsafe, because `mtime` is client-controlled.** Sync clients set it directly via
-`touchFile` (`files/utils/files.ts:182`), so unlike `createdAt` it is neither monotonic nor trustworthy. Without a
-floor, a capture whose content carries a backdated `mtime` lands straight into a coarse band and can be expired
-**inside the same `snapshot()` call that created it** — unrecoverably, while the caller's log line still reads
-"versioned …" as if it succeeded.
+**But banding on `mtime` alone is unsafe, because `mtime` is client-controlled — in both directions.** Sync clients
+set it directly via `touchFile` (`files/utils/files.ts:182`), so unlike `createdAt` it is neither monotonic nor
+trustworthy. A **backdated** `mtime` lands a capture straight into a coarse band, where it can be expired **inside the
+same `snapshot()` call that created it** — unrecoverably, while the caller's log line still reads "versioned …" as if
+it succeeded. A **forward-skewed** `mtime` (a client clock ahead of the server's) is the opposite failure: it yields a
+negative age, which matches `stepForAge`'s finest band (its `<=` comparison never falls through for a negative
+number), so the row is judged at the tightest spacing forever and never thins — exactly the unbounded growth
+age-tiered thinning replaced the FIFO cap to prevent.
 
-**The resolution keeps `mtime` for banding and spacing, and floors *expiry* on `createdAt`.** A version may only be
-judged old enough to expire once it has survived its band's `step` by `createdAt`'s clock — the one **we** set, on
-write, and which never rewinds — regardless of what its `mtime` claims. This needs no new constant: the floor IS the
-curve, evaluated against a clock we trust instead of one the client controls; `versionsToExpire` re-derives `step` from
-`stepForAge` and applies it to `createdAt` directly. A row exempted by the floor still anchors the spacing walk — it
-counts as kept, so the *next* candidate is measured against it — because keeping more neighbours is the safe direction
-for a rule whose only failure mode is deleting a user's history.
+**The resolution: band on whichever clock says the row is older, keep `mtime` for spacing, and floor *expiry* on
+`createdAt`.** Banding takes `max(nowMs - mtime, nowMs - createdAt)`, so a forward-skewed `mtime` can no longer
+understate a row's age — `createdAt` is server-set and never rewinds, so it puts a true ceiling under the
+mtime-derived age. Separately, a version may only be judged old enough to *expire* once it has survived its band's
+`step` by `createdAt`'s clock — the one **we** set, on write — regardless of what its `mtime` claims; this is what
+protects a backdated-`mtime` row from the first failure mode above. This needs no new constant: the floor IS the
+curve, evaluated against a clock we trust instead of one the client controls; `versionsToExpire` re-derives `step`
+from `stepForAge` and applies it to `createdAt` directly. A row exempted by the floor still anchors the spacing walk —
+it counts as kept, so the *next* candidate is measured against it — because keeping more neighbours is the safe
+direction for a rule whose only failure mode is deleting a user's history.
 
 ## 4. What this replaces
 

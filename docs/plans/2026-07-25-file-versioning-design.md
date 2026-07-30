@@ -2,9 +2,9 @@
 
 > **SUPERSEDED, in part, by `docs/superpowers/specs/2026-07-29-version-thinning-design.md` and this document's own
 > §5.3.** §5.3 (below) already amends §5's coalescing rules — read it before trusting anything in §5.1/§5.2, including
-> :197's "statuses 2/3 are treated as human" (they are classified `interactive` and get the scalar, not `human`; only
-> proven `forcesavetype` 1/3 gets `human`'s zero window). §5.3 does **not** amend §6/§7: :239's config-class listing
-> still shows the retired `maxVersionsPerFile`, and :247's "an NC-style thinning ladder is explicitly deferred" is
+> :205's "statuses 2/3 are treated as human" (they are classified `interactive` and get the scalar, not `human`; only
+> proven `forcesavetype` 1/3 gets `human`'s zero window). §5.3 does **not** amend §6/§7: :247's config-class listing
+> still shows the retired `maxVersionsPerFile`, and :255's "an NC-style thinning ladder is explicitly deferred" is
 > false — it shipped, replacing the per-file FIFO cap entirely. See the thinning spec and ADR §5.3 for the current
 > shape.
 

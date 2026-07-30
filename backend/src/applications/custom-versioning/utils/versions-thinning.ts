@@ -39,10 +39,11 @@ export interface ThinnableVersion {
 
 // The ids to expire, given a file's versions and the current time.
 //
-// Keys on `mtime`, not `createdAt`: mtime is the timeline of distinct content
-// states and is what the version panel displays, so the survivors read as evenly
-// spaced to the user. `createdAt` would bunch a burst of captures whose contents
-// actually span days.
+// Spacing keys on `mtime`, not `createdAt`: mtime is the timeline of distinct
+// content states and is what the version panel displays, so the survivors read
+// as evenly spaced to the user. `createdAt` would bunch a burst of captures
+// whose contents actually span days. Banding is not this simple — see the
+// max() below for why it keys on whichever clock says the row is older.
 //
 // Labeled versions are filtered out ENTIRELY rather than merely skipped — they
 // are neither expired nor used as a spacing anchor. An unlabeled version sitting
@@ -78,7 +79,7 @@ export function versionsToExpire(versions: ThinnableVersion[], nowMs: number): n
     // of a fabricated one" — never the reverse.
     //
     // This is also what makes `byFileIdNewestFirst` safe to leave UNPAGED
-    // (versioning-queries.service.ts:277-279 — "the row count for one file is
+    // (versioning-queries.service.ts:274-276 — "the row count for one file is
     // bounded by the thinner itself on every write"): that claim is exactly what
     // an unbounded band-1 row would falsify.
     const step = stepForAge(Math.max(nowMs - version.mtime, nowMs - version.createdAt.getTime()) / 1000)

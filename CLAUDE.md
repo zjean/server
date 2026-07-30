@@ -235,11 +235,14 @@ changed from `maxVersionsPerFile` to `thinning`). `quotaShare` and `retentionDay
 
 Three traps this introduces:
 
-- **Thinning bands on `mtime`, but expiry is floored on `createdAt`.** `mtime` is client-controlled (sync clients set
-  it via `touchFile`, `files/utils/files.ts:182`), so it is neither monotonic nor trustworthy — banding and spacing
-  still use it (it's the timeline the version panel displays), but a version can only be judged old enough to expire
-  once it has survived its band's step by `createdAt`'s clock, which the server sets and which never rewinds. Without
-  the floor, a capture with a backdated `mtime` could be expired inside the same `snapshot()` call that created it.
+- **Thinning bands on whichever clock says a row is older; spacing still keys on `mtime`; expiry is floored on
+  `createdAt`.** `mtime` is client-controlled (sync clients set it via `touchFile`, `files/utils/files.ts:182`), so it
+  is neither monotonic nor trustworthy — spacing still uses it (it's the timeline the version panel displays), but
+  banding takes `max(nowMs - mtime, nowMs - createdAt)`: a forward-skewed `mtime` yields a negative age that would
+  otherwise match the finest band forever, so `createdAt`'s true, non-negative age puts a ceiling under it. Separately,
+  a version can only be judged old enough to expire once it has survived its band's step by `createdAt`'s clock, which
+  the server sets and which never rewinds. Without that floor, a capture with a backdated `mtime` could be expired
+  inside the same `snapshot()` call that created it.
 - **The proven-human discriminator is the raw `forcesavetype` (∈ {1, 3}), never `saveKind === 'interactive'`.**
   `saveKindOf` deliberately defaults anything unclassifiable to interactive, so testing the derived kind would also
   exempt document-server timer saves (`forcesavetype: 2`) from coalescing whenever `autoAssembly` is on — the exact
