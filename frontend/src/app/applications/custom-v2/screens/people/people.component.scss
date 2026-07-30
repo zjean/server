@@ -29,16 +29,15 @@
     flex-shrink: 0;
   }
 
-  &__eyebrow {
-    margin: 0;
-    font-family: var(--si-display);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
-    color: var(--si-fg-faint);
-  }
-
+  // The eyebrow here read "PEOPLE" above an h1 reading "Directory", duplicating
+  // the nav item and the breadcrumb, so it is gone (#405 item 5).
+  //
+  // This header is NOT converted to the 26px page-hero scale the other screens
+  // use, because it is not a page hero: it is the header of a 340px master pane,
+  // sitting above a filter input and beside a detail pane. 26px would overflow
+  // the column, and renaming it "People" would make the word appear three times
+  // on screen at once (nav, breadcrumb, heading) while dropping the only label
+  // that distinguishes this pane.
   &__title {
     margin: 0;
     font-family: var(--si-display);

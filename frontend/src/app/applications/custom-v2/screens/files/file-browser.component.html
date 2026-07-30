@@ -2,13 +2,13 @@
   <header class="personal__toolbar" [class.personal__toolbar--selecting]="hasSelection()">
     <div class="personal__row personal__row--top">
       <div class="personal__title">
-        <div class="personal__title-text">
+        <h1 class="personal__title-text">
           @if (pathSegments().length === 0 && repository.translateRootLabel) {
             {{ folderLabel() | translate: locale.language }}
           } @else {
             {{ folderLabel() }}
           }
-        </div>
+        </h1>
         <div class="personal__title-meta">
           {{ (files().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: files().length } }}
           @if (totalSize() > 0) {

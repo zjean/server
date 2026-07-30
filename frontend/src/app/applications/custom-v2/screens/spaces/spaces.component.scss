@@ -34,6 +34,10 @@
 
   &__title-text {
     // See files/file-browser.component.scss for rationale (Stack page-title scale).
+    // margin: 0 because this is an <h1> — the UA's 0.67em block margin would
+    // otherwise reflow the toolbar. Every other rule here already overrode the
+    // UA heading defaults, so the promotion is visually inert.
+    margin: 0;
     font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);

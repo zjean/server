@@ -1,7 +1,6 @@
 <div class="people">
   <aside class="people__list">
     <header class="people__list-header">
-      <p class="people__eyebrow" l10nTranslate>People</p>
       <h1 class="people__title" l10nTranslate>Directory</h1>
       <div class="people__summary">
         {{ 'nb_total_nb_online' | translate: locale.language : { total: users().length, online: onlineCount() } }}

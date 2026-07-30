@@ -73,17 +73,20 @@ interface AdminCard {
         flex-direction: column;
         gap: 4px;
       }
+      /* Page-title scale shared with every other v2 screen (#405 item 5). */
       .admin__title {
         margin: 0;
-        font-size: 22px;
-        font-weight: 700;
+        font-size: 26px;
+        font-weight: 500;
         color: var(--si-fg);
-        letter-spacing: -0.3px;
+        letter-spacing: -0.018em;
+        line-height: 1.15;
         font-family: var(--si-display);
       }
       .admin__lede {
         margin: 0;
-        font-size: 13px;
+        font-size: 14px;
+        line-height: 1.4;
         color: var(--si-fg-muted);
       }
       .admin__grid {

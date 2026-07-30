@@ -24,7 +24,6 @@ export type SharedVariant = 'with-me' | 'with-others' | 'via-links'
 
 interface VariantConfig {
   title: string
-  eyebrow: string
   icon: IconV2Name
   filter: (shares: ShareFileModel[]) => ShareFileModel[]
   emptyState: string
@@ -33,21 +32,18 @@ interface VariantConfig {
 const CONFIGS: Record<SharedVariant, VariantConfig> = {
   'with-me': {
     title: 'With me',
-    eyebrow: 'Shared',
     icon: 'person',
     filter: (shares) => shares.filter((s) => !!s.parent),
     emptyState: 'Nothing has been shared with you yet.'
   },
   'with-others': {
     title: 'With others',
-    eyebrow: 'Shared',
     icon: 'arrowUp',
     filter: (shares) => shares.filter((s) => !s.parent),
     emptyState: "You haven't shared anything yet."
   },
   'via-links': {
     title: 'Via links',
-    eyebrow: 'Shared',
     icon: 'link',
     filter: (shares) => shares.filter((s) => (s.counts?.links ?? 0) > 0),
     emptyState: 'No link shares yet.'
