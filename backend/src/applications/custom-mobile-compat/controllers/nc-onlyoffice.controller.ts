@@ -31,18 +31,29 @@ const TEMPLATE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx'])
 // document server posts back server-to-server with no Basic-Auth — see
 // the separate NcOnlyOfficeCallbackController below.
 //
-// Which clients actually speak to these four routes is NOT established. Two
-// facts to weigh before treating any of it as verified:
+// THE STOCK NC CLIENTS DO NOT SPEAK TO THESE ROUTES. U2 of
+// docs/plans/2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md is answered
+// from source instead of from a device: nextcloud/ios, nextcloud/android and
+// nextcloud/NextcloudKit contain no reference to `apps/onlyoffice` anywhere. iOS
+// reaches an office editor only through the directEditing catalog
+// (NCViewer.swift's DOCUMENTS branch) or richdocuments, and Android likewise. So
+// this fork serves office editing to them through NcDirectEditingService's
+// catalog entry and NcOfficeEditorController — not through this connector.
+//
+// Two things that remain true and are why these routes stay:
 //   - The ONLYOFFICE Documents mobile apps connect to a Nextcloud account as a
 //     WebDAV storage (the URL their help pages give is /remote.php/webdav/) and
 //     edit in their own embedded editor, so they never reach a doc-server
-//     connector at all. The clients that could arrive here are the STOCK NC
-//     clients, and U2 in docs/plans/2026-05-28-nc-mobile-compat-u1-u2-u3-verification.md
-//     — which would have told us whether they do — was never run; its Results
-//     sections are still blank. The `onlyoffice.config` log line below exists
-//     for exactly that session.
+//     connector either. Any client that does arrive here is speaking the
+//     connector protocol deliberately.
 //   - Only /track corresponds to a route the real connector serves. See the
 //     route table in constants/routes.ts.
+//
+// One latent gap, deliberately left alone here: /config calls
+// OnlyOfficeManager.getSettings without declaring ContextInterceptor, so
+// `headerOriginUrl()` is undefined and the urls in the config come out malformed.
+// It has never surfaced because no client calls the route. Fixing it is a
+// one-line decorator, out of scope for #369.
 @Controller()
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)

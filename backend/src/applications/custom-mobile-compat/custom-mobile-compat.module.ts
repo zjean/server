@@ -20,6 +20,7 @@ import { NcLoginV2Controller } from './controllers/nc-login-v2.controller'
 import { NcMobileOidcController } from './controllers/nc-mobile-oidc.controller'
 import { NcOcsController } from './controllers/nc-ocs.controller'
 import { NcOcsSharesController } from './controllers/nc-ocs-shares.controller'
+import { NcOfficeEditorController } from './controllers/nc-office-editor.controller'
 import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './controllers/nc-onlyoffice.controller'
 import { NcRecommendationsController } from './controllers/nc-recommendations.controller'
 import { NcTextEditorController } from './controllers/nc-text-editor.controller'
@@ -130,7 +131,12 @@ const officeEditorEnabled =
     // the flag is read at request time, in one place.
     NcVersionsController,
     ...(oidcEnabled ? [NcMobileOidcController] : []),
-    ...(officeEditorEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController] : [])
+    // NcOfficeEditorController serves the page the directEditing catalog's office
+    // entry points at, and NcDirectEditingService adds that entry under the SAME
+    // condition. They must stay gated together: an advertised editor whose page
+    // 404s is a dead-end Edit button in the client, which is worse than the
+    // affordance being absent.
+    ...(officeEditorEnabled ? [NcOnlyOfficeController, NcOnlyOfficeCallbackController, NcOfficeEditorController] : [])
   ],
   providers: [
     NcBasicAuthGuard,

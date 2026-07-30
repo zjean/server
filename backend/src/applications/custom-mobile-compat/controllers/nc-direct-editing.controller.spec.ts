@@ -178,6 +178,37 @@ describe(NcDirectEditingController.name, () => {
       expect(getUserFileByPath).toHaveBeenCalledWith(7, '.', 'notes.md')
     })
 
+    it('points an office editorId at the office editor page', async () => {
+      // Stubbing officeEditorId rather than the config keeps the case
+      // independent of whichever document server this checkout has enabled;
+      // the config-driven side of that method is covered in
+      // nc-direct-editing-office.service.spec.ts.
+      const spy = vi.spyOn(moduleRef.get(NcDirectEditingService), 'officeEditorId').mockReturnValue('onlyoffice')
+      try {
+        getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/Report.docx' })
+        const r = makeRes()
+        const out = await controller.open(makeReq(), r.res, '/Report.docx', 'onlyoffice', '42')
+        expect(out.ocs.data.url).toContain('/custom-mobile-compat/office-editor')
+        expect(out.ocs.data.url).not.toContain('/text-editor')
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
+    it('rejects the office editorId when no office document server is enabled', async () => {
+      // The catalog would not have advertised it and NcOfficeEditorController
+      // would not be mounted, so minting a token for it would hand the client a
+      // url that 404s.
+      const spy = vi.spyOn(moduleRef.get(NcDirectEditingService), 'officeEditorId').mockReturnValue(null)
+      try {
+        getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/Report.docx' })
+        const r = makeRes()
+        await expect(controller.open(makeReq(), r.res, '/Report.docx', 'onlyoffice', '42')).rejects.toMatchObject({ status: 400 })
+      } finally {
+        spy.mockRestore()
+      }
+    })
+
     it('rejects unknown editorId (catalog drift / spoofed iOS)', async () => {
       getUserFile.mockResolvedValue({ id: 42, path: 'files/personal/notes.md', mime: 'text-markdown' })
       const r = makeRes()

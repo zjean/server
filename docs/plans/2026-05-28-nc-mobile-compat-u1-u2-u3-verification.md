@@ -114,6 +114,8 @@ It does **not** cover "Android believes us" — the two are different claims, an
 
 **Hypothesis:** Unclear whether NextcloudKit's "Edit" affordance on a `.docx`/`.xlsx`/`.pptx` hits our OnlyOffice connector (`/index.php/apps/onlyoffice/config`) or routes through the OCS direct-editing path (`/ocs/v2.php/apps/files/api/v1/directEditing/open`). The directEditing catalog this fork advertises currently only declares a `Nextcloud Text` editor — no OnlyOffice entry — so if iOS uses the OCS path, the Edit button won't appear on OnlyOffice-handled files even though OnlyOffice itself is configured and working in the web UI.
 
+> **RESOLVED 2026-07-30 as Path B, from source — no device session needed. See the Results section below.**
+
 **No mitigation shipped yet.** Both candidate paths log on entry; we use the logs to learn which one iOS chooses, then implement the right fix surgically.
 
 ### Test steps
@@ -137,15 +139,44 @@ It does **not** cover "Android believes us" — the two are different claims, an
 
 If the Edit affordance never appears on `.docx` in iOS regardless of what the server logs say, the issue is iOS-side gating (the catalog the server returned doesn't satisfy iOS's "isAvailableDirectEditingEditorView" check on the file's mime + editor name pair) — see the comment block at the top of [`nc-direct-editing.service.ts`](../../backend/src/applications/custom-mobile-compat/services/nc-direct-editing.service.ts) for the gating logic.
 
-### Results
+### Results — **Path B**, settled 2026-07-30 by reading the clients (#369)
 
-_Fill in below after the test session._
+The device session was never needed, because the question has a definitive answer
+in the clients' own source:
 
-- `.txt` Edit on iOS: [pass / fail], log lines observed: [...]
-- `.docx` Edit on iOS: [Path A / Path B / neither / button absent], log lines observed: [...]
-- `.xlsx` Edit on iOS: [Path A / Path B / neither / button absent], log lines observed: [...]
-- `.pptx` Edit on iOS: [Path A / Path B / neither / button absent], log lines observed: [...]
-- Follow-up action: [no change / add OnlyOffice editor to directEditing catalog / other:______]
+- **`nextcloud/ios`, `nextcloud/android` and `nextcloud/NextcloudKit` contain no
+  reference to `apps/onlyoffice` at all.** Path A is not merely unlikely, it does
+  not exist. The only office surfaces those clients implement are the
+  directEditing catalog and `richdocuments`.
+- iOS's `NCViewer.swift` DOCUMENTS branch calls
+  `utility.editorsDirectEditing(account:contentType:)`, which reads
+  `capabilities.directEditingEditors` (populated from our `/info` by
+  `NextcloudKit+NCText.swift::textObtainEditorDetails`), then resolves the editor
+  through `NCDirectEditorAdapter.resolve` — a registry keyed on the lowercased
+  editor **id**: `text`, `onlyoffice`, `eurooffice`, `whiteboard`.
+- Android matches the same way: `EditorUtils.kt` keeps
+  `OFFICE_EDITOR_IDS = setOf("onlyoffice", "eurooffice")` and compares against
+  `Editor.id`.
+
+Two corrections to the hypothesis above, both of which would have misled a device
+session:
+
+- The gate is the editor **id**, not the name. The name check
+  (`isAvailableDirectEditingEditorView` comparing against `"nextcloud text"` /
+  `"onlyoffice"`) is an older iOS shape; current iOS gates on
+  `!editors.isEmpty` and then on the id registry.
+- The `/open` URL must point at **a page we serve ourselves**, not "through the
+  OnlyOffice connector". Both clients load the returned URL in a plain
+  WebView/WKWebView; there is no connector handshake on the client side at all.
+
+**Follow-up action: shipped in #369** — an office entry in
+`NcDirectEditingService.listEditors()` (id following the configured document
+server, `onlyoffice` or `eurooffice`) plus `NcOfficeEditorController`, which
+renders the document server's `api.js` into the host WebView under the same
+short-lived token scheme the text editor uses.
+
+The `onlyoffice.config` / `directEditing.*` U2 instrumentation can now be removed
+(step 3 of the Cleanup section) — it was there to answer this question.
 
 ## U3 — Endpoints iOS hits with `Accept: application/xml`
 

@@ -14,6 +14,11 @@ import type { OcsEnvelope } from '../utils/ocs-envelope'
 // it from here.
 export const NC_DIRECT_EDITING_EDITOR_PATH = '/custom-mobile-compat/text-editor'
 
+// Same arrangement for the office editor page (NcOfficeEditorController). Only
+// reachable when an office document server is enabled — /open refuses the office
+// editorId otherwise, because the catalog never advertised it.
+export const NC_DIRECT_EDITING_OFFICE_PATH = '/custom-mobile-compat/office-editor'
+
 interface InfoResponseData {
   editors: Record<string, NcDirectEditor>
   creators: Record<string, NcDirectCreator>
@@ -114,7 +119,13 @@ export class NcDirectEditingController {
       fileId = resolved
     }
 
-    if (editorId !== NC_DIRECT_EDITING_EDITOR_ID) {
+    // Which page this token will open. The office id is only accepted while an
+    // office document server is enabled, which is the same condition under which
+    // the catalog advertised it and the same condition under which
+    // NcOfficeEditorController is mounted — so accept and serve cannot disagree.
+    const officeEditorId = this.directEditing.officeEditorId()
+    const isOffice = officeEditorId !== null && editorId === officeEditorId
+    if (editorId !== NC_DIRECT_EDITING_EDITOR_ID && !isOffice) {
       // Someone advertised a different editor and now wants to open with
       // it — catalog drift. Refuse rather than mint a token under an
       // editor name we don't actually serve.
@@ -142,8 +153,15 @@ export class NcDirectEditingController {
       throw new HttpException('file not found', HttpStatus.NOT_FOUND)
     }
 
+    // One token scheme for both pages. It is not scoped per editor because the
+    // mime gate on each page already is: the text content endpoints refuse a
+    // non-text mime with 415, and the office page refuses anything outside
+    // `isOfficeMime`. Both pages resolve the same user and the same fileId out of
+    // the token, so a token replayed on the other page can only reach a file that
+    // page would already have served.
     const token = await this.directEditing.mintEditToken({ user: req.user, fileId })
-    const url = `${this.response.baseUrl(req)}${NC_DIRECT_EDITING_EDITOR_PATH}?token=${encodeURIComponent(token)}`
+    const editorPath = isOffice ? NC_DIRECT_EDITING_OFFICE_PATH : NC_DIRECT_EDITING_EDITOR_PATH
+    const url = `${this.response.baseUrl(req)}${editorPath}?token=${encodeURIComponent(token)}`
 
     return this.response.json(res, { url })
   }

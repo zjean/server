@@ -53,7 +53,19 @@ export class WebDAVFile implements Omit<FileProps, 'path'> {
     if (this.isDir) {
       return undefined
     } else if (this.mime) {
-      return this.mime.replaceAll('-', '/')
+      // Fork: `replace`, not `replaceAll`. `getMimeType` (files/utils/files.ts)
+      // stores a mime by replacing only its FIRST '/' with '-', so only the
+      // first '-' may be turned back. `replaceAll` also ate the hyphens that
+      // belong to the subtype, emitting
+      // `application/vnd.openxmlformats/officedocument.…` for every .docx and
+      // `text/x/python` for every .py. Both NC mobile clients compare the
+      // advertised directEditing mimetype to this string with EXACT equality
+      // (NCUtility.swift::editorsDirectEditing, EditorUtils.kt::getEditor), so a
+      // corrupted subtype silently removes the Edit affordance; desktop clients
+      // and any consumer sniffing on content type saw the same wrong value.
+      // Every other dash→slash site in the repo already uses first-only
+      // `replace` — this getter was the lone outlier.
+      return this.mime.replace('-', '/')
     }
     return DEFAULT_MIME_TYPE
   }

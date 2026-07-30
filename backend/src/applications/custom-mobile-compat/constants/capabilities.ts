@@ -114,14 +114,16 @@ export function ncCapabilities(serverUrl: string): NcCapabilitiesPayload {
         bigfilechunking: true,
         blacklisted_files: [],
         // NC iOS gates the per-file "Edit" affordance on this block being
-        // present AND the editor list at `url` advertising an editor named
-        // (lowercased) "nextcloud text" or "onlyoffice" with a mimetype that
-        // matches the file. Backed by NcDirectEditingController serving a
-        // catalog of plain-text/source-code mimetypes; the editor URL it
-        // returns from /open points at our in-app text editor (CodeMirror
-        // wrapped in a token-protected page). `supportsFileId: true` tells
-        // iOS to send `fileId` on /open — we use it as the canonical id and
-        // never trust `path`.
+        // present AND the editor list at `url` advertising an editor whose id is
+        // one it knows — `text`, `onlyoffice` or `eurooffice` — with a mimetype
+        // matching the file. Backed by NcDirectEditingController, which serves a
+        // catalog of plain-text/source-code mimetypes plus, when an office
+        // document server is enabled, the office formats. The URL /open returns
+        // points at our own in-app editor page in both cases (CodeMirror or
+        // TipTap for text, the document server's api.js for office), each wrapped
+        // in a token-protected page. `supportsFileId: true` tells iOS to send
+        // `fileId` on /open — we use it as the canonical id and never trust
+        // `path`.
         directEditing: {
           url: `${serverUrl}/ocs/v2.php/apps/files/api/v1/directEditing`,
           etag: ncDirectEditingCatalogEtag(),
