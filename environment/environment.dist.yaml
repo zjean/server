@@ -420,10 +420,6 @@ applications:
       # enable file versioning
       # default: false
       enabled: false
-      # Maximum number of versions kept per file.
-      # Set to `false` or 0 to keep an unlimited number.
-      # default: 20
-      maxVersionsPerFile: 20
       # Version retention in days per repository type. Set each value to a number
       # of days to enable automatic cleanup.
       # Set to `false` or 0 to disable cleanup for that repository type.

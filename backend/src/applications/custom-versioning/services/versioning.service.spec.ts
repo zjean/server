@@ -13,7 +13,6 @@ vi.mock('../../../configuration/config.environment', () => ({
         tmpPath: '',
         versions: {
           enabled: true,
-          maxVersionsPerFile: 20,
           retentionDays: { users: false, spaces: false },
           quotaShare: 0.5,
           minIntervalSeconds: 60,
@@ -116,18 +115,6 @@ class FakeQueries {
       .filter((r) => r.versionsRoot === versionsRoot && !r.label)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)[0]
   }
-  // Both root-scoped, matching the real queries: a global count paired with a
-  // per-root candidate list is the exact mismatch the retention sweep's comment
-  // warns about, and a fake that ignored the root would hide it.
-  async countByFileId(versionsRoot: string, fileId: number) {
-    return this.rows.filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId).length
-  }
-  async unlabeledByFileIdOldestFirst(versionsRoot: string, fileId: number, limit: number) {
-    return [...this.rows]
-      .filter((r) => r.versionsRoot === versionsRoot && r.fileId === fileId && !r.label)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id - b.id)
-      .slice(0, limit)
-  }
   // EVERY version of one file within one root, newest first, labels included —
   // the thinner filters labels itself (see versions-thinning.ts).
   async byFileIdNewestFirst(versionsRoot: string, fileId: number) {
@@ -179,7 +166,6 @@ describe(VersioningService.name, () => {
     versionsConfig.minIntervalSeconds = 60
     versionsConfig.minIntervalSecondsByOrigin = { collabora: 300, onlyoffice: 300 }
     versionsConfig.quotaShare = 0.5
-    versionsConfig.maxVersionsPerFile = 20
 
     filePath = path.join(tmpRoot, 'users', 'alice', 'files', 'docs', 'report.txt')
     await fs.mkdir(path.dirname(filePath), { recursive: true })
@@ -594,8 +580,9 @@ describe(VersioningService.name, () => {
   // orders of magnitude apart: an editor's is set by the document server
   // (Collabora saves after 30 idle seconds), an interactive save is a human
   // decision. One scalar cannot serve both — at 60 an hour of editing mints ~10
-  // versions and, with maxVersionsPerFile at 20, evicts half the file's
-  // genuinely distinct older revisions.
+  // versions, which under the FIFO cap this config used to carry would have
+  // evicted half the file's genuinely distinct older revisions. Age-tiered
+  // thinning is what removed that trade-off.
   describe('per-origin coalescing window', () => {
     // THE test: the same elapsed time, two origins, two answers.
     it('coalesces an editor save that an interactive save of the same age would not', async () => {

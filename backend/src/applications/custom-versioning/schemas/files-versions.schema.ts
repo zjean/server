@@ -114,7 +114,7 @@ export const customFilesVersions = mysqlTable(
       'restore'
     ]).notNull(),
     // Named revision. A labeled version is never coalesced, never auto-expired
-    // by retentionDays/maxVersionsPerFile, and never evicted by the quota cap.
+    // by retentionDays/thinning, and never evicted by the quota cap.
     label: varchar('label', { length: 255 })
   },
   (table) => [

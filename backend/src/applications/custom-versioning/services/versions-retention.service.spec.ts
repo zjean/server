@@ -10,7 +10,6 @@ vi.mock('../../../configuration/config.environment', () => ({
         trashRetention: { users: false, spaces: false },
         versions: {
           enabled: true,
-          maxVersionsPerFile: 20,
           retentionDays: { users: false, spaces: false },
           quotaShare: 0.5,
           minIntervalSeconds: 60
@@ -88,7 +87,6 @@ describe(VersionsRetention.name, () => {
     configuration.applications.files.tmpPath = path.join(tmpRoot, 'tmp')
 
     versionsConfig.enabled = true
-    versionsConfig.maxVersionsPerFile = 20
     versionsConfig.retentionDays = { users: false, spaces: false }
     versionsConfig.quotaShare = 0.5
     trashConfig.users = false
@@ -104,8 +102,6 @@ describe(VersionsRetention.name, () => {
     queries = {
       distinctRoots: vi.fn().mockResolvedValue([ROOT]),
       unlabeledOlderThan: vi.fn().mockResolvedValue([]),
-      fileIdsExceeding: vi.fn().mockResolvedValue([]),
-      unlabeledByFileIdOldestFirst: vi.fn().mockResolvedValue([]),
       usageByRoot: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0 }),
       oldestUnlabeledByRoot: vi.fn().mockResolvedValue(undefined),
       unlabeledByRootOldestFirst: vi.fn().mockResolvedValue([]),

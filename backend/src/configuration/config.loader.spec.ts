@@ -102,7 +102,6 @@ describe(configLoader.name, () => {
   // to match the default proves nothing.
   it.each([
     ['ENABLED', 'true', (c: any) => c.applications.files.versions.enabled, true],
-    ['MAXVERSIONSPERFILE', '7', (c: any) => c.applications.files.versions.maxVersionsPerFile, 7],
     ['QUOTASHARE', '0.25', (c: any) => c.applications.files.versions.quotaShare, 0.25],
     ['MININTERVALSECONDS', '1234', (c: any) => c.applications.files.versions.minIntervalSeconds, 1234],
     ['RETENTIONDAYS_USERS', '30', (c: any) => c.applications.files.versions.retentionDays.users, 30],

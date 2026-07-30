@@ -93,10 +93,10 @@ export class FilesVersionsRetentionConfig {
 //     Collabora's own coolwsd.xml defaults are `idlesave_duration_secs: 30`
 //     and `autosave_duration_secs: 300`, so a PutFile can arrive every 30
 //     seconds of edit-then-pause. At a 60-second window an hour of active
-//     editing mints ~10 versions — which, with `maxVersionsPerFile` at 20,
-//     evicts about half of that file's genuinely distinct older revisions.
-//     Autosave noise consuming the retention budget is the real harm, not the
-//     row count.
+//     editing mints ~10 versions — which under the FIFO cap this config used to
+//     carry would have evicted about half of the file's genuinely distinct older
+//     revisions. Age-tiered thinning is what removed that trade-off; the window
+//     now bounds only the write rate, not the reach of history.
 //   - An INTERACTIVE write is a human pressing Save. Each one is a decision,
 //     and collapsing four of them into one leaves the intermediate states
 //     unrecoverable. 60 seconds is right there.
@@ -142,12 +142,6 @@ export class FilesVersionsOriginIntervalsConfig {
 export class FilesVersionsConfig {
   @IsBoolean()
   enabled: boolean = false
-
-  @Transform(({ value }) => (value === 0 ? false : value))
-  @ValidateIf((o: FilesVersionsConfig) => o.maxVersionsPerFile !== false)
-  @IsInt()
-  @Min(1)
-  maxVersionsPerFile: number | false = 20
 
   @IsNotEmptyObject()
   @ValidateNested()

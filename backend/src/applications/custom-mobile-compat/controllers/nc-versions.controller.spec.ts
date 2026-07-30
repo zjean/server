@@ -7,7 +7,7 @@ vi.mock('../../../configuration/config.environment', () => ({
         usersPath: '',
         spacesPath: '',
         tmpPath: '',
-        versions: { enabled: true, maxVersionsPerFile: 20, retentionDays: { users: false, spaces: false }, quotaShare: 0.5, minIntervalSeconds: 60 }
+        versions: { enabled: true, retentionDays: { users: false, spaces: false }, quotaShare: 0.5, minIntervalSeconds: 60 }
       }
     }
   },
