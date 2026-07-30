@@ -248,6 +248,12 @@ export class VersioningService {
   // specs mutate `configuration.applications.files.versions` on an
   // already-constructed service.
   private coalescingWindow(origin: VersionOrigin, saveKind?: SnapshotOptions['saveKind']): number {
+    // A proven human trigger is never rate-limited. This is §5.1's own
+    // justification carried to its conclusion: the override exists BECAUSE the
+    // document server sets the cadence, and positive proof that a person set it
+    // falsifies that premise outright rather than merely downgrading it to the
+    // scalar (which is what #395 did, and what still swallowed saves).
+    if (saveKind === 'human') return 0
     if (saveKind === 'interactive') return this.config.minIntervalSeconds ?? 0
     const configured = (this.config.minIntervalSecondsByOrigin as Partial<Record<VersionOrigin, number>> | undefined)?.[origin]
     if (typeof configured === 'number') return configured

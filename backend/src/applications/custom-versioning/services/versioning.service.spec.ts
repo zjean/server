@@ -805,6 +805,32 @@ describe(VersioningService.name, () => {
     })
   })
 
+  // Task 6 (#389 follow-up): a save PROVEN human (forcesavetype 1 or 3) never
+  // coalesces at all, regardless of the origin's own override. The soak found
+  // two deliberate Ctrl+S presses 34s apart, both classified 'interactive'
+  // under the old two-way split, and the second was swallowed by onlyoffice's
+  // 300s override. `coalescingWindow` is a pure function of (origin, saveKind),
+  // so it is tested directly here rather than through a full snapshot round
+  // trip.
+  describe('a PROVEN human save never coalesces (task 6)', () => {
+    it('never coalesces a PROVEN human save, whatever the origin override says', () => {
+      versionsConfig.minIntervalSeconds = 60
+      versionsConfig.minIntervalSecondsByOrigin.onlyoffice = 300
+      expect(service['coalescingWindow']('onlyoffice', 'human')).toBe(0)
+    })
+
+    // The regression that motivated this: two deliberate Ctrl+S presses 34s
+    // apart both arrive as forcesavetype 1, and the second used to be
+    // swallowed.
+    it('keeps the scalar for an UNPROVABLE interactive save and the override for an automatic one', () => {
+      versionsConfig.minIntervalSeconds = 60
+      versionsConfig.minIntervalSecondsByOrigin.onlyoffice = 300
+      expect(service['coalescingWindow']('onlyoffice', 'interactive')).toBe(60)
+      expect(service['coalescingWindow']('onlyoffice', 'automatic')).toBe(300)
+      expect(service['coalescingWindow']('onlyoffice', undefined)).toBe(300)
+    })
+  })
+
   /* -------------------------------------------------------------- quota share */
 
   it('evicts oldest-unlabeled-first to stay under quota * quotaShare', async () => {
