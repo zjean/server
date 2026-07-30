@@ -18,21 +18,16 @@
     gap: 8px;
   }
 
-  &__eyebrow {
-    margin: 0;
-    font-family: var(--si-mono);
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--si-fg-faint);
-  }
-
+  // h1 + description, matching every other v2 screen (#405 item 5). 32px was the
+  // only title in v2 at that size and the type ladder has no step for it; 26px is
+  // --si-text-15, which the seven other page titles already use.
   &__title {
     margin: 0;
     font-family: var(--si-display);
-    font-weight: 600;
-    font-size: 32px;
-    letter-spacing: -0.02em;
+    font-weight: 500;
+    font-size: 26px;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
     color: var(--si-fg);
   }
 

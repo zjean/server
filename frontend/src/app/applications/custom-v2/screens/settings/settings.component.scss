@@ -28,23 +28,28 @@
     gap: 4px;
   }
 
-  &__eyebrow {
-    margin: 0;
-    font-family: var(--si-display);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.4px;
-    text-transform: uppercase;
-    color: var(--si-fg-faint);
-  }
-
+  // One page-header pattern across v2 (#405 item 5): h1 + description, which is
+  // what Recents, Favorites, Search and Admin already did. The eyebrow that used
+  // to sit here said "SETTINGS" above an h1 reading "Your account" — the eyebrow
+  // carried the page's actual name and the heading carried the description, so
+  // the two were inverted. Now the h1 is the name and the lede is the sentence.
+  // Type rules match recents.component.scss exactly so the screens agree.
   &__title {
     margin: 0;
     font-family: var(--si-display);
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: -0.018em;
+    line-height: 1.15;
     color: var(--si-fg);
+  }
+
+  &__lede {
+    margin: 4px 0 0;
+    font-family: var(--si-sans);
+    font-size: 14px;
+    line-height: 1.4;
+    color: var(--si-fg-muted);
   }
 
   &__identity {
