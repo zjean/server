@@ -13,6 +13,7 @@
 // the OCS Basic Auth header, so every /content fetch carries ?token=<jwt>.
 
 import { escapeHtml } from './nc-html'
+import { NC_MOBILE_BRIDGE_JS } from './nc-mobile-bridge'
 
 export interface MarkdownEditorPageOptions {
   token: string
@@ -169,6 +170,7 @@ ${INLINE_BOOTSTRAP_JS}
 // TipTap. Mirrors the codemirror page's flow so the only diff between the
 // two is the editor module and the toolbar UI.
 const INLINE_BOOTSTRAP_JS = `
+${NC_MOBILE_BRIDGE_JS}
 const body = document.body
 const token = body.dataset.token
 const readOnly = body.dataset.readonly === '1'
@@ -278,13 +280,8 @@ editor.onChange(() => setDirty(true))
 saveBtn.addEventListener('click', save)
 closeBtn.addEventListener('click', () => {
   if (dirty && !confirm('Discard unsaved changes?')) return
-  if (window.webkit?.messageHandlers?.DirectEditingMobileInterface) {
-    try { window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage('close') } catch {}
-  } else if (history.length > 1) {
-    history.back()
-  } else {
-    window.close()
-  }
+  // Both host shapes, plus a browser fallback — see nc-mobile-bridge.ts.
+  __ncBridge.close()
 })
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save() }
@@ -382,5 +379,10 @@ function refreshFormatBar(tt) {
 }
 
 await loadContent()
+// Reveal the page. On stock NC Android the WebView is INVISIBLE until this
+// call lands (EditorWebView.java::hideLoading), so it must run on the failure
+// path too — loadContent() swallows its own errors into the status line, which
+// the user can only read once the WebView is showing.
+__ncBridge.loaded()
 await upgradeToTipTap()
 `

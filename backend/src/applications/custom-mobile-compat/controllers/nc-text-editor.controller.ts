@@ -13,7 +13,7 @@ import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { UserModel } from '../../users/models/user.model'
 import { NcDirectEditingService, type NcDirectEditClaims } from '../services/nc-direct-editing.service'
 import { renderMarkdownEditorPage } from '../utils/markdown-editor-page'
-import { escapeHtml } from '../utils/nc-html'
+import { renderEditorErrorPageHtml } from '../utils/nc-editor-error-page'
 import { renderTextEditorPage } from '../utils/text-editor-page'
 
 // 5 MB cap. Big text files cause WKWebView to lag and CodeMirror to thrash;
@@ -292,25 +292,10 @@ export class NcTextEditorController {
   }
 }
 
-// HTML error page rendered when token verification fails. Avoids leaking
-// information about why the token failed (expired vs malformed vs file-not-
-// found are all conflated).
+// HTML error page rendered when token verification fails. The page itself lives
+// in utils/nc-editor-error-page.ts — shared with the office editor, and the one
+// place that knows it must call the `loaded` bridge to become visible on stock
+// NC Android.
 function renderError(res: FastifyReply, message: string): FastifyReply {
-  const safe = escapeHtml(message)
-  const body = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="color-scheme" content="light dark" />
-<title>Editor</title>
-<style>
-  :root { color-scheme: light dark; }
-  html, body { height: 100%; margin: 0; }
-  body { display: flex; align-items: center; justify-content: center; padding: 24px;
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-  .card { max-width: 360px; text-align: center; }
-  .card h1 { font-size: 17px; margin: 0 0 8px; }
-  .card p { margin: 0; opacity: 0.8; }
-</style></head>
-<body><div class="card"><h1>Cannot open editor</h1><p>${safe}</p></div></body></html>`
-  return res.header('Content-Type', 'text/html; charset=utf-8').send(body)
+  return res.header('Content-Type', 'text/html; charset=utf-8').send(renderEditorErrorPageHtml(message))
 }

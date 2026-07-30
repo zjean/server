@@ -16,6 +16,7 @@
 // share Basic Auth from the OCS path, so cookies/Authorization are unusable.
 
 import { escapeHtml } from './nc-html'
+import { NC_MOBILE_BRIDGE_JS } from './nc-mobile-bridge'
 
 export interface TextEditorPageOptions {
   token: string
@@ -123,6 +124,7 @@ ${INLINE_BOOTSTRAP_JS}
 // upgrade the textarea to a CodeMirror editor by importing the bundle.
 // Kept as a string constant so the HTML template stays a pure function.
 const INLINE_BOOTSTRAP_JS = `
+${NC_MOBILE_BRIDGE_JS}
 const body = document.body
 const token = body.dataset.token
 const language = body.dataset.language
@@ -247,15 +249,8 @@ editor.onChange(() => setDirty(true))
 saveBtn.addEventListener('click', save)
 closeBtn.addEventListener('click', () => {
   if (dirty && !confirm('Discard unsaved changes?')) return
-  // NCViewerNextcloudText registers "DirectEditingMobileInterface" as the
-  // WKScriptMessageHandler and expects the string "close" to dismiss.
-  if (window.webkit?.messageHandlers?.DirectEditingMobileInterface) {
-    try { window.webkit.messageHandlers.DirectEditingMobileInterface.postMessage('close') } catch {}
-  } else if (history.length > 1) {
-    history.back()
-  } else {
-    window.close()
-  }
+  // Both host shapes, plus a browser fallback — see nc-mobile-bridge.ts.
+  __ncBridge.close()
 })
 window.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); save() }
@@ -283,6 +278,11 @@ async function upgradeToCodeMirror() {
 }
 
 await loadContent()
+// Reveal the page. On stock NC Android the WebView is INVISIBLE until this
+// call lands (EditorWebView.java::hideLoading), so it must run on the failure
+// path too — loadContent() swallows its own errors into the status line, which
+// the user can only read once the WebView is showing.
+__ncBridge.loaded()
 upgradeToCodeMirror() // fire-and-forget: don't block window load / iOS spinner
 editor.focus()
 `
