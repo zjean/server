@@ -266,14 +266,14 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
+        gap: var(--si-space-4);
+        padding: var(--si-space-4) var(--si-space-6);
         background: var(--si-bg2, #f5f5f7);
         border-bottom: 1px solid var(--si-border, rgba(0, 0, 0, 0.08));
         flex-wrap: wrap;
       }
       .md-view__status {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted, #666);
         font-variant-numeric: tabular-nums;
         min-width: 90px;
@@ -281,7 +281,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__toolbar {
         display: inline-flex;
         align-items: center;
-        gap: 2px;
+        gap: var(--si-space-1);
         flex-wrap: wrap;
       }
       .md-tool {
@@ -294,8 +294,8 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         font: inherit;
         height: 30px;
         min-width: 30px;
-        padding: 0 6px;
-        font-size: 13px;
+        padding: 0 var(--si-space-3);
+        font-size: var(--si-text-8);
         line-height: 1;
         display: inline-flex;
         align-items: center;
@@ -323,13 +323,13 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       }
       .md-tool--mono {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .md-tool__sep {
         width: 1px;
         height: 18px;
         background: var(--si-border, rgba(0, 0, 0, 0.12));
-        margin: 0 4px;
+        margin: 0 var(--si-space-2);
       }
       .md-view__spacer {
         flex: 1 1 auto;
@@ -361,7 +361,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         min-height: 180px;
       }
       .md-view__editor {
-        padding: 24px 32px 48px;
+        padding: var(--si-space-11) var(--si-space-13) 48px;
         max-width: 880px;
         margin: 0 auto;
       }
@@ -388,8 +388,8 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         min-height: 200px;
       }
       .md-view__state {
-        padding: 24px;
-        font-size: 13px;
+        padding: var(--si-space-11);
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted, #666);
       }
       .md-view__state--error {

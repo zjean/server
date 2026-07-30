@@ -13,8 +13,8 @@
   height: 56px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 20px;
+  gap: var(--si-space-6);
+  padding: 0 var(--si-space-10);
   // Separated from the content below by surface tone (topbar bg0 vs bg2), not
   // a hard underline.
   background: var(--si-bg0);
@@ -26,7 +26,7 @@
   &__history {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--si-space-1);
     flex-shrink: 0;
   }
 
@@ -52,7 +52,7 @@
   &__crumbs {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     // The breadcrumb area should give back its space first when widths
     // get tight: shrink before the spacer collapses, so search + actions
     // stay reachable. Min-width 0 plus the truncating last segment lets
@@ -65,7 +65,7 @@
   &__crumb {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     padding: 0;
     background: transparent;
     border: 0;
@@ -135,11 +135,11 @@
   &__search {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     flex: 0 1 240px;
     min-width: 36px;
     height: 34px;
-    padding: 0 10px 0 12px;
+    padding: 0 var(--si-space-5) 0 var(--si-space-6);
     background: var(--si-bg2);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
@@ -187,7 +187,7 @@
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: 5px;
-    padding: 2px 6px;
+    padding: var(--si-space-1) var(--si-space-3);
     flex-shrink: 0;
     letter-spacing: 0.02em;
   }
@@ -195,7 +195,7 @@
   &__actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--si-space-2);
     flex-shrink: 0;
   }
 
@@ -206,7 +206,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    margin-left: 4px;
+    margin-left: var(--si-space-2);
     border-radius: var(--si-r4);
     text-decoration: none;
     transition: box-shadow var(--si-dur-2) var(--si-ease), transform var(--si-dur-2) var(--si-ease);
@@ -242,8 +242,8 @@
 // in the 768–1024 sliver where desktop chrome stays.
 @media (max-width: 1024px) {
   .topbar {
-    padding: 0 14px;
-    gap: 8px;
+    padding: 0 var(--si-space-7);
+    gap: var(--si-space-4);
   }
   .topbar__history {
     display: none;

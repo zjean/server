@@ -133,7 +133,7 @@
   .shared__toolbar,
   .trash__toolbar {
     flex-wrap: wrap;
-    row-gap: 8px;
+    row-gap: var(--si-space-4);
   }
 
   // The .personal block class comes from files/file-browser.component.scss

@@ -21,11 +21,11 @@
   }
 
   &__list-header {
-    padding: 20px 18px 12px;
+    padding: var(--si-space-10) var(--si-space-9) var(--si-space-6);
     border-bottom: 1px solid var(--si-line);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--si-space-3);
     flex-shrink: 0;
   }
 
@@ -41,14 +41,14 @@
   &__title {
     margin: 0;
     font-family: var(--si-display);
-    font-size: 20px;
+    font-size: var(--si-text-13);
     font-weight: 600;
     color: var(--si-fg);
     letter-spacing: -0.3px;
   }
 
   &__summary {
-    font-size: 11.5px;
+    font-size: var(--si-text-5);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
   }
@@ -56,13 +56,13 @@
   &__filter {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 10px;
+    gap: var(--si-space-4);
+    padding: 0 var(--si-space-5);
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     height: 30px;
-    margin-top: 6px;
+    margin-top: var(--si-space-3);
 
     &:focus-within {
       border-color: var(--si-accent-line);
@@ -81,7 +81,7 @@
     outline: none;
     color: var(--si-fg);
     font-family: var(--si-sans);
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     letter-spacing: -0.05px;
     min-width: 0;
 
@@ -97,28 +97,28 @@
   &__list-body {
     flex: 1;
     overflow: auto;
-    padding: 6px;
+    padding: var(--si-space-3);
   }
 
   &__state {
-    padding: 24px 16px;
+    padding: var(--si-space-11) var(--si-space-8);
     text-align: center;
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-faint);
   }
 
   &__detail {
     flex: 1;
     min-width: 0;
-    padding: 32px;
+    padding: var(--si-space-13);
     overflow: auto;
   }
 
   &__detail-empty {
     color: var(--si-fg-faint);
-    font-size: 13px;
+    font-size: var(--si-text-8);
     text-align: center;
-    padding: 80px 20px;
+    padding: 80px var(--si-space-10);
   }
 
   &__detail-card {
@@ -126,16 +126,16 @@
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r3);
-    padding: 24px 26px;
+    padding: var(--si-space-11) 26px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--si-space-9);
   }
 
   &__detail-head {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: var(--si-space-9);
   }
 
   &__detail-avatar {
@@ -148,7 +148,7 @@
     justify-content: center;
     font-family: var(--si-sans);
     font-weight: 600;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     flex-shrink: 0;
 
     img {
@@ -164,25 +164,25 @@
 
   &__detail-name {
     font-family: var(--si-display);
-    font-size: 20px;
+    font-size: var(--si-text-13);
     font-weight: 600;
     letter-spacing: -0.3px;
     color: var(--si-fg);
   }
 
   &__detail-email {
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__detail-status {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 6px;
+    gap: var(--si-space-3);
+    margin-top: var(--si-space-3);
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--si-fg-faint);
@@ -211,8 +211,8 @@
     margin: 0;
     display: grid;
     grid-template-columns: 80px 1fr;
-    gap: 8px;
-    font-size: 12.5px;
+    gap: var(--si-space-4);
+    font-size: var(--si-text-7);
 
     dt {
       color: var(--si-fg-faint);
@@ -226,7 +226,7 @@
 
   &__detail-mono {
     font-family: var(--si-mono);
-    font-size: 11.5px;
+    font-size: var(--si-text-5);
   }
 }
 
@@ -234,8 +234,8 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: var(--si-space-5);
+  padding: var(--si-space-4) var(--si-space-5);
   background: transparent;
   border: none;
   border-radius: var(--si-r2);
@@ -269,7 +269,7 @@
     flex-shrink: 0;
     font-family: var(--si-sans);
     font-weight: 600;
-    font-size: 12px;
+    font-size: var(--si-text-6);
     letter-spacing: -0.3px;
 
     img {
@@ -306,7 +306,7 @@
   }
 
   &__name {
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.05px;
@@ -316,10 +316,10 @@
   }
 
   &__sub {
-    font-size: 11px;
+    font-size: var(--si-text-4);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    margin-top: 2px;
+    margin-top: var(--si-space-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

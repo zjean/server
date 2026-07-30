@@ -34,8 +34,8 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 56px 20px;
-        margin: 16px 28px 28px;
+        padding: 56px var(--si-space-10);
+        margin: var(--si-space-8) var(--si-space-12) var(--si-space-12);
         color: var(--si-fg-faint);
         text-align: center;
         background: var(--si-bg3);
@@ -55,20 +55,20 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-bottom: 14px;
+        margin-bottom: var(--si-space-7);
         border: 1px solid var(--si-line);
       }
       .empty__title {
         font-family: var(--si-display);
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 500;
         color: var(--si-fg-muted);
         letter-spacing: -0.1px;
         max-width: 36ch;
       }
       .empty__lede {
-        margin-top: 6px;
-        font-size: 13.5px;
+        margin-top: var(--si-space-3);
+        font-size: var(--si-text-9);
         color: var(--si-fg-faint);
         max-width: 32ch;
         line-height: 1.5;

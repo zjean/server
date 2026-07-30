@@ -16,13 +16,13 @@
   // Compact page header, matching personal/spaces/shared/trash (one header
   // system across the app — 26px title + 14px meta).
   &__header {
-    padding: 32px 28px 18px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
   }
 
   &__title-text {
     margin: 0;
     font-family: var(--si-display);
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -30,27 +30,27 @@
   }
 
   &__title-meta {
-    margin: 4px 0 0;
-    font-size: 14px;
+    margin: var(--si-space-2) 0 0;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
   }
 
   &__section {
-    padding: 24px 28px 28px;
+    padding: var(--si-space-11) var(--si-space-12) var(--si-space-12);
   }
 
   &__section-head {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: var(--si-space-5);
+    margin-bottom: var(--si-space-7);
   }
 
   &__section-label {
     font-family: var(--si-display);
-    font-size: 11px;
+    font-size: var(--si-text-4);
     font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -61,12 +61,12 @@
     display: inline-flex;
     align-items: center;
     height: 18px;
-    padding: 0 8px;
+    padding: 0 var(--si-space-4);
     border-radius: var(--si-r4);
     background: var(--si-bg4);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     line-height: 1;
     font-variant-numeric: tabular-nums;
   }
@@ -76,8 +76,8 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: var(--si-space-6);
+  padding: var(--si-space-5) var(--si-space-6);
   margin: 0 -12px;
   border-radius: 8px;
   border: none;
@@ -97,7 +97,7 @@
   }
 
   &__name {
-    font-size: 13.5px;
+    font-size: var(--si-text-9);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.1px;
@@ -109,9 +109,9 @@
   &__sub {
     display: flex;
     align-items: center;
-    gap: 5px;
-    margin-top: 3px;
-    font-size: 11.5px;
+    gap: var(--si-space-3);
+    margin-top: var(--si-space-2);
+    font-size: var(--si-text-5);
     color: var(--si-fg-faint);
     min-width: 0;
   }
@@ -133,7 +133,7 @@
 
   &__time {
     font-family: var(--si-mono);
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
     white-space: nowrap;
     flex-shrink: 0;

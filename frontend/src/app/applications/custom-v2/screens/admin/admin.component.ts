@@ -62,7 +62,7 @@ interface AdminCard {
         background: var(--si-bg2);
       }
       .admin {
-        padding: 28px 32px;
+        padding: var(--si-space-12) var(--si-space-13);
         display: flex;
         flex-direction: column;
         gap: 22px;
@@ -71,12 +71,12 @@ interface AdminCard {
       .admin__head {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--si-space-2);
       }
       /* Page-title scale shared with every other v2 screen (#405 item 5). */
       .admin__title {
         margin: 0;
-        font-size: 26px;
+        font-size: var(--si-text-15);
         font-weight: 500;
         color: var(--si-fg);
         letter-spacing: -0.018em;
@@ -85,20 +85,20 @@ interface AdminCard {
       }
       .admin__lede {
         margin: 0;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         line-height: 1.4;
         color: var(--si-fg-muted);
       }
       .admin__grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: 12px;
+        gap: var(--si-space-6);
       }
       .admin-card {
         display: flex;
         align-items: flex-start;
-        gap: 14px;
-        padding: 14px 16px;
+        gap: var(--si-space-7);
+        padding: var(--si-space-7) var(--si-space-8);
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
@@ -136,17 +136,17 @@ interface AdminCard {
       .admin-card__body {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: var(--si-space-2);
         min-width: 0;
       }
       .admin-card__title {
-        font-size: 13.5px;
+        font-size: var(--si-text-9);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .admin-card__desc {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         line-height: 1.35;
       }

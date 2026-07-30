@@ -60,8 +60,8 @@ import { V2BreadcrumbService } from './breadcrumb.service'
       .pcb {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 12px 28px 0;
+        gap: var(--si-space-3);
+        padding: var(--si-space-6) var(--si-space-12) 0;
         background: var(--si-bg2);
         font-family: var(--si-sans);
         font-size: var(--si-text-6);
@@ -79,7 +79,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
       .pcb__crumb {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: var(--si-space-3);
         padding: 0;
         background: transparent;
         border: 0;
@@ -106,7 +106,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
         background: var(--si-accent-soft, rgba(58, 122, 254, 0.14));
         color: var(--si-fg-strong);
         border-radius: 6px;
-        padding: 2px 6px;
+        padding: var(--si-space-1) var(--si-space-3);
         margin: -2px -6px;
       }
     `

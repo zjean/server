@@ -143,13 +143,13 @@ type EditorTheme = 'light' | 'dark'
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
+        gap: var(--si-space-4);
+        padding: var(--si-space-4) var(--si-space-6);
         background: var(--si-bg2, #f5f5f7);
         border-bottom: 1px solid var(--si-border, rgba(0, 0, 0, 0.08));
       }
       .text-view__status {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted, #666);
         font-variant-numeric: tabular-nums;
       }
@@ -174,8 +174,8 @@ type EditorTheme = 'light' | 'dark'
         outline: none !important;
       }
       .text-view__state {
-        padding: 24px;
-        font-size: 13px;
+        padding: var(--si-space-11);
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted, #666);
       }
       .text-view__state--error {

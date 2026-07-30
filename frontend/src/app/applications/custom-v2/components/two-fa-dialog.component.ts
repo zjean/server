@@ -81,27 +81,27 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         z-index: calc(var(--si-z-dialog) + 1);
         min-width: 320px;
         max-width: 380px;
-        padding: 18px 20px 14px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
         box-shadow: var(--si-shadow3);
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: var(--si-space-6);
       }
       .tfa-dialog__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
       }
       .tfa-dialog__field {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--si-space-2);
       }
       .tfa-dialog__field > span {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);
@@ -111,8 +111,8 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         width: 100%;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
-        padding: 8px 10px;
+        font-size: var(--si-text-8);
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -130,9 +130,9 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
       }
       .tfa-dialog__actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         justify-content: flex-end;
-        margin-top: 4px;
+        margin-top: var(--si-space-2);
       }
     `
   ]

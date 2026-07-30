@@ -142,10 +142,10 @@ export interface GroupRef {
         min-height: 0;
       }
       .gmd__head {
-        padding: 18px 20px 14px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
         display: flex;
         align-items: flex-start;
-        gap: 12px;
+        gap: var(--si-space-6);
         border-bottom: 1px solid var(--si-line);
       }
       .gmd__title-wrap {
@@ -153,7 +153,7 @@ export interface GroupRef {
         min-width: 0;
       }
       .gmd__eyebrow {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1.1px;
         color: var(--si-fg-faint);
@@ -161,8 +161,8 @@ export interface GroupRef {
         font-family: var(--si-display);
       }
       .gmd__title {
-        margin: 4px 0 0;
-        font-size: 18px;
+        margin: var(--si-space-2) 0 0;
+        font-size: var(--si-text-12);
         font-weight: 700;
         color: var(--si-fg);
         letter-spacing: -0.3px;
@@ -190,16 +190,16 @@ export interface GroupRef {
       .gmd__body {
         flex: 1 1 auto;
         overflow-y: auto;
-        padding: 14px 20px;
+        padding: var(--si-space-7) var(--si-space-10);
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: var(--si-space-5);
         min-height: 0;
       }
       .gmd__state {
-        padding: 30px 12px;
+        padding: 30px var(--si-space-6);
         text-align: center;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
           color: var(--si-rose);
@@ -207,8 +207,8 @@ export interface GroupRef {
       }
       .gmd__counts {
         display: flex;
-        gap: 10px;
-        font-size: 11px;
+        gap: var(--si-space-5);
+        font-size: var(--si-text-4);
         font-family: var(--si-mono);
         color: var(--si-fg-muted);
       }
@@ -221,14 +221,14 @@ export interface GroupRef {
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--si-space-3);
       }
       .gmd__row {
         display: grid;
         grid-template-columns: 26px 1fr 120px 24px;
         align-items: center;
-        gap: 10px;
-        padding: 8px 10px;
+        gap: var(--si-space-5);
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
@@ -248,7 +248,7 @@ export interface GroupRef {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 11px;
+        font-size: var(--si-text-4);
       }
       .gmd__info {
         display: flex;
@@ -257,7 +257,7 @@ export interface GroupRef {
         min-width: 0;
       }
       .gmd__name {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg);
         font-weight: 500;
         overflow: hidden;
@@ -265,7 +265,7 @@ export interface GroupRef {
         white-space: nowrap;
       }
       .gmd__desc {
-        font-size: 11px;
+        font-size: var(--si-text-4);
         color: var(--si-fg-muted);
         overflow: hidden;
         text-overflow: ellipsis;
@@ -275,10 +275,10 @@ export interface GroupRef {
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
-        padding: 5px 7px;
+        padding: var(--si-space-3) var(--si-space-4);
         color: var(--si-fg);
         font: inherit;
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
 
         &:focus {
           outline: none;
@@ -311,14 +311,14 @@ export interface GroupRef {
         }
       }
       .gmd__foot {
-        padding: 14px 20px 18px;
+        padding: var(--si-space-7) var(--si-space-10) var(--si-space-9);
         border-top: 1px solid var(--si-line);
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .gmd__foot-label {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
         color: var(--si-fg-faint);

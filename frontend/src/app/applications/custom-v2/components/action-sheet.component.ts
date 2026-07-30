@@ -92,20 +92,20 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
         box-shadow: var(--si-shadow3);
-        padding: 8px;
+        padding: var(--si-space-4);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--si-space-3);
         animation: as-slide-up 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
       }
       .as__title {
         font-family: var(--si-display);
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--si-fg-faint);
-        padding: 8px 12px 4px;
+        padding: var(--si-space-4) var(--si-space-6) var(--si-space-2);
       }
       .as__list {
         list-style: none;
@@ -113,20 +113,20 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 2px;
+        gap: var(--si-space-1);
       }
       .as__item {
         width: 100%;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--si-space-6);
         height: 48px;
-        padding: 0 14px;
+        padding: 0 var(--si-space-7);
         background: transparent;
         border: 0;
         border-radius: 8px;
         font: inherit;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         text-align: left;
         color: var(--si-fg);
         cursor: pointer;
@@ -153,13 +153,13 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         flex: 1 1 auto;
       }
       .as__cancel {
-        margin-top: 4px;
+        margin-top: var(--si-space-2);
         height: 44px;
         background: var(--si-bg2);
         border: 0;
         border-radius: 8px;
         font: inherit;
-        font-size: 14px;
+        font-size: var(--si-text-10);
         font-weight: 500;
         color: var(--si-fg-muted);
         cursor: pointer;
@@ -173,7 +173,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
       }
       .as__divider {
         height: 1px;
-        margin: 6px 12px;
+        margin: var(--si-space-3) var(--si-space-6);
         background: var(--si-line);
       }
       @keyframes as-fade-in {

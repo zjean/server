@@ -71,8 +71,8 @@ export interface PickedMember {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
-        padding: 8px 10px;
+        font-size: var(--si-text-8);
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -96,23 +96,23 @@ export interface PickedMember {
         z-index: calc(var(--si-z-base) + 1);
       }
       .ugp__hint {
-        padding: 10px 12px;
-        font-size: 12.5px;
+        padding: var(--si-space-5) var(--si-space-6);
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
       }
       .ugp__result {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--si-space-4);
         width: 100%;
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
         background: transparent;
         color: var(--si-fg);
         border: none;
         border-bottom: 1px solid color-mix(in srgb, var(--si-border) 50%, transparent);
         text-align: left;
         font: inherit;
-        font-size: 13px;
+        font-size: var(--si-text-8);
         cursor: pointer;
       }
       .ugp__result:last-child {
@@ -136,19 +136,19 @@ export interface PickedMember {
         justify-content: center;
         background: var(--si-bg3);
         color: var(--si-fg-muted);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .ugp__name {
         font-weight: 500;
       }
       .ugp__desc {
         color: var(--si-fg-muted);
-        font-size: 12px;
+        font-size: var(--si-text-6);
       }
       .ugp__type {
         margin-left: auto;
         color: var(--si-fg-muted);
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         text-transform: lowercase;
       }
     `

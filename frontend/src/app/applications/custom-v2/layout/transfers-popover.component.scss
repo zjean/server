@@ -27,11 +27,11 @@
 
   &__head {
     height: 32px;
-    padding: 0 12px;
+    padding: 0 var(--si-space-6);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     background: var(--si-chrome-bg);
     color: rgba(255, 255, 255, 0.95);
     font-family: var(--si-sans);
@@ -51,27 +51,27 @@
   }
 
   &__body {
-    padding: 8px;
+    padding: var(--si-space-4);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--si-space-2);
     max-height: 340px;
     overflow: auto;
   }
 
   &__empty {
-    padding: 32px 12px;
+    padding: var(--si-space-13) var(--si-space-6);
     text-align: center;
     font-size: var(--si-text-6);
     color: var(--si-fg-faint);
   }
 
   &__footer {
-    padding: 8px 12px;
+    padding: var(--si-space-4) var(--si-space-6);
     border-top: 1px solid var(--si-line);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     font-size: var(--si-text-5);
     color: var(--si-fg-faint);
 
@@ -82,13 +82,13 @@
 }
 
 .transfer-row {
-  padding: 8px 10px;
+  padding: var(--si-space-4) var(--si-space-5);
   border-radius: var(--si-r2);
   background: var(--si-bg3);
   border: 1px solid var(--si-line);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--si-space-2);
   transition: background var(--si-dur-2) var(--si-ease);
 
   &--active {
@@ -103,7 +103,7 @@
   &__line {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: var(--si-space-3);
     font-size: var(--si-text-6);
     color: var(--si-fg);
     letter-spacing: -0.05px;

@@ -18,7 +18,7 @@
   justify-content: center;
   height: 100%;
   color: var(--si-fg-muted);
-  font-size: 14px;
+  font-size: var(--si-text-10);
 }
 
 .diagram-view__state--error {
@@ -40,7 +40,7 @@
   z-index: calc(var(--si-z-dialog) + 1);
   min-width: 340px;
   max-width: 460px;
-  padding: 18px 20px 14px;
+  padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
   background: var(--si-bg1);
   border: 1px solid var(--si-border);
   border-radius: 10px;
@@ -48,22 +48,22 @@
 }
 
 .diagram-conflict__title {
-  font-size: 15px;
+  font-size: var(--si-text-11);
   font-weight: 600;
   color: var(--si-fg);
-  margin-bottom: 8px;
+  margin-bottom: var(--si-space-4);
 }
 
 .diagram-conflict__message {
-  font-size: 13px;
+  font-size: var(--si-text-8);
   color: var(--si-fg-muted);
   line-height: 1.45;
-  margin-bottom: 16px;
+  margin-bottom: var(--si-space-8);
 }
 
 .diagram-conflict__actions {
   display: flex;
-  gap: 8px;
+  gap: var(--si-space-4);
   justify-content: flex-end;
 }
 
@@ -71,8 +71,8 @@
   appearance: none;
   border: 1px solid var(--si-border);
   border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
+  padding: var(--si-space-3) var(--si-space-6);
+  font-size: var(--si-text-8);
   font-weight: 500;
   cursor: pointer;
   background: transparent;

@@ -14,11 +14,11 @@
   overflow: auto;
 
   &__toolbar {
-    padding: 32px 28px 20px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-10);
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     background: var(--si-bg2);
     position: sticky;
     top: 0;
@@ -28,14 +28,14 @@
   &__title-group {
     display: flex;
     flex-direction: column;
-    margin-right: 10px;
+    margin-right: var(--si-space-5);
   }
 
   &__title {
     // Stack page-title scale (see files/file-browser.component.scss).
     // margin: 0 — see spaces.component.scss; this is an <h1>.
     margin: 0;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -44,30 +44,30 @@
   }
 
   &__subtitle {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__divider {
     width: 1px;
     height: 22px;
     background: var(--si-line);
-    margin: 0 6px;
+    margin: 0 var(--si-space-3);
   }
 
   &__toolbar-right {
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
   }
 
   &__state {
     padding: 40px 22px;
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     text-align: center;
 
@@ -86,14 +86,14 @@
 .bin-row {
   display: grid;
   grid-template-columns: minmax(260px, 2fr) 100px 180px 40px;
-  padding: 0 18px;
+  padding: 0 var(--si-space-9);
   align-items: center;
   border-bottom: 1px solid var(--si-line);
 }
 
 .bin-table__head {
   height: 32px;
-  font-size: 10.5px;
+  font-size: var(--si-text-3);
   color: var(--si-fg-faint);
   font-weight: 600;
   text-transform: uppercase;
@@ -135,7 +135,7 @@
   &__name {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--si-space-5);
     min-width: 0;
   }
 
@@ -152,7 +152,7 @@
   }
 
   &__title {
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.05px;
@@ -162,13 +162,13 @@
   }
 
   &__count {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
   }
 
   &__mtime {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
   }
 

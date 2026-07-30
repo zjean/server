@@ -81,7 +81,7 @@ const VIEWPORT_GUTTER = 8
         position: fixed;
         z-index: var(--si-z-popover);
         min-width: ${MENU_WIDTH}px;
-        padding: 4px;
+        padding: var(--si-space-2);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 8px;
@@ -94,15 +94,15 @@ const VIEWPORT_GUTTER = 8
       .ctx-menu__item {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--si-space-5);
         height: ${MENU_ITEM_HEIGHT}px;
-        padding: 0 10px;
+        padding: 0 var(--si-space-5);
         background: transparent;
         border: none;
         border-radius: 6px;
         color: var(--si-fg);
         font: inherit;
-        font-size: 15px;
+        font-size: var(--si-text-11);
         text-align: left;
         cursor: pointer;
         transition:
@@ -134,7 +134,7 @@ const VIEWPORT_GUTTER = 8
       }
       .ctx-menu__divider {
         height: 1px;
-        margin: 4px 6px;
+        margin: var(--si-space-2) var(--si-space-3);
         background: var(--si-line);
       }
     `

@@ -123,52 +123,52 @@ interface FormState {
         transform: translate(-50%, -50%);
         z-index: calc(var(--si-z-dialog) + 1);
         width: min(440px, calc(100vw - 24px));
-        padding: 18px 20px 16px;
+        padding: var(--si-space-9) var(--si-space-10) var(--si-space-8);
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 10px;
         box-shadow: var(--si-shadow3);
       }
       .ld__title {
-        font-size: 15px;
+        font-size: var(--si-text-11);
         font-weight: 600;
         color: var(--si-fg);
-        margin-bottom: 2px;
+        margin-bottom: var(--si-space-1);
       }
       .ld__subject {
-        font-size: 12.5px;
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
-        margin-bottom: 14px;
+        margin-bottom: var(--si-space-7);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
       .ld__url-row {
         display: flex;
-        gap: 6px;
+        gap: var(--si-space-3);
         align-items: center;
-        margin-bottom: 14px;
+        margin-bottom: var(--si-space-7);
       }
       .ld__url-input {
         flex: 1;
         min-width: 0;
         box-sizing: border-box;
         font: inherit;
-        font-size: 12px;
-        padding: 7px 9px;
+        font-size: var(--si-text-6);
+        padding: var(--si-space-4) 9px;
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
         border-radius: 6px;
       }
       .ld__field {
-        margin-bottom: 12px;
+        margin-bottom: var(--si-space-6);
       }
       .ld__toggle {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        font-size: 13px;
+        gap: var(--si-space-4);
+        font-size: var(--si-text-8);
         color: var(--si-fg);
         cursor: pointer;
         user-select: none;
@@ -178,17 +178,17 @@ interface FormState {
       }
       .ld__row {
         display: flex;
-        gap: 6px;
+        gap: var(--si-space-3);
         align-items: center;
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
       }
       .ld__input {
         flex: 1;
         min-width: 0;
         box-sizing: border-box;
         font: inherit;
-        font-size: 13px;
-        padding: 8px 10px;
+        font-size: var(--si-text-8);
+        padding: var(--si-space-4) var(--si-space-5);
         background: var(--si-bg2);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
@@ -200,18 +200,18 @@ interface FormState {
         border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .ld__input--date {
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
       }
       .ld__error {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-rose, #c0392b);
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
       }
       .ld__actions {
         display: flex;
-        gap: 8px;
+        gap: var(--si-space-4);
         align-items: center;
-        margin-top: 14px;
+        margin-top: var(--si-space-7);
       }
       .ld__spacer {
         flex: 1;

@@ -14,9 +14,9 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
       .pill {
         display: inline-flex;
         align-items: center;
-        gap: 5px;
+        gap: var(--si-space-3);
         line-height: 1;
-        padding: 4px 8px;
+        padding: var(--si-space-2) var(--si-space-4);
         border-radius: var(--si-r4);
         border: 1px solid transparent;
         font-family: var(--si-sans);

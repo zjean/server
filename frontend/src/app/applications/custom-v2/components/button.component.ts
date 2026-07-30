@@ -47,26 +47,26 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
       .btn--xs {
         height: 24px;
         padding: 0 9px;
-        font-size: 12.5px;
-        gap: 5px;
+        font-size: var(--si-text-7);
+        gap: var(--si-space-3);
       }
       .btn--sm {
         height: 28px;
         padding: 0 11px;
-        font-size: 13.5px;
-        gap: 6px;
+        font-size: var(--si-text-9);
+        gap: var(--si-space-3);
       }
       .btn--md {
         height: 32px;
         padding: 0 13px;
-        font-size: 14px;
-        gap: 7px;
+        font-size: var(--si-text-10);
+        gap: var(--si-space-4);
       }
       .btn--lg {
         height: 38px;
-        padding: 0 18px;
-        font-size: 14.5px;
-        gap: 8px;
+        padding: 0 var(--si-space-9);
+        font-size: var(--si-text-10);
+        gap: var(--si-space-4);
       }
 
       .btn--primary {

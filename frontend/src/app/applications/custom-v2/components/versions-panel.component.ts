@@ -214,12 +214,12 @@ interface VersionRow extends VersionModel {
       .vp {
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: 12px 14px;
+        gap: var(--si-space-5);
+        padding: var(--si-space-6) var(--si-space-7);
       }
       .vp__state {
-        padding: 18px 10px;
-        font-size: 12px;
+        padding: var(--si-space-9) var(--si-space-5);
+        font-size: var(--si-text-6);
         color: var(--si-fg-muted);
         text-align: center;
 
@@ -228,8 +228,8 @@ interface VersionRow extends VersionModel {
         }
       }
       .vp__state-lede {
-        margin-top: 4px;
-        font-size: 11px;
+        margin-top: var(--si-space-2);
+        font-size: var(--si-text-4);
         color: var(--si-fg-faint);
       }
       .vp__list {
@@ -238,13 +238,13 @@ interface VersionRow extends VersionModel {
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--si-space-4);
       }
       .vp-row {
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r2);
-        padding: 8px 10px;
+        padding: var(--si-space-4) var(--si-space-5);
 
         &--busy {
           opacity: 0.6;
@@ -253,7 +253,7 @@ interface VersionRow extends VersionModel {
       .vp-row__head {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--si-space-4);
         min-width: 0;
       }
       .vp-row__meta {
@@ -263,13 +263,13 @@ interface VersionRow extends VersionModel {
         flex: 1 1 auto;
       }
       .vp-row__when {
-        font-size: 12px;
+        font-size: var(--si-text-6);
         font-weight: 600;
         color: var(--si-fg);
         letter-spacing: -0.1px;
       }
       .vp-row__sub {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
         overflow-wrap: anywhere;
       }
@@ -278,8 +278,8 @@ interface VersionRow extends VersionModel {
       }
       .vp-row__actions {
         display: flex;
-        gap: 4px;
-        margin-top: 6px;
+        gap: var(--si-space-2);
+        margin-top: var(--si-space-3);
       }
       .vp-row__action {
         width: 24px;
@@ -311,19 +311,19 @@ interface VersionRow extends VersionModel {
         }
       }
       .vp-row__editor {
-        margin-top: 6px;
+        margin-top: var(--si-space-3);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--si-space-3);
       }
       .vp-row__input {
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r1);
-        padding: 6px 8px;
+        padding: var(--si-space-3) var(--si-space-4);
         color: var(--si-fg);
         font: inherit;
-        font-size: 12px;
+        font-size: var(--si-text-6);
 
         &:focus {
           outline: none;
@@ -336,21 +336,21 @@ interface VersionRow extends VersionModel {
       .vp-row__editor-actions {
         display: flex;
         justify-content: flex-end;
-        gap: 6px;
+        gap: var(--si-space-3);
       }
       .vp-row__diff {
-        margin-top: 8px;
+        margin-top: var(--si-space-4);
         min-width: 0;
       }
       .vp__usage {
         border-top: 1px solid var(--si-line);
-        padding-top: 10px;
+        padding-top: var(--si-space-5);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--si-space-3);
       }
       .vp__usage-text {
-        font-size: 11.5px;
+        font-size: var(--si-text-5);
         color: var(--si-fg-muted);
       }
       .vp__usage-bar {
@@ -368,7 +368,7 @@ interface VersionRow extends VersionModel {
         }
       }
       .vp__usage-note {
-        font-size: 10.5px;
+        font-size: var(--si-text-3);
         color: var(--si-fg-faint);
       }
     `

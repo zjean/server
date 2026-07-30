@@ -14,11 +14,11 @@
   overflow: auto;
 
   &__toolbar {
-    padding: 32px 28px 22px;
+    padding: var(--si-space-13) var(--si-space-12) 22px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--si-space-2);
     background: var(--si-bg2);
     position: sticky;
     top: 0;
@@ -38,7 +38,7 @@
     // otherwise reflow the toolbar. Every other rule here already overrode the
     // UA heading defaults, so the promotion is visually inert.
     margin: 0;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -47,24 +47,24 @@
   }
 
   &__title-meta {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     min-height: 18px;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__divider {
     width: 1px;
     height: 22px;
     background: var(--si-line);
-    margin: 0 6px;
+    margin: 0 var(--si-space-3);
   }
 
   &__state {
     padding: 40px 22px;
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     text-align: center;
 
@@ -80,15 +80,15 @@
 .space-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  padding: 0 28px 28px;
+  gap: var(--si-space-8);
+  padding: 0 var(--si-space-12) var(--si-space-12);
 }
 
 .space-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px 18px 14px;
+  gap: var(--si-space-8);
+  padding: var(--si-space-9) var(--si-space-9) var(--si-space-7);
   background: var(--si-bg3);
   border: 1px solid var(--si-line);
   border-radius: var(--si-r3);
@@ -113,7 +113,7 @@
   &__head {
     display: flex;
     align-items: flex-start;
-    gap: 12px;
+    gap: var(--si-space-6);
   }
 
   &__glyph {
@@ -134,7 +134,7 @@
   }
 
   &__name {
-    font-size: 15px;
+    font-size: var(--si-text-11);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.01em;
@@ -146,9 +146,9 @@
   }
 
   &__description {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg-faint);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -172,7 +172,7 @@
   &__quota {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--si-space-3);
   }
 
   &__quota-bar {
@@ -201,7 +201,7 @@
   }
 
   &__quota-label {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.1px;
@@ -210,7 +210,7 @@
 
   &__quota-sep {
     color: var(--si-fg-faint);
-    margin: 0 4px;
+    margin: 0 var(--si-space-2);
   }
 
   // margin-top: auto pins the footer to the bottom of the card (#399). The grid
@@ -221,29 +221,29 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--si-space-4);
     margin-top: auto;
-    padding-top: 10px;
+    padding-top: var(--si-space-5);
     border-top: 1px solid var(--si-line);
   }
 
   &__stats {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--si-space-6);
   }
 
   &__stat {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    font-size: 12px;
+    gap: var(--si-space-3);
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-variant-numeric: tabular-nums;
   }
 
   &__modified {
-    font-size: 11px;
+    font-size: var(--si-text-4);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
     letter-spacing: -0.1px;

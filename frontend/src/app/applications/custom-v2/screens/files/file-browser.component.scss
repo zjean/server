@@ -23,11 +23,11 @@
     // gives the title room to read at 26px without fighting the chips
     // for horizontal space, and lets the filter expand wider than the
     // 240px it had on the previous single-row layout.
-    padding: 32px 28px 18px;
+    padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--si-space-7);
     background: var(--si-bg2);
     // 120ms literal: there is no duration token yet, and --dur-1 was never
     // declared so this always fell back anyway. Tokenised by #398.
@@ -44,7 +44,7 @@
   &__row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--si-space-3);
     min-width: 0;
 
     // Title row: align baselines so the meta line sits flush with the
@@ -52,11 +52,11 @@
     // actions to the right edge.
     &--top {
       align-items: flex-end;
-      gap: 8px;
+      gap: var(--si-space-4);
     }
 
     &--bottom {
-      gap: 10px;
+      gap: var(--si-space-5);
     }
   }
 
@@ -73,7 +73,7 @@
     // weight, matching Stack's kicker · title · meta triad.
     // margin: 0 — see spaces.component.scss; this really is an <h1> now.
     margin: 0;
-    font-size: 26px;
+    font-size: var(--si-text-15);
     font-weight: 500;
     color: var(--si-fg);
     letter-spacing: -0.018em;
@@ -82,12 +82,12 @@
   }
 
   &__title-meta {
-    font-size: 14px;
+    font-size: var(--si-text-10);
     line-height: 1.4;
     min-height: 18px;
     color: var(--si-fg-muted);
     font-family: var(--si-sans);
-    margin-top: 4px;
+    margin-top: var(--si-space-2);
   }
 
   &__selection {
@@ -97,19 +97,19 @@
     // (the row is align-items:flex-end for the create-actions case).
     align-items: center;
     align-self: center;
-    gap: 8px;
+    gap: var(--si-space-4);
     flex: 1 1 auto;
     // Breathing room between the page title and the selection toolbar.
-    margin-left: 32px;
+    margin-left: var(--si-space-13);
     min-width: 0;
   }
 
   &__selection-count {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.2px;
-    margin-right: 6px;
+    margin-right: var(--si-space-3);
     white-space: nowrap;
   }
 
@@ -117,8 +117,8 @@
     height: 32px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    gap: var(--si-space-4);
+    padding: 0 var(--si-space-6);
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
@@ -141,7 +141,7 @@
     border: none;
     outline: none;
     color: var(--si-fg);
-    font-size: 14px;
+    font-size: var(--si-text-10);
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
     min-width: 0;
@@ -152,10 +152,10 @@
   }
 
   &__filter-hint {
-    font-size: 10px;
+    font-size: var(--si-text-2);
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    padding: 1px 5px;
+    padding: 1px var(--si-space-3);
     background: var(--si-bg4);
     border-radius: 3px;
     border: 1px solid var(--si-line);
@@ -167,7 +167,7 @@
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
-    padding: 2px;
+    padding: var(--si-space-1);
     gap: 1px;
   }
 
@@ -239,15 +239,15 @@
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
+    gap: var(--si-space-4);
+    font-size: var(--si-text-10);
     font-weight: 600;
     color: var(--si-fg);
   }
 
   &__state {
     padding: 40px 22px;
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     text-align: center;
 
@@ -263,18 +263,18 @@
   // 28px content margin so the row block (and its rounded highlight) lines up
   // with the page title + toolbar; the checkbox column then sits at that 28px
   // margin, aligned with the title.
-  padding: 0 12px;
+  padding: 0 var(--si-space-6);
 
   &__head {
     display: grid;
     grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
-    padding: 0 16px;
+    padding: 0 var(--si-space-8);
     height: 36px;
     align-items: center;
     // De-emphasised header: no bottom rule, no all-caps/display-font shouting —
     // a quiet column label in the body sans. Separation now comes from the
     // sticky surface tint, not a border.
-    font-size: 13px;
+    font-size: var(--si-text-8);
     color: var(--si-fg-tertiary);
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -295,7 +295,7 @@
 .file-row {
   display: grid;
   grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
-  padding: 0 16px;
+  padding: 0 var(--si-space-8);
   height: 56px;
   align-items: center;
   // Borderless: no per-row divider. Rhythm comes from row height + the
@@ -355,12 +355,12 @@
   &__name {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--si-space-6);
     min-width: 0;
   }
 
   &__name-text {
-    font-size: 15px;
+    font-size: var(--si-text-11);
     color: var(--si-fg);
     letter-spacing: -0.1px;
     font-weight: 500;
@@ -381,7 +381,7 @@
   }
 
   &__size {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.2px;
@@ -389,14 +389,14 @@
   }
 
   &__modified {
-    font-size: 12px;
+    font-size: var(--si-text-6);
     color: var(--si-fg-muted);
   }
 
   &__modified-pill {
     color: var(--si-fg-faint);
     font-family: var(--si-mono);
-    font-size: 11.5px;
+    font-size: var(--si-text-5);
     letter-spacing: -0.1px;
     font-variant-numeric: tabular-nums;
   }
@@ -433,9 +433,9 @@
 .file-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
+  gap: var(--si-space-6);
   // Left/right margin matches the page title + toolbar (28px content margin).
-  padding: 16px 28px 28px;
+  padding: var(--si-space-8) var(--si-space-12) var(--si-space-12);
 }
 
 .file-card {
@@ -489,7 +489,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3px;
+    padding: var(--si-space-2);
     border-radius: 7px;
     // Clean opaque chip so the checkbox reads on any file-type header tint
     // (the old translucent color-mix went muddy over the colored headers).
@@ -526,11 +526,11 @@
   }
 
   &__body {
-    padding: 10px 12px;
+    padding: var(--si-space-5) var(--si-space-6);
   }
 
   &__name {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.1px;
@@ -540,12 +540,12 @@
   }
 
   &__meta {
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
-    margin-top: 3px;
+    margin-top: var(--si-space-2);
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--si-space-3);
   }
 
   &__size {
@@ -560,8 +560,8 @@
 .file-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 14px;
-  padding: 18px 28px 28px;
+  gap: var(--si-space-7);
+  padding: var(--si-space-9) var(--si-space-12) var(--si-space-12);
 }
 
 .gallery-card {
@@ -614,7 +614,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3px;
+    padding: var(--si-space-2);
     border-radius: 7px;
     // Clean opaque chip (was a muddy translucent color-mix over the stage).
     background: var(--si-bg1);
@@ -648,15 +648,15 @@
     bottom: 10px;
     left: 10px;
     display: flex;
-    gap: 5px;
+    gap: var(--si-space-3);
   }
 
   &__footer {
-    padding: 10px 12px;
+    padding: var(--si-space-5) var(--si-space-6);
   }
 
   &__name {
-    font-size: 12.5px;
+    font-size: var(--si-text-7);
     color: var(--si-fg);
     font-weight: 500;
     letter-spacing: -0.1px;
@@ -666,12 +666,12 @@
   }
 
   &__meta {
-    font-size: 10.5px;
+    font-size: var(--si-text-3);
     color: var(--si-fg-faint);
-    margin-top: 3px;
+    margin-top: var(--si-space-2);
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--si-space-3);
     font-family: var(--si-mono);
   }
 
@@ -702,7 +702,7 @@
   .file-table__head,
   .file-row {
     grid-template-columns: 28px minmax(0, 1fr) 40px;
-    padding: 0 12px;
+    padding: 0 var(--si-space-6);
   }
 
   // Header cells are positional spans (Name / Info / Size / Modified / blank);
@@ -724,7 +724,7 @@
 .file-row__size-trigger {
   background: transparent;
   border: 0;
-  padding: 0 4px;
+  padding: 0 var(--si-space-2);
   cursor: pointer;
   color: inherit;
   font: inherit;

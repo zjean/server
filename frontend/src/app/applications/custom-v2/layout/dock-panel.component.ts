@@ -116,7 +116,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
       }
       .dp__head {
         flex: 0 0 auto;
-        padding: 14px 18px;
+        padding: var(--si-space-7) var(--si-space-9);
         font-family: var(--si-display);
         font-weight: 600;
         font-size: var(--si-text-10);
@@ -128,10 +128,10 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
       .dp__kv {
         flex: 1 1 auto;
         overflow-y: auto;
-        padding: 14px 18px 18px;
+        padding: var(--si-space-7) var(--si-space-9) var(--si-space-9);
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: var(--si-space-5);
       }
       .dp__kv-title {
         font-size: var(--si-text-4);
@@ -139,13 +139,13 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--si-fg-faint);
-        margin-bottom: 2px;
+        margin-bottom: var(--si-space-1);
       }
       .dp__kv-row {
         display: grid;
         grid-template-columns: 92px 1fr;
         align-items: baseline;
-        gap: 12px;
+        gap: var(--si-space-6);
         font-size: var(--si-text-8);
 
         > span:first-child {
@@ -170,8 +170,8 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        padding: 32px 18px;
+        gap: var(--si-space-4);
+        padding: var(--si-space-13) var(--si-space-9);
         text-align: center;
         color: var(--si-fg-muted);
       }
@@ -180,7 +180,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         font-weight: 500;
         font-size: var(--si-text-10);
         color: var(--si-fg);
-        margin-top: 4px;
+        margin-top: var(--si-space-2);
       }
       .dp__empty-lede {
         font-size: var(--si-text-7);
