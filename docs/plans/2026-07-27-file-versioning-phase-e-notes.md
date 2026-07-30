@@ -1,7 +1,9 @@
 # File Versioning — Phase E notes
 
 - **Date:** 2026-07-27
-- **Status:** 19 of the 20 planned cases are implemented and green. One is owed; §3 says why it is the one left.
+- **Status:** all 20 planned cases are implemented and green (E2E-14's DAV half landed 2026-07-30; §3 records what it
+  does and does not assert). The suite has since grown past the plan — the editor history protocol and the admin
+  surface both have their own files.
 - **Run it:** `npm -w backend run test:e2e` (needs `npm run dev:db` + `npm run dev:migrate` first).
 
 Phase E is the e2e suite from the implementation plan's §5. It matters more than a test count suggests: **every
@@ -55,8 +57,11 @@ Three traps the suite hit while being written, all now called out in comments:
 
 ## 2. What is covered
 
-`versions-lifecycle.e2e-spec.ts` (14), `versions-write-paths.e2e-spec.ts` (15), `versions-policy.e2e-spec.ts` (15),
-`versions-nc-compat.e2e-spec.ts` (17), `versions-permissions.e2e-spec.ts` (8), `versions-editors.e2e-spec.ts` (12).
+Counts as of 2026-07-30, from a full `--reporter=verbose` run rather than from `it(` greps:
+`versions-policy.e2e-spec.ts` (18), `versions-nc-compat.e2e-spec.ts` (17), `versions-write-paths.e2e-spec.ts` (15),
+`versions-lifecycle.e2e-spec.ts` (14), `versions-editors.e2e-spec.ts` (14), `versions-editor-history.e2e-spec.ts` (13),
+`versions-admin.e2e-spec.ts` (11), `versions-permissions.e2e-spec.ts` (8), `schemas/files-versions.e2e-spec.ts` (6) —
+116 of the suite's 157 cases.
 
 | Case | Covers | Notable assertion |
 |---|---|---|
@@ -73,7 +78,7 @@ Three traps the suite hit while being written, all now called out in comments:
 | **E2E-11** | editor callbacks | a real OnlyOffice callback (self-signed JWT + a throwaway local HTTP document source): the pre-save content versioned as `onlyoffice` with the acting author, **the live file's inode preserved**, the 2/3/6/7-only status set, coalescing inside the editor window holding the PRE-SESSION bytes, and the save still succeeding when the snapshot fails |
 | **E2E-12** | quota (ADR §7 rewrite) | usage stays under `quota * quotaShare`; a labeled version is never evicted; no quota → no cap; a dedup hit evicts nothing |
 | **E2E-13** | flag off | no versions, no blob-store writes, all seven endpoints 404, history intact when it returns |
-| **E2E-14** | concurrency | **re-hashes every stored blob and requires its own name back** — no strict version count, per ADR §4 |
+| **E2E-14** | concurrency | **re-hashes every stored blob and requires its own name back** — no strict version count, per ADR §4. Both halves: lock-mediated overwrites, and parallel **unlocked** WebDAV PUTs (§3) |
 | **E2E-15** | crash safety | an injected row-insert failure still lets the user's save succeed; no row without bytes; no staging debris |
 | **E2E-16** | `copyMove` overwrite | no version — trash already holds the destination |
 | **E2E-17** | multipart PATCH | `web-patch`, the path a `saveStream`-centric reading misses |
