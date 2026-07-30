@@ -282,6 +282,27 @@ export class VersioningQueries {
     return Number(row?.n ?? 0)
   }
 
+  // EVERY version of one file within one root, newest first, labels included.
+  //
+  // Unlike unlabeledByFileIdOldestFirst (which this replaces) the thinner needs
+  // labeled rows in the list: it filters them itself, and handing it a
+  // pre-filtered list would make a labeled version invisible in a way that
+  // changes nothing today but would silently diverge if the thinner ever
+  // anchored spacing on labels.
+  //
+  // Unpaged, deliberately. The row count for ONE file is bounded by the thinner
+  // itself on every write, so the pathological case this would page for cannot
+  // persist past the next save. The root filter belongs in the query for the
+  // reason fileIdsExceeding documents: a file whose versions span two roots must
+  // be thinned per root, or one root over-deletes while the other under-enforces.
+  async byFileIdNewestFirst(versionsRoot: string, fileId: number): Promise<VersionRow[]> {
+    return this.db
+      .select()
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.versionsRoot, versionsRoot), eq(customFilesVersions.fileId, fileId)))
+      .orderBy(desc(customFilesVersions.mtime), desc(customFilesVersions.id))
+  }
+
   // Oldest-first, unlabeled only — the trim order for maxVersionsPerFile.
   // Oldest-first trim candidates for one file WITHIN one root — see
   // fileIdsExceeding for why the root filter belongs in the query rather than in
