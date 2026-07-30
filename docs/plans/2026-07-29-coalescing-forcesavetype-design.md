@@ -1,5 +1,16 @@
 # Coalescing: discriminate human saves from timer saves via `forcesavetype`
 
+> **SUPERSEDED, in part, by `docs/plans/2026-07-25-file-versioning-design.md` §5.3 and
+> `docs/superpowers/specs/2026-07-29-version-thinning-design.md`.** After this design shipped, the ADR §19 soak found
+> the `interactive`-save fallback to the scalar still insufficient (see §5.3): a PROVEN human save
+> (`forcesavetype` 1/3) now resolves to window **0** — never coalesced — rather than to `minIntervalSeconds` as
+> described below (§3, :76). `saveKind` is now `'interactive' | 'automatic' | 'human'`, not the two-value type at
+> :73; "unclassifiable" (§2.2's absent-field / status 2 / status 3 rows) is classified `'interactive'`, which is
+> specifically **not** `'human'` (:51). And `maxVersionsPerFile` (:119) no longer exists — the per-file FIFO cap it
+> refers to was replaced by age-tiered thinning. The three-way classification and the rest of this document's
+> reasoning (why a discriminator is read at all, the callback-status table, Collabora's degradation) still hold;
+> only the two points above are stale.
+
 Closes the design half of #389. Supersedes the premise of ADR §5.1 for the `onlyoffice` origin only; every other
 origin's window is unchanged.
 

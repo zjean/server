@@ -109,13 +109,19 @@ export class FilesVersionsRetentionConfig {
 //
 // AMENDED after the ADR §19 soak (#389). "Barely needs one" was too generous:
 // OnlyOffice has no automatic save AT ALL, so its 300 was being applied
-// exclusively to HUMAN saves — the category the scalar's 60 is for — and four
-// Ctrl+S presses inside two minutes minted zero versions. The values below are
-// unchanged; what changed is that a save OnlyOffice reports as human-triggered
-// (`forcesavetype`) now resolves to the scalar instead, because the premise
-// above — the document server decides when to save — is false for that save.
-// Collabora reports no such thing and keeps the override for every save. See
-// docs/plans/2026-07-29-coalescing-forcesavetype-design.md.
+// exclusively to HUMAN saves, and four Ctrl+S presses inside two minutes
+// minted zero versions. #395 first routed a
+// save OnlyOffice reports as human-triggered (`forcesavetype` 1/3) through the
+// scalar instead of this override — better, but still a rate limit on an
+// explicit user request, and two deliberate Ctrl+S presses 34s apart could
+// still land in the same 60s bucket and lose one. §5.3's later fix: a PROVEN
+// human save (forcesavetype 1/3) now skips coalescing entirely (window 0,
+// never rate-limited); a save that cannot be proven either way (no
+// discriminator on the wire) still falls back to the scalar; only a save an
+// editor PROVES its own timer made uses the override below. Collabora reports
+// no discriminator at all, so every one of its saves keeps the override. See
+// docs/plans/2026-07-29-coalescing-forcesavetype-design.md and §5.3 of
+// docs/plans/2026-07-25-file-versioning-design.md.
 //
 // `0` means "never coalesce this origin" and is distinguishable from "not
 // configured" — the lookup tests for a number, not for truthiness. Any origin
