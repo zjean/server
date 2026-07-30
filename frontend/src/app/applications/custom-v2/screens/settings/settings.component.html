@@ -64,16 +64,19 @@
         silently no-ops. SelectControlValueAccessor tracks option registration
         instead, so the selection lands once the options exist.
       -->
-      <select
-        class="settings__input"
-        [ngModel]="language()"
-        (ngModelChange)="language.set($event)"
-        [attr.aria-label]="'Language' | translate: locale.language"
-      >
-        @for (l of languages; track l) {
-          <option [ngValue]="l">{{ languageLabels[l] || l }}</option>
-        }
-      </select>
+      <span class="settings__select">
+        <select
+          class="settings__input"
+          [ngModel]="language()"
+          (ngModelChange)="language.set($event)"
+          [attr.aria-label]="'Language' | translate: locale.language"
+        >
+          @for (l of languages; track l) {
+            <option [ngValue]="l">{{ languageLabels[l] || l }}</option>
+          }
+        </select>
+        <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
+      </span>
       <app-v2-btn kind="primary" size="sm" [disabled]="savingLanguage()" (click)="saveLanguage()">
         {{ 'Save' | translate: locale.language }}
       </app-v2-btn>
@@ -89,16 +92,19 @@
         gone. Previously the [value] binding no-opped and the browser fell back
         to selectedIndex 0 — correct-looking only while the user's status was 0.
       -->
-      <select
-        class="settings__input"
-        [ngModel]="onlineStatus()"
-        (ngModelChange)="onlineStatus.set($event)"
-        [attr.aria-label]="'Online status' | translate: locale.language"
-      >
-        @for (s of onlineStatuses; track s; let i = $index) {
-          <option [ngValue]="i">{{ statusLabel(i) | translate: locale.language }}</option>
-        }
-      </select>
+      <span class="settings__select">
+        <select
+          class="settings__input"
+          [ngModel]="onlineStatus()"
+          (ngModelChange)="onlineStatus.set($event)"
+          [attr.aria-label]="'Online status' | translate: locale.language"
+        >
+          @for (s of onlineStatuses; track s; let i = $index) {
+            <option [ngValue]="i">{{ statusLabel(i) | translate: locale.language }}</option>
+          }
+        </select>
+        <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
+      </span>
       <app-v2-btn kind="primary" size="sm" (click)="saveOnlineStatus()">
         {{ 'Save' | translate: locale.language }}
       </app-v2-btn>
