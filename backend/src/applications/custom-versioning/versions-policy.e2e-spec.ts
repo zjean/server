@@ -50,6 +50,19 @@ describe('versions retention, quota and crash safety (e2e)', () => {
     await e2e.db.update(customFilesVersions).set({ createdAt }).where(eq(customFilesVersions.id, versionId))
   }
 
+  // Same idea as ageVersion, but in SECONDS: what thinning's FLOOR (versions-
+  // thinning.ts — never expire a capture held for less than the band step it
+  // is judged by) is measured against. A version this e2e suite just wrote has
+  // a createdAt of "now", so without backdating it the floor exempts it from
+  // every automatic rule regardless of spacing — a fast in-process run never
+  // ages past the finest band's 2s step on its own. Only createdAt moves here;
+  // mtime (what the curve actually spaces survivors by) must stay put, or the
+  // test would stop exercising the real spacing rule.
+  const ageVersionSeconds = async (versionId: number, seconds: number) => {
+    const createdAt = new Date(Date.now() - seconds * 1000)
+    await e2e.db.update(customFilesVersions).set({ createdAt }).where(eq(customFilesVersions.id, versionId))
+  }
+
   /* ------------------------------------------------------------------ E2E-4 */
 
   // The sync client uploads into a tmp file and then MOVES it into place. The
@@ -107,55 +120,95 @@ describe('versions retention, quota and crash safety (e2e)', () => {
   /* ------------------------------------------------------------------ E2E-8 */
 
   describe('E2E-8 retention', () => {
-    it('prunes beyond maxVersionsPerFile oldest-first and keeps NAMED versions regardless', async () => {
-      const rel = 'e2e8-max.txt'
+    it('thins rapid successive versions and keeps NAMED versions regardless', async () => {
+      const rel = 'e2e8-thin.txt'
       await e2e.seed(rel, 'retention gen 0')
       for (let i = 1; i <= 5; i++) {
         await e2e.overwrite(rel, `retention gen ${i}`, 'web')
       }
       const all = await e2e.versionsOf(rel)
-      expect(all).toHaveLength(5)
 
-      // Name the OLDEST, which is exactly the one an oldest-first rule wants to
-      // take first. A labeled version is exempt from every automatic rule.
+      // Name the OLDEST, which is what any pruning rule reaches for first.
       const oldest = all[all.length - 1]
       expect((await e2e.api.label(oldest.id, rel, 'pinned')).status).toBe(200)
 
-      e2e.config.maxVersionsPerFile = 2
+      // Clear the thinning FLOOR (versions-thinning.ts: never expire a capture
+      // held for less than the band step it is judged by) for the unlabeled
+      // versions. Without this, cleanVersions() sees every version here as
+      // "just created" — createdAt is only milliseconds old — and exempts all
+      // of them from every rule, so the sweep would pass by pruning nothing,
+      // which is not what happens in production once real time has moved on.
+      // Only createdAt moves; mtime (what the curve spaces survivors by) is
+      // untouched, so the actual spacing rule is still what gets exercised.
+      for (const v of all) {
+        if (v.id !== oldest.id) await ageVersionSeconds(v.id, 5)
+      }
+
       await e2e.retention.cleanVersions()
 
       const kept = await e2e.versionsOf(rel)
+      // DETERMINISTIC: the label is exempt from every automatic rule.
       expect(kept.some((v) => v.id === oldest.id)).toBe(true)
-      // The cap counts unlabeled survivors; the named one is over and above it.
-      expect(kept.filter((v) => !v.label).length).toBeLessThanOrEqual(2)
-      expect(kept.length).toBeLessThan(all.length)
+      // TIMING-DEPENDENT, so guarded. The collapse only holds if the writes
+      // landed inside the 2s band; on a slow runner they spread past it and
+      // nothing is expected to collapse. Asserting unconditionally would make
+      // this a false negative under load. The curve itself is unit-tested in
+      // versions-thinning.spec.ts.
+      const spans = all.map((v) => v.mtime).sort((a, b) => b - a)
+      const allWithin2s = spans.every((m, i) => i === 0 || spans[i - 1] - m < 2000)
+      if (allWithin2s) {
+        expect(kept.filter((v) => !v.label).length).toBeLessThan(all.filter((v) => !v.label).length)
+      }
     })
 
-    // #340: the cap used to be enforced ONLY by the sweep above, so between 3AM
-    // runs one file's history was bounded by nothing — the coalescing window
-    // limits the rate, not the total, and the quota cap is skipped whenever the
-    // root has no matching quota (which is the case here: no quota is set). The
-    // sweep is NOT invoked in these two cases, on purpose: that absence is the
-    // whole assertion.
-    it('caps a file at maxVersionsPerFile as the versions are written, without the nightly sweep', async () => {
-      const rel = 'e2e8-max-eager.txt'
-      e2e.config.maxVersionsPerFile = 2
+    // #340's point, restated for thinning: shaping happens on the WRITE path, so
+    // one file's history is bounded between nightly runs. The sweep is
+    // deliberately NOT invoked here — that absence is the whole assertion.
+    //
+    // thinFile runs SYNCHRONOUSLY inside the write path, so unlike the sweep
+    // case above (which sometimes runs long enough, scanning every root, to
+    // outlast the floor by accident) this one never would: a fast in-process
+    // e2e run reaches the very next write's thinFile pass milliseconds after
+    // the previous one, so createdAt always reads as "now" and the floor
+    // always wins. The middle backdating step below is what makes eager
+    // thinning observable at all without relying on that timing accident, or
+    // on a multi-second sleep.
+    it('thins as the versions are written, without the nightly sweep', async () => {
+      const rel = 'e2e8-thin-eager.txt'
       await e2e.seed(rel, 'eager gen 0')
-      for (let i = 1; i <= 4; i++) {
+      for (let i = 1; i <= 3; i++) {
+        await e2e.overwrite(rel, `eager gen ${i}`, 'web')
+      }
+      const preBackdate = await e2e.versionsOf(rel)
+
+      // Clear the floor for what's been written so far — only createdAt moves.
+      for (const v of preBackdate) {
+        await ageVersionSeconds(v.id, 5)
+      }
+
+      for (let i = 4; i <= 5; i++) {
         await e2e.overwrite(rel, `eager gen ${i}`, 'web')
       }
 
       const kept = await e2e.versionsOf(rel)
-      expect(kept).toHaveLength(2)
-      // Newest-first, and each version holds the content the write destroyed —
-      // so the two survivors are the last two overwritten generations.
-      expect((await e2e.api.content(kept[0].id, rel)).body).toBe('eager gen 3')
-      expect((await e2e.api.content(kept[1].id, rel)).body).toBe('eager gen 2')
+      // DETERMINISTIC: the newest version is always kept, and each version holds
+      // the content its write destroyed — so the newest survivor is the last
+      // generation overwritten. True whatever the runner's speed.
+      expect((await e2e.api.content(kept[0].id, rel)).body).toBe('eager gen 4')
+      // TIMING-DEPENDENT, guarded: the collapse below only holds if those
+      // earlier writes actually landed within the 2s band of each other in
+      // real time — on a slow runner they spread past it and nothing is
+      // expected to collapse on spacing alone, floor or not. The curve itself
+      // is unit-tested in versions-thinning.spec.ts.
+      const spans = preBackdate.map((v) => v.mtime).sort((a, b) => b - a)
+      const allWithin2s = spans.every((m, i) => i === 0 || spans[i - 1] - m < 2000)
+      if (allWithin2s) {
+        expect(kept.length).toBeLessThan(5)
+      }
     })
 
     it('never trims a NAMED version on the write path, however old', async () => {
       const rel = 'e2e8-max-eager-named.txt'
-      e2e.config.maxVersionsPerFile = 3
       await e2e.seed(rel, 'named gen 0')
       for (const n of [1, 2, 3]) {
         await e2e.overwrite(rel, `named gen ${n}`, 'web')
@@ -166,13 +219,31 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       const oldest = all[all.length - 1]
       expect((await e2e.api.label(oldest.id, rel, 'pinned')).status).toBe(200)
 
+      // Clear the floor for the unlabeled versions, same reasoning as the
+      // eager case above — without it the very next write's thinFile pass
+      // exempts all of them as "just created" and this case would pass having
+      // exercised nothing. Only createdAt moves.
+      for (const v of all) {
+        if (v.id !== oldest.id) await ageVersionSeconds(v.id, 5)
+      }
+
       await e2e.overwrite(rel, 'named gen 4', 'web')
 
       const kept = await e2e.versionsOf(rel)
+      // DETERMINISTIC: the label is exempt from every automatic rule on the
+      // write path exactly as on the sweep, and its content never changes.
       expect(kept.map((v) => v.id)).toContain(oldest.id)
-      expect(kept).toHaveLength(3)
-      // The unlabeled one behind it is what went instead.
       expect((await e2e.api.content(oldest.id, rel)).body).toBe('named gen 0')
+      // TIMING-DEPENDENT, guarded: whether the unlabeled ones behind it are
+      // thinned depends on their writes having landed within the 2s band in
+      // real time. Which ones survive is the curve's job (unit-tested in
+      // versions-thinning.spec.ts) — here only "something unlabeled can go,
+      // the label never does" is asserted.
+      const spans = all.map((v) => v.mtime).sort((a, b) => b - a)
+      const allWithin2s = spans.every((m, i) => i === 0 || spans[i - 1] - m < 2000)
+      if (allWithin2s) {
+        expect(kept.length).toBeLessThan(all.length + 1)
+      }
     })
 
     it('expires versions older than retentionDays, and keeps younger ones', async () => {
