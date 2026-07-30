@@ -937,6 +937,12 @@ git commit -m "test(custom-versioning): rewrite E2E-8 retention cases for thinni
 - Modify: `CLAUDE.md` (the file-versioning section)
 - Modify: `CHANGELOG.md`
 
+- [ ] **Step 0: Correct the spec's "verbatim" claim**
+
+In `docs/superpowers/specs/2026-07-29-version-thinning-design.md` §3.2, the phrase "Adopted verbatim rather than tuned" overclaims and must be narrowed. Task 1's review established, by reading `nextcloud/server` `apps/files_versions/lib/Storage.php:764-813`, that **NC advances bands from the last-kept version's age crossing absolute thresholds, while our walk selects the band from each candidate's own age.** The band *values* are NC's; the *walk* is ours.
+
+Rewrite the paragraph to say exactly that: the six band values are taken verbatim, the walk is a reimplementation that differs structurally near band edges, and neither produces materially different shape (both are dense-recent, sparse-old). A spec that implies we inherited NC's proven behaviour when we inherited only its numbers is the kind of claim this repo treats as a defect.
+
 - [ ] **Step 1: Amend the ADR**
 
 Add §5.3 after §5.2, in the same voice as the existing amendments: state that §5.2's choice of the scalar for proven-human saves was measured insufficient (the three-save table from the spec's §1), that the window for a proven human trigger is now 0, and that the per-file FIFO cap is replaced by age-tiered thinning because relaxing the window without reshaping eviction trades one data loss for another. Cross-reference the spec.
