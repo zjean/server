@@ -33,6 +33,8 @@
 
   &__title {
     // Stack page-title scale (see files/file-browser.component.scss).
+    // margin: 0 — see spaces.component.scss; this is an <h1>.
+    margin: 0;
     font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);

@@ -71,6 +71,8 @@
     // Stack h1 scale (26px / 500 / -0.018em) — bigger than the previous
     // 22px so the title clearly outranks toolbar buttons in visual
     // weight, matching Stack's kicker · title · meta triad.
+    // margin: 0 — see spaces.component.scss; this really is an <h1> now.
+    margin: 0;
     font-size: 26px;
     font-weight: 500;
     color: var(--si-fg);
