@@ -228,16 +228,33 @@ export class VersioningService {
   // The window for one origin: its own override if configured, otherwise the
   // scalar fallback (ADR §5).
   //
-  // AN INTERACTIVE SAVE SKIPS THE OVERRIDE ENTIRELY. The override exists for
-  // one stated reason — "an editor's cadence is set by the document server, not
-  // by a human" (ADR §5.1) — so a save we can PROVE a human triggered falsifies
-  // its premise and gets the interactive number, which is what the scalar is.
-  // The §19 soak is what forced this: OnlyOffice has no autosave at all, so its
-  // 300 was being applied exclusively to human saves, and four Ctrl+S presses
-  // inside two minutes produced zero versions. Deliberately not a new config
-  // key — see the design note. `saveKind` is only ever set where a
-  // discriminator is on the wire (`forcesavetype`, statuses 6/7), so Collabora
-  // and every non-editor origin resolve exactly as before.
+  // THE OVERRIDE EXISTS FOR ONE STATED REASON — "an editor's cadence is set by
+  // the document server, not by a human" (ADR §5.1). Positive proof that a
+  // human triggered the write falsifies that premise, but "proof" comes in two
+  // strengths and they get two different answers, not one:
+  //
+  //   - `human` (forcesavetype 1/3 — a proven Save-button-click or form
+  //     submit) falsifies the premise OUTRIGHT and skips the override
+  //     entirely: window 0, never rate-limited. The §19 soak is what forced
+  //     this: OnlyOffice has no autosave at all, so its 300s override was
+  //     being applied exclusively to human saves, and four Ctrl+S presses
+  //     inside two minutes produced zero versions. #395 shipped a fix that
+  //     routed these through the scalar instead of the override — better, but
+  //     still a rate limit on an explicit user request — and it was still
+  //     possible to lose one: two deliberate Ctrl+S presses 34s apart both
+  //     landed in the one bucket #395 had, and the second was swallowed by the
+  //     60s scalar. Splitting `human` out with its own zero window (task 6) is
+  //     what actually closes that gap.
+  //   - `interactive` is the WEAKER, unprovable claim: no discriminator was on
+  //     the wire at all (statuses 2 and 3 carry no `forcesavetype`), but the
+  //     shape of the callback still says a person is likely at the other end.
+  //     It gets the scalar, not zero — there is no proof here to falsify the
+  //     override's premise with, only a good guess.
+  //
+  // Deliberately not a new config key for either — see the design note.
+  // `saveKind` is only ever set where a discriminator is on the wire
+  // (`forcesavetype`, statuses 6/7), so Collabora and every non-editor origin
+  // resolve exactly as before.
   //
   // TESTS FOR A NUMBER, NOT FOR TRUTHINESS. `0` is a meaningful value — "never
   // coalesce this origin" — and `?? fallback` or a truthiness check would
@@ -248,12 +265,9 @@ export class VersioningService {
   // specs mutate `configuration.applications.files.versions` on an
   // already-constructed service.
   private coalescingWindow(origin: VersionOrigin, saveKind?: SnapshotOptions['saveKind']): number {
-    // A proven human trigger is never rate-limited. This is §5.1's own
-    // justification carried to its conclusion: the override exists BECAUSE the
-    // document server sets the cadence, and positive proof that a person set it
-    // falsifies that premise outright rather than merely downgrading it to the
-    // scalar (which is what #395 did, and what still swallowed saves).
+    // PROVEN human: never rate-limited. See above.
     if (saveKind === 'human') return 0
+    // Unprovable but interactive-shaped: the scalar, not zero. See above.
     if (saveKind === 'interactive') return this.config.minIntervalSeconds ?? 0
     const configured = (this.config.minIntervalSecondsByOrigin as Partial<Record<VersionOrigin, number>> | undefined)?.[origin]
     if (typeof configured === 'number') return configured

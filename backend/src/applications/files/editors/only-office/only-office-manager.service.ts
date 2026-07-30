@@ -199,9 +199,9 @@ export class OnlyOfficeManager {
     return { error: 0 }
   }
 
-  /* Fork: versioning. Classifies a save callback as human-triggered or
-     automatic, for the coalescing window only (#389, and
-     docs/plans/2026-07-29-coalescing-forcesavetype-design.md).
+  /* Fork: versioning. Classifies a save callback as PROVEN human, automatic,
+     or (unprovable but) interactive, for the coalescing window only (#389,
+     and docs/plans/2026-07-29-coalescing-forcesavetype-design.md).
 
      THIS IS THE ONLY PLACE THAT CAN DECIDE, because the status is half the
      answer and saveDocument never sees it. `forcesavetype` is documented as
