@@ -132,16 +132,31 @@ makes `sync-in` plus faker-random logins, and CI runs migrations without seeding
 creates its own user. That was not optional: with those failures the new CI workflow would have been red from its
 first run and worth nothing.
 
-## 3. The one case still owed
+## 3. The last case, now in — 20 of 20
 
-| Case | Why it is the one left |
+**E2E-14's DAV half landed.** The prediction above it was half right and worth keeping as the record: it *is* the same
+store invariant as the non-DAV case, and it did have to drop every assertion the design does not make. It was not,
+however, hard to stabilise — three parallel `PUT /webdav/personal/<file>` requests reliably produce three versions
+(measured, not assumed), and 25 consecutive runs of the file passed.
+
+What the DAV case asserts, and what it deliberately does not:
+
+| | |
 |---|---|
-| **E2E-14** DAV concurrency half | The non-DAV half is done. The DAV half can only assert **no corruption** — DAV writes hold no server lock (ADR §4), so a strict version count would encode a guarantee the design does not make, and the non-DAV case already re-hashes every blob and requires its own name back. What is genuinely missing is parallel *unlocked* PUTs, and making that non-flaky is the whole difficulty. Low yield: it would restate an existing assertion under a harder-to-stabilise setup. |
+| **Asserted** | every blob's name re-hashes from its own bytes; each row's `size` describes those bytes; every row is downloadable; one blob per distinct checksum (dedup survives the race); `.staging` empty afterwards; `origin === 'webdav'`; at least one version, i.e. the hook still fires on the unlocked path |
+| **Not asserted** | a version *count* (which writer wins is a race by construction); the **live file's** bytes (three concurrent `flag: 'w'` writes to one inode may interleave, and no lock says otherwise); that each version holds one *complete* prior revision (a snapshot may legitimately capture partial bytes mid-write — that is what best-effort means) |
+
+The one thing it adds over the non-DAV case is where it runs: the unlocked path is exactly where "hash the live file in
+a second pass" would break, because the source can change underneath. Hashing the **copy** is what keeps a blob's name
+true to its bytes, and a mis-named blob is the one corruption in this design that escapes its own row — every later
+snapshot of the genuinely-matching content dedups against it and then serves wrong bytes.
 
 **Collabora is deliberately NOT covered.** OnlyOffice is enabled in dev and CI; Collabora is not. The two share the
 snapshot hook and the `copyFileContent` write, so the inode and origin claims are already proven by E2E-11 — what
 Collabora would add is its own WOPI request shape, which is transport, not versioning. Its cadence question was settled
-from `coolwsd.xml` in D4.2 rather than by measurement.
+from `coolwsd.xml` in D4.2 rather than by measurement — and has since been **measured** against a real container
+([`2026-07-29-adr-19-editor-soak.md`](2026-07-29-adr-19-editor-soak.md)), which corrected the number: saves land 15–16 s
+after the last keystroke, not the 30 s `coolwsd.xml` implied.
 
 **On E2E-7, one thing worth keeping:** the ADR matrix is asymmetric on purpose — `GET` carries no required
 permission, matching the live file, so a read-only member gets the **read** half of history and is refused the write
@@ -149,9 +164,27 @@ half. Asserting only the refusals would let a regression that broke *reading* pa
 there, plus a member granted MODIFY who *can* restore — which is what proves the refusal is about the permission
 rather than about something incidental.
 
-Also still open from Phase D, unchanged: the **ADR §19 soak** against real Collabora, OnlyOffice and NC clients, and
-the two unwritten release blockers (the quota-reduction release note, and adding per-home `versions/` to the documented
-backup set).
+**The admin surface has a live case now too** (`versions-admin.e2e-spec.ts`). It is separate from
+`versions-admin.controller.spec.ts` on purpose: that spec constructs a `UserRolesGuard` and asks it about a fabricated
+principal, which proves the guard's *decision* and not that the decision is in the request path. PR #364 shipped with
+only the former, on the one route in this feature that destroys history instance-wide. The e2e drives a real logged-in
+non-admin session and asserts both halves — 403, **and** the history it aimed at still standing afterwards, because a
+status code alone cannot tell "refused" from "refused after deleting". It also pins that an administrator is still
+subject to CSRF on the purge, which is what stops an admin's browser session from being enough for a cross-site POST.
+
+One trap it hit, worth not re-discovering: **`listVersions` is itself gated on `files.versions.enabled`** and answers
+`[]` while the flag is off. So the obvious "nothing was purged" read-back in the flag-off case passes for the wrong
+reason. That case reads through `VersioningQueries.usageByRoot` instead, which is un-gated.
+
+### What remains open
+
+- The **ADR §19 soak** is done for both editors ([`2026-07-29-adr-19-editor-soak.md`](2026-07-29-adr-19-editor-soak.md))
+  and for NC Android ([`2026-07-27-nc-android-versioning-soak.md`](2026-07-27-nc-android-versioning-soak.md)).
+  **NC iOS is the one client still unrun** — and the highest-risk item left, since the Android soak's one finding was a
+  missing capability key that silently disabled the version list, and iOS parses namespace-*blind*.
+- The two release blockers this section used to list as unwritten **are written**: the quota-reduction wording is in
+  `CHANGELOG.md` under 2.4.4-custom.1 ("Read before enabling file versioning"), and the per-home `versions/` backup
+  requirement is in both that entry and [`docs/backup-and-restore.md`](../backup-and-restore.md).
 
 ## 4. CI
 

@@ -206,7 +206,7 @@ Creating the SQL file without running `db:generate` leaves `meta/_journal.json` 
 ## File versioning (`custom-versioning`)
 
 Shipped behind `files.versions.enabled`, **default off**. Phases A–D are complete: backend, the `custom-v2` UI
-(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is 19 of its 20 e2e cases in.** The ADR §19 soak
+(browser-verified), and the Nextcloud file-versions DAV tree. **Phase E is all 20 of its e2e cases in.** The ADR §19 soak
 (#348) is done for **both editors** against real containers and for **NC Android**; only **NC iOS** is unrun. Two things
 that soak settled and you should not re-derive: OnlyOffice has no automatic save of any kind (so every version it mints
 is a human pressing Save), while Collabora saves unprompted ~15 s after the last keystroke.
@@ -263,13 +263,21 @@ later inherits it rather than shipping unauthenticated. And the purge **must** k
 what makes the labeled-version exemption, the per-`(checksum, versionsRoot)` refcount and the ADR §7 audit line apply
 without restating any of them. A bespoke delete here would silently drop all three.
 
+Both claims are pinned over real HTTP in `versions-admin.e2e-spec.ts`, which exists **because**
+`versions-admin.controller.spec.ts` cannot: that spec constructs a `UserRolesGuard` and asks it about a fabricated
+principal, proving the decision but not that the decision is in the request path. The e2e drives a real logged-in
+non-admin and asserts 403 **plus** the history still standing — a status code alone cannot tell "refused" from "refused
+after deleting". Note while writing cases here that **`listVersions` is gated on `files.versions.enabled`** and returns
+`[]` while the flag is off, so a flag-off read-back must go through `VersioningQueries`, not the service, or it passes
+for the wrong reason.
+
 **e2e:** `npm -w backend run test:e2e`, after `npm run dev:db` + `npm run dev:migrate`. Read
 `custom-versioning/utils/versions-e2e.fixture.ts` before adding a case — a test user needs the `permissions` column
 (not the derived `applications` array) or every request 403s, and writes need the `sync-in-csrf` header as well as the
 cookie.
 
 **e2e files run in PARALLEL worker threads against ONE database.** `vitest-e2e.config.mts` sets no
-`fileParallelism: false`, and seven `custom-versioning` spec files create versions through the API at once. So any
+`fileParallelism: false`, and eight `custom-versioning` spec files create versions through the API at once. So any
 assertion about an **instance-wide** figure is racing its neighbours: comparing `usageTotals()` against a single
 `SELECT *` snapshot failed as `expected 829 to be 808`, the 21 bytes being another file's row landing between the two
 reads (#366). Scope new assertions to a root the case owns, or bracket the aggregate between a snapshot taken before
