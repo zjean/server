@@ -124,7 +124,7 @@ export interface GroupRef {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 80;
+        z-index: var(--si-z-dialog);
       }
       .gmd {
         position: fixed;
@@ -133,7 +133,7 @@ export interface GroupRef {
         bottom: 0;
         width: 420px;
         max-width: 100vw;
-        z-index: 81;
+        z-index: calc(var(--si-z-dialog) + 1);
         background: var(--si-bg2);
         border-left: 1px solid var(--si-line);
         box-shadow: -12px 0 28px rgba(0, 0, 0, 0.25);

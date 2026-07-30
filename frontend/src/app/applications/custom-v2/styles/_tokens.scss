@@ -203,22 +203,34 @@
   --si-dur-4: 220ms; //     1×  file-detail inspector
   --si-ease: ease;
 
-  // ─── Stacking (#398) ─────────────────────────────────────────────────
-  // 25 distinct z-indexes ship today, including hand-tuned neighbours
-  // (70, 71, 72, 73, 74, 75, 76, 77, 80, 81, 90, 91). These bands name the
-  // layers those numbers were reaching for.
+  // ─── Stacking (#398, renumbered #405) ────────────────────────────────
+  // #404 declared these but migrated nothing, and the values it picked could not
+  // express what v2 actually does: 53 declarations, 25 distinct values, of which
+  // THIRTEEN sat in the dialog range (70…91, plus a 200). --si-z-dialog: 90 under
+  // --si-z-toast: 100 leaves ten slots for thirteen levels. It did not fit.
   //
-  // NOT migrated in this change, on purpose: renumbering a stacking context is
-  // the kind of edit whose regressions do not appear in a diff — two elements
-  // that never overlap on the screens you happen to open look identical either
-  // way. Each consumer should move on its own, with eyes on the screen.
-  --si-z-base: 1;
-  --si-z-sticky: 20; // sticky table headers, top bar
-  --si-z-overlay: 40; // drop overlays, scrims
-  --si-z-panel: 60; // inspector, side panels
-  --si-z-popover: 80; // popovers, dropdowns, context menus
-  --si-z-dialog: 90; // modals
-  --si-z-toast: 100; // toasts
+  // Renumbering was free — nothing consumed these yet. Gaps of 10 give every band
+  // room for the pairs it actually needs, expressed as calc(band + n) at the call
+  // site so a backdrop and the thing over it stay visibly related.
+  //
+  // The thirteen dialog levels collapse to TWO, because no two dialogs are ever
+  // open at once. Three independent facts force that, and they are why the
+  // 70 < 72 < 74 < 76 < 80 < 90 ladder encoded a priority nothing exercised:
+  //   • every call site is `await <service>.open(…)` — awaited to close before
+  //     anything else opens (14 sites in file-browser.base.ts, 2 in shared),
+  //   • no dialog injects another dialog's service (CompressDialogService's
+  //     reference to PromptDialogService is a comment, not an injection),
+  //   • each service does `if (existing) existing.resolve(null)`, so a dialog
+  //     type cannot even stack on itself.
+  // If a nested dialog is ever introduced, it needs its own +n here — not a
+  // second ladder.
+  --si-z-base: 1; // sticky table heads, section heads, toolbars (+1: in-card chips, dropdown results)
+  --si-z-sticky: 10; // top bar
+  --si-z-overlay: 20; // drop overlays, scrims (+1: FAB)
+  --si-z-panel: 30; // inspector, side panels, mobile chrome (+1…+4: backdrop → sidebar)
+  --si-z-popover: 40; // context menus, dropdowns, tooltips, notification + transfer panels (+1: sheet over its backdrop)
+  --si-z-dialog: 50; // every modal: backdrop = band, surface = +1. Two levels is the whole need.
+  --si-z-toast: 60; // unconditionally above everything
 
   // ─── Radii ───────────────────────────────────────────────────────────
   // r1 is 7px, not 6px: 7px is what the app's controls actually use, and

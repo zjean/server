@@ -132,14 +132,14 @@ interface RowMember extends ShareMemberInput {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 76;
+        z-index: var(--si-z-dialog);
       }
       .sd {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 77;
+        z-index: calc(var(--si-z-dialog) + 1);
         width: min(500px, calc(100vw - 24px));
         padding: 18px 20px 16px;
         background: var(--si-bg1);
@@ -243,7 +243,7 @@ interface RowMember extends ShareMemberInput {
         position: absolute;
         bottom: calc(100% + 8px);
         right: 0;
-        z-index: 80;
+        z-index: var(--si-z-popover);
         display: flex;
         flex-direction: column;
         gap: 2px;

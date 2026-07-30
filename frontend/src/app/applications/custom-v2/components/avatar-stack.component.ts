@@ -72,7 +72,7 @@ export interface AvatarStackUser extends AvatarUser {
         position: absolute;
         bottom: calc(100% + 8px);
         left: 0;
-        z-index: 60;
+        z-index: var(--si-z-popover);
         display: flex;
         flex-direction: column;
         gap: 2px;

@@ -508,7 +508,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 90;
+        z-index: var(--si-z-dialog);
       }
       .au-dialog {
         position: fixed;
@@ -518,7 +518,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         width: 460px;
         max-height: 80vh;
         overflow: auto;
-        z-index: 91;
+        z-index: calc(var(--si-z-dialog) + 1);
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);

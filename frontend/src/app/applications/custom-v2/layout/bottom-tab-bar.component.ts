@@ -58,7 +58,7 @@ interface TabEntry {
         align-items: center;
         background: var(--si-bg1);
         border-top: 1px solid var(--si-line);
-        z-index: 30;
+        z-index: var(--si-z-panel);
       }
       .bb__tab {
         display: flex;

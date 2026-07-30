@@ -26,7 +26,7 @@ import { ToastService } from './toast.service'
         position: fixed;
         top: 60px;
         right: 16px;
-        z-index: 60;
+        z-index: var(--si-z-toast);
         pointer-events: none;
       }
       .toast-host {

@@ -71,14 +71,14 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 74;
+        z-index: var(--si-z-dialog);
       }
       .tfa-dialog {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 75;
+        z-index: calc(var(--si-z-dialog) + 1);
         min-width: 320px;
         max-width: 380px;
         padding: 18px 20px 14px;

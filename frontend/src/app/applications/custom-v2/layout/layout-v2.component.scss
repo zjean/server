@@ -52,7 +52,10 @@
   left: 48px;
   right: 0;
   bottom: 0;
-  z-index: 40;
+  // Desktop scrim for the dock panel. This and the panel itself were BOTH 40 — a
+  // tie resolved only by source order. Now explicit: scrim on the band, panel one
+  // step over it (#405 item 2).
+  z-index: calc(var(--si-z-panel) + 1);
   background: rgba(0, 0, 0, 0.32);
   animation: layout-v2-backdrop-in 160ms ease-out;
 }
@@ -83,7 +86,7 @@
     bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     width: 85vw;
     max-width: 360px;
-    z-index: 40;
+    z-index: calc(var(--si-z-panel) + 2);
     transform: translateX(110%);
     transition: transform 200ms ease-out;
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
@@ -104,7 +107,9 @@
     left: 0;
     right: 0;
     bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    z-index: 39;
+    // Mobile sidebar scrim. Was 39, one below the sidebar's 40 — the same
+    // backdrop/surface pair, spelled as a decrement instead of an increment.
+    z-index: calc(var(--si-z-panel) + 1);
     background: rgba(0, 0, 0, 0.32);
     animation: layout-v2-backdrop-in 160ms ease-out;
 

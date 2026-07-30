@@ -114,14 +114,14 @@ interface FormState {
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.35);
-        z-index: 74;
+        z-index: var(--si-z-dialog);
       }
       .ld {
         position: fixed;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        z-index: 75;
+        z-index: calc(var(--si-z-dialog) + 1);
         width: min(440px, calc(100vw - 24px));
         padding: 18px 20px 16px;
         background: var(--si-bg1);
