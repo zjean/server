@@ -59,7 +59,29 @@ export function versionsToExpire(versions: ThinnableVersion[], nowMs: number): n
       lastKeptMtime = version.mtime
       continue
     }
-    const step = stepForAge((nowMs - version.mtime) / 1000)
+    // Banded by whichever clock says the row is OLDER, never by mtime alone.
+    // `mtime` is client-controlled (touchFile), so a forward-skewed sync client
+    // can stamp a row with a mtime ahead of `nowMs` — a NEGATIVE age, which
+    // `stepForAge`'s `<=` comparison matches against band 1 forever. Without the
+    // max(), such a row is judged at band 1's 2s spacing for its whole life and
+    // never thins: with retentionDays off and no quota configured (both
+    // defaults), the row count for that one file then grows at the coalescing
+    // rate with nothing to bound it, exactly the unbounded growth the FIFO cap
+    // used to prevent. `createdAt` is server-set and never rewinds, so
+    // `nowMs - createdAt` is always a true, non-negative age and puts a ceiling
+    // under the mtime-derived age.
+    //
+    // This preserves banding-on-mtime for every honest row: a BACKDATED mtime
+    // (the case the floor below exists for) has `age_mtime > age_createdAt`, so
+    // mtime still governs, exactly as before. Only a future-skewed mtime is
+    // affected, and only in the direction of "band by the truthful age instead
+    // of a fabricated one" — never the reverse.
+    //
+    // This is also what makes `byFileIdNewestFirst` safe to leave UNPAGED
+    // (versioning-queries.service.ts:277-279 — "the row count for one file is
+    // bounded by the thinner itself on every write"): that claim is exactly what
+    // an unbounded band-1 row would falsify.
+    const step = stepForAge(Math.max(nowMs - version.mtime, nowMs - version.createdAt.getTime()) / 1000)
     // THE FLOOR. Never expire a capture we have not held for at least as long as
     // the spacing we are judging it by. `mtime` is client-controlled, so without
     // this a row whose content carries a backdated mtime lands in a coarse band

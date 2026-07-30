@@ -18,10 +18,19 @@ describe('THINNING_BANDS', () => {
 const NOW = 10_000_000_000
 
 // `secondsAgo` is how old the version's CONTENT is, which is what mtime means.
-// `heldSeconds` defaults to a year: the floor is not what these cases are about,
-// and a row held that long is past every band's step, so the pre-floor
-// expectations are unchanged.
-const at = (id: number, secondsAgo: number, label: string | null = null, heldSeconds = 31_536_000): ThinnableVersion => ({
+// `heldSeconds` DEFAULTS TO `secondsAgo` — i.e. an HONEST write, where createdAt
+// and mtime name the same moment, so `stepForAge`'s `max(ageByMtime,
+// ageByCreatedAt)` (versions-thinning.ts) collapses to the single age these
+// band-selection cases already reason about. This is not an arbitrary choice:
+// a fixed default (this used to be a flat one year, regardless of `secondsAgo`)
+// would make every case with a small `secondsAgo` simulate mtime skewed far
+// AHEAD of createdAt — precisely the future-mtime bug `max()` exists to correct
+// — and band selection would then key off the year-old createdAt instead of the
+// intended `secondsAgo`, moving these cases' expectations for a reason that has
+// nothing to do with what they are testing. Pass `heldSeconds` explicitly only
+// when a case is deliberately about the floor (a row held for less than its own
+// band's step) or about the skew itself.
+const at = (id: number, secondsAgo: number, label: string | null = null, heldSeconds = secondsAgo): ThinnableVersion => ({
   id,
   mtime: NOW - secondsAgo * 1000,
   label,
@@ -98,12 +107,59 @@ describe('versionsToExpire', () => {
   })
 })
 
+// A forward-skewed sync client (touchFile) can stamp `mtime` AHEAD of the
+// server's `nowMs`, so `ageByMtime` is NEGATIVE. `stepForAge`'s `<=` comparison
+// matches band 1 (the 2s step) for any negative age, so mtime-only banding pins
+// such a row in the finest band forever — with retentionDays off and no quota
+// configured (both defaults), nothing else bounds its row count, which is
+// exactly what age-tiered thinning replaced the FIFO cap to avoid.
+// `stepForAge(Math.max(ageByMtime, ageByCreatedAt))` (versions-thinning.ts)
+// fixes this by falling back to the true, non-negative age derived from
+// `createdAt` whenever it is the larger (i.e. "older-looking") of the two.
+describe('versionsToExpire — future-skewed mtime', () => {
+  it('bands by createdAt instead of pinning a future-mtime row in band 1 forever', () => {
+    // Both rows were genuinely captured 40 days ago (createdAt), well past
+    // band 6's 604800s step, but their (skewed) mtime claims they are barely
+    // 100_000s apart and still in the future relative to NOW. Mtime-only
+    // banding would put both in band 1 (any negative age matches its "<= 10"
+    // check) and 100_000s of spacing clears that 2s step easily, so the buggy
+    // code keeps both forever. The fix bands both by their true createdAt age
+    // (band 6, 604800s step), under which 100_000s of spacing is NOT enough,
+    // so the older of the two is expired.
+    const heldSeconds = 3_456_000 // 40 days
+    const rows: ThinnableVersion[] = [
+      { id: 1, mtime: NOW + 500_000, label: null, createdAt: new Date(NOW - heldSeconds * 1000) },
+      { id: 2, mtime: NOW + 400_000, label: null, createdAt: new Date(NOW - heldSeconds * 1000) }
+    ]
+    expect(versionsToExpire(rows, NOW)).toEqual([2])
+  })
+
+  // The floor still protects a row that was genuinely just captured, even
+  // when its mtime is future-skewed: `ageByCreatedAt` is ~0, so `max()` picks
+  // band 1 regardless of how far in the future mtime claims to be, and the
+  // floor (held 0s < band 1's 2s step) exempts it exactly as it would an
+  // honest fresh capture.
+  //
+  // Row 1 is given an even MORE future mtime purely so it — not row 2 — is the
+  // sorted-newest and auto-kept as the walk's anchor unconditionally. That
+  // isolates what this test is actually about: whether row 2, a mere 1s (well
+  // under band 1's 2s step) behind that anchor, survives via the floor rather
+  // than via the "newest is always kept" rule.
+  it('still exempts a just-captured row via the floor, even with a future mtime', () => {
+    const rows: ThinnableVersion[] = [
+      { id: 1, mtime: NOW + 10_000, label: null, createdAt: new Date(NOW - 999_999 * 1000) },
+      { id: 2, mtime: NOW + 9_000, label: null, createdAt: new Date(NOW) }
+    ]
+    expect(versionsToExpire(rows, NOW)).toEqual([])
+  })
+})
+
 // mtime is CLIENT-CONTROLLED (touchFile), so it cannot be the only clock. The
 // floor is keyed on createdAt, which the server sets and never rewinds.
 describe('versionsToExpire — the createdAt floor', () => {
   // THE VECTOR. Content stamped 2 days ago, captured just now: without the floor
-  // it lands in the 24h band (3600s step), sits 30s from its neighbour, and is
-  // expired inside the same snapshot() call that created it.
+  // it lands in the 30-day band (86400s step), sits 30s from its neighbour, and
+  // is expired inside the same snapshot() call that created it.
   it('never expires a row it has only just captured, however old the content claims to be', () => {
     const twoDays = 172_800
     const rows = [at(1, twoDays, null, 31_536_000), at(2, twoDays + 30, null, 0)]

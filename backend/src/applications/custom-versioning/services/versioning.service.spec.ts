@@ -51,6 +51,7 @@ import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
+import { blobPathFromRoot } from '../utils/paths'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
 
@@ -1231,6 +1232,67 @@ describe(VersioningService.name, () => {
       vi.spyOn(queries, 'byFileIdNewestFirst').mockRejectedValue(new Error('db gone'))
       await expect(service['thinFile']('/root', 7)).resolves.toBeUndefined()
     })
+  })
+
+  // Regression guard for the `origin !== 'restore'` guard at the thinFile call
+  // site in `snapshot()`. Without it, a restore's own safety snapshot would run
+  // eager thinning over EVERY row of the file — including the very revision the
+  // user just restored — and a long-held row sitting in the 1-week band
+  // (>=30 days old) with a same-band neighbour close enough in mtime is exactly
+  // what the thinner is supposed to collapse. The restore's write still
+  // succeeds (the blob is pinned open before this runs — invariant 3), but the
+  // row the user clicked "Restore" on would vanish from the list underneath
+  // them.
+  //
+  // Both seeded rows need a backdated `createdAt`, not just a backdated
+  // `mtime`: the createdAt floor (versions-thinning.ts) exempts anything held
+  // less than its own band's step, and FakeQueries.insertVersion stamps
+  // createdAt with a fresh `new Date()` — a few milliseconds old — which would
+  // mask the bug regardless of how old `mtime` claims the content is.
+  it('does not let its own safety snapshot thin away the revision being restored', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const space = personalSpace()
+    const sixMonthsAgo = 180 * 86_400 // seconds; lands in the 1-week/604800s band
+
+    const oldContent = 'the six-month-old revision being restored'
+    const oldChecksum = crypto.createHash('sha512-256').update(oldContent).digest('hex')
+    await queries.insertVersion({
+      fileId: FILE_ID,
+      versionsRoot: 'user:alice',
+      checksum: oldChecksum,
+      size: oldContent.length,
+      mtime: Date.now() - sixMonthsAgo * 1000,
+      origin: 'web'
+    } as VersionInsert)
+    const oldRevisionId = queries.rows[0].id
+    queries.rows[0].createdAt = new Date(Date.now() - sixMonthsAgo * 1000)
+
+    // A neighbour 3 days closer to now — well within the 1-week band's step —
+    // long held too, so it is the neighbour that would make the thinner expire
+    // the row above rather than this one.
+    await queries.insertVersion({
+      fileId: FILE_ID,
+      versionsRoot: 'user:alice',
+      checksum: 'b'.repeat(64),
+      size: 5,
+      mtime: Date.now() - (sixMonthsAgo - 3 * 86_400) * 1000,
+      origin: 'web'
+    } as VersionInsert)
+    queries.rows[1].createdAt = new Date(Date.now() - (sixMonthsAgo - 3 * 86_400) * 1000)
+
+    // The real blob for the revision being restored: restoreVersion opens it
+    // from disk before it does anything else.
+    const blobPath = blobPathFromRoot('user:alice', oldChecksum)!
+    await fs.mkdir(path.dirname(blobPath), { recursive: true })
+    await fs.writeFile(blobPath, oldContent)
+
+    await service.restoreVersion(user, space, oldRevisionId)
+
+    expect(await fs.readFile(filePath, 'utf8')).toBe(oldContent)
+    // THE ASSERTION. With the guard in place this row survives; deleting the
+    // `origin !== 'restore'` guard at the thinFile call site makes it vanish —
+    // proven live below rather than asserted on faith.
+    expect(queries.rows.find((r) => r.id === oldRevisionId)).toBeDefined()
   })
 
   /* ------------------------------------------------------- never throws to caller */
