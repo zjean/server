@@ -157,7 +157,13 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       const spans = all.map((v) => v.mtime).sort((a, b) => b - a)
       const allWithin2s = spans.every((m, i) => i === 0 || spans[i - 1] - m < 2000)
       if (allWithin2s) {
-        expect(kept.filter((v) => !v.label).length).toBeLessThan(all.filter((v) => !v.label).length)
+        // `all` was fetched BEFORE the label call, so every row in that
+        // snapshot — oldest included — still reads label: null; comparing
+        // kept's filtered count against all's filtered count would compare 5
+        // against 5, unconditionally true whether or not anything actually
+        // got thinned. Exactly one version (oldest) was labeled since, so
+        // `all.length - 1` is the real pre-sweep unlabeled count.
+        expect(kept.filter((v) => !v.label).length).toBeLessThan(all.length - 1)
       }
     })
 
