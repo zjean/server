@@ -81,8 +81,23 @@ Nextcloud's constants, verbatim (`nextcloud/server`, `apps/files_versions/lib/St
 Walk a file's versions newest → oldest; keep one only if it is at least `step` older than the last kept version,
 where `step` comes from the band the version's age falls in.
 
-Adopted verbatim rather than tuned: it is a proven curve, this fork already mirrors NC for the mobile surface, and
-picking our own numbers invites bikeshedding with no evidence behind it.
+**The band *values* are Nextcloud's, verbatim. The *walk* is not — and that overclaim needs correcting.** NC's own
+selection logic, read at `apps/files_versions/lib/Storage.php:764-813`, advances through the bands as the **last-kept
+version's age** crosses each absolute threshold: once the version it last decided to keep turns 60 s old, it moves to
+the next-hour band, and so on — one accumulating age driving a stateful walk. Our walk instead asks, independently for
+every candidate, "which band does *this version's own age* fall in" (`stepForAge`), then requires it be `step` older
+than the last kept version. These are structurally different rules that happen to share their constants: NC's next
+threshold is fixed by the survivor's age at the moment it was chosen; ours is re-derived per candidate against the
+current time. Near a band edge they can keep a different set of versions for the same input — a candidate at 59 s and
+one at 61 s are judged by different steps under our walk in a way NC's would not necessarily split. Neither is more
+correct, and neither materially changes the shape both are going for: both are dense-recent, sparse-old, and the
+divergence is bounded by one band's step size, not by orders of magnitude.
+
+So: the six band values are adopted verbatim — it is a proven curve, this fork already mirrors NC for the mobile
+surface, and picking our own numbers invites bikeshedding with no evidence behind it. The walk is a **reimplementation**,
+not a port, and has been verified only against this fork's own table-driven tests (§7), not against NC's edge-case
+behaviour. A spec implying we inherited NC's proven walk when we inherited only its numbers is the kind of claim this
+repo treats as a defect.
 
 ### 3.3 Thin on `mtime`, not `createdAt`
 
@@ -92,6 +107,20 @@ It is the timeline of distinct content states, and it is what the panel already 
 the surviving rows read as evenly spaced to the user. `createdAt` would bunch a burst of captures whose contents
 actually span days — e.g. a file untouched for a week, then overwritten twice in a minute, has two rows whose
 *contents* are a week apart.
+
+**But banding on `mtime` alone is unsafe, because `mtime` is client-controlled.** Sync clients set it directly via
+`touchFile` (`files/utils/files.ts:182`), so unlike `createdAt` it is neither monotonic nor trustworthy. Without a
+floor, a capture whose content carries a backdated `mtime` lands straight into a coarse band and can be expired
+**inside the same `snapshot()` call that created it** — unrecoverably, while the caller's log line still reads
+"versioned …" as if it succeeded.
+
+**The resolution keeps `mtime` for banding and spacing, and floors *expiry* on `createdAt`.** A version may only be
+judged old enough to expire once it has survived its band's `step` by `createdAt`'s clock — the one **we** set, on
+write, and which never rewinds — regardless of what its `mtime` claims. This needs no new constant: the floor IS the
+curve, evaluated against a clock we trust instead of one the client controls; `versionsToExpire` re-derives `step` from
+`stepForAge` and applies it to `createdAt` directly. A row exempted by the floor still anchors the spacing walk — it
+counts as kept, so the *next* candidate is measured against it — because keeping more neighbours is the safe direction
+for a rule whose only failure mode is deleting a user's history.
 
 ## 4. What this replaces
 

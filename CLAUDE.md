@@ -217,10 +217,38 @@ state; they are dated findings, not current truth. Verified by running `configLo
 `SYNCIN_APPLICATIONS_FILES_VERSIONS_ENABLED=false` against a yaml saying `true` now resolves to `false`.
 
 The one trap: `config.loader.ts` splits the name on `_` and matches each segment with `key.toUpperCase() === segment`,
-so a **camelCase key is a single segment** — `MAXVERSIONSPERFILE`, never `MAX_VERSIONS_PER_FILE`. A path that does not
+so a **camelCase key is a single segment** — `MININTERVALSECONDS`, never `MIN_INTERVAL_SECONDS`. A path that does not
 match logs `Ignoring unknown environment variable: "…"` and leaves the default in place, so it fails as a **warning, not
 an error**. Grep the boot log for `Ignoring unknown` after touching these. Anything newly added under
 `applications.*` must land in `environment.dist.yaml` too, or its env var is discarded the same silent way (#384).
+
+**Version history size is bounded by thinning, not a per-file cap.**
+`applications.files.versions.maxVersionsPerFile` was **removed** — age-tiered thinning replaces the per-file FIFO cap
+as the shaper of history. A boot-time warning (`removedMaxVersionsPerFileConfig`, `config.environment.ts`) fires if the
+key is still present in `environment.yaml`, precisely because an unknown key would otherwise be discarded the same
+silent way as above (#384's failure class). History is now shaped by Nextcloud's six-band keep-density curve — dense
+for recent versions, sparse for old ones — in `custom-versioning/utils/versions-thinning.ts`, enforced both eagerly on
+write (`VersioningService.thinFile`) and nightly (`VersionsRetention.enforceThinning`; the retention log's rule name
+changed from `maxVersionsPerFile` to `thinning`). `quotaShare` and `retentionDays` remain the size backstops. Design:
+`docs/superpowers/specs/2026-07-29-version-thinning-design.md`; ADR: `docs/plans/2026-07-25-file-versioning-design.md`
+§5.3.
+
+Three traps this introduces:
+
+- **Thinning bands on `mtime`, but expiry is floored on `createdAt`.** `mtime` is client-controlled (sync clients set
+  it via `touchFile`, `files/utils/files.ts:182`), so it is neither monotonic nor trustworthy — banding and spacing
+  still use it (it's the timeline the version panel displays), but a version can only be judged old enough to expire
+  once it has survived its band's step by `createdAt`'s clock, which the server sets and which never rewinds. Without
+  the floor, a capture with a backdated `mtime` could be expired inside the same `snapshot()` call that created it.
+- **The proven-human discriminator is the raw `forcesavetype` (∈ {1, 3}), never `saveKind === 'interactive'`.**
+  `saveKindOf` deliberately defaults anything unclassifiable to interactive, so testing the derived kind would also
+  exempt document-server timer saves (`forcesavetype: 2`) from coalescing whenever `autoAssembly` is on — the exact
+  storm the window exists to catch.
+- **The per-row author off-by-one (#409) must be fixed at WRITE time if it is ever fixed.** A row's `created`
+  describes the content it holds, but its `authorId` names whoever *replaced* that content — so row *n*'s true author
+  is row *n-1*'s `authorId`. The tempting fix is to shift by one on read. Thinning makes that wrong: once rows are
+  removed, row *n-1* is no longer the row that actually preceded *n*. Fix it by recording the previous content's
+  author on the row at write time instead (spec §8).
 
 **There is an operator surface as of #342** — `VersionsAdminController` (`custom-versioning/versions-admin.controller.ts`)
 plus a panel on the v2 admin Tools screen: instance-wide usage, heaviest roots, and a per-root purge. Two things about
