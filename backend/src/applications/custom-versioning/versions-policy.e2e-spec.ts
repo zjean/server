@@ -514,5 +514,81 @@ describe('versions retention, quota and crash safety (e2e)', () => {
         expect(Buffer.byteLength(res.body)).toBe(version.size)
       }
     })
+
+    /* ------------------------------------------------- the DAV half of E2E-14 */
+
+    // The two cases above go through the lock manager. This one does not, and
+    // that is the entire point: WebDAV writes hold NO server lock (ADR §4, and
+    // the design's own "do not document or claim 'under lock' semantics for it"),
+    // so the DAV origin is the one place where three snapshots can interleave
+    // with three truncating writes to the same inode.
+    //
+    // WHAT IS DELIBERATELY NOT ASSERTED, because the design does not promise it:
+    //   - a version count. Which writers win is a race by construction.
+    //   - the LIVE file's bytes. Three concurrent `flag: 'w'` writes to one inode
+    //     may interleave, and no lock says otherwise.
+    //   - that each version holds one COMPLETE prior revision. A snapshot may run
+    //     while another writer is mid-write and legitimately capture partial
+    //     bytes — that is what "best-effort" means here.
+    //
+    // What must hold anyway is the store's own invariant, and the unlocked path
+    // is precisely where "hash the live file in a second pass" would break it:
+    // hashing the COPY is what keeps a blob's name true to its bytes even when
+    // the source changed underneath. A mis-named blob is the one corruption in
+    // this design that escapes its own row — every later snapshot of the
+    // genuinely-matching content dedups against it and then serves wrong bytes.
+    it('keeps the blob store consistent under parallel UNLOCKED WebDAV PUTs', async () => {
+      const rel = 'e2e14-dav-parallel.txt'
+      const basic = `Basic ${Buffer.from(`${e2e.user.login}:password`).toString('base64')}`
+      await e2e.seed(rel, 'dav concurrent baseline content')
+
+      // Distinct LENGTHS, not just distinct bytes: a capture that caught a
+      // partial or interleaved write would hash to something no writer wrote, so
+      // the invariant below is what notices — a same-length payload set could
+      // hide a swapped blob behind a matching size.
+      await Promise.allSettled(
+        ['dav-A'.padEnd(200, 'A'), 'dav-B'.padEnd(300, 'B'), 'dav-C'.padEnd(400, 'C')].map((payload) =>
+          e2e.app.inject({
+            method: 'PUT',
+            url: `/webdav/personal/${rel}`,
+            headers: { authorization: basic, 'content-type': 'text/plain' },
+            payload
+          } as never)
+        )
+      )
+
+      const versions = await e2e.versionsOf(rel)
+      // Not a count — only that the hook fires at all on the unlocked path.
+      // Every writer sees `fExists && startRange === 0`, so a zero here would
+      // mean DAV snapshots stopped happening under concurrency, which is a
+      // different failure from the race this case tolerates.
+      expect(versions.length).toBeGreaterThan(0)
+      expect(versions.every((v) => v.origin === 'webdav')).toBe(true)
+
+      const checksums = new Set<string>()
+      for (const version of versions) {
+        const bytes = await fs.readFile(blobFor(version.checksum))
+        // THE INVARIANT: re-hash the stored bytes and require the name back.
+        expect(createHash('sha512-256').update(bytes).digest('hex')).toBe(version.checksum)
+        expect(bytes.byteLength).toBe(version.size)
+        // And it is reachable, with the size the row advertises — a row pointing
+        // at nothing is the other way this race could end.
+        const res = await e2e.api.content(version.id, rel)
+        expect(res.status).toBe(200)
+        expect(Buffer.byteLength(res.body)).toBe(version.size)
+        checksums.add(version.checksum)
+      }
+
+      // Dedup still holds under the race: one blob per distinct content, no
+      // second copy written because two stagings raced the same checksum. Rows
+      // may outnumber blobs (two writers can capture the same baseline); blobs
+      // may never outnumber distinct checksums.
+      const blobs = (await e2e.blobs()).filter((p) => checksums.has(path.basename(p)))
+      expect(blobs).toHaveLength(checksums.size)
+
+      // Nothing left behind mid-flight. Staging is where a concurrent snapshot
+      // would leak, since each writer stages before it hashes.
+      expect(await fs.readdir(e2e.versionsPath('.staging')).catch(() => [])).toEqual([])
+    })
   })
 })

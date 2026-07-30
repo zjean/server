@@ -116,8 +116,13 @@ export interface VersionsE2EContext {
    * Returns the user plus an `api` bound to THEIR session, so a case can ask
    * "what can this person do to that file" without rebuilding the cookie/CSRF
    * dance. Cleaned up by teardown().
+   *
+   * `role` exists for the admin surface (#342), whose authorization is the
+   * ADMINISTRATOR role rather than a space permission. The fixture's own user is
+   * deliberately a plain USER, so it doubles as the non-admin principal — a
+   * caller wanting the allowed side of those endpoints has to ask for one.
    */
-  addUser: (opts?: { permissions?: string }) => Promise<VersionsActor>
+  addUser: (opts?: { permissions?: string; role?: USER_ROLE }) => Promise<VersionsActor>
   restoreConfig: () => void
   teardown: () => Promise<void>
 }
@@ -277,13 +282,13 @@ export async function setupVersionsE2E(): Promise<VersionsE2EContext> {
 
   // Extra actors, tracked so teardown removes them.
   const extraUsers: UserModel[] = []
-  const addUser = async (opts: { permissions?: string } = {}): Promise<VersionsActor> => {
+  const addUser = async (opts: { permissions?: string; role?: USER_ROLE } = {}): Promise<VersionsActor> => {
     const extra = await admin.createUserOrGuest(
       {
         ...generateUserTest(false),
         permissions: opts.permissions ?? Object.values(USER_PERMISSION).join(USER_PERMS_SEP)
       } as never,
-      USER_ROLE.USER
+      opts.role ?? USER_ROLE.USER
     )
     extraUsers.push(extra)
     const res = await app.inject({ method: 'POST', url: API_AUTH_LOGIN, body: { login: extra.login, password: 'password' } })
