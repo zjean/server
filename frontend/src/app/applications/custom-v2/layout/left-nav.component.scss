@@ -199,7 +199,10 @@
 
     &--active {
       background: var(--si-accent-soft);
-      color: var(--si-accent);
+      // -ink, not the fill tone: this is brand-as-type sitting on a brand
+      // wash. At the fill's L 0.70 the active label measured 4.13:1 once the
+      // surfaces came up under it.
+      color: var(--si-accent-ink);
       font-weight: 500;
     }
   }

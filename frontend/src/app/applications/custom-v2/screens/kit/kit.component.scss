@@ -158,7 +158,8 @@
   &__scale-token {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-accent);
+    // brand-as-type -> the ink tone (the fill tone measured 4.18:1 here)
+    color: var(--si-accent-ink);
   }
 
   &__scale-value {

@@ -3,6 +3,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { USER_ONLINE_STATUS } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { UserOnlineModel } from '../../../users/models/user-online.model'
 import { StoreService } from '../../../../store/store.service'
+import { avatarHue } from '../../components/avatar.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 
@@ -77,10 +78,12 @@ export class PeopleComponent implements OnInit {
     }
   }
 
+  // Delegates to the shared helper rather than hashing locally. This screen
+  // used its own hash (h * 31) while the user-card and avatar stacks used
+  // avatarHue()'s djb2 — so one login rendered as two different colours
+  // depending on which screen you were looking at.
   protected hueForUser(u: UserOnlineModel): number {
-    let h = 0
-    for (let i = 0; i < u.login.length; i++) h = (h * 31 + u.login.charCodeAt(i)) >>> 0
-    return h % 360
+    return avatarHue(u.login)
   }
 
   protected initials(u: UserOnlineModel): string {

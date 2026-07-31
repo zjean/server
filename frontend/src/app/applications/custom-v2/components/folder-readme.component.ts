@@ -216,7 +216,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         font-size: var(--si-text-8);
         /* --si-rose is v2's error colour (_tokens.scss, used the same way in
            action-sheet.component.ts). There is no --si-danger. */
-        color: var(--si-rose, #ff6c5d);
+        color: var(--si-rose-ink);
       }
       .fr__notice {
         font-size: var(--si-text-8);

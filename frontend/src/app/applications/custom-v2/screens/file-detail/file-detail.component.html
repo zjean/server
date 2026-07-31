@@ -10,7 +10,7 @@
         <div class="detail__identity-text">
           <div class="detail__name">{{ f.name }}</div>
           <div class="detail__meta">
-            {{ f.mime }}
+            <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
             @if (!f.isDir) {
               · {{ f.size | toBytes: 1 : true }}
             }
@@ -112,7 +112,7 @@
           <div class="detail__inspector-head-text">
             <div class="detail__inspector-name">{{ f.name }}</div>
             <div class="detail__inspector-meta">
-              {{ f.mime }}
+              <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
               @if (!f.isDir) {
                 · {{ f.size | toBytes: 1 : true }}
               }
@@ -140,7 +140,7 @@
                 <div class="kv-section__title" l10nTranslate>Properties</div>
                 <div class="kv-row">
                   <span l10nTranslate>Type</span>
-                  <span>{{ f.mime }}</span>
+                  <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
                 </div>
                 @if (!f.isDir) {
                   <div class="kv-row">

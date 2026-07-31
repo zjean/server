@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
+import { L10nTranslateDirective } from 'angular-l10n'
 import { CompressDialogComponent } from '../components/compress-dialog.component'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
@@ -47,7 +48,8 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LinkDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
-    BottomTabBarComponent
+    BottomTabBarComponent,
+    L10nTranslateDirective
   ]
 })
 export class LayoutV2Component implements OnInit {
@@ -56,6 +58,18 @@ export class LayoutV2Component implements OnInit {
 
   ngOnInit() {
     setUiVersion('v2')
+  }
+
+  // Skip link target. The sidebar puts ~20 focusable items between the top of
+  // the document and the content on every route, and there was no way past
+  // them from the keyboard. `main` carries tabindex="-1" so it can take focus
+  // programmatically without joining the tab order itself.
+  protected focusMainContent(): void {
+    if (typeof document === 'undefined') return
+    const main = document.getElementById('v2-main-content')
+    if (!main) return
+    main.focus()
+    main.scrollTop = 0
   }
 
   @HostListener('window:resize')

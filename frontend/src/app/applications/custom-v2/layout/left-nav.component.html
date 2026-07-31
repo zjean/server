@@ -87,7 +87,7 @@
     </button>
   </nav>
 } @else {
-  <nav class="left-nav">
+  <nav class="left-nav" [attr.aria-label]="'Navigation' | translate: locale.language">
     @if (showHeader()) {
       <header class="left-nav__header">
         <div class="left-nav__brand">

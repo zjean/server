@@ -254,7 +254,7 @@ const ROOT_SHARES: FileTree = {
         color: var(--si-fg-muted);
       }
       .tree-picker__error {
-        color: var(--si-rose, #c0392b);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-4);
         margin-top: var(--si-space-1);
       }

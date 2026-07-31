@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core'
 import { toSignal } from '@angular/core/rxjs-interop'
 import { NavigationEnd, Router, RouterLink } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslateDirective } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { filter, map, startWith } from 'rxjs/operators'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
@@ -27,9 +27,9 @@ interface TabEntry {
 @Component({
   selector: 'app-v2-bottom-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconV2Component, RouterLink, L10nTranslateDirective],
+  imports: [IconV2Component, RouterLink, L10nTranslateDirective, L10nTranslatePipe],
   template: `
-    <nav class="bb">
+    <nav class="bb" [attr.aria-label]="'Primary' | translate: locale.language">
       @for (t of tabs; track t.id) {
         <a [routerLink]="t.route" class="bb__tab" [class.bb__tab--active]="activeId() === t.id">
           <app-v2-icon [name]="t.icon" [size]="20" />

@@ -77,7 +77,7 @@
         </select>
         <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
       </span>
-      <app-v2-btn kind="primary" size="sm" [disabled]="savingLanguage()" (click)="saveLanguage()">
+      <app-v2-btn kind="secondary" size="sm" [disabled]="savingLanguage()" (click)="saveLanguage()">
         {{ 'Save' | translate: locale.language }}
       </app-v2-btn>
     </div>
@@ -105,7 +105,7 @@
         </select>
         <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
       </span>
-      <app-v2-btn kind="primary" size="sm" (click)="saveOnlineStatus()">
+      <app-v2-btn kind="secondary" size="sm" (click)="saveOnlineStatus()">
         {{ 'Save' | translate: locale.language }}
       </app-v2-btn>
     </div>

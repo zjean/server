@@ -1,106 +1,169 @@
-// Sync-In v2 design tokens — vibrant navy + peach.
-// Mood: a richer, deeper-blue navy (hue 255, chroma lifted to ~0.045–0.062 so
-// the surfaces read as real ocean-navy, not flat charcoal) with wider lightness
-// steps so the sidebar, canvas and cards separate by elevation. A single
-// confident peach brand accent (hue ~55), now more saturated for punch.
-// Text is brightened across the tier ladder so secondary metadata stays legible
-// rather than greying out. The semantic + file-type colours are tuned as one
-// vivid family (held at L≈0.80 with a consistent chroma envelope) so they read
-// as a coordinated set, not a scattered rainbow.
+// Sync-In v2 design tokens — deep navy + kraft.
+// Mood: navy is kept as the fork's identity (hue 262), but the surface chroma
+// is cut ~2× from the pre-#419 revision AND made to TAPER as lightness rises
+// (0.032 at bg0 → 0.014 at bg6). That taper is the load-bearing change: the old
+// ramp raised chroma with elevation (0.045 → 0.062), so a hovered row or a
+// selected file read as *more blue paint* rather than as more light. Real lit
+// surfaces desaturate as they brighten; this ramp now does too.
 //
-// Variable names are unchanged so every existing consumer across the v2 tree
-// keeps resolving — only the values shift.
+// ─── Where the floor sits, and why it is not lower ───────────────────────
+// The first cut of this ramp put bg0 at L 0.195 and --si-chrome-bg at L 0.155,
+// and the maintainer's verdict on it was "too dark". Measured against the
+// field, that was fair: bg0 sat only just above Material's recommended floor,
+// and --si-chrome-bg was BELOW every published floor — between GitHub's
+// `canvas.inset` (L 0.104, a recessed well, never a page background) and
+// Material's surface. (--si-chrome-bg is narrower in scope than its name
+// suggests: the desktop top bar paints bg0. It drives the MOBILE title bar,
+// the transfers popover and the logo tile.)
+//
+//   L 0.104  #010409  GitHub canvas.inset      (a well, not a background)
+//   L 0.176  #0D1117  GitHub dark canvas
+//   L 0.182  #121212  Material's recommended dark surface — the floor
+//   L 0.200  #161616  IBM Carbon Gray 100      (their darkest theme)
+//   L 0.208  #101826  OUR title bar
+//   L 0.250  #192231  OUR bg0
+//   L 0.269  #262626  IBM Carbon Gray 90       (their SOFTER dark theme)
+//   L 0.271  #22272e  GitHub dark-dimmed       (their SOFTER dark theme)
+//
+// The target is deliberately the *softer* of each vendor's two dark themes.
+// Both GitHub and IBM ship a second, lighter dark theme precisely because the
+// first one reads as too black for all-day use, and this is an app people keep
+// open all day. bg0 sits just under that pair; the title bar sits one step
+// below bg0 rather than in a hole of its own.
+//
+// Two consequences worth knowing before you touch these numbers:
+//   • Raising the floor SPENDS contrast. Every dependent token — the five text
+//     tiers, the focus ring, --si-line-strong, all five `-ink` tones — had to be
+//     re-solved against the lighter surfaces. Lowering a surface is cheap;
+//     raising one is not. Re-run the floors below if you move any of them.
+//   • Body text now lands at 14.60:1 on bg0. The commonly cited comfort band
+//     for off-white on dark grey is 12–15:1; above it, white text on near-black
+//     haloes for readers with astigmatism. The previous cut measured 16.70:1.
+//
+// The brand is kraft — a paper tone rather than a highlighter. It sits at
+// L 0.70, deliberately BELOW the text tiers, so a primary button no longer
+// out-shouts the filenames next to it (the old accent sat at L 0.85 against
+// body text at L 0.975 — 87% as bright as the words beside it).
 //
 // Scoped under .v2-root so nothing leaks into the classic layout.
 // hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the
 // fallback (fallbacks generated from the oklch values, sRGB-accurate).
 //
-// ─── Measured contrast, text tier × surface (#397) ───────────────────────
-// An earlier revision of this header claimed "all body text passes WCAG AA on
-// bg-0..bg-2". That was not true: fg-ghost on bg2 measured 4.33. Real numbers,
-// measured in-browser against the rendered app rather than derived by hand —
-// keep them here so the next change does not have to re-derive them.
+// ─── The brand needs FOUR values, not one ────────────────────────────────
+// One colour cannot be fill, ink and focus ring in dark mode. Collapsing them
+// is what broke two pills the first time this ramp was applied:
+//   • --si-accent      L 0.70  the FILL. Buttons, active-nav wash.
+//   • --si-accent-ink  L 0.83  brand used as TYPE on a tinted chip. Must climb
+//                              back up or it fails AA on its own soft fill.
+//   • --si-focus-ring  L 0.82  stays bright on purpose — SC 1.4.11 wants 3:1
+//                              against every surface a control can sit on.
+//   • --si-accent-fg   L 0.20  ink ON the fill (6.64:1).
+//
+// ─── Measured contrast, text tier × surface ──────────────────────────────
+// Computed in OKLab and confirmed by canvas readback against the rendered app.
+// Every cell improves on the previous revision. Keep these here so the next
+// change does not have to re-derive them.
 //
 //              bg0     bg1     bg2     bg3     bg4     bg5     bg6
-//   fg        15.51   13.89   12.14    9.73    7.25    5.35   [4.00]
-//   muted     12.30   11.02    9.63    7.72    5.75   [4.24]  [3.18]
-//   faint      9.86    8.83    7.97    6.35    4.76   [3.51]  [2.62]
-//   tertiary   8.05    7.21    6.30    5.05   [3.76]  [2.78]  [2.08]
-//   ghost      5.54    4.96   [4.33]  [3.47]  [2.59]  [1.91]  [1.43]
+//   fg        14.60   13.27   11.91   10.47    8.98    7.45    5.96
+//   muted     11.88   10.80    9.70    8.52    7.31    6.07    4.85
+//   faint      9.55    8.68    7.79    6.85    5.87    4.88   [3.90]
+//   tertiary   7.46    6.78    6.09    5.35    4.59   [3.81]  [3.04]
+//   ghost      5.05    4.59   [4.12]  [3.62]  [3.11]  [2.58]  [2.06]
 //
 //   [n] = below 4.5:1, i.e. not usable for normal-size text.
 //
-// Practical rules this implies:
-//   • bg5 and bg6 carry NO text tier at AA. They are fills, not text surfaces.
-//   • ghost is a bg0/bg1-only tier — separators and chrome, never body text on
-//     a card. It is not a placeholder colour (that was the 4.33 failure).
-//   • faint is the lowest tier that survives on bg4 (the selected-row surface),
-//     which is why it sits at L 0.84 rather than the 0.82 it had before.
+// Practical rules this implies. These are the FLOORS each tier was solved
+// against — if you move a surface, re-solve them:
+//   • bg5 carries fg / muted / faint, and bg6 carries fg / muted. The pre-#419
+//     ramp's "bg5 and bg6 are fills, never text surfaces" does not hold here.
+//   • ghost is a bg0/bg1-only tier (4.12 on bg2). Separators and chrome, never
+//     body text on a card, and never a placeholder colour.
+//   • tertiary is the lowest tier that survives on bg4, the selected row.
 
 .v2-root {
-  // ─── Backgrounds — richer navy (hue 255), wider elevation steps ──────
-  --si-bg0: #0f1f33; // page / outermost
-  --si-bg0: oklch(0.235 0.045 255);
-  --si-bg1: #152841; // sidebar / rails
-  --si-bg1: oklch(0.275 0.052 255);
-  --si-bg2: #1d324d; // content canvas / card
-  --si-bg2: oklch(0.315 0.056 255);
-  --si-bg3: #29415f; // card hover / input bg
-  --si-bg3: oklch(0.37 0.06 255);
-  --si-bg4: #3b5474; // selected row
-  --si-bg4: oklch(0.44 0.062 255);
-  --si-bg5: #4f6888; // active surface
-  --si-bg5: oklch(0.51 0.06 255);
-  --si-bg6: #647c9b; // lifted element
-  --si-bg6: oklch(0.58 0.055 255);
+  // ─── Backgrounds — deep navy (hue 262), chroma TAPERS as light rises ──
+  --si-bg0: #192231; // page / outermost
+  --si-bg0: oklch(0.25 0.032 262);
+  --si-bg1: #212938; // sidebar / rails
+  --si-bg1: oklch(0.281 0.029 262);
+  --si-bg2: #2a313e; // content canvas / card
+  --si-bg2: oklch(0.312 0.026 262);
+  --si-bg3: #333a46; // card hover / input bg
+  --si-bg3: oklch(0.346 0.023 262);
+  --si-bg4: #3e444e; // selected row
+  --si-bg4: oklch(0.384 0.02 262);
+  --si-bg5: #4a4f59; // active surface
+  --si-bg5: oklch(0.428 0.017 262);
+  --si-bg6: #595e66; // lifted element
+  --si-bg6: oklch(0.48 0.014 262);
 
   // ─── Lines — same navy hue family ────────────────────────────────────
-  --si-line: rgba(108, 130, 158, 0.55);
-  --si-line: oklch(0.6 0.05 255 / 0.55);
-  --si-line-strong: #7288a4;
-  --si-line-strong: oklch(0.62 0.05 255);
-  --si-line-bold: rgba(132, 154, 183, 0.7);
-  --si-line-bold: oklch(0.68 0.05 255 / 0.7);
+  // --si-line is decorative (card edges, separators) and carries no contrast
+  // floor. --si-line-strong is NOT decorative: it is aliased to --si-border
+  // below and draws the boundary of inputs, selects and dialogs, so WCAG 2.2
+  // SC 1.4.11 wants 3:1 against whatever they sit on. At L 0.66 it measures
+  // 5.15 (bg0) · 4.68 (bg1) · 4.20 (bg2) · 3.69 (bg3, the input fill) ·
+  // 3.17 (bg4) — every surface a bordered control actually occupies. It had to
+  // rise from L 0.63 when the surfaces came up. Before #419 it sat at L 0.62
+  // and came to 2.87 on bg3 and 2.14 on bg4, i.e. input borders missed the
+  // floor entirely; do not lower it back for looks — reach for --si-line
+  // instead when you want a quieter edge.
+  --si-line: rgba(135, 140, 150, 0.28);
+  --si-line: oklch(0.64 0.016 262 / 0.28);
+  --si-line-strong: #8d929c;
+  --si-line-strong: oklch(0.66 0.015 262);
+  --si-line-bold: rgba(135, 140, 150, 0.45);
+  --si-line-bold: oklch(0.64 0.016 262 / 0.45);
 
   // Alias — referenced by form controls, dialogs, context menus, inspector.
   --si-border: var(--si-line-strong);
 
-  // ─── Text — cool-white (hue 250) tier ladder, brightened ─────────────
-  --si-fg: #f1f8ff;
-  --si-fg: oklch(0.975 0.012 250);
-  --si-fg-muted: #d4dfeb;
-  --si-fg-muted: oklch(0.9 0.02 250);
-  // L 0.84, not 0.82: at 0.82 this tier measured 4.47 against bg4 (the
-  // selected-row surface), so selecting a row pushed its own metadata under AA.
-  --si-fg-faint: #c0ccd9;
-  --si-fg-faint: oklch(0.84 0.022 250);
-  --si-fg-tertiary: #aab6c2;
-  --si-fg-tertiary: oklch(0.77 0.022 250);
-  --si-fg-ghost: #8b96a5;
-  --si-fg-ghost: oklch(0.67 0.026 255);
+  // ─── Text — cool-white (hue 262) tier ladder ─────────────────────────
+  --si-fg: #f1f5fa;
+  --si-fg: oklch(0.968 0.008 262);
+  --si-fg-muted: #d9dee8;
+  --si-fg-muted: oklch(0.9 0.014 262);
+  --si-fg-faint: #c2c8d3;
+  --si-fg-faint: oklch(0.832 0.016 262);
+  --si-fg-tertiary: #abb1bc;
+  --si-fg-tertiary: oklch(0.76 0.017 262);
+  --si-fg-ghost: #8b919c;
+  --si-fg-ghost: oklch(0.655 0.018 262);
 
-  // ─── Accent — peach, single confident primary (hue ~55), vivid ───────
-  --si-accent: #ffb36b;
-  --si-accent: oklch(0.85 0.145 55);
-  --si-accent-soft: rgba(255, 179, 107, 0.16);
-  --si-accent-soft: oklch(0.85 0.145 55 / 0.16);
-  --si-accent-line: rgba(255, 179, 107, 0.45);
-  --si-accent-line: oklch(0.85 0.145 55 / 0.45);
-  --si-accent-deep: #ff8f52;
-  --si-accent-deep: oklch(0.78 0.17 45);
-  --si-accent-fg: #321707; // text on peach primary
-  --si-accent-fg: oklch(0.24 0.05 50);
-  --si-accent-hover: #ffc07a;
-  --si-accent-hover: oklch(0.88 0.135 58);
+  // ─── Accent — kraft, the brand as paper rather than highlighter ──────
+  // The FILL. Sits below the text tiers on purpose (see header).
+  --si-accent: #cd8f57;
+  --si-accent: oklch(0.7 0.105 62);
+  --si-accent-soft: rgba(205, 143, 87, 0.16);
+  --si-accent-soft: oklch(0.7 0.105 62 / 0.16);
+  --si-accent-line: rgba(205, 143, 87, 0.45);
+  --si-accent-line: oklch(0.7 0.105 62 / 0.45);
+  --si-accent-deep: #b97340;
+  --si-accent-deep: oklch(0.62 0.11 55);
+  --si-accent-fg: #221205; // ink ON the kraft fill — 6.64:1
+  --si-accent-fg: oklch(0.2 0.035 60);
+  --si-accent-hover: #e0a062;
+  --si-accent-hover: oklch(0.755 0.11 64);
+  // Brand used as TYPE on a soft/tinted fill. Must be lighter than the fill
+  // tone or it fails AA on its own chip: at the fill's L 0.70 an accent pill
+  // measured 3.96:1. On its own soft fill it now reads 5.90 (over bg2) ·
+  // 4.61 (over bg4, the tight one). Use this — never --si-accent — whenever
+  // the brand is the text colour.
+  --si-accent-ink: #fdb677;
+  --si-accent-ink: oklch(0.83 0.115 62);
 
   // ─── Focus ring (#396) ───────────────────────────────────────────────
   // Its own token rather than a raw --si-accent reference, so the ring can be
-  // retuned without disturbing the brand accent. Measured against every
-  // surface: 9.42 (bg0) · 8.44 (bg1) · 7.37 (bg2) · 5.91 (bg3) · 4.40 (bg4) ·
-  // 3.25 (bg5) · 2.43 (bg6) — WCAG 2.2 SC 1.4.11 wants 3:1, so it holds
-  // everywhere a control actually sits. bg6 is a lifted-element fill and hosts
-  // no focusable control; if that ever changes, this ring needs a second tone.
-  --si-focus-ring: var(--si-accent);
+  // retuned without disturbing the brand accent — which is exactly what this
+  // revision needed, since the accent moved down to L 0.70 and the ring must
+  // not follow it. Measured: 8.89 (bg0) · 8.08 (bg1) · 7.26 (bg2) · 6.38 (bg3) ·
+  // 5.47 (bg4) · 4.54 (bg5) · 3.63 (bg6) — WCAG 2.2 SC 1.4.11 wants 3:1, and
+  // unlike the pre-#419 ring (2.42 on bg6) this one clears it on every surface,
+  // including the lifted-element fill. bg6 is the tight one: it lost headroom
+  // when the floor came up, so do not lighten bg6 without re-checking here.
+  --si-focus-ring: #ffb066;
+  --si-focus-ring: oklch(0.82 0.13 62);
 
   // ─── Nav — alias of accent (one accent everywhere) ───────────────────
   --si-nav: var(--si-accent);
@@ -108,36 +171,61 @@
   --si-nav-line: var(--si-accent-line);
 
   // ─── Title bar — one step deeper than bg0, navy-coherent ─────────────
-  --si-chrome-bg: #061324;
-  --si-chrome-bg: oklch(0.185 0.04 255);
-  --si-chrome-bg-dark: #061324;
-  --si-chrome-bg-dark: oklch(0.185 0.04 255);
+  --si-chrome-bg: #101826;
+  --si-chrome-bg: oklch(0.208 0.03 262);
+  --si-chrome-bg-dark: #101826;
+  --si-chrome-bg-dark: oklch(0.208 0.03 262);
 
-  // ─── Semantic palette — vivid, L≈0.80 family ─────────────────────────
-  --si-green: #53e39c;
-  --si-green: oklch(0.82 0.16 158);
-  --si-green-soft: rgba(83, 227, 156, 0.2);
-  --si-green-soft: oklch(0.82 0.16 158 / 0.2);
+  // ─── Semantic palette — one L/C envelope ─────────────────────────────
+  //
+  // Each semantic ships as a PAIR: the base tone is the FILL, the `-ink` tone
+  // is the same hue used as TYPE. This is the same rule as --si-accent /
+  // --si-accent-ink, generalised, and it exists because a colour that reads
+  // correctly as a 18%-alpha wash is too dark to read as text sitting on that
+  // wash. Measured worst case across bg2/bg3/bg4 with the soft fill composited
+  // over each: 4.57:1 (green on bg4). The base tones alone land near 4.1 on the
+  // lighter cards — that is what the violet pill and the admin chip failed at.
+  // Violet and cyan are chroma-capped rather than lightness-capped: above
+  // C 0.075 / 0.080 at these lightnesses they fall outside sRGB.
+  //
+  // Rule of thumb: filling a shape → base. Drawing a glyph or a word → -ink.
+  // Chroma comes down from the previous 0.13–0.19 to 0.105–0.135. That single
+  // change is most of what separates "dashboard" from "professional": at the
+  // old saturation a table of status pills read as a strip of highlighter.
+  // Danger keeps the most chroma and the least lightness of the four on
+  // purpose — it has to feel heavier than its neighbours.
+  --si-green: #7fcc90;
+  --si-green: oklch(0.78 0.115 150);
+  --si-green-soft: rgba(127, 204, 144, 0.18);
+  --si-green-soft: oklch(0.78 0.115 150 / 0.18);
+  --si-green-ink: #97e1a6;
+  --si-green-ink: oklch(0.845 0.11 150);
 
   // "amber" is the brand-tint slot (always tied to the active brand colour).
-  // Aliased to accent so badges/avatars/folder-chips keep resolving to peach.
+  // Aliased to accent so badges/avatars/folder-chips keep resolving to kraft.
   --si-amber: var(--si-accent);
   --si-amber-soft: var(--si-accent-soft);
 
-  --si-rose: #ff6c5d;
-  --si-rose: oklch(0.72 0.19 28);
-  --si-rose-soft: rgba(255, 108, 93, 0.2);
-  --si-rose-soft: oklch(0.72 0.19 28 / 0.2);
+  --si-rose: #e67a73;
+  --si-rose: oklch(0.7 0.135 25);
+  --si-rose-soft: rgba(230, 122, 115, 0.18);
+  --si-rose-soft: oklch(0.7 0.135 25 / 0.18);
+  --si-rose-ink: #feb2ab;
+  --si-rose-ink: oklch(0.835 0.09 25);
 
-  --si-violet: #c89eff;
-  --si-violet: oklch(0.78 0.16 300);
-  --si-violet-soft: rgba(200, 158, 255, 0.22);
-  --si-violet-soft: oklch(0.78 0.16 300 / 0.22);
+  --si-violet: #b6a4ed;
+  --si-violet: oklch(0.76 0.105 295);
+  --si-violet-soft: rgba(182, 164, 237, 0.18);
+  --si-violet-soft: oklch(0.76 0.105 295 / 0.18);
+  --si-violet-ink: #d4c8fe;
+  --si-violet-ink: oklch(0.86 0.075 295);
 
-  --si-cyan: #6dcfff;
-  --si-cyan: oklch(0.82 0.13 240);
-  --si-cyan-soft: rgba(109, 207, 255, 0.22);
-  --si-cyan-soft: oklch(0.82 0.13 240 / 0.22);
+  --si-cyan: #6fc2f1;
+  --si-cyan: oklch(0.78 0.105 235);
+  --si-cyan-soft: rgba(111, 194, 241, 0.18);
+  --si-cyan-soft: oklch(0.78 0.105 235 / 0.18);
+  --si-cyan-ink: #9ddafe;
+  --si-cyan-ink: oklch(0.86 0.08 235);
 
   // ─── Type system — Geist sans/display, JetBrains Mono ────────────────
   --si-sans: 'Geist Variable', 'Inter Variable', system-ui, -apple-system, sans-serif;
@@ -254,61 +342,77 @@
   --si-shadow3: 0 24px 60px rgba(0, 0, 0, 0.5), 0 6px 18px rgba(0, 0, 0, 0.38);
   --si-shadow3: 0 1px 0 oklch(1 0 0 / 0.06) inset, 0 24px 60px oklch(0 0 0 / 0.5);
 
-  // ─── File-type color coding — vivid, one family ──────────────────────
-  //   image → violet, doc → blue, sheet → green, folder/deck → peach (brand),
-  //   pdf/video → coral. Audio/code/archive kept in-family.
-  --fc-image-bg: rgba(205, 166, 255, 0.2);
-  --fc-image-bg: oklch(0.8 0.15 300 / 0.2);
-  --fc-image-fg: #cda6ff;
-  --fc-image-fg: oklch(0.8 0.15 300);
+  // ─── File-type colour coding — FOUR families, not eight hues ─────────
+  // The previous revision gave ten file types eight distinct hues. Its own
+  // comment called them "one family"; measured, they spanned 300° of the wheel
+  // at near-maximum chroma for their lightness, and a mixed directory rendered
+  // as a rainbow.
+  //
+  // Colour now encodes WHAT KIND OF THING the file is — the axis you actually
+  // scan a directory along — rather than which vendor produced it, which the
+  // glyph shape and the extension in the name already say. Four families, one
+  // L/C envelope (L≈0.75, C 0.09):
+  //
+  //   documents  doc · pdf              → blue 235
+  //   data       sheet                  → green 150
+  //   media      image · video · audio  → violet 295
+  //   containers folder · archive · code · deck → kraft 62 (the brand)
+  //
+  // Containers take the brand deliberately: a folder is the thing you most
+  // often want to hit in a listing, so the one warm tone on the screen marks
+  // it. The per-type variable names are unchanged, so no consumer churns.
+  --fc-doc-bg: rgba(118, 187, 226, 0.16);
+  --fc-doc-bg: oklch(0.76 0.09 235 / 0.16);
+  --fc-doc-fg: #76bbe2;
+  --fc-doc-fg: oklch(0.76 0.09 235);
 
-  --fc-video-bg: rgba(255, 138, 122, 0.2);
-  --fc-video-bg: oklch(0.8 0.18 28 / 0.2);
-  --fc-video-fg: #ff8a7a;
-  --fc-video-fg: oklch(0.8 0.18 28);
+  --fc-pdf-bg: rgba(118, 187, 226, 0.16);
+  --fc-pdf-bg: oklch(0.76 0.09 235 / 0.16);
+  --fc-pdf-fg: #76bbe2;
+  --fc-pdf-fg: oklch(0.76 0.09 235);
 
-  --fc-doc-bg: rgba(102, 200, 255, 0.2);
-  --fc-doc-bg: oklch(0.8 0.13 240 / 0.2);
-  --fc-doc-fg: #66c8ff;
-  --fc-doc-fg: oklch(0.8 0.13 240);
+  --fc-sheet-bg: rgba(135, 194, 147, 0.16);
+  --fc-sheet-bg: oklch(0.76 0.09 150 / 0.16);
+  --fc-sheet-fg: #87c293;
+  --fc-sheet-fg: oklch(0.76 0.09 150);
 
-  --fc-sheet-bg: rgba(82, 219, 151, 0.2);
-  --fc-sheet-bg: oklch(0.8 0.155 158 / 0.2);
-  --fc-sheet-fg: #52db97;
-  --fc-sheet-fg: oklch(0.8 0.155 158);
+  --fc-image-bg: rgba(178, 163, 225, 0.16);
+  --fc-image-bg: oklch(0.75 0.09 295 / 0.16);
+  --fc-image-fg: #b2a3e1;
+  --fc-image-fg: oklch(0.75 0.09 295);
 
-  --fc-pdf-bg: rgba(255, 132, 116, 0.2);
-  --fc-pdf-bg: oklch(0.78 0.18 28 / 0.2);
-  --fc-pdf-fg: #ff8474;
-  --fc-pdf-fg: oklch(0.78 0.18 28);
+  --fc-video-bg: rgba(178, 163, 225, 0.16);
+  --fc-video-bg: oklch(0.75 0.09 295 / 0.16);
+  --fc-video-fg: #b2a3e1;
+  --fc-video-fg: oklch(0.75 0.09 295);
 
-  --fc-deck-bg: rgba(255, 179, 107, 0.22);
-  --fc-deck-bg: oklch(0.85 0.145 55 / 0.22);
-  --fc-deck-fg: #ffb36b;
-  --fc-deck-fg: oklch(0.85 0.145 55);
+  --fc-audio-bg: rgba(178, 163, 225, 0.16);
+  --fc-audio-bg: oklch(0.75 0.09 295 / 0.16);
+  --fc-audio-fg: #b2a3e1;
+  --fc-audio-fg: oklch(0.75 0.09 295);
 
-  --fc-folder-bg: rgba(255, 179, 107, 0.22);
-  --fc-folder-bg: oklch(0.85 0.145 55 / 0.22);
-  --fc-folder-fg: #ffb36b;
-  --fc-folder-fg: oklch(0.85 0.145 55);
+  --fc-folder-bg: rgba(212, 158, 111, 0.18);
+  --fc-folder-bg: oklch(0.74 0.09 62 / 0.18);
+  --fc-folder-fg: #d49e6f;
+  --fc-folder-fg: oklch(0.74 0.09 62);
 
-  --fc-code-bg: rgba(109, 207, 255, 0.2);
-  --fc-code-bg: oklch(0.82 0.13 240 / 0.2);
-  --fc-code-fg: #6dcfff;
-  --fc-code-fg: oklch(0.82 0.13 240);
+  --fc-archive-bg: rgba(212, 158, 111, 0.16);
+  --fc-archive-bg: oklch(0.74 0.09 62 / 0.16);
+  --fc-archive-fg: #d49e6f;
+  --fc-archive-fg: oklch(0.74 0.09 62);
 
-  --fc-audio-bg: rgba(255, 157, 234, 0.2);
-  --fc-audio-bg: oklch(0.82 0.15 335 / 0.2);
-  --fc-audio-fg: #ff9dea;
-  --fc-audio-fg: oklch(0.82 0.15 335);
+  --fc-code-bg: rgba(212, 158, 111, 0.16);
+  --fc-code-bg: oklch(0.74 0.09 62 / 0.16);
+  --fc-code-fg: #d49e6f;
+  --fc-code-fg: oklch(0.74 0.09 62);
 
-  --fc-archive-bg: rgba(177, 183, 253, 0.2);
-  --fc-archive-bg: oklch(0.8 0.1 280 / 0.2);
-  --fc-archive-fg: #b1b7fd;
-  --fc-archive-fg: oklch(0.8 0.1 280);
+  --fc-deck-bg: rgba(212, 158, 111, 0.16);
+  --fc-deck-bg: oklch(0.74 0.09 62 / 0.16);
+  --fc-deck-fg: #d49e6f;
+  --fc-deck-fg: oklch(0.74 0.09 62);
 
-  --fc-default-bg: rgba(255, 255, 255, 0.06);
-  --fc-default-bg: oklch(1 0 0 / 0.06);
-  --fc-default-fg: #adb9c5;
-  --fc-default-fg: oklch(0.78 0.022 250);
+  --fc-default-bg: rgba(255, 255, 255, 0.05);
+  --fc-default-bg: oklch(1 0 0 / 0.05);
+  --fc-default-fg: #abb1bc;
+  --fc-default-fg: oklch(0.76 0.017 262);
 }

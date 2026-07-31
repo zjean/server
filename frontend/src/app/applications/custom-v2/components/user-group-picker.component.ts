@@ -80,7 +80,7 @@ export interface PickedMember {
         outline: none;
       }
       .ugp__input:focus {
-        border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .ugp__results {
         position: absolute;

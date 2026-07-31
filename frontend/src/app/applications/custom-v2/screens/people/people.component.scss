@@ -325,3 +325,35 @@
     white-space: nowrap;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Mobile: stack the master and detail panes instead of sitting them side by
+// side. At 390px the 340px-wide list left the detail pane ~50px, and its own
+// min-content width pushed the pair out to 487px — past the viewport, with no
+// scroll container of its own, so the overflow escaped to the layout's main
+// element and scrolled the entire page sideways.
+//
+// Stacking rather than swapping panes is deliberate: a swap needs a "no
+// selection" route state and a back affordance, which this screen does not
+// have. Stacking keeps both panes reachable with the markup as it stands.
+// ---------------------------------------------------------------------------
+:host-context(.layout-v2--mobile) {
+  .people {
+    flex-direction: column;
+  }
+
+  .people__list {
+    width: auto;
+    max-height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid var(--si-line);
+  }
+
+  .people__detail {
+    padding: var(--si-space-9);
+  }
+
+  .people__detail-empty {
+    padding: var(--si-space-12) var(--si-space-6);
+  }
+}

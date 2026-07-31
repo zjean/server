@@ -1,3 +1,6 @@
+<!-- A button, not an <a href="#…">: the app uses hash routing, so a fragment
+     href would overwrite the current route instead of moving focus. -->
+<button type="button" class="layout-v2__skip" (click)="focusMainContent()" l10nTranslate>Skip to content</button>
 @if (layoutV2.isMobile()) {
   <app-v2-title-bar>
     <app-v2-transfers-popover titleBarRight />
@@ -13,7 +16,7 @@
       aria-hidden="true"
     ></div>
   }
-  <main class="layout-v2__content">
+  <main class="layout-v2__content" id="v2-main-content" tabindex="-1">
     @if (!layoutV2.isMobile()) {
       <app-v2-top-bar />
     } @else {

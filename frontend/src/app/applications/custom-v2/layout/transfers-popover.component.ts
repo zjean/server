@@ -62,7 +62,7 @@ export class TransfersPopoverComponent {
 
   protected readonly pillColor = computed(() => {
     if (this.totalError() > 0) return 'rose' as const
-    if (this.totalActive() > 0) return 'warm' as const
+    if (this.totalActive() > 0) return 'amber' as const
     return 'green' as const
   })
 

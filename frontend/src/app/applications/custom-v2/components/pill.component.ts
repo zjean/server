@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core'
 
-export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet' | 'cyan' | 'warm'
+// 'indigo' and 'warm' are gone. Both resolved to the same accent values as
+// 'amber', so the kit rendered three differently-named chips that were pixel
+// identical — an API promising a distinction it could not deliver. 'amber' is
+// the surviving name for the brand-tinted pill.
+export type PillColor = 'gray' | 'green' | 'amber' | 'rose' | 'violet' | 'cyan'
 
 @Component({
   selector: 'app-v2-pill',
@@ -29,43 +33,35 @@ export type PillColor = 'gray' | 'indigo' | 'green' | 'amber' | 'rose' | 'violet
         color: var(--si-fg-muted);
         border-color: var(--si-line);
       }
-      .pill--indigo {
-        // Legacy "indigo" pill name — under the Stack palette it resolves
-        // to the amber accent, since nav and accent have collapsed to one
-        // hue. Kept as an alias so existing call sites don't churn.
-        background: var(--si-accent-soft);
-        color: var(--si-accent);
-        border-color: var(--si-accent-line);
-      }
+      // Every variant now resolves through tokens. The previous revision wrote
+      // literal oklch() for the text and border of five of them — at hues that
+      // did not match the tokens they sat on (amber text at hue 75 over an
+      // accent fill at hue 55, cyan text at 210 over a fill at 240) — so the
+      // pills drifted out of the palette and two of them failed AA.
       .pill--green {
         background: var(--si-green-soft);
-        color: oklch(0.86 0.13 155);
-        border-color: oklch(0.76 0.15 155 / 0.3);
+        color: var(--si-green-ink);
+        border-color: var(--si-green-soft);
       }
       .pill--amber {
         background: var(--si-amber-soft);
-        color: oklch(0.9 0.11 75);
-        border-color: oklch(0.82 0.14 75 / 0.3);
+        color: var(--si-accent-ink);
+        border-color: var(--si-accent-line);
       }
       .pill--rose {
         background: var(--si-rose-soft);
-        color: oklch(0.82 0.15 20);
-        border-color: oklch(0.72 0.17 20 / 0.3);
+        color: var(--si-rose-ink);
+        border-color: var(--si-rose-soft);
       }
       .pill--violet {
         background: var(--si-violet-soft);
-        color: oklch(0.86 0.14 305);
-        border-color: oklch(0.75 0.16 305 / 0.3);
+        color: var(--si-violet-ink);
+        border-color: var(--si-violet-soft);
       }
       .pill--cyan {
         background: var(--si-cyan-soft);
-        color: oklch(0.88 0.1 210);
-        border-color: oklch(0.78 0.13 210 / 0.3);
-      }
-      .pill--warm {
-        background: var(--si-accent-soft);
-        color: var(--si-accent);
-        border-color: var(--si-accent-line);
+        color: var(--si-cyan-ink);
+        border-color: var(--si-cyan-soft);
       }
     `
   ]

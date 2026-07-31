@@ -1,5 +1,5 @@
 @if (tabs().length > 0) {
-  <nav class="dock-rail">
+  <nav class="dock-rail" [attr.aria-label]="'File panels' | translate: locale.language">
     @for (t of tabs(); track t.id) {
       <button
         type="button"

@@ -211,13 +211,18 @@ function emptyDraft(): GroupDraft {
         align-items: baseline;
         gap: var(--si-space-4);
       }
+      // Page title at the app's page-hero step. These four admin screens sat at
+      // --si-text-13 / 700 while the seven other top-level pages use
+      // --si-text-15 / 500 — same rank in the hierarchy, three different
+      // renderings. Matched to the majority convention.
       .ag__title {
         margin: 0;
-        font-size: var(--si-text-13);
-        font-weight: 700;
-        color: var(--si-fg);
-        letter-spacing: -0.3px;
         font-family: var(--si-display);
+        font-size: var(--si-text-15);
+        font-weight: 500;
+        color: var(--si-fg);
+        letter-spacing: -0.018em;
+        line-height: 1.15;
       }
       .ag__count {
         font-size: var(--si-text-4);

@@ -100,10 +100,19 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
       .btn--outline:hover:not(:disabled) {
         background: var(--si-bg3);
       }
+      // Deliberately a soft tint, never a filled rose — a destructive action
+      // must not carry the same visual weight as the primary next to it. That
+      // was already true; what was not is that these three values were literal
+      // oklch at hue 20 while the rose token lives at hue 25, so the variant
+      // drifted out of the palette. Now routed through the tokens: rose-ink on
+      // rose-soft measures 5.59:1 over bg2.
       .btn--danger {
-        background: oklch(0.7 0.17 20 / 0.16);
-        color: oklch(0.88 0.15 20);
-        border-color: oklch(0.7 0.17 20 / 0.35);
+        background: var(--si-rose-soft);
+        color: var(--si-rose-ink);
+        border-color: color-mix(in srgb, var(--si-rose) 35%, transparent);
+      }
+      .btn--danger:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--si-rose) 26%, transparent);
       }
     `
   ]
