@@ -34,7 +34,12 @@
                 <div class="space-card__description">{{ s.description }}</div>
               }
             </div>
-            <app-v2-icon-btn iconName="more" [size]="22" class="space-card__more" />
+            <app-v2-icon-btn
+              iconName="more"
+              [size]="22"
+              class="space-card__more"
+              [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }"
+            />
           </div>
 
           @if (s.storageQuota && s.storageQuota > 0) {

@@ -232,5 +232,8 @@
   "Primary": "Primary",
   "Navigation": "Navigation",
   "Try again": "Try again",
-  "Download file": "Download file"
+  "Download file": "Download file",
+  "Close transfers": "Close transfers",
+  "v2_more_actions_for": "More actions for {{ name }}",
+  "v2_open_name": "Open {{ name }}"
 }

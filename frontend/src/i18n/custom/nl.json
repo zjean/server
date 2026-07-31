@@ -232,5 +232,8 @@
   "Primary": "Hoofdnavigatie",
   "Navigation": "Navigatie",
   "Try again": "Opnieuw proberen",
-  "Download file": "Bestand downloaden"
+  "Download file": "Bestand downloaden",
+  "Close transfers": "Overdrachten sluiten",
+  "v2_more_actions_for": "Meer acties voor {{ name }}",
+  "v2_open_name": "{{ name }} openen"
 }

@@ -14,6 +14,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
       [style.height.px]="size"
       [style.color]="color"
       [attr.title]="title"
+      [attr.aria-label]="resolvedAriaLabel"
       [disabled]="disabled"
     >
       <app-v2-icon [name]="iconName" [size]="resolvedIconSize" />
@@ -61,9 +62,19 @@ export class IconButtonComponent {
   @Input() active = false
   @Input() color: string | null = null
   @Input() title: string | null = null
+  // The button's content is one <svg>, so there is no text node to name it —
+  // without this (or a `title`) it announces as a bare "button". Defaults to
+  // `title` because every call site that has one already spells the action out
+  // there, and a tooltip is not an accessible name: AT exposes `title` only as
+  // a last-resort fallback, and never at all once aria-label is present.
+  @Input() ariaLabel: string | null = null
   @Input() disabled = false
 
   get resolvedIconSize(): number {
     return this.iconSize ?? Math.round(this.size * 0.52)
+  }
+
+  get resolvedAriaLabel(): string | null {
+    return this.ariaLabel ?? this.title
   }
 }

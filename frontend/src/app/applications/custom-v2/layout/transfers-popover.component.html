@@ -21,7 +21,13 @@
       <span class="transfers-popover__summary">
         {{ 'nb_active_nb_done' | translate: locale.language : { active: totalActive(), done: totalDone() } }}
       </span>
-      <app-v2-icon-btn iconName="x" [size]="22" color="rgba(255,255,255,0.75)" (click)="toggle()" />
+      <app-v2-icon-btn
+        iconName="x"
+        [size]="22"
+        color="rgba(255,255,255,0.75)"
+        [ariaLabel]="'Close transfers' | translate: locale.language"
+        (click)="toggle()"
+      />
     </header>
 
     <div class="transfers-popover__body">
