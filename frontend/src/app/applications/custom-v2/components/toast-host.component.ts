@@ -51,16 +51,16 @@ import { ToastService } from './toast.service'
         animation: toast-in 140ms ease-out;
       }
       .toast--success {
-        border-color: color-mix(in srgb, var(--si-green, #22c55e) 35%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-green) 35%, var(--si-border));
       }
       .toast--success app-v2-icon {
-        color: var(--si-green, #22c55e);
+        color: var(--si-green);
       }
       .toast--error {
-        border-color: color-mix(in srgb, var(--si-rose, #c0392b) 35%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-rose) 35%, var(--si-border));
       }
       .toast--error app-v2-icon {
-        color: var(--si-rose, #c0392b);
+        color: var(--si-rose-ink);
       }
       .toast__msg {
         flex: 1 1 auto;

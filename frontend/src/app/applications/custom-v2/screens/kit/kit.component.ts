@@ -123,19 +123,21 @@ export class KitComponent implements OnInit {
 
   readonly fileTypes: FileGlyphType[] = ['image', 'video', 'doc', 'sheet', 'deck', 'pdf', 'code', 'audio', 'archive', 'folder', 'default']
 
-  readonly pillColors: PillColor[] = ['gray', 'indigo', 'green', 'amber', 'rose', 'violet', 'cyan', 'warm']
+  readonly pillColors: PillColor[] = ['gray', 'green', 'amber', 'rose', 'violet', 'cyan']
 
   readonly buttonKinds: ButtonKind[] = ['primary', 'secondary', 'ghost', 'outline', 'danger']
   readonly buttonSizes: ButtonSize[] = ['xs', 'sm', 'md', 'lg']
 
-  readonly soloAvatar: AvatarUser = { initials: 'JW', hue: 55 }
-  readonly ringedAvatar: AvatarUser = { initials: 'AM', hue: 265 }
+  // Hues drawn from AVATAR_HUES so the kit shows the real set rather than
+  // arbitrary values the generator can never produce.
+  readonly soloAvatar: AvatarUser = { initials: 'JW', hue: 62 }
+  readonly ringedAvatar: AvatarUser = { initials: 'AM', hue: 268 }
 
   readonly stackUsers: AvatarStackUser[] = [
-    { id: 1, initials: 'JW', hue: 55 },
-    { id: 2, initials: 'AM', hue: 265 },
-    { id: 3, initials: 'RL', hue: 155 },
-    { id: 4, initials: 'TK', hue: 305 },
-    { id: 5, initials: 'NB', hue: 20 }
+    { id: 1, initials: 'JW', hue: 62 },
+    { id: 2, initials: 'AM', hue: 268 },
+    { id: 3, initials: 'RL', hue: 150 },
+    { id: 4, initials: 'TK', hue: 295 },
+    { id: 5, initials: 'NB', hue: 22 }
   ]
 }

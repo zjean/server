@@ -197,6 +197,11 @@
     display: inline-flex;
     gap: var(--si-space-4);
     margin-left: auto;
+    // Wraps rather than overflowing: at 390px this row ran 3px past the
+    // viewport, clipping the right edge of the Regenerate button.
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: var(--si-space-3);
   }
 
   &__form {

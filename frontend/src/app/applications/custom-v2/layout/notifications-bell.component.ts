@@ -118,8 +118,12 @@ import { ToastService } from '../components/toast.service'
         height: 15px;
         padding: 0 var(--si-space-2);
         border-radius: var(--si-r4);
-        background: var(--si-rose, oklch(0.72 0.17 20));
-        color: #fff;
+        background: var(--si-rose);
+        // Dark ink, NOT #fff. White on the rose fill measured 2.78:1 at this
+        // size and weight — the app's only WCAG AA text failure, and it was on
+        // every route. Ink at L 0.18 on the same fill reads 6.69:1, so the
+        // badge keeps its colour and becomes legible.
+        color: oklch(0.18 0.04 25);
         font-size: var(--si-text-1);
         font-weight: 700;
         font-family: var(--si-mono);

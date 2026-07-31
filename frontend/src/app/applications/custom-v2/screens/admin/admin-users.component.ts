@@ -277,19 +277,33 @@ function emptyDraft(isGuest: boolean): UserDraft {
         display: flex;
         align-items: center;
         gap: var(--si-space-6);
+        // At 390px this header measured 702px wide and had no scroll container
+        // of its own, so the overflow escaped to main.layout-v2__content and
+        // the WHOLE page scrolled sideways — title and table with it. Wrapping
+        // keeps it inside the column. The admin Tools table on the same
+        // viewport already does the contained-scroller version correctly.
+        :host-context(.layout-v2--mobile) & {
+          flex-wrap: wrap;
+          row-gap: var(--si-space-4);
+        }
       }
       .au__title-wrap {
         display: flex;
         align-items: baseline;
         gap: var(--si-space-4);
       }
+      // Page title at the app's page-hero step. These four admin screens sat at
+      // --si-text-13 / 700 while the seven other top-level pages use
+      // --si-text-15 / 500 — same rank in the hierarchy, three different
+      // renderings. Matched to the majority convention.
       .au__title {
         margin: 0;
-        font-size: var(--si-text-13);
-        font-weight: 700;
-        color: var(--si-fg);
-        letter-spacing: -0.3px;
         font-family: var(--si-display);
+        font-size: var(--si-text-15);
+        font-weight: 500;
+        color: var(--si-fg);
+        letter-spacing: -0.018em;
+        line-height: 1.15;
       }
       .au__count {
         font-size: var(--si-text-4);
@@ -301,6 +315,11 @@ function emptyDraft(isGuest: boolean): UserDraft {
         display: flex;
         align-items: center;
         gap: var(--si-space-4);
+        :host-context(.layout-v2--mobile) & {
+          margin-left: 0;
+          flex-wrap: wrap;
+          row-gap: var(--si-space-4);
+        }
       }
       .au__segmented {
         display: inline-flex;
@@ -389,6 +408,11 @@ function emptyDraft(isGuest: boolean): UserDraft {
       .au__search {
         width: 220px;
         height: 30px;
+        :host-context(.layout-v2--mobile) & {
+          width: auto;
+          flex: 1 1 140px;
+          min-width: 0;
+        }
         padding: 0 var(--si-space-5);
         background: var(--si-bg3);
         border: 1px solid var(--si-line);
@@ -416,6 +440,14 @@ function emptyDraft(isGuest: boolean): UserDraft {
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
         overflow: hidden;
+        // Six grid columns do not fit a phone. Scroll them inside the table
+        // rather than letting the row actions escape to x=453 and drag the
+        // whole page sideways — the same contained-scroller the admin Tools
+        // table uses. min-width keeps the columns legible while scrolling
+        // instead of crushing them to unreadable slivers.
+        :host-context(.layout-v2--mobile) & {
+          overflow-x: auto;
+        }
       }
       .au-row {
         display: grid;
@@ -426,6 +458,11 @@ function emptyDraft(isGuest: boolean): UserDraft {
         font-size: var(--si-text-7);
         color: var(--si-fg);
         border-bottom: 1px solid var(--si-line);
+        // Gives the scroller above something to scroll. Without a floor the
+        // fr columns just collapse to fit and the cells become unreadable.
+        :host-context(.layout-v2--mobile) & {
+          min-width: 640px;
+        }
 
         &:last-child {
           border-bottom: none;
@@ -464,13 +501,16 @@ function emptyDraft(isGuest: boolean): UserDraft {
         letter-spacing: 0.2px;
         text-transform: uppercase;
 
+        // Brand and semantic used as TYPE on their own soft fill, so both take
+        // the -ink tone. --si-nav resolves to the accent FILL (L 0.70), which
+        // measured 4.35:1 here; the ink tone clears AA on every card surface.
         &--admin {
           background: var(--si-nav-soft);
-          color: var(--si-nav);
+          color: var(--si-accent-ink);
         }
         &--active {
-          background: var(--si-green-soft, rgba(80, 180, 120, 0.2));
-          color: oklch(0.86 0.13 155);
+          background: var(--si-green-soft);
+          color: var(--si-green-ink);
         }
         &--inactive {
           background: var(--si-bg4);

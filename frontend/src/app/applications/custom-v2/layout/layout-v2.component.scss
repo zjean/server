@@ -5,6 +5,32 @@
   min-height: 0;
 }
 
+// Skip link. Off-screen until focused, then pinned top-left over the chrome.
+// Not `display: none` — that would take it out of the tab order, which is the
+// one thing it exists to be in.
+.layout-v2__skip {
+  // fixed, not absolute: :host is not a positioned ancestor, and this button
+  // is a sibling of (not inside) .layout-v2__body, which is.
+  position: fixed;
+  left: var(--si-space-4);
+  top: var(--si-space-4);
+  z-index: var(--si-z-toast);
+  transform: translateY(-200%);
+  padding: var(--si-space-4) var(--si-space-8);
+  border: 1px solid var(--si-accent);
+  border-radius: var(--si-r1);
+  background: var(--si-accent);
+  color: var(--si-accent-fg);
+  font-family: var(--si-sans);
+  font-size: var(--si-text-8);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:focus-visible {
+    transform: translateY(0);
+  }
+}
+
 .layout-v2__body {
   flex: 1 1 auto;
   display: flex;
@@ -132,6 +158,18 @@
   .spaces__toolbar,
   .shared__toolbar,
   .trash__toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--si-space-4);
+  }
+
+  // ...and so do the rows INSIDE those toolbars. Wrapping only the toolbar was
+  // not enough: the file-browser header is two nested `.personal__row` flex
+  // rows, each `nowrap`, so the bottom row (filter + view-mode switch) stayed
+  // one line at 356px inside a 342px column and overflowed 42px to the right.
+  // Where a dock-rail is present that overflow lands underneath it — the rail
+  // is an opaque flex sibling painted after the content — which hid the
+  // Gallery view button and the overflow menu completely at 390px.
+  .personal__row {
     flex-wrap: wrap;
     row-gap: var(--si-space-4);
   }

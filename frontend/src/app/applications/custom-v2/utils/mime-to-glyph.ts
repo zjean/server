@@ -74,6 +74,81 @@ export function isArchiveMime(mime: string | null | undefined): boolean {
   return ARCHIVE_MIMES.has(normalizeMime(mime))
 }
 
+// Human-readable name for a MIME type.
+//
+// The file-detail header printed `f.mime` verbatim: 71 characters of machine
+// string in the slot where a label belongs, truncated mid-word. Worse, the
+// browse API's stored form replaces the first '/' with '-', so what reached the
+// user ('application-vnd.openxmlformats-...') was not even a valid MIME type.
+//
+// Exact matches first, then family prefixes, then a last-resort tidy-up of the
+// subtype so an unknown mime still reads as words rather than as a path.
+const MIME_NAMES: Record<string, string> = {
+  'application/pdf': 'PDF document',
+  'application/msword': 'Word document',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word document',
+  'application/vnd.oasis.opendocument.text': 'OpenDocument text',
+  'application/vnd.ms-excel': 'Excel spreadsheet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel spreadsheet',
+  'application/vnd.oasis.opendocument.spreadsheet': 'OpenDocument spreadsheet',
+  'application/vnd.ms-powerpoint': 'PowerPoint presentation',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PowerPoint presentation',
+  'application/vnd.oasis.opendocument.presentation': 'OpenDocument presentation',
+  'application/json': 'JSON file',
+  'application/xml': 'XML file',
+  'application/rtf': 'Rich text document',
+  'application/zip': 'ZIP archive',
+  'application/x-7z-compressed': '7z archive',
+  'application/x-tar': 'TAR archive',
+  'application/x-rar-compressed': 'RAR archive',
+  'application/gzip': 'Gzip archive',
+  'application/x-bzip2': 'Bzip2 archive',
+  'text/plain': 'Text file',
+  'text/markdown': 'Markdown file',
+  'text/csv': 'CSV file',
+  'text/html': 'HTML file',
+  'text/css': 'Stylesheet',
+  'inode/directory': 'Folder',
+  folder: 'Folder'
+}
+
+const MIME_FAMILIES: [string, string][] = [
+  ['image/', 'image'],
+  ['video/', 'video'],
+  ['audio/', 'audio'],
+  ['font/', 'font']
+]
+
+export function mimeLabel(mime: string | null | undefined): string {
+  const m = normalizeMime(mime)
+  if (!m) return 'Unknown type'
+
+  const exact = MIME_NAMES[m]
+  if (exact) return exact
+
+  const [type, subtype = ''] = m.split('/')
+
+  // image/png -> "PNG image", video/quicktime -> "QuickTime video"
+  for (const [prefix, noun] of MIME_FAMILIES) {
+    if (!m.startsWith(prefix)) continue
+    const short = subtype.replace(/^x-/, '').replace(/\+.*$/, '')
+    return short ? `${short.toUpperCase()} ${noun}` : `${type} file`
+  }
+
+  if (!subtype) return `${type} file`
+  // Strip vendor/suffix noise, then take the most specific segment:
+  // 'vnd.oasis.opendocument.chart' -> 'chart'
+  const cleaned = subtype
+    .replace(/^(vnd|x|prs)[.-]/, '')
+    .replace(/\+.*$/, '')
+    .split('.')
+    .pop()!
+    .replace(/[-_]/g, ' ')
+    .trim()
+  if (!cleaned) return `${type} file`
+  return `${cleaned.charAt(0).toUpperCase()}${cleaned.slice(1)} file`
+}
+
 // Map a MIME type to one of the v2 FileGlyph categories.
 // Unknown mimes fall through to 'default', which the FileGlyph renders as a
 // neutral document glyph.

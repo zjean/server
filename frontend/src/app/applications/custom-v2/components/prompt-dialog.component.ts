@@ -90,11 +90,11 @@ import { PromptDialogService } from './prompt-dialog.service'
         transition: border-color 120ms ease;
       }
       .prompt-dialog__input:focus {
-        border-color: color-mix(in srgb, var(--si-accent, #3b82f6) 60%, var(--si-border));
+        border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
       }
       .prompt-dialog__error {
         font-size: var(--si-text-4);
-        color: var(--si-rose, #c0392b);
+        color: var(--si-rose-ink);
         margin-bottom: var(--si-space-5);
         margin-top: var(--si-space-2);
       }

@@ -38,7 +38,7 @@ import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
 import { isFileWriteable } from '../../utils/file-writeable'
-import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeToGlyph } from '../../utils/mime-to-glyph'
+import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeLabel, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { isOfficeEditorEnabled, isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
 import { OfficeViewComponent } from '../../preview/office-view.component'
@@ -137,6 +137,11 @@ export class FileDetailComponent implements OnInit {
     if (!f) return 'default' as const
     return f.isDir ? 'folder' : mimeToGlyph(f.mime)
   })
+
+  // Exposed to the template so the three places that used to print the raw
+  // stored mime can show a human label instead, keeping the machine string in
+  // a title attribute for anyone who wants it.
+  protected readonly mimeLabel = mimeLabel
 
   protected readonly previewUrl = computed(() => {
     const p = this.currentPath()

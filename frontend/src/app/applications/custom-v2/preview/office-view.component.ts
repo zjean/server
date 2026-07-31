@@ -7,7 +7,10 @@ import { FileProps } from '@sync-in-server/backend/src/applications/files/interf
 import { EURO_OFFICE_APP_LOCK, ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
 import type { OnlyOfficeReqDto } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.dtos'
 import { API_ONLY_OFFICE_SETTINGS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.routes'
+import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { OnlyOfficeComponent } from '../../files/components/utils/only-office.component'
+import { IconV2Component } from '../icons/icon-v2.component'
 import type { FileModel } from '../../files/models/file.model'
 import { StoreService } from '../../../store/store.service'
 import type { OnlyOfficeHistoryEditor, OnlyOfficeHistoryHooks } from '../models/only-office-history.model'
@@ -27,16 +30,25 @@ import { buildFileModelStub } from '../utils/file-model-stub'
 @Component({
   selector: 'app-v2-preview-office-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [OnlyOfficeComponent, L10nTranslateDirective, L10nTranslatePipe],
+  imports: [OnlyOfficeComponent, IconV2Component, L10nTranslateDirective, L10nTranslatePipe],
   template: `
     @if (loading()) {
       <div class="office-view__state" l10nTranslate>Loading editor…</div>
     } @else if (error(); as err) {
       <div class="office-view__error">
-        <div>{{ err | translate: locale.language : { editor: officeEditorName } }}</div>
-        @if (errorDetail(); as detail) {
-          <div class="office-view__error-detail">{{ detail }}</div>
-        }
+        <div class="office-view__error-card">
+          <div class="office-view__error-icon">
+            <app-v2-icon name="info" [size]="22" />
+          </div>
+          <div class="office-view__error-title">{{ err | translate: locale.language : { editor: officeEditorName } }}</div>
+          @if (errorDetail(); as detail) {
+            <div class="office-view__error-detail">{{ detail }}</div>
+          }
+          <div class="office-view__error-actions">
+            <button type="button" class="office-view__error-btn office-view__error-btn--primary" (click)="retry()" l10nTranslate>Try again</button>
+            <a class="office-view__error-btn" [href]="downloadUrl()" download l10nTranslate>Download file</a>
+          </div>
+        </div>
       </div>
     } @else if (config(); as cfg) {
       <app-files-onlyoffice-document
@@ -59,18 +71,92 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         height: 100%;
         background: var(--si-bg1);
       }
-      .office-view__state,
-      .office-view__error {
+      .office-view__state {
         padding: var(--si-space-11);
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
+      // Was two bare sentences top-left in an otherwise empty full-height
+      // canvas, with no icon, no card and no way forward — the least finished
+      // surface in v2, and a reachable one (any docserver outage lands here).
+      // Now it matches the shared empty-state's visual language and offers the
+      // two actions that actually exist at this point: retry, or take the file.
       .office-view__error {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--si-space-11);
+      }
+      .office-view__error-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 56px var(--si-space-10);
+        max-width: 440px;
+        background: var(--si-bg3);
+        border: 1px dashed var(--si-line-strong);
+        border-radius: var(--si-r3);
+      }
+      .office-view__error-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 24px;
+        background: var(--si-bg4);
+        color: var(--si-rose-ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: var(--si-space-7);
+        border: 1px solid var(--si-line);
+      }
+      .office-view__error-title {
+        font-family: var(--si-display);
+        font-size: var(--si-text-11);
+        font-weight: 500;
         color: var(--si-fg);
+        letter-spacing: -0.1px;
+        max-width: 36ch;
       }
       .office-view__error-detail {
         margin-top: var(--si-space-3);
+        font-size: var(--si-text-7);
         color: var(--si-fg-muted);
+        max-width: 40ch;
+      }
+      .office-view__error-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--si-space-4);
+        margin-top: var(--si-space-9);
+      }
+      .office-view__error-btn {
+        display: inline-flex;
+        align-items: center;
+        height: 30px;
+        padding: 0 var(--si-space-7);
+        border-radius: var(--si-r1);
+        border: 1px solid var(--si-border);
+        background: transparent;
+        color: var(--si-fg);
+        font: inherit;
+        font-size: var(--si-text-8);
+        text-decoration: none;
+        cursor: pointer;
+        transition: background var(--si-dur-2) var(--si-ease);
+        &:hover {
+          background: var(--si-bg4);
+        }
+        &--primary {
+          background: var(--si-accent);
+          border-color: var(--si-accent);
+          color: var(--si-accent-fg);
+          &:hover {
+            background: var(--si-accent-hover);
+          }
+        }
       }
       .office-view__doc {
         display: block;
@@ -94,6 +180,23 @@ export class OfficeViewComponent implements OnDestroy {
 
   protected readonly config = signal<OnlyOfficeReqDto | null>(null)
   protected readonly loading = signal(false)
+
+  // Direct file URL, so the error card can offer "Download file" — the one
+  // thing that still works when the document server is unreachable.
+  protected readonly downloadUrl = computed(() => {
+    const p = this.path()
+    return p ? `${API_FILES_OPERATION}/${encodeUrl(p)}` : ''
+  })
+
+  // Re-runs the settings fetch that failed. loadSettings() already resets
+  // error/errorDetail/config and re-acquires the lock, so this needs no
+  // teardown of its own.
+  protected retry(): void {
+    const p = this.path()
+    const f = this.file()
+    if (!p || !f) return
+    this.loadSettings(p, f)
+  }
   protected readonly error = signal<string | null>(null)
   // Untranslated technical detail shown under the localized headline. Only the
   // editor-load path sets it; see onLoadError for why it is not a i18n key.

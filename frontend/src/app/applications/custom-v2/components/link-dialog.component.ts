@@ -204,7 +204,7 @@ interface FormState {
       }
       .ld__error {
         font-size: var(--si-text-5);
-        color: var(--si-rose, #c0392b);
+        color: var(--si-rose-ink);
         margin-top: var(--si-space-3);
       }
       .ld__actions {

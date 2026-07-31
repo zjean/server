@@ -300,7 +300,7 @@ interface RowMember extends ShareMemberInput {
       }
       .sd__error {
         font-size: var(--si-text-5);
-        color: var(--si-rose, #c0392b);
+        color: var(--si-rose-ink);
         margin-bottom: var(--si-space-5);
       }
       .sd__actions {
