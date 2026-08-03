@@ -700,6 +700,27 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     return [SPACE_REPOSITORY.FILES, this.repository.alias(), ...segs, file.name].join('/')
   }
 
+  /**
+   * The addressable, repository-qualified path of a row in the CURRENT listing —
+   * what `app-v2-file-thumb` needs to build its thumbnail URL (#428).
+   *
+   * Keys on `loadedDirPath()` rather than the route, for the same reason the
+   * folder-readme banner does: a thumbnail describes a row that is already on
+   * screen, and `loadFiles()` deliberately leaves the previous listing visible
+   * while the next one loads — so between a navigation and its response the
+   * route names the new folder while `files()` still holds the old rows. Using
+   * `buildFullPath` here would request `<new folder>/<old row's name>` for that
+   * window. Returns '' before the first listing lands (and after a failed one),
+   * which the component reads as "no address yet" and renders the glyph.
+   *
+   * The repository prefix comes in through `loadedDirPath`, which is written from
+   * `repository.alias()`, so both screens get their own answer without an `if`.
+   */
+  protected thumbPath(file: FileProps): string {
+    const dir = this.loadedDirPath()
+    return dir ? `${dir}/${file.name}` : ''
+  }
+
   protected onFilterInput(event: Event): void {
     this.filter.set((event.target as HTMLInputElement).value)
   }
