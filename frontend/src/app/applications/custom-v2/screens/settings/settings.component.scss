@@ -224,6 +224,62 @@
     color: var(--si-rose);
   }
 
+  // A standalone labelled control, outside &__form. Without the width clamp the
+  // flex column stretches the <select> across the whole 820px page column.
+  // Deliberately a modifier, not a change to &__field: the password fields rely
+  // on &__field stretching to their container's 420px.
+  &__field--compact {
+    align-items: flex-start;
+    width: fit-content;
+  }
+
+  &__hint {
+    font-size: var(--si-text-4);
+    color: var(--si-fg-faint);
+    max-width: 420px;
+  }
+
+  &__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--si-space-4);
+    font-size: var(--si-text-7);
+    color: var(--si-fg);
+    cursor: pointer;
+    width: fit-content;
+
+    input {
+      accent-color: var(--si-accent);
+      width: 15px;
+      height: 15px;
+      margin: 0;
+      cursor: pointer;
+    }
+  }
+
+  &__webdav {
+    display: flex;
+    align-items: center;
+    gap: var(--si-space-5);
+    // Long origins must not push the copy button off-screen; the URL truncates
+    // and the button keeps its intrinsic width.
+    flex-wrap: wrap;
+  }
+
+  &__webdav-url {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-5);
+    color: var(--si-fg);
+    background: var(--si-bg3);
+    border: 1px solid var(--si-line);
+    border-radius: 6px;
+    padding: var(--si-space-3) var(--si-space-5);
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &__form-row {
     display: inline-flex;
     align-items: center;

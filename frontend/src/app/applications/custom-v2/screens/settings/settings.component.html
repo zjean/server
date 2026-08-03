@@ -52,6 +52,17 @@
         </div>
       </div>
     </section>
+
+    <section class="settings__section">
+      <div class="settings__section-title" l10nTranslate>WebDAV</div>
+      <div class="settings__webdav">
+        <code class="settings__webdav-url" [title]="webdavUrl">{{ webdavUrl }}</code>
+        <app-v2-btn kind="outline" size="sm" icon="copy" (click)="copyWebdavUrl()">
+          {{ 'v2_link_copy' | translate: locale.language }}
+        </app-v2-btn>
+      </div>
+      <div class="settings__hint" l10nTranslate>Use this address to connect a WebDAV client.</div>
+    </section>
   }
 
   <section class="settings__section">
@@ -109,6 +120,47 @@
         {{ 'Save' | translate: locale.language }}
       </app-v2-btn>
     </div>
+  </section>
+
+  <section class="settings__section">
+    <div class="settings__section-title" l10nTranslate>Preferences</div>
+
+    @if (showEditorPreference()) {
+      <label class="settings__field settings__field--compact">
+        <span l10nTranslate>Document editor</span>
+        <!-- [ngValue], not [value] — see the Language note above. -->
+        <span class="settings__select">
+          <select class="settings__input" [ngModel]="editorPreference()" (ngModelChange)="updateEditorPreference($event)">
+            <option [ngValue]="null">{{ 'Ask Me' | translate: locale.language }}</option>
+            @for (e of editorOptions(); track e.value) {
+              <option [ngValue]="e.value">{{ e.label }}</option>
+            }
+          </select>
+          <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
+        </span>
+      </label>
+      <div class="settings__hint" l10nTranslate>Used when both editors support the file type.</div>
+    }
+
+    <label class="settings__field settings__field--compact">
+      <span l10nTranslate>Notification</span>
+      <span class="settings__select">
+        <select class="settings__input" [ngModel]="notification()" (ngModelChange)="updateNotification($event)">
+          @for (n of notifications; track n; let i = $index) {
+            <option [ngValue]="i">{{ n | translate: locale.language }}</option>
+          }
+        </select>
+        <app-v2-icon name="chevDown" [size]="12" class="settings__select-chev" />
+      </span>
+    </label>
+
+    @if (user()?.isUser) {
+      <label class="settings__toggle">
+        <input type="checkbox" [checked]="storageIndexing()" (change)="updateStorageIndexing($any($event.target).checked)" />
+        <span l10nTranslate>Full-text search</span>
+      </label>
+      <div class="settings__hint" l10nTranslate>Enable content indexation for personal files.</div>
+    }
   </section>
 
   <section class="settings__section">
