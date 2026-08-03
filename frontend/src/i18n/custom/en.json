@@ -235,5 +235,13 @@
   "Download file": "Download file",
   "Close transfers": "Close transfers",
   "v2_more_actions_for": "More actions for {{ name }}",
-  "v2_open_name": "Open {{ name }}"
+  "v2_open_name": "Open {{ name }}",
+  "v2_remove_from_group": "Remove <b>{{ name }}</b> from <b>{{ group }}</b>?",
+  "v2_leave_group": "Leave group <b>{{ name }}</b>? You will no longer see it or its members.",
+  "My groups": "My groups",
+  "Filter members…": "Filter members…",
+  "Search users…": "Search users…",
+  "Search for people to add to this group.": "Search for people to add to this group.",
+  "You do not belong to any group yet.": "You do not belong to any group yet.",
+  "Failed to load groups": "Failed to load groups"
 }

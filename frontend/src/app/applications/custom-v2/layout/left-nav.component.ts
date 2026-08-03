@@ -92,6 +92,10 @@ export class LeftNavComponent {
   ]
 
   protected readonly peopleRoute = `/${V2_PATH}/${V2_ROUTES.PEOPLE}`
+  // Group MEMBERSHIP (classic's /user/groups), not the admin group registry —
+  // it sits beside People because both are directory screens, and unlike
+  // adminEntries it needs no role.
+  protected readonly groupsRoute = `/${V2_PATH}/${V2_ROUTES.GROUPS}`
   protected readonly trashRoute = `/${V2_PATH}/${V2_ROUTES.TRASH}`
   protected readonly settingsRoute = `/${V2_PATH}/${V2_ROUTES.SETTINGS}`
   // Sidebar header (wordmark) is desktop-only — mobile already shows the

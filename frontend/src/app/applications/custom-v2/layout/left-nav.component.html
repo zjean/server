@@ -58,6 +58,15 @@
       <app-v2-icon name="person" [size]="17" />
     </a>
     <a
+      [routerLink]="groupsRoute"
+      routerLinkActive="left-nav__rail-item--active"
+      class="left-nav__rail-item"
+      [title]="'My groups' | translate: locale.language"
+      [attr.aria-label]="'My groups' | translate: locale.language"
+    >
+      <app-v2-icon name="people" [size]="17" />
+    </a>
+    <a
       [routerLink]="trashRoute"
       routerLinkActive="left-nav__rail-item--active"
       class="left-nav__rail-item"
@@ -178,6 +187,10 @@
     <a [routerLink]="peopleRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
       <app-v2-icon name="person" [size]="15" />
       <span class="left-nav__label" l10nTranslate>People</span>
+    </a>
+    <a [routerLink]="groupsRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
+      <app-v2-icon name="people" [size]="15" />
+      <span class="left-nav__label" l10nTranslate>My groups</span>
     </a>
     <a [routerLink]="trashRoute" routerLinkActive="left-nav__item--active" class="left-nav__item">
       <app-v2-icon name="trash" [size]="15" />

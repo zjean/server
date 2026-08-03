@@ -235,5 +235,13 @@
   "Download file": "Bestand downloaden",
   "Close transfers": "Overdrachten sluiten",
   "v2_more_actions_for": "Meer acties voor {{ name }}",
-  "v2_open_name": "{{ name }} openen"
+  "v2_open_name": "{{ name }} openen",
+  "v2_remove_from_group": "<b>{{ name }}</b> uit <b>{{ group }}</b> verwijderen?",
+  "v2_leave_group": "Groep <b>{{ name }}</b> verlaten? Je ziet de groep en haar leden daarna niet meer.",
+  "My groups": "Mijn groepen",
+  "Filter members…": "Filter leden…",
+  "Search users…": "Zoek gebruikers…",
+  "Search for people to add to this group.": "Zoek personen om aan deze groep toe te voegen.",
+  "You do not belong to any group yet.": "Je bent nog geen lid van een groep.",
+  "Failed to load groups": "Laden van groepen mislukt"
 }
