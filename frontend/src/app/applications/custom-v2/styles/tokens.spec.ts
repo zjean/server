@@ -112,9 +112,7 @@ describe('custom-v2 accent discipline', () => {
   // (--si-accent-ink, 7.13:1 on the tint); brand-as-ink-on-the-fill is
   // --si-accent-fg. The bare token is a FILL and nothing else.
   it('never uses the accent fill as a text colour', () => {
-    const offenders = declarations
-      .filter((d) => /^(?!.*-color:)color:\s*var\(--si-(accent|nav)\)\s*;/.test(d.text))
-      .map((d) => `${d.file}:${d.line}`)
+    const offenders = declarations.filter((d) => /^(?!.*-color:)color:\s*var\(--si-(accent|nav)\)\s*;/.test(d.text)).map((d) => `${d.file}:${d.line}`)
     expect(offenders, 'use --si-accent-ink for brand-as-type, or --si-accent-fg on the fill').toEqual([])
   })
 

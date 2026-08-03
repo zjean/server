@@ -246,6 +246,76 @@ Measured surface: **~70 real occurrences across ~12 files** — chiefly `rgba(0,
 
 ---
 
+### 2.13 What Phase 0 actually settled — read this before Phase 1
+
+Shipped in **#432**. The phase came in roughly as scoped, but it found one whole
+class of defect the plan did not anticipate, and two of the design's own values
+failed their own floors. Do not re-derive any of this.
+
+**The plan's biggest omission: the accent hue swap broke 24 declarations that
+were correct under kraft.** §2.5 caught this pattern in one direction — the
+`--si-amber` alias — and missed that it runs the other way too. A warm accent had
+been standing in for "gold" and for "readable brand text", and cobalt is neither:
+
+- **21 sites used the accent fill as type.** accent-600 measures 3.48:1 on the
+  content plane and ~3.4 on its own tint, so it fails as text; kraft at L 0.70
+  passed, which is exactly why they existed. All lifted to accent-400. Measured in
+  situ afterwards, the active nav label reads **7.41:1**.
+- **The favourite star was `--si-accent`** because the accent used to be gold.
+  Under cobalt a star both breaks "cobalt means action" and contradicts the
+  design's amber favourite badge. → `--si-amber-ink`.
+- **Space identity marks were cobalt.** The design reserves the accent for the
+  action beside them: "Periwinkle marks Space identity so cobalt stays reserved
+  for Create space." → `--si-violet-soft` / `--si-violet`.
+
+The lesson for the remaining phases: **when a token's hue changes, grep its
+consumers and ask what each one was using it FOR**, not whether it still
+compiles. Neither the build nor the type system sees any of this. `tokens.spec.ts`
+now pins all three shapes.
+
+**Two design values failed their own stated floors** (both now deviations in
+`_tokens.scss`, both pinned by tests):
+
+- The focus ring's `rgba(76,126,243,0.6)` composites to **2.55 → 2.03** across the
+  seven surfaces and fails SC 1.4.11's 3:1 on every one. §2.3's deviation was
+  written about the *implementation* (outline vs box-shadow) and had not measured
+  the colour. Opaque accent-500 reads 5.09 → 3.28.
+- `--si-line-strong` as `--si-border` measures **1.69** on the input fill, which
+  §2.10 predicted. Resolved with `#8A857D` — the design's own text-tertiary tone,
+  so no invented colour. Note *why* this matters more here than in the design: the
+  design's inputs are fill-only, but that fill is 1.10:1 against the content
+  plane, so it identifies nothing on its own.
+
+**Three things done here that the plan had not scoped**, each because it was a
+colour problem rather than a structural one:
+
+- **Avatars.** They generated a per-user oklch hue, i.e. a login could put a
+  colour on screen that no designer chose. Now six in-palette tones with
+  per-tone measured ink (`AVATAR_TONE_COUNT`, `avatarTone()`), which also fixed a
+  pre-existing split where `people.component.html` built its own ramp at a
+  different L and C from the avatar component's — one person rendered as two.
+- **The logo.** A kraft→navy conic gradient has no counterpart in a one-accent
+  system, so the mark changed with the palette: a solid cobalt disc with a
+  punched-out centre, per the design's own masthead.
+- **`fonts.scss`.** `v2.scss` was already 1.38 kB into the `anyComponentStyle`
+  warning band on develop; ~9 kB of font CSS pushed it past the error. The
+  `@font-face` rules are their own `styleUrls` entry now — @font-face is global
+  regardless, so the old co-location implied a scoping that was never real.
+
+**Corrections to this plan's own text:** `--si-fg-faint` is *aliased* to
+`--si-fg-muted`, not codemodded — the alias is what delivers the visual change,
+and the ~150-site rename is cosmetic. Same for `--si-bg4` → `--si-bg3`. Both
+renames belong in Phase 1. The raw-colour count was 63 by declaration-prefixed
+grep; the test found more (template attributes, `accent-color`, entity
+false-positives), so trust the test, not a grep.
+
+**Phase 1 inherits two things already done:** the secondary button is filled
+surface-3 with no border (it read as a disabled outline next to the filled
+primary, and only looked right against the old ramp), and the avatar tones above.
+It still owes the two alias retirements and the `--si-ease` call-site migration.
+
+---
+
 ## 3. Phase 1 — primitives, verified in `_kit`
 
 One PR, `feat/v2-design-primitives`. `screens/kit/` is the in-repo component gallery and is the right place to land and verify all of this before a single screen consumes it.
