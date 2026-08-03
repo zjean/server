@@ -82,7 +82,7 @@
   // tie resolved only by source order. Now explicit: scrim on the band, panel one
   // step over it (#405 item 2).
   z-index: calc(var(--si-z-panel) + 1);
-  background: rgba(0, 0, 0, 0.32);
+  background: var(--si-scrim);
   animation: layout-v2-backdrop-in 160ms ease-out;
 }
 
@@ -115,7 +115,7 @@
     z-index: calc(var(--si-z-panel) + 2);
     transform: translateX(110%);
     transition: transform 200ms ease-out;
-    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.18);
+    box-shadow: var(--si-shadow2);
 
     &--open {
       transform: translateX(0);
@@ -136,7 +136,7 @@
     // Mobile sidebar scrim. Was 39, one below the sidebar's 40 — the same
     // backdrop/surface pair, spelled as a decrement instead of an increment.
     z-index: calc(var(--si-z-panel) + 1);
-    background: rgba(0, 0, 0, 0.32);
+    background: var(--si-scrim);
     animation: layout-v2-backdrop-in 160ms ease-out;
 
     &--right {

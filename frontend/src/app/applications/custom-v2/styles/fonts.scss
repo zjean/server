@@ -1,0 +1,33 @@
+// The v2 webfont @font-face declarations, and nothing else.
+//
+// Split out of v2.scss rather than imported by it, for two reasons that point the
+// same way:
+//
+//   • @font-face is inherently global. A browser parses it into the document's
+//     font registry; there is no such thing as a component-scoped one. Keeping
+//     these next to the scoped `.v2-root { … }` rules implied a scoping that was
+//     never real. What IS scoped is the family BINDING — `--si-sans` and
+//     `font-family` live on .v2-root, so classic routes keep their own stack.
+//   • Angular measures `anyComponentStyle` per stylesheet, and v2.scss is
+//     effectively a global sheet wearing a component's clothes
+//     (`encapsulation: None`). Carrying ~9 kB of font declarations inside it put
+//     it over the 14 kB error budget the moment the token system grew. Splitting
+//     the two concerns puts each comfortably under, without weakening a budget
+//     that every other component in the app relies on.
+//
+// Listed as its own entry in LayoutV2Component's `styleUrls`, so it still only
+// loads on the /v2 route tree.
+//
+// Font files themselves are fetched lazily per glyph — declaring a face costs the
+// CSS above and nothing more until something needs it.
+//
+// Only the mono weights the design uses are here (400 and 500). The design never
+// asks for mono 600, and each extra weight is a file.
+
+@import '@fontsource-variable/ibm-plex-sans';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+// Inter stays in the fallback chain so a brief load lag on Plex does not flash
+// system-ui. It is also still the classic UI's face.
+@import '@fontsource-variable/inter';

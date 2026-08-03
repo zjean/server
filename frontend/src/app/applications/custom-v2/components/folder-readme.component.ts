@@ -190,7 +190,7 @@ const FOLDER_README_MAX_BYTES = 256 * 1024
         color: var(--si-fg-muted);
         /* --si-mono is the token defined in _tokens.scss. There is no
            --si-font-mono. */
-        font-family: var(--si-mono, ui-monospace, monospace);
+        font-family: var(--si-mono);
       }
       .fr__spacer {
         flex: 1 1 auto;

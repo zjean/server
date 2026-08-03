@@ -123,7 +123,7 @@ export interface GroupRef {
       .gmd__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .gmd {
@@ -136,7 +136,7 @@ export interface GroupRef {
         z-index: calc(var(--si-z-dialog) + 1);
         background: var(--si-bg2);
         border-left: 1px solid var(--si-line);
-        box-shadow: -12px 0 28px rgba(0, 0, 0, 0.25);
+        box-shadow: var(--si-shadow3);
         display: flex;
         flex-direction: column;
         min-height: 0;

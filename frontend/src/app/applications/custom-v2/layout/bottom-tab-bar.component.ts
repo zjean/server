@@ -83,7 +83,7 @@ interface TabEntry {
       }
       .bb__tab--active,
       .bb__tab--active:hover {
-        color: var(--si-accent);
+        color: var(--si-accent-ink);
       }
       .bb__label {
         line-height: 1;

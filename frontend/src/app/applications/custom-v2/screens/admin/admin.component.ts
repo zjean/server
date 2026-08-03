@@ -130,7 +130,7 @@ interface AdminCard {
         justify-content: center;
         border-radius: var(--si-r2);
         background: var(--si-nav-soft);
-        color: var(--si-nav);
+        color: var(--si-accent-ink);
         flex-shrink: 0;
       }
       .admin-card__body {

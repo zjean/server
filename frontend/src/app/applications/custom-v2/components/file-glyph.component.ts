@@ -44,7 +44,6 @@ const TYPE_TO_ICON: Record<FileGlyphType, IconV2Name> = {
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
       }
     `
   ]

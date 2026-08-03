@@ -7,7 +7,7 @@ import { FilesService } from '../../../files/services/files.service'
 import { FileRecentModel } from '../../../files/models/file-recent.model'
 import { StoreService } from '../../../../store/store.service'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
-import { AvatarComponent, avatarHue, avatarInitials, AvatarUser } from '../../components/avatar.component'
+import { AvatarComponent, avatarTone, avatarInitials, AvatarUser } from '../../components/avatar.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
@@ -121,7 +121,7 @@ export class RecentsComponent implements OnInit {
     const seed = author?.login ?? author?.fullName ?? ''
     return {
       initials: avatarInitials(author?.fullName ?? author?.login ?? '?'),
-      hue: avatarHue(seed),
+      tone: avatarTone(seed),
       imageUrl: author?.avatarUrl ?? null
     }
   }

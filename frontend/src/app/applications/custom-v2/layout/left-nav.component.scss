@@ -14,7 +14,7 @@
   left: 48px; // sits immediately to the right of the persistent rail
   bottom: 0;
   z-index: calc(var(--si-z-panel) + 3);
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--si-shadow2);
 
   .left-nav {
     height: 100%;
@@ -37,7 +37,7 @@
   z-index: calc(var(--si-z-panel) + 2);
   transform: translateX(-100%);
   transition: transform 200ms ease-out;
-  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--si-shadow2);
 
   &.left-nav--open {
     transform: translateX(0);
@@ -160,7 +160,7 @@
     height: 1px;
     // Faint hairline, not the heavy --si-line rule — groups are mainly
     // separated by the uppercase section labels + spacing.
-    background: oklch(0.7 0.04 255 / 0.16);
+    background: var(--si-line);
     margin: var(--si-space-4) var(--si-space-5);
   }
 
@@ -313,7 +313,7 @@
     transition: color var(--si-dur-2) var(--si-ease);
 
     &:hover {
-      color: var(--si-accent);
+      color: var(--si-accent-ink);
     }
   }
 
@@ -348,7 +348,7 @@
 
     &--active {
       background: var(--si-accent-soft);
-      color: var(--si-accent);
+      color: var(--si-accent-ink);
     }
   }
 

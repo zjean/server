@@ -130,14 +130,14 @@ export class KitComponent implements OnInit {
 
   // Hues drawn from AVATAR_HUES so the kit shows the real set rather than
   // arbitrary values the generator can never produce.
-  readonly soloAvatar: AvatarUser = { initials: 'JW', hue: 62 }
-  readonly ringedAvatar: AvatarUser = { initials: 'AM', hue: 268 }
+  readonly soloAvatar: AvatarUser = { initials: 'JW', tone: 1 }
+  readonly ringedAvatar: AvatarUser = { initials: 'AM', tone: 3 }
 
   readonly stackUsers: AvatarStackUser[] = [
-    { id: 1, initials: 'JW', hue: 62 },
-    { id: 2, initials: 'AM', hue: 268 },
-    { id: 3, initials: 'RL', hue: 150 },
-    { id: 4, initials: 'TK', hue: 295 },
-    { id: 5, initials: 'NB', hue: 22 }
+    { id: 1, initials: 'JW', tone: 1 },
+    { id: 2, initials: 'AM', tone: 2 },
+    { id: 3, initials: 'RL', tone: 3 },
+    { id: 4, initials: 'TK', tone: 4 },
+    { id: 5, initials: 'NB', tone: 5 }
   ]
 }

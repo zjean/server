@@ -27,8 +27,8 @@
         >
           <span
             class="people-row__avatar"
-            [style.background]="'linear-gradient(135deg, oklch(0.55 0.14 ' + hueForUser(u) + '), oklch(0.38 0.12 ' + hueForUser(u) + '))'"
-            [style.color]="'oklch(0.96 0.03 ' + hueForUser(u) + ')'"
+            [style.background]="toneVarFor(u)"
+            [style.color]="toneVarFor(u, '-fg')"
           >
             @if (u.avatarUrl) {
               <img [src]="u.avatarUrl" alt="" />
@@ -60,8 +60,8 @@
         <div class="people__detail-head">
           <span
             class="people__detail-avatar"
-            [style.background]="'linear-gradient(135deg, oklch(0.55 0.14 ' + hueForUser(u) + '), oklch(0.38 0.12 ' + hueForUser(u) + '))'"
-            [style.color]="'oklch(0.96 0.03 ' + hueForUser(u) + ')'"
+            [style.background]="toneVarFor(u)"
+            [style.color]="toneVarFor(u, '-fg')"
           >
             @if (u.avatarUrl) {
               <img [src]="u.avatarUrl" alt="" />

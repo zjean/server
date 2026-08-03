@@ -1,244 +1,296 @@
-// Sync-In v2 design tokens — deep navy + kraft.
-// Mood: navy is kept as the fork's identity (hue 262), but the surface chroma
-// is cut ~2× from the pre-#419 revision AND made to TAPER as lightness rises
-// (0.032 at bg0 → 0.014 at bg6). That taper is the load-bearing change: the old
-// ramp raised chroma with elevation (0.045 → 0.062), so a hovered row or a
-// selected file read as *more blue paint* rather than as more light. Real lit
-// surfaces desaturate as they brighten; this ramp now does too.
+// Sync-In v2 design tokens — warm neutral + cobalt.
 //
-// ─── Where the floor sits, and why it is not lower ───────────────────────
-// The first cut of this ramp put bg0 at L 0.195 and --si-chrome-bg at L 0.155,
-// and the maintainer's verdict on it was "too dark". Measured against the
-// field, that was fair: bg0 sat only just above Material's recommended floor,
-// and --si-chrome-bg was BELOW every published floor — between GitHub's
-// `canvas.inset` (L 0.104, a recessed well, never a page background) and
-// Material's surface. (--si-chrome-bg is narrower in scope than its name
-// suggests: the desktop top bar paints bg0. It drives the MOBILE title bar,
-// the transfers popover and the logo tile.)
+// ─── Authority ───────────────────────────────────────────────────────────
+// These values come from the Claude Design project "Sync-In Design System v1.0"
+// (`4d96b99d-7b88-4478-bd57-7bfc169b5b0a`), adopted in full per the plan at
+// docs/plans/2026-08-03-v2-design-system-adoption-plan.md. That document is the
+// authority on WHY; this file is the authority on WHAT.
 //
-//   L 0.104  #010409  GitHub canvas.inset      (a well, not a background)
-//   L 0.176  #0D1117  GitHub dark canvas
-//   L 0.182  #121212  Material's recommended dark surface — the floor
-//   L 0.200  #161616  IBM Carbon Gray 100      (their darkest theme)
-//   L 0.208  #101826  OUR title bar
-//   L 0.250  #192231  OUR bg0
-//   L 0.269  #262626  IBM Carbon Gray 90       (their SOFTER dark theme)
-//   L 0.271  #22272e  GitHub dark-dimmed       (their SOFTER dark theme)
+// This replaces the deep-navy + kraft ramp of #419 and reverses two of #398's
+// calls (the 6→7px control radius, and the numeric motion durations). Those were
+// good decisions against the old system; they are simply not this system.
 //
-// The target is deliberately the *softer* of each vendor's two dark themes.
-// Both GitHub and IBM ship a second, lighter dark theme precisely because the
-// first one reads as too black for all-day use, and this is an app people keep
-// open all day. bg0 sits just under that pair; the title bar sits one step
-// below bg0 rather than in a hole of its own.
+// The design's premise, in one line: a warm neutral base — five deliberate
+// elevations, no vertical rules — with a single cobalt accent that only ever
+// means "this is the thing you act on". Type does the hierarchy work: one weight
+// for names, monospace for anything a machine produced.
 //
-// Two consequences worth knowing before you touch these numbers:
-//   • Raising the floor SPENDS contrast. Every dependent token — the five text
-//     tiers, the focus ring, --si-line-strong, all five `-ink` tones — had to be
-//     re-solved against the lighter surfaces. Lowering a surface is cheap;
-//     raising one is not. Re-run the floors below if you move any of them.
-//   • Body text now lands at 14.60:1 on bg0. The commonly cited comfort band
-//     for off-white on dark grey is 12–15:1; above it, white text on near-black
-//     haloes for readers with astigmatism. The previous cut measured 16.70:1.
+// ─── Plain hex, on purpose ───────────────────────────────────────────────
+// The previous revision declared every colour twice (hex fallback, then oklch)
+// so Safari <15.4 had something to parse. The design ships final sRGB hex, so
+// there is nothing to convert and nothing to fall back from — one declaration
+// per token. This is not only shorter: it means any contrast figure in this file
+// can be recomputed exactly from the values as written, whereas oklch defeated
+// `getComputedStyle`-based measurement and forced canvas pixel readback.
 //
-// The brand is kraft — a paper tone rather than a highlighter. It sits at
-// L 0.70, deliberately BELOW the text tiers, so a primary button no longer
-// out-shouts the filenames next to it (the old accent sat at L 0.85 against
-// body text at L 0.975 — 87% as bright as the words beside it).
+// ─── THREE MEASURED DEVIATIONS from the design ───────────────────────────
+// Each was found by measuring the design's own value against its own stated
+// floor, and each fails. Do not "restore" them to the design's numbers.
 //
-// Scoped under .v2-root so nothing leaks into the classic layout.
-// hex/rgb fallbacks declared before oklch() so Safari <15.4 picks up the
-// fallback (fallbacks generated from the oklch values, sRGB-accurate).
+// 1. FOCUS RING is opaque accent-500 (#4C7EF3), not `rgba(76,126,243,0.6)`.
+//    The design specifies a two-layer ring — `0 0 0 2px {surface},
+//    0 0 0 4px rgba(76,126,243,0.6)` — whose visible edge is a 60%-alpha cobalt
+//    against the surface. Composited, that measures 2.55 (bg0) down to 2.03
+//    (bg6): it fails WCAG 2.2 SC 1.4.11's 3:1 on EVERY surface in the system.
+//    Opaque accent-500 — which the design itself names as the focus colour —
+//    measures 5.09 · 4.85 · 4.67 · 4.52 · 4.26 · 3.79 · 3.28. Only the alpha
+//    was the problem.
+//    We also keep v2's `outline` + `outline-offset` implementation rather than
+//    the design's two-layer box-shadow, because that inner layer has to name the
+//    surface the control sits on — a raw colour at ~60 call sites that breaks the
+//    moment a control moves. One outline rule gets the same two-band result,
+//    follows border-radius for free, and needs no per-site knowledge (#396).
 //
-// ─── The brand needs FOUR values, not one ────────────────────────────────
-// One colour cannot be fill, ink and focus ring in dark mode. Collapsing them
-// is what broke two pills the first time this ramp was applied:
-//   • --si-accent      L 0.70  the FILL. Buttons, active-nav wash.
-//   • --si-accent-ink  L 0.83  brand used as TYPE on a tinted chip. Must climb
-//                              back up or it fails AA on its own soft fill.
-//   • --si-focus-ring  L 0.82  stays bright on purpose — SC 1.4.11 wants 3:1
-//                              against every surface a control can sit on.
-//   • --si-accent-fg   L 0.20  ink ON the fill (6.64:1).
+// 2. --si-border is #8A857D, NOT an alias of --si-line-strong.
+//    The design's inputs are filled rather than outlined ("the fill is what makes
+//    an input findable on a dark plane"), and it uses line-strong (#4A453F) only
+//    for hovered inputs and dashed drop targets. But the input fill (bg3) is
+//    1.10:1 against the content plane and 1.12:1 inside a dialog — so on its own
+//    it identifies nothing, and SC 1.4.11 wants 3:1 for the boundary of an
+//    interactive control. line-strong measures 1.69 on that fill. #8A857D — the
+//    design's own text-tertiary tone, so not an invented colour — measures
+//    5.23 · 4.98 · 4.80 · 4.64 · 4.38 · 3.89 · 3.36 and clears the floor
+//    everywhere. Inputs therefore keep a resting boundary that the mockups draw
+//    without; that is deliberate.
+//
+// 3. --si-amber is NO LONGER an alias of --si-accent.
+//    It was one because the brand used to be warm, so "brand tint" and "amber"
+//    were the same colour. Under cobalt that identity dissolves and every amber
+//    consumer would silently turn blue. It is now a real warning pair, and all
+//    five former consumers (space quota bar, two "away" presence dots, the
+//    admin-tools "stopping" chip, and the co-editing lock pill) were checked
+//    individually — every one of them meant warning.
 //
 // ─── Measured contrast, text tier × surface ──────────────────────────────
-// Computed in OKLab and confirmed by canvas readback against the rendered app.
-// Every cell improves on the previous revision. Keep these here so the next
-// change does not have to re-derive them.
+// Computed from the hex values above by WCAG 2.x relative luminance. Keep this
+// table current: if you move a surface or a tier, recompute the whole grid.
 //
-//              bg0     bg1     bg2     bg3     bg4     bg5     bg6
-//   fg        14.60   13.27   11.91   10.47    8.98    7.45    5.96
-//   muted     11.88   10.80    9.70    8.52    7.31    6.07    4.85
-//   faint      9.55    8.68    7.79    6.85    5.87    4.88   [3.90]
-//   tertiary   7.46    6.78    6.09    5.35    4.59   [3.81]  [3.04]
-//   ghost      5.05    4.59   [4.12]  [3.62]  [3.11]  [2.58]  [2.06]
+//                bg0    bg1    bg2   band    bg3    bg5    bg6
+//   fg          17.16  16.35  15.74  15.22  14.37  12.77  11.05
+//   muted        9.10   8.67   8.35   8.07   7.62   6.77   5.86
+//   tertiary     5.23   4.98   4.80   4.64   4.38  [3.89] [3.36]
+//   quiet       [2.98] [2.84] [2.74] [2.65] [2.50] [2.22] [1.92]
 //
 //   [n] = below 4.5:1, i.e. not usable for normal-size text.
 //
-// Practical rules this implies. These are the FLOORS each tier was solved
-// against — if you move a surface, re-solve them:
-//   • bg5 carries fg / muted / faint, and bg6 carries fg / muted. The pre-#419
-//     ramp's "bg5 and bg6 are fills, never text surfaces" does not hold here.
-//   • ghost is a bg0/bg1-only tier (4.12 on bg2). Separators and chrome, never
-//     body text on a card, and never a placeholder colour.
-//   • tertiary is the lowest tier that survives on bg4, the selected row.
+// The rules this implies, which the design states independently and which the
+// numbers confirm:
+//   • fg and muted are usable on every surface.
+//   • tertiary is a bg0–bg3 tier. It FAILS on bg5 (dialogs, context menus,
+//     sheets, popovers) and bg6 (tooltips, pressed, drag-over). The pre-adoption
+//     ramp allowed it up to the old bg4, so every tertiary string on an overlay
+//     needs lifting to muted.
+//   • quiet clears nothing. It is decorative only — disabled labels, column
+//     heads, hint text that repeats something already visible. It may never be
+//     the sole carrier of meaning. This is a real narrowing versus the old ramp,
+//     where the equivalent tier measured 5.05 on bg0.
+//
+// Ink on its own soft fill (the fill composited over each bed first), worst bed
+// being bg6: accent 5.04 · success 5.49 · warning 5.57 · danger 4.77 ·
+// info 5.82 · neutral 4.81 · secondary 4.72. All clear 4.5.
+//
+// Fill inks: white on accent-600 = 5.05, on accent-700 = 7.28, on danger-fill
+// = 4.83. White on accent-500 is 3.76, which is why accent-500 is hover and
+// focus only and NEVER carries white body text — filled buttons use accent-600.
+//
+// Scoped under .v2-root so nothing leaks into the classic layout.
 
 .v2-root {
-  // ─── Backgrounds — deep navy (hue 262), chroma TAPERS as light rises ──
-  --si-bg0: #192231; // page / outermost
-  --si-bg0: oklch(0.25 0.032 262);
-  --si-bg1: #212938; // sidebar / rails
-  --si-bg1: oklch(0.281 0.029 262);
-  --si-bg2: #2a313e; // content canvas / card
-  --si-bg2: oklch(0.312 0.026 262);
-  --si-bg3: #333a46; // card hover / input bg
-  --si-bg3: oklch(0.346 0.023 262);
-  --si-bg4: #3e444e; // selected row
-  --si-bg4: oklch(0.384 0.02 262);
-  --si-bg5: #4a4f59; // active surface
-  --si-bg5: oklch(0.428 0.017 262);
-  --si-bg6: #595e66; // lifted element
-  --si-bg6: oklch(0.48 0.014 262);
+  // ─── Surfaces — warm neutral, elevation always toward the user ────────
+  // The design names five steps plus two halves; v2's seven `bg` slots hold
+  // them without renaming a single consumer. Two hard rules come with them:
+  // never skip two steps between adjacent planes, and never place surface-1
+  // directly on surface-1 — if two regions need separating and no step is
+  // available, use 24px of space instead.
+  //
+  // Panels flanking the content plane step DOWN, never up (bg1 < bg2). There is
+  // no border between a panel and the body; the value change IS the edge. Which
+  // is the whole reason the design bans vertical rules: they would be redundant.
+  --si-bg0: #100f0e; // surface-0   · app canvas, sidebar, page gutters
+  --si-bg1: #161513; // surface-0.5 · top bar, right panel, empty-state panel
+  --si-bg2: #1a1917; // surface-1   · content plane: file table, detail body
+  --si-bg-band: #1e1c1a; // surface-1.5 · the alternating table band (see below)
+  --si-bg3: #232120; // surface-2   · cards, row hover, input fill, chips, code
+  --si-bg5: #2d2a28; // surface-3   · dialogs, context menus, sheets, popovers
+  --si-bg6: #383431; // surface-4   · tooltips, pressed, drag-over, segmented-on
 
-  // ─── Lines — same navy hue family ────────────────────────────────────
-  // --si-line is decorative (card edges, separators) and carries no contrast
-  // floor. --si-line-strong is NOT decorative: it is aliased to --si-border
-  // below and draws the boundary of inputs, selects and dialogs, so WCAG 2.2
-  // SC 1.4.11 wants 3:1 against whatever they sit on. At L 0.66 it measures
-  // 5.15 (bg0) · 4.68 (bg1) · 4.20 (bg2) · 3.69 (bg3, the input fill) ·
-  // 3.17 (bg4) — every surface a bordered control actually occupies. It had to
-  // rise from L 0.63 when the surfaces came up. Before #419 it sat at L 0.62
-  // and came to 2.87 on bg3 and 2.14 on bg4, i.e. input borders missed the
-  // floor entirely; do not lower it back for looks — reach for --si-line
-  // instead when you want a quieter edge.
-  --si-line: rgba(135, 140, 150, 0.28);
-  --si-line: oklch(0.64 0.016 262 / 0.28);
-  --si-line-strong: #8d929c;
-  --si-line-strong: oklch(0.66 0.015 262);
-  --si-line-bold: rgba(135, 140, 150, 0.45);
-  --si-line-bold: oklch(0.64 0.016 262 / 0.45);
+  // Retired. `bg4` was documented as "selected row", and in this system a
+  // selected row is --si-accent-soft plus a 2px cobalt marker — not a surface
+  // step, so the slot has no remaining role. Aliased rather than deleted so its
+  // ~40 consumers keep rendering; the alias goes when the table is rebuilt.
+  --si-bg4: var(--si-bg3);
 
-  // Alias — referenced by form controls, dialogs, context menus, inspector.
-  --si-border: var(--si-line-strong);
+  // ─── Lines — three values, and that is the whole budget ───────────────
+  // Note what these are NOT for: there is no `border-left` or `border-right`
+  // anywhere in this product, and table rows carry no dividers at all (they band
+  // instead — see --si-bg-band). Horizontal dividers are hairline and rare.
+  --si-line-subtle: #2a2725; // table + section rules; the default and commonest
+  --si-line: #35312e; // card outlines, menu separators
+  --si-line-strong: #4a453f; // hovered input outline, dashed drop targets, frames
 
-  // ─── Text — cool-white (hue 262) tier ladder ─────────────────────────
-  --si-fg: #f1f5fa;
-  --si-fg: oklch(0.968 0.008 262);
-  --si-fg-muted: #d9dee8;
-  --si-fg-muted: oklch(0.9 0.014 262);
-  --si-fg-faint: #c2c8d3;
-  --si-fg-faint: oklch(0.832 0.016 262);
-  --si-fg-tertiary: #abb1bc;
-  --si-fg-tertiary: oklch(0.76 0.017 262);
-  --si-fg-ghost: #8b919c;
-  --si-fg-ghost: oklch(0.655 0.018 262);
+  // NOT an alias of line-strong — see deviation 2 in the header. This is the
+  // resting boundary of anything interactive whose fill cannot identify it.
+  --si-border: #8a857d;
 
-  // ─── Accent — kraft, the brand as paper rather than highlighter ──────
-  // The FILL. Sits below the text tiers on purpose (see header).
-  --si-accent: #cd8f57;
-  --si-accent: oklch(0.7 0.105 62);
-  --si-accent-soft: rgba(205, 143, 87, 0.16);
-  --si-accent-soft: oklch(0.7 0.105 62 / 0.16);
-  --si-accent-line: rgba(205, 143, 87, 0.45);
-  --si-accent-line: oklch(0.7 0.105 62 / 0.45);
-  --si-accent-deep: #b97340;
-  --si-accent-deep: oklch(0.62 0.11 55);
-  --si-accent-fg: #221205; // ink ON the kraft fill — 6.64:1
-  --si-accent-fg: oklch(0.2 0.035 60);
-  --si-accent-hover: #e0a062;
-  --si-accent-hover: oklch(0.755 0.11 64);
-  // Brand used as TYPE on a soft/tinted fill. Must be lighter than the fill
-  // tone or it fails AA on its own chip: at the fill's L 0.70 an accent pill
-  // measured 3.96:1. On its own soft fill it now reads 5.90 (over bg2) ·
-  // 4.61 (over bg4, the tight one). Use this — never --si-accent — whenever
-  // the brand is the text colour.
-  --si-accent-ink: #fdb677;
-  --si-accent-ink: oklch(0.83 0.115 62);
+  // Kept as an alias so existing consumers compile; it has no distinct role in
+  // this system and should be migrated to one of the three above.
+  --si-line-bold: var(--si-line-strong);
 
-  // ─── Focus ring (#396) ───────────────────────────────────────────────
-  // Its own token rather than a raw --si-accent reference, so the ring can be
-  // retuned without disturbing the brand accent — which is exactly what this
-  // revision needed, since the accent moved down to L 0.70 and the ring must
-  // not follow it. Measured: 8.89 (bg0) · 8.08 (bg1) · 7.26 (bg2) · 6.38 (bg3) ·
-  // 5.47 (bg4) · 4.54 (bg5) · 3.63 (bg6) — WCAG 2.2 SC 1.4.11 wants 3:1, and
-  // unlike the pre-#419 ring (2.42 on bg6) this one clears it on every surface,
-  // including the lifted-element fill. bg6 is the tight one: it lost headroom
-  // when the floor came up, so do not lighten bg6 without re-checking here.
-  --si-focus-ring: #ffb066;
-  --si-focus-ring: oklch(0.82 0.13 62);
+  // ─── Text — four values, and that is the whole hierarchy budget ───────
+  // New emphasis comes from size and weight, never from a new colour. See the
+  // measured table in the header for where each tier may and may not be used.
+  --si-fg: #f5f2ee; // primary   · file names, titles, values
+  --si-fg-muted: #b8b2a9; // secondary · body copy, nav labels, descriptions
+  --si-fg-tertiary: #8a857d; // tertiary  · metadata, sizes, timestamps (bg0–bg3)
+  --si-fg-ghost: #635e58; // quiet     · disabled labels, column heads. Decorative.
+
+  // Collapsed. The design's budget is four tiers; v2 had five, and `faint` sat
+  // between primary and secondary with no counterpart. Aliasing it to secondary
+  // IS the behavioural change — ~150 call sites across 31 files get the design's
+  // value immediately. The textual rename follows in the primitives phase.
+  --si-fg-faint: var(--si-fg-muted);
+
+  // ─── Accent — cobalt. One accent, three jobs ──────────────────────────
+  // The single primary action, the active navigation state, and focus. It is
+  // never decorative. Exactly one filled cobalt action per view.
+  //
+  // Four values because one colour cannot be fill, ink and ring at once — the
+  // same lesson #419 learned under kraft, which the design states in its own
+  // words ("accent-500 never carries white body text").
+  --si-accent: #3a66e0; // accent-600 · THE primary button fill. One per view.
+  --si-accent-hover: #4c7ef3; // accent-500 · button hover, progress fill
+  --si-accent-deep: #2b4eb8; // accent-700 · pressed, selected tab underline
+  --si-accent-ink: #8fadfa; // accent-400 · accent AS TYPE: links, active nav
+  --si-accent-300: #a9c0fb; // hover value for accent text and links
+  --si-accent-100: #d8e2fe; // text on filled accent at large sizes
+  --si-accent-line: rgba(76, 126, 243, 0.45);
+  --si-accent-soft: rgba(76, 126, 243, 0.1); // accent-tint · selected row, nav wash
+  --si-accent-fg: #ffffff; // ink ON the accent-600 fill — 5.05:1
+
+  // ─── Focus ring ──────────────────────────────────────────────────────
+  // Opaque, and its own token rather than a reference to --si-accent-hover, so
+  // the ring can be retuned without moving the button hover fill. See deviation
+  // 1: the design's 60%-alpha version fails 3:1 on all seven surfaces.
+  // Measured opaque: 5.09 · 4.85 · 4.67 · 4.52 · 4.26 · 3.79 · 3.28.
+  --si-focus-ring: #4c7ef3;
 
   // ─── Nav — alias of accent (one accent everywhere) ───────────────────
   --si-nav: var(--si-accent);
   --si-nav-soft: var(--si-accent-soft);
   --si-nav-line: var(--si-accent-line);
 
-  // ─── Title bar — one step deeper than bg0, navy-coherent ─────────────
-  --si-chrome-bg: #101826;
-  --si-chrome-bg: oklch(0.208 0.03 262);
-  --si-chrome-bg-dark: #101826;
-  --si-chrome-bg-dark: oklch(0.208 0.03 262);
+  // ─── Chrome — the mobile title bar, transfers popover, logo tile ─────
+  // Narrower in scope than the name suggests: the desktop top bar paints bg1.
+  --si-chrome-bg: #100f0e;
+  --si-chrome-bg-dark: #100f0e;
 
-  // ─── Semantic palette — one L/C envelope ─────────────────────────────
+  // ─── Secondary — periwinkle, and deliberately restrained ─────────────
+  // Used for exactly three things: Space identity marks, public-link
+  // affordances, and the "shared with others" direction. CAPPED AT ONE INSTANCE
+  // PER VIEW — if it competes with cobalt, drop it.
   //
-  // Each semantic ships as a PAIR: the base tone is the FILL, the `-ink` tone
-  // is the same hue used as TYPE. This is the same rule as --si-accent /
-  // --si-accent-ink, generalised, and it exists because a colour that reads
-  // correctly as a 18%-alpha wash is too dark to read as text sitting on that
-  // wash. Measured worst case across bg2/bg3/bg4 with the soft fill composited
-  // over each: 4.57:1 (green on bg4). The base tones alone land near 4.1 on the
-  // lighter cards — that is what the violet pill and the admin chip failed at.
-  // Violet and cyan are chroma-capped rather than lightness-capped: above
-  // C 0.075 / 0.080 at these lightnesses they fall outside sRGB.
+  // Carried on the existing `violet` slot: the previous value (#b6a4ed) was
+  // within 2 units per channel of the design's secondary-400, so no consumer
+  // churns and nothing shifts perceptibly.
+  --si-violet: #b3a6ee; // secondary-400
+  --si-violet-ink: #b3a6ee; // same tone as type; it is already light enough
+  --si-violet-deep: #8b7be0; // secondary-500
+  --si-violet-soft: rgba(139, 123, 224, 0.14);
+  --si-violet-line: rgba(139, 123, 224, 0.3);
+
+  // ─── Semantic palette — five pairs ───────────────────────────────────
+  // Each ships as a PAIR: the base tone is the FILL, the `-ink` tone is the same
+  // hue used as TYPE. A colour that reads correctly as a 14%-alpha wash is too
+  // dark to read as text sitting on that wash — so: filling a shape → base;
+  // drawing a glyph or a word → -ink. Worst-case inks are in the header.
+  --si-green: #57b87f; // Success · upload complete, saved, restored, sync healthy
+  --si-green-ink: #7ed39f;
+  --si-green-soft: rgba(87, 184, 127, 0.14);
+
+  // Warning. NO LONGER an accent alias — see deviation 3.
+  --si-amber: #c9932f; // Warning · link expiring, quota >85%, locked by someone
+  --si-amber-ink: #e6bc63;
+  --si-amber-soft: rgba(201, 147, 47, 0.14);
+  --si-amber-line: rgba(201, 147, 47, 0.35);
+
+  --si-rose: #c4483f; // Danger · delete, permanent removal, failed, revoke
+  --si-rose-ink: #f0908a;
+  --si-rose-soft: rgba(196, 72, 63, 0.14);
+  --si-rose-line: rgba(196, 72, 63, 0.6);
+  // Ink ON the danger fill — 4.83:1, which clears AA.
   //
-  // Rule of thumb: filling a shape → base. Drawing a glyph or a word → -ink.
-  // Chroma comes down from the previous 0.13–0.19 to 0.105–0.135. That single
-  // change is most of what separates "dashboard" from "professional": at the
-  // old saturation a table of status pills read as a strip of highlighter.
-  // Danger keeps the most chroma and the least lightness of the four on
-  // purpose — it has to feel heavier than its neighbours.
-  --si-green: #7fcc90;
-  --si-green: oklch(0.78 0.115 150);
-  --si-green-soft: rgba(127, 204, 144, 0.18);
-  --si-green-soft: oklch(0.78 0.115 150 / 0.18);
-  --si-green-ink: #97e1a6;
-  --si-green-ink: oklch(0.845 0.11 150);
+  // Worth knowing because it reverses a previous finding rather than ignoring
+  // one: under the old rose fill, white measured 2.78:1 and was the app's only
+  // AA text failure, so the notification count badge carried hand-written dark
+  // ink at L 0.18 to fix it. This fill is dark enough that white passes, which is
+  // also what the design does for its "Delete forever" button — so the badge and
+  // that button can finally share one value.
+  --si-rose-fg: #ffffff;
 
-  // "amber" is the brand-tint slot (always tied to the active brand colour).
-  // Aliased to accent so badges/avatars/folder-chips keep resolving to kraft.
-  --si-amber: var(--si-accent);
-  --si-amber-soft: var(--si-accent-soft);
+  --si-cyan: #3e86ae; // Info · read-only notice, indexing, neutral system message
+  --si-cyan-ink: #8cc7e8;
+  --si-cyan-soft: rgba(62, 134, 174, 0.14);
 
-  --si-rose: #e67a73;
-  --si-rose: oklch(0.7 0.135 25);
-  --si-rose-soft: rgba(230, 122, 115, 0.18);
-  --si-rose-soft: oklch(0.7 0.135 25 / 0.18);
-  --si-rose-ink: #feb2ab;
-  --si-rose-ink: oklch(0.835 0.09 25);
+  --si-neutral: #4a453f; // Neutral · counts, offline, "no change". Default badge.
+  --si-neutral-ink: #b8b2a9;
+  --si-neutral-soft: rgba(184, 178, 169, 0.1);
 
-  --si-violet: #b6a4ed;
-  --si-violet: oklch(0.76 0.105 295);
-  --si-violet-soft: rgba(182, 164, 237, 0.18);
-  --si-violet-soft: oklch(0.76 0.105 295 / 0.18);
-  --si-violet-ink: #d4c8fe;
-  --si-violet-ink: oklch(0.86 0.075 295);
+  // ─── Avatar tones — six, all drawn from the system ───────────────────
+  // "Initials on a hue derived from the user id" — derived by picking from a set,
+  // not by walking the hue wheel. The set matters: an unbounded hue imports
+  // arbitrary colour into a palette that is otherwise budgeted to one accent
+  // plus five semantics, and it is the one place a user's login can put a colour
+  // on screen that no designer chose.
+  //
+  // Every tone here is already a member of this system — accent-600, the success
+  // fill, secondary-400, and three file-type tones — which is also what the
+  // design's own mockups use for their four avatars.
+  //
+  // Ink is paired per tone rather than shared, because cobalt is the only tone
+  // dark enough for white: measured against the dark ink, tones 2–6 read
+  // 6.26–8.76, and white on cobalt reads 5.05. The opposite pairings fail
+  // (white on periwinkle is 2.19).
+  --si-avatar-1: #3a66e0; // cobalt
+  --si-avatar-1-fg: #ffffff;
+  --si-avatar-2: #7fae8e; // green
+  --si-avatar-2-fg: #100f0e;
+  --si-avatar-3: #b3a6ee; // periwinkle
+  --si-avatar-3-fg: #100f0e;
+  --si-avatar-4: #c08578; // clay
+  --si-avatar-4-fg: #100f0e;
+  --si-avatar-5: #b79a5f; // ochre
+  --si-avatar-5-fg: #100f0e;
+  --si-avatar-6: #b192b8; // mauve
+  --si-avatar-6-fg: #100f0e;
 
-  --si-cyan: #6fc2f1;
-  --si-cyan: oklch(0.78 0.105 235);
-  --si-cyan-soft: rgba(111, 194, 241, 0.18);
-  --si-cyan-soft: oklch(0.78 0.105 235 / 0.18);
-  --si-cyan-ink: #9ddafe;
-  --si-cyan-ink: oklch(0.86 0.08 235);
+  // ─── Scrim — dialogs and sheets, 60% ─────────────────────────────────
+  // One token for what was eleven hand-written rgba(0,0,0,0.35) declarations at
+  // four different alphas. The design's value is a warm near-black rather than
+  // pure black, so it darkens the warm ground without cooling it.
+  --si-scrim: rgba(11, 10, 9, 0.6);
 
-  // ─── Type system — Geist sans/display, JetBrains Mono ────────────────
-  --si-sans: 'Geist Variable', 'Inter Variable', system-ui, -apple-system, sans-serif;
-  --si-display: 'Geist Variable', 'Inter Variable', system-ui, sans-serif;
-  --si-serif: 'Geist Variable', 'Inter Variable', system-ui, sans-serif;
-  --si-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  // ─── Type system — IBM Plex ──────────────────────────────────────────
+  // The division that governs everything: IBM Plex Sans for anything a PERSON
+  // wrote, IBM Plex Mono for anything a SYSTEM produced. Paths, byte sizes,
+  // timestamps, version numbers, shortcuts and token names are mono. File names
+  // are sans, always — a mono file name reads as data rather than as a thing you
+  // opened. Weight is limited to 400 / 500 / 600.
+  // `IBM Plex Sans Variable` is the family name @fontsource-variable registers —
+  // NOT `IBM Plex Sans`, which is listed second so a system-installed static Plex
+  // is still preferred over Inter. Getting this wrong fails silently: the stack
+  // just falls through to Inter and everything looks nearly right.
+  --si-sans: 'IBM Plex Sans Variable', 'IBM Plex Sans', 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --si-display: 'IBM Plex Sans Variable', 'IBM Plex Sans', 'Inter Variable', system-ui, sans-serif;
+  --si-serif: 'IBM Plex Sans Variable', 'IBM Plex Sans', 'Inter Variable', system-ui, sans-serif;
+  --si-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  // ─── Type scale (#398) ───────────────────────────────────────────────
-  // Numbered like --si-bg* / --si-r* / --si-shadow*, and deliberately a RECORD
-  // of the sizes v2 already ships rather than a fresh modular scale: adopting it
-  // must not move a pixel. The counts are source-level declaration counts at the
-  // time of writing — they are what makes the ladder non-arbitrary, and they say
-  // which steps are load-bearing. 15 steps covers 333 of the 337 declarations.
+  // ─── Type scale ──────────────────────────────────────────────────────
+  // Unchanged, deliberately. These are sizes, not roles: they carry no weight,
+  // colour or letter-spacing, so nothing in them contradicts the new system, and
+  // re-basing the ladder would move pixels in 337 places for a naming
+  // difference. What the design adds on top is nine ROLES, each bundling size +
+  // weight + spacing + family + colour — see `_type.scss`. Reach for a role
+  // mixin first; drop to a bare step only when no role fits.
   --si-text-1: 9.5px; //    4×  chrome eyebrows, sidebar back / source links
   --si-text-2: 10px; //    11×  kbd hints, usage readouts, section labels
   --si-text-3: 10.5px; //  37×  table headers, chips, mono timestamps
@@ -254,13 +306,12 @@
   --si-text-13: 20px; //    6×  section headings
   --si-text-14: 22px; //    3×  secondary page titles
   --si-text-15: 26px; //    8×  page titles
-  //
-  // Four singletons stay literal until the bulk migration snaps them, each a
-  // ≤2px move on ONE declaration: 14.5px (button lg) → --si-text-10, 17px →
-  // --si-text-12, 19px → --si-text-13, 32px (the _kit title) → --si-text-15.
+  --si-text-16: 28px; //         page-title role (the design's one-per-page title)
 
-  // ─── Spacing scale (#398) ────────────────────────────────────────────
-  // Same principle — the values already in use, so adoption is a rename.
+  // ─── Spacing ─────────────────────────────────────────────────────────
+  // Also unchanged. The design's ladder is a 4px index (space-1 = 4px) whose
+  // members — 12 / 16 / 20 / 24 / 28 — all already exist here, so adopting its
+  // NAMES would rename 700+ declarations to reach the same pixels.
   --si-space-1: 2px; //    35×
   --si-space-2: 4px; //    70×
   --si-space-3: 6px; //    82×
@@ -274,145 +325,110 @@
   --si-space-11: 24px; //  14×
   --si-space-12: 28px; //  28×
   --si-space-13: 32px; //  18×
-  //
-  // 3px (23×), 5px (18×) and 7px (13×) are deliberately NOT steps: they are the
-  // off-grid values the audit flagged, and each sits between two steps above.
-  // The migration rounds them to the nearer step; those are the only spacing
-  // changes it should produce.
+  --si-space-14: 40px; //       page margin (desktop) — new, the design's space-10
 
-  // ─── Motion (#398) ───────────────────────────────────────────────────
-  // 120ms carries 103 of v2's ~115 transitions, written two ways today (120ms
-  // and 0.12s). One token, one notation. --si-ease is plain `ease` because that
-  // is what every existing transition uses — naming it is not licence to
-  // change the curve.
-  --si-dur-1: 100ms; //     3×  micro, opacity-only
-  --si-dur-2: 120ms; //   103×  the house transition
-  --si-dur-3: 200ms; //     7×  panel / drawer slide
-  --si-dur-4: 220ms; //     1×  file-detail inspector
-  --si-ease: ease;
+  // ─── Motion ──────────────────────────────────────────────────────────
+  // Re-pointed to the design's four durations. dur-2 keeps its 120ms value, so
+  // the 103 declarations that use the house transition are untouched.
+  //
+  // The governing note: nothing in a file manager should feel animated. Rows and
+  // menus fade and translate ≤4px; the only motion above 200ms is a panel or
+  // sheet changing the layout.
+  --si-dur-1: 80ms; //  hover value changes, icon colour
+  --si-dur-2: 120ms; // buttons, checkboxes, chips, row hover — the house value
+  --si-dur-3: 180ms; // menus, tooltips, toasts, tab switch
+  --si-dur-4: 260ms; // right panel open/close, bottom sheet
 
-  // ─── Stacking (#398, renumbered #405) ────────────────────────────────
-  // #404 declared these but migrated nothing, and the values it picked could not
-  // express what v2 actually does: 53 declarations, 25 distinct values, of which
-  // THIRTEEN sat in the dialog range (70…91, plus a 200). --si-z-dialog: 90 under
-  // --si-z-toast: 100 leaves ten slots for thirteen levels. It did not fit.
-  //
-  // Renumbering was free — nothing consumed these yet. Gaps of 10 give every band
-  // room for the pairs it actually needs, expressed as calc(band + n) at the call
-  // site so a backdrop and the thing over it stay visibly related.
-  //
-  // The thirteen dialog levels collapse to TWO, because no two dialogs are ever
-  // open at once. Three independent facts force that, and they are why the
-  // 70 < 72 < 74 < 76 < 80 < 90 ladder encoded a priority nothing exercised:
-  //   • every call site is `await <service>.open(…)` — awaited to close before
-  //     anything else opens (14 sites in file-browser.base.ts, 2 in shared),
-  //   • no dialog injects another dialog's service (CompressDialogService's
-  //     reference to PromptDialogService is a comment, not an injection),
-  //   • each service does `if (existing) existing.resolve(null)`, so a dialog
-  //     type cannot even stack on itself.
-  // If a nested dialog is ever introduced, it needs its own +n here — not a
-  // second ladder.
-  --si-z-base: 1; // sticky table heads, section heads, toolbars (+1: in-card chips, dropdown results)
+  --si-ease-out: cubic-bezier(0.2, 0.8, 0.3, 1); // everything entering or settling
+  --si-ease-in: cubic-bezier(0.4, 0, 1, 1); // everything leaving
+
+  // Alias so nothing breaks in this PR. Existing call sites move to ease-out /
+  // ease-in in the primitives phase; new code must not use this.
+  --si-ease: var(--si-ease-out);
+
+  // ─── Stacking ────────────────────────────────────────────────────────
+  // Unchanged from #405. Expressed as calc(band + n) at the call site so a
+  // backdrop and the thing over it stay visibly related.
+  --si-z-base: 1; // sticky table heads, section heads, toolbars
   --si-z-sticky: 10; // top bar
   --si-z-overlay: 20; // drop overlays, scrims (+1: FAB)
-  --si-z-panel: 30; // inspector, side panels, mobile chrome (+1…+4: backdrop → sidebar)
-  --si-z-popover: 40; // context menus, dropdowns, tooltips, notification + transfer panels (+1: sheet over its backdrop)
-  --si-z-dialog: 50; // every modal: backdrop = band, surface = +1. Two levels is the whole need.
+  --si-z-panel: 30; // inspector, side panels, mobile chrome
+  --si-z-popover: 40; // context menus, dropdowns, tooltips, notification panels
+  --si-z-dialog: 50; // every modal: backdrop = band, surface = +1
   --si-z-toast: 60; // unconditionally above everything
 
   // ─── Radii ───────────────────────────────────────────────────────────
-  // r1 is 7px, not 6px: 7px is what the app's controls actually use, and
-  // migrating those call sites down to 6px would have tightened almost every
-  // corner in v2 by a pixel for no gain (maintainer's call, #398). The nine
-  // existing var(--si-r1) consumers move 6px → 7px, which is the whole visual
-  // delta of this change.
+  // Re-pointed to the design's ladder, which reverses #398's deliberate 6→7px
+  // call. The visual delta is one to two pixels on every corner in v2.
+  --si-r0: 4px; // radius-xs   · chips, badges, inline code
+  --si-r1: 6px; // radius-sm   · buttons, inputs, menu items
+  --si-r2: 8px; // radius-md   · cards, file-type tiles, toasts
+  --si-r3: 12px; // radius-lg  · dialogs, panels, sheets
+  --si-r5: 16px; // radius-xl  · mobile bottom-sheet top corners
+  --si-r4: 999px; // radius-full · avatars, pills, toggles
+
+  // ─── Shadows — pure black at low alpha ───────────────────────────────
+  // The design is explicit that a warm base plus a warm shadow turns muddy, so
+  // these stay neutral. The `inset 0 1px 0 rgba(255,255,255,.0x)` top-edge
+  // highlight the previous revision carried has no counterpart in this system
+  // and is gone; it read as a bevel against flat warm surfaces.
   //
-  // r4 was 20px and had ZERO consumers. Repurposed as the pill radius, which
-  // 15 declarations were spelling as a literal 999px.
-  --si-r1: 7px;
-  --si-r2: 10px;
-  --si-r3: 14px;
-  --si-r4: 999px;
+  // Elevation never substitutes for a surface step. Overlays get both.
+  --si-shadow0: none; // rows, sidebar, anything in the flow
+  --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.45); // cards on hover, sticky toolbars
+  --si-shadow2: 0 4px 12px -2px rgba(0, 0, 0, 0.55); // popovers, dropdowns, tooltips
+  --si-shadow3: 0 16px 40px -8px rgba(0, 0, 0, 0.65); // dialogs, sheets, bulk bar
 
-  // ─── Shadows — neutral black, navy-coherent ──────────────────────────
-  --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --si-shadow1: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.3);
-  --si-shadow2: 0 8px 24px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --si-shadow2: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 8px 24px oklch(0 0 0 / 0.35);
-  --si-shadow3: 0 24px 60px rgba(0, 0, 0, 0.5), 0 6px 18px rgba(0, 0, 0, 0.38);
-  --si-shadow3: 0 1px 0 oklch(1 0 0 / 0.06) inset, 0 24px 60px oklch(0 0 0 / 0.5);
-
-  // ─── File-type colour coding — FOUR families, not eight hues ─────────
-  // The previous revision gave ten file types eight distinct hues. Its own
-  // comment called them "one family"; measured, they spanned 300° of the wheel
-  // at near-maximum chroma for their lightness, and a mixed directory rendered
-  // as a rainbow.
+  // ─── File-type colour coding — ten hues, low saturation ──────────────
+  // This reverses #419, which collapsed eight hues to four families because "a
+  // mixed directory rendered as a rainbow". The design answers the same risk
+  // differently: it keeps ten hues but holds saturation low and the tile tint at
+  // 14%, so a folder of mixed types stays calm AND the cobalt accent still wins
+  // attention.
   //
-  // Colour now encodes WHAT KIND OF THING the file is — the axis you actually
-  // scan a directory along — rather than which vendor produced it, which the
-  // glyph shape and the extension in the name already say. Four families, one
-  // L/C envelope (L≈0.75, C 0.09):
+  // The usage rule is what makes it work, and it is not optional: THE TILE IS
+  // THE ONLY PLACE A FILE-TYPE COLOUR APPEARS. File names are always
+  // --si-fg. A coloured file name would break the "cobalt means action"
+  // contract, because colour on a name reads as a link.
   //
-  //   documents  doc · pdf              → blue 235
-  //   data       sheet                  → green 150
-  //   media      image · video · audio  → violet 295
-  //   containers folder · archive · code · deck → kraft 62 (the brand)
-  //
-  // Containers take the brand deliberately: a folder is the thing you most
-  // often want to hit in a listing, so the one warm tone on the screen marks
-  // it. The per-type variable names are unchanged, so no consumer churns.
-  --fc-doc-bg: rgba(118, 187, 226, 0.16);
-  --fc-doc-bg: oklch(0.76 0.09 235 / 0.16);
-  --fc-doc-fg: #76bbe2;
-  --fc-doc-fg: oklch(0.76 0.09 235);
+  // Folder takes cobalt deliberately — it is the thing you most often want to
+  // hit in a listing — which is the one place the accent hue appears without
+  // meaning "act on this". It is a container, not a control, and the 14% tile
+  // keeps it clearly quieter than a button.
+  --fc-folder-bg: rgba(143, 173, 250, 0.14);
+  --fc-folder-fg: #8fadfa;
 
-  --fc-pdf-bg: rgba(118, 187, 226, 0.16);
-  --fc-pdf-bg: oklch(0.76 0.09 235 / 0.16);
-  --fc-pdf-fg: #76bbe2;
-  --fc-pdf-fg: oklch(0.76 0.09 235);
+  --fc-doc-bg: rgba(124, 156, 196, 0.14); // markdown / documents
+  --fc-doc-fg: #7c9cc4;
 
-  --fc-sheet-bg: rgba(135, 194, 147, 0.16);
-  --fc-sheet-bg: oklch(0.76 0.09 150 / 0.16);
-  --fc-sheet-fg: #87c293;
-  --fc-sheet-fg: oklch(0.76 0.09 150);
+  --fc-sheet-bg: rgba(127, 174, 142, 0.14); // spreadsheets
+  --fc-sheet-fg: #7fae8e;
 
-  --fc-image-bg: rgba(178, 163, 225, 0.16);
-  --fc-image-bg: oklch(0.75 0.09 295 / 0.16);
-  --fc-image-fg: #b2a3e1;
-  --fc-image-fg: oklch(0.75 0.09 295);
+  --fc-image-bg: rgba(177, 146, 184, 0.14);
+  --fc-image-fg: #b192b8;
 
-  --fc-video-bg: rgba(178, 163, 225, 0.16);
-  --fc-video-bg: oklch(0.75 0.09 295 / 0.16);
-  --fc-video-fg: #b2a3e1;
-  --fc-video-fg: oklch(0.75 0.09 295);
+  --fc-pdf-bg: rgba(192, 133, 120, 0.14);
+  --fc-pdf-fg: #c08578;
 
-  --fc-audio-bg: rgba(178, 163, 225, 0.16);
-  --fc-audio-bg: oklch(0.75 0.09 295 / 0.16);
-  --fc-audio-fg: #b2a3e1;
-  --fc-audio-fg: oklch(0.75 0.09 295);
+  --fc-archive-bg: rgba(183, 154, 95, 0.14);
+  --fc-archive-fg: #b79a5f;
 
-  --fc-folder-bg: rgba(212, 158, 111, 0.18);
-  --fc-folder-bg: oklch(0.74 0.09 62 / 0.18);
-  --fc-folder-fg: #d49e6f;
-  --fc-folder-fg: oklch(0.74 0.09 62);
+  --fc-code-bg: rgba(111, 168, 168, 0.14);
+  --fc-code-fg: #6fa8a8;
 
-  --fc-archive-bg: rgba(212, 158, 111, 0.16);
-  --fc-archive-bg: oklch(0.74 0.09 62 / 0.16);
-  --fc-archive-fg: #d49e6f;
-  --fc-archive-fg: oklch(0.74 0.09 62);
+  --fc-video-bg: rgba(154, 147, 212, 0.14);
+  --fc-video-fg: #9a93d4;
 
-  --fc-code-bg: rgba(212, 158, 111, 0.16);
-  --fc-code-bg: oklch(0.74 0.09 62 / 0.16);
-  --fc-code-fg: #d49e6f;
-  --fc-code-fg: oklch(0.74 0.09 62);
+  --fc-audio-bg: rgba(196, 139, 160, 0.14);
+  --fc-audio-fg: #c48ba0;
 
-  --fc-deck-bg: rgba(212, 158, 111, 0.16);
-  --fc-deck-bg: oklch(0.74 0.09 62 / 0.16);
-  --fc-deck-fg: #d49e6f;
-  --fc-deck-fg: oklch(0.74 0.09 62);
+  // Presentations have no colour in the design — this is the one invented value
+  // in the file. They take the PDF tone because a deck and a PDF are the same
+  // kind of thing to a reader: rendered pages you page through rather than edit.
+  --fc-deck-bg: rgba(192, 133, 120, 0.14);
+  --fc-deck-fg: #c08578;
 
-  --fc-default-bg: rgba(255, 255, 255, 0.05);
-  --fc-default-bg: oklch(1 0 0 / 0.05);
-  --fc-default-fg: #abb1bc;
-  --fc-default-fg: oklch(0.76 0.017 262);
+  // Plain text — the design's own "Plain text" tone.
+  --fc-default-bg: rgba(163, 154, 142, 0.14);
+  --fc-default-fg: #a39a8e;
 }

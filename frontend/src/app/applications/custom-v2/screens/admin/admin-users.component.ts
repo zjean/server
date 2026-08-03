@@ -345,7 +345,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         &--active {
           background: var(--si-bg1);
           color: var(--si-fg);
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+          box-shadow: var(--si-shadow1);
         }
       }
       .au-chips {
@@ -547,7 +547,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
       .au-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .au-dialog {
@@ -562,7 +562,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
-        box-shadow: var(--si-shadow2, 0 16px 32px rgba(0, 0, 0, 0.35));
+        box-shadow: var(--si-shadow2);
         padding: var(--si-space-9) var(--si-space-10);
         display: flex;
         flex-direction: column;

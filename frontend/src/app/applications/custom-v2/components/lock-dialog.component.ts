@@ -3,7 +3,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
 import { StoreService } from '../../../store/store.service'
 import { fileLockPropsToString } from '../../files/components/utils/file-lock.utils'
 import { userAvatarUrl } from '../../users/user.functions'
-import { AvatarComponent, avatarHue, avatarInitials, type AvatarUser } from './avatar.component'
+import { AvatarComponent, avatarTone, avatarInitials, type AvatarUser } from './avatar.component'
 import { ButtonComponent } from './button.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { LockDialogService } from './lock-dialog.service'
@@ -79,7 +79,7 @@ import { LockDialogService } from './lock-dialog.service'
       .lock-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .lock-dialog {
@@ -181,7 +181,7 @@ export class LockDialogComponent {
     const label = owner?.fullName || owner?.login || ''
     return {
       initials: avatarInitials(label),
-      hue: avatarHue(owner?.login || label),
+      tone: avatarTone(owner?.login || label),
       // Classic renders userAvatarUrl(file.lock.owner.login); the gradient +
       // initials are the fallback when there is no login to address.
       imageUrl: owner?.login ? userAvatarUrl(owner.login) : null

@@ -70,7 +70,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
       .tfa-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .tfa-dialog {
@@ -126,7 +126,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
       .tfa-dialog__input--totp {
         text-align: center;
         letter-spacing: 4px;
-        font-family: var(--si-mono, monospace);
+        font-family: var(--si-mono);
       }
       .tfa-dialog__actions {
         display: flex;

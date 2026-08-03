@@ -76,7 +76,7 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       .compress-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .compress-dialog {

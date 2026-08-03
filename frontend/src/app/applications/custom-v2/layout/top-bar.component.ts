@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { Router, RouterLink } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { StoreService } from '../../../store/store.service'
-import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
+import { AvatarComponent, AvatarUser, avatarTone, avatarInitials } from '../components/avatar.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { V2BreadcrumbService } from './breadcrumb.service'
@@ -101,7 +101,7 @@ export class TopBarComponent {
     const seed = u?.login ?? u?.fullName ?? ''
     return {
       initials: avatarInitials(u?.fullName ?? u?.login ?? '?'),
-      hue: avatarHue(seed),
+      tone: avatarTone(seed),
       imageUrl: this.userAvatar() ?? null
     }
   })

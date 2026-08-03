@@ -28,7 +28,7 @@
 .diagram-conflict__backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--si-scrim);
   z-index: var(--si-z-dialog);
 }
 
@@ -86,7 +86,7 @@
 .diagram-conflict__btn--primary {
   background: var(--si-accent);
   border-color: var(--si-accent);
-  color: var(--si-accent-fg, #fff);
+  color: var(--si-accent-fg);
 }
 
 .diagram-conflict__btn--primary:hover {

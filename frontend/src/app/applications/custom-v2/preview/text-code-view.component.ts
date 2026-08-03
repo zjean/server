@@ -145,12 +145,12 @@ type EditorTheme = 'light' | 'dark'
         align-items: center;
         gap: var(--si-space-4);
         padding: var(--si-space-4) var(--si-space-6);
-        background: var(--si-bg2, #f5f5f7);
-        border-bottom: 1px solid var(--si-border, rgba(0, 0, 0, 0.08));
+        background: var(--si-bg2);
+        border-bottom: 1px solid var(--si-border);
       }
       .text-view__status {
         font-size: var(--si-text-6);
-        color: var(--si-fg-muted, #666);
+        color: var(--si-fg-muted);
         font-variant-numeric: tabular-nums;
       }
       .text-view__spacer {
@@ -176,7 +176,7 @@ type EditorTheme = 'light' | 'dark'
       .text-view__state {
         padding: var(--si-space-11);
         font-size: var(--si-text-8);
-        color: var(--si-fg-muted, #666);
+        color: var(--si-fg-muted);
       }
       .text-view__state--error {
         color: var(--si-rose);

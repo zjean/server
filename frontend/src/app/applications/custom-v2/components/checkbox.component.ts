@@ -39,7 +39,7 @@ export type CheckboxState = 'checked' | 'unchecked' | 'indeterminate'
         align-items: center;
         justify-content: center;
         border-radius: 4px;
-        border: 1.5px solid var(--si-line-strong, var(--si-line));
+        border: 1.5px solid var(--si-line-strong);
         background: transparent;
         color: transparent;
         cursor: pointer;
@@ -60,7 +60,7 @@ export type CheckboxState = 'checked' | 'unchecked' | 'indeterminate'
       .v2-checkbox--indeterminate {
         background: var(--si-nav);
         border-color: var(--si-nav);
-        color: #fff;
+        color: var(--si-accent-fg);
       }
       .v2-checkbox--checked:hover,
       .v2-checkbox--indeterminate:hover {

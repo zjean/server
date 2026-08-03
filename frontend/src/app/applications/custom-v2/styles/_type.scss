@@ -1,0 +1,118 @@
+// Sync-In v2 type roles.
+//
+// The design's central diagnosis of the old UI is that "titles and metadata
+// shared a size", so a row had no entry point and scanning collapsed. Its fix is
+// nine ROLES rather than nine sizes: each bundles size, weight, letter-spacing,
+// family and colour, and each differs from its neighbours in AT LEAST TWO of
+// those axes. `--si-text-*` alone cannot express that — it carries size only.
+//
+// Emitted as CLASSES, not mixins, on purpose. Roughly half of v2's components
+// declare their styles as inline `styles: [...]` strings in a `.ts` file, which
+// cannot `@use` a SCSS partial. A class works from both, so there is one
+// spelling of each role instead of two that can drift.
+//
+// Loaded globally by v2.scss (LayoutV2Component uses `encapsulation: None`), so
+// these cascade into component templates regardless of view encapsulation.
+//
+// Reach for a role first. Drop to a bare `--si-text-*` step only when no role
+// fits, and if you find yourself doing that often, the role list is wrong.
+//
+// The division that governs all nine: IBM Plex Sans for anything a PERSON wrote,
+// IBM Plex Mono for anything a SYSTEM produced.
+
+.v2-root {
+  // One per page, top-left of the content plane. Must never wrap to two lines in
+  // a folder header — a long folder name truncates instead.
+  .v2-page-title {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-16);
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    color: var(--si-fg);
+  }
+
+  // Panel headers, dialog titles, space card titles.
+  .v2-section {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-12);
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: var(--si-fg);
+  }
+
+  // Card headings, grouped setting labels, sheet titles.
+  .v2-subsection {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-11);
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--si-fg);
+  }
+
+  // Descriptions, dialog copy, comments. Measure caps at 68ch — the max-width is
+  // part of the role, not a layout decision, because prose set wider than this
+  // stops being readable no matter what container it lands in.
+  .v2-body {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-10);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--si-fg-muted);
+    max-width: 68ch;
+  }
+
+  // File and folder names — THE ROW ENTRY POINT. Same size as body, two steps
+  // away from it: heavier and brighter. That pair of differences is the whole
+  // reason a row scans.
+  .v2-body-strong {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-10);
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--si-fg);
+  }
+
+  // Sub-titles under a page title, secondary row line, helper text.
+  .v2-meta {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-7);
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--si-fg-tertiary);
+  }
+
+  // Sidebar group heads, panel section heads, table column heads.
+  .v2-label {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-4);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--si-fg-tertiary);
+  }
+
+  // Sizes, timestamps, counts, version numbers. Tabular by default — v2.scss
+  // sets `font-variant-numeric: tabular-nums` globally, which is what keeps a
+  // column of byte counts aligned.
+  .v2-mono-data {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-6);
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--si-fg-tertiary);
+  }
+
+  // Space paths in search results and favourites; keyboard shortcuts. Brighter
+  // than mono-data because a path is something you read, not something you skim
+  // past.
+  .v2-mono-path {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-6);
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--si-fg-muted);
+  }
+}

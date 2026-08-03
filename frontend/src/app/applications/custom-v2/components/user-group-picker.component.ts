@@ -92,7 +92,7 @@ export interface PickedMember {
         background: var(--si-bg1);
         border: 1px solid var(--si-border);
         border-radius: 8px;
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+        box-shadow: var(--si-shadow2);
         z-index: calc(var(--si-z-base) + 1);
       }
       .ugp__hint {

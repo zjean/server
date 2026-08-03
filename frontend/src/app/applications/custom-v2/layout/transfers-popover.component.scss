@@ -33,7 +33,7 @@
     align-items: center;
     gap: var(--si-space-4);
     background: var(--si-chrome-bg);
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--si-fg);
     font-family: var(--si-sans);
   }
 
@@ -47,7 +47,7 @@
   &__summary {
     margin-left: auto;
     font-size: var(--si-text-4);
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--si-fg-muted);
   }
 
   &__body {
@@ -97,7 +97,7 @@
 
   &--error {
     background: var(--si-rose-soft);
-    border-color: oklch(0.72 0.17 20 / 0.35);
+    border-color: var(--si-rose-line);
   }
 
   &__line {

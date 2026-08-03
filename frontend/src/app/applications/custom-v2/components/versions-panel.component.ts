@@ -9,7 +9,7 @@ import { userAvatarUrl } from '../../users/user.functions'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { isDiffableFile, VersionModel, VersionsUsage, versionsUsageRatio } from '../models/version.model'
 import { VersionsService } from '../services/versions.service'
-import { AvatarComponent, avatarHue, avatarInitials, AvatarUser } from './avatar.component'
+import { AvatarComponent, avatarTone, avatarInitials, AvatarUser } from './avatar.component'
 import { ButtonComponent } from './button.component'
 import { ConfirmDialogService } from './confirm-dialog.service'
 import { PillComponent } from './pill.component'
@@ -486,10 +486,10 @@ export class VersionsPanelComponent implements OnChanges {
   private buildAvatar(v: VersionModel): AvatarUser {
     // No author means a system-originated snapshot or a deleted account, not an
     // error — neutral initials, no image.
-    if (!v.author) return { initials: '··', hue: 0, imageUrl: null }
+    if (!v.author) return { initials: '··', tone: 1, imageUrl: null }
     return {
       initials: avatarInitials(v.author.name),
-      hue: avatarHue(v.author.login),
+      tone: avatarTone(v.author.login),
       imageUrl: userAvatarUrl(v.author.login)
     }
   }

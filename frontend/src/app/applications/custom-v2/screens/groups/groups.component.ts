@@ -455,10 +455,10 @@ interface GroupDraft {
         font-size: var(--si-text-4);
 
         &--group {
-          color: var(--si-nav);
+          color: var(--si-accent-ink);
         }
         &--personal {
-          color: var(--si-violet, var(--si-nav));
+          color: var(--si-violet);
         }
       }
       .mg-row__label {
@@ -510,7 +510,7 @@ interface GroupDraft {
       .mg-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .mg-dialog {
@@ -526,7 +526,7 @@ interface GroupDraft {
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
-        box-shadow: var(--si-shadow2, 0 16px 32px rgba(0, 0, 0, 0.35));
+        box-shadow: var(--si-shadow2);
         padding: var(--si-space-9) var(--si-space-10);
         display: flex;
         flex-direction: column;
