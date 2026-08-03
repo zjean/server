@@ -11,6 +11,7 @@ import { BrowserApi, describeFileBrowserContract } from '../files/testing/file-b
 import { PersonalComponent } from './personal.component'
 
 const USER_ID = 7
+const USER_LOGIN = 'sync-in'
 
 describeFileBrowserContract({
   label: 'personal',
@@ -36,6 +37,10 @@ describeFileBrowserContract({
   compressRootAlias: 'personal',
   rootArchiveName: 'personal',
   userId: USER_ID,
+  userLogin: USER_LOGIN,
+  // In your personal space you are always the file owner, so the unlock always
+  // carries forceAsFileOwner=true — classic's `inPersonalSpace` short-circuit.
+  filesAreOwnedByUser: true,
   navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'favorites.loadFavoriteIds'],
   // Personal's onFabSheetSelect has its own switch and never closes the sheet.
   fabSheetClosesOnSelect: false

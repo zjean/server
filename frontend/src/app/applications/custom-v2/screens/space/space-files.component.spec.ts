@@ -12,6 +12,7 @@ import { SpaceFilesComponent } from './space-files.component'
 
 const ALIAS = 'demo'
 const USER_ID = 7
+const USER_LOGIN = 'sync-in'
 
 describeFileBrowserContract({
   label: 'space-files',
@@ -43,6 +44,10 @@ describeFileBrowserContract({
   compressRootAlias: ALIAS,
   rootArchiveName: ALIAS,
   userId: USER_ID,
+  userLogin: USER_LOGIN,
+  // Ownership in a space is per-root, so the file-owner verdict comes off the
+  // row's `root.owner.login` rather than from the screen.
+  filesAreOwnedByUser: false,
   // The extra listSpaces call is the space-name lookup fired from the listing's
   // success handler.
   navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'spaces.listSpaces', 'favorites.loadFavoriteIds'],

@@ -48,6 +48,15 @@ export interface BrowserContractParams {
   rootArchiveName: string
   /** Id of the logged-in user seeded into StoreService. */
   userId: number
+  /** Login of the logged-in user seeded into StoreService — what the lock flow compares against. */
+  userLogin: string
+  /**
+   * `repository.filesAreOwnedByUser` — whether the screen asserts file ownership
+   * by construction (personal) or defers to the row's `root.owner` (a space).
+   * Drives both halves of the unlock flow: whether Unlock is offered at all and
+   * whether the request carries `forceAsFileOwner=true`.
+   */
+  filesAreOwnedByUser: boolean
   /** Recorded side effects of one navigation, excluding the ngOnInit prologue. */
   navSequence: string[]
   /** Does `onFabSheetSelect` close the sheet itself? */
@@ -62,7 +71,7 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     deps.routeParams.next(p.routeParams)
     deps.routeUrl.next(urlSegments(...segs))
     deps.httpGetResponses.set([BROWSE, 'files', p.alias, ...segs].join('/'), { files })
-    deps.user.next({ id: p.userId })
+    deps.user.next({ id: p.userId, login: p.userLogin })
   }
 
   /** Mount + ngOnInit at `segs`, with the listing already stubbed. */
@@ -912,6 +921,147 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
         const { c, deps } = start()
         await c.bulkShare()
         expect(deps.log.count('shareDialog.open')).toBe(0)
+      })
+    })
+
+    // -----------------------------------------------------------------------
+    // L2. Locks — the unlock-only affordance behind the locked-row badge.
+    //
+    // Parity target: classic's `FilesLockDialogComponent`, reached from
+    // `openLockDialog` on the badge (spaces-browser.component.html:252 / :427).
+    // There is deliberately no "lock this file" gesture to pin — classic has
+    // none, so neither does this.
+    // -----------------------------------------------------------------------
+    describe('locks', () => {
+      const owner = (login: string) => ({ id: 1, login, email: `${login}@example.test`, fullName: `${login} Name` })
+
+      const lockedRow = (lockLogin: string, rootOwnerLogin?: string) =>
+        file({
+          id: 42,
+          name: 'locked.txt',
+          lock: { owner: owner(lockLogin), app: 'sync-in', info: 'edit', isExclusive: true },
+          ...(rootOwnerLogin ? { root: { id: 1, alias: 'r', permissions: 'v:m', owner: owner(rootOwnerLogin) } } : {})
+        } as never)
+
+      it('does nothing on a row that is not locked', async () => {
+        const { c, deps } = start()
+        await c.openLockDialog(FIXTURE_FILES[0])
+        expect(deps.log.count('lockDialog.open')).toBe(0)
+      })
+
+      it('opens the unlock dialog with the row name, the lock, and the file-owner verdict', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        await c.openLockDialog(row)
+        expect(deps.log.only('lockDialog.open').args[0]).toEqual({
+          fileName: 'locked.txt',
+          lock: row.lock,
+          // Personal short-circuits to true; a space has to find the login on
+          // the row's root, and this row's root owner is someone else.
+          isFileOwner: p.filesAreOwnedByUser
+        })
+      })
+
+      it('treats the user as the file owner when the row root names them', async () => {
+        const row = lockedRow('someone-else', p.userLogin)
+        const { c, deps } = start([], [row])
+        await c.openLockDialog(row)
+        expect(deps.log.only('lockDialog.open').args[0]).toMatchObject({ isFileOwner: true })
+      })
+
+      it('unlocks through the classic endpoint, passing isFileOwner as forceAsFileOwner', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start(['sub'], [row])
+        deps.lockResults.results.push('unlock')
+        await c.openLockDialog(row)
+        const call = deps.log.only('files.unlock')
+        expect((call.args[0] as { path: string }).path).toBe(filePath('locked.txt', ['sub']))
+        expect(call.args[1]).toBe(p.filesAreOwnedByUser)
+        expect(deps.log.count('files.unlockRequest')).toBe(0)
+      })
+
+      it('toasts and reloads after an unlock, in that order', async () => {
+        const row = lockedRow(p.userLogin)
+        const { c, deps } = start([], [row])
+        deps.lockResults.results.push('unlock')
+        deps.log.clear()
+        await c.openLockDialog(row)
+        // Sliced: the reload's own follow-on calls differ per screen (space-files
+        // resolves its space name from the listing) and are pinned elsewhere.
+        expect(deps.log.sequence().slice(0, 4)).toEqual(['lockDialog.open', 'files.unlock', 'toast.success', 'http.get'])
+        expect(deps.log.only('toast.success').args).toEqual(['v2_file_unlocked', { name: 'locked.txt' }])
+      })
+
+      it('drops the lock off the row optimistically, ahead of the reload', () => {
+        const row = lockedRow('someone-else')
+        const { c } = start([], [row])
+        expect(c.files()[0].lock).toBeTruthy()
+        c.stripLock(42)
+        expect(c.files()[0].lock).toBeUndefined()
+      })
+
+      it('lets the reload put a lock back — the browse response is the authority', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        deps.lockResults.results.push('unlock')
+        await c.openLockDialog(row)
+        expect(c.files()[0].lock).toBeTruthy()
+      })
+
+      it('sends an unlock request instead when that is the choice, naming the holder', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start(['sub'], [row])
+        deps.lockResults.results.push('request')
+        await c.openLockDialog(row)
+        expect((deps.log.only('files.unlockRequest').args[0] as { path: string }).path).toBe(filePath('locked.txt', ['sub']))
+        expect(deps.log.count('files.unlock')).toBe(0)
+        expect(deps.log.only('toast.success').args).toEqual(['v2_unlock_request_sent', { owner: 'someone-else Name' }])
+      })
+
+      it('does nothing when the dialog is dismissed', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        await c.openLockDialog(row)
+        expect(deps.log.count('files.unlock')).toBe(0)
+        expect(deps.log.count('files.unlockRequest')).toBe(0)
+      })
+
+      // A 409 lock conflict answers with a bare FileLockProps body and no
+      // `message` at all (FileError / LockConflict extend Error, not
+      // HttpException), so a naive `e.error.message` would toast "undefined".
+      it('falls back to its own message when the error body carries none', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        deps.lockResults.results.push('unlock')
+        deps.unlockError = { status: 409, body: { owner: owner('someone-else'), app: 'sync-in', isExclusive: true } }
+        await c.openLockDialog(row)
+        expect(deps.log.only('toast.error').args[0]).toBe('Unlock failed')
+      })
+
+      it('prefers the server message when there is one', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        deps.lockResults.results.push('unlock')
+        deps.unlockError = { status: 403, body: { message: 'Not allowed' } }
+        await c.openLockDialog(row)
+        expect(deps.log.only('toast.error').args[0]).toBe('Not allowed')
+      })
+
+      it('reports a failed unlock request too', async () => {
+        const row = lockedRow('someone-else')
+        const { c, deps } = start([], [row])
+        deps.lockResults.results.push('request')
+        deps.unlockRequestError = { status: 500, body: null }
+        await c.openLockDialog(row)
+        expect(deps.log.only('toast.error').args[0]).toBe('Unlock request failed')
+      })
+
+      // Classic's FileLockFormatPipe, verbatim: name (email) - info app.
+      it('formats the badge tooltip the way classic formats it', () => {
+        const row = lockedRow('someone-else')
+        const { c } = start([], [row])
+        expect(c.lockLabel(row)).toBe('someone-else Name (someone-else@example.test) - edit sync-in')
+        expect(c.lockLabel(FIXTURE_FILES[0])).toBe('')
       })
     })
 

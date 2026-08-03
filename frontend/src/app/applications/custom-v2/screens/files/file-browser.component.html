@@ -148,6 +148,30 @@
                   @if (favoritesService.isFavorite(f.id)) {
                     <app-v2-icon name="star" [size]="13" class="file-row__favorite" [attr.title]="'Favorites' | translate: locale.language" />
                   }
+                  <!-- Locked-row badge, list mode. Classic's equivalent is the
+                       `@case ('info')` badge at spaces-browser.component.html:427 —
+                       a clickable badge carrying the lock owner in its tooltip and
+                       opening the unlock dialog.
+                       It lives in the NAME cell rather than classic's Info cell for
+                       one reason: `.file-row__info` is `display: none` below 768px
+                       (see the mobile block in the stylesheet), and this is the only
+                       badge that is an *action*. In the Info cell a mobile user would
+                       have a file they cannot write and no unlock path at all.
+                       Rose for an exclusive lock, amber for a co-editing session —
+                       the split classic draws between faLock and faLockOpen. -->
+                  @if (f.lock) {
+                    <button
+                      type="button"
+                      class="file-row__lock-btn"
+                      (click)="$event.stopPropagation(); openLockDialog(f)"
+                      [attr.title]="lockLabel(f)"
+                      [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                    >
+                      <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="11">
+                        <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="10" />
+                      </app-v2-pill>
+                    </button>
+                  }
                 </div>
                 <div class="file-row__size">
                   @if (!f.isDir) {
@@ -240,6 +264,22 @@
                       <app-v2-icon name="star" [size]="12" />
                     </span>
                   }
+                  <!-- Grid-mode counterpart of classic's gallery badge
+                       (spaces-browser.component.html:427). Bottom-right so it
+                       cannot collide with the comments pill above it. -->
+                  @if (f.lock) {
+                    <button
+                      type="button"
+                      class="file-card__lock"
+                      (click)="$event.stopPropagation(); openLockDialog(f)"
+                      [attr.title]="lockLabel(f)"
+                      [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                    >
+                      <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
+                        <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
+                      </app-v2-pill>
+                    </button>
+                  }
                 </div>
                 <div class="file-card__body">
                   <div class="file-card__name">{{ f.name }}</div>
@@ -298,6 +338,22 @@
                       <app-v2-pill color="gray" [size]="10">
                         <app-v2-icon name="star" [size]="9" />
                       </app-v2-pill>
+                    }
+                    <!-- Gallery mode is classic's own badge row
+                         (spaces-browser.component.html:427); the lock pill joins
+                         the existing tag strip rather than getting its own corner. -->
+                    @if (f.lock) {
+                      <button
+                        type="button"
+                        class="gallery-card__lock"
+                        (click)="$event.stopPropagation(); openLockDialog(f)"
+                        [attr.title]="lockLabel(f)"
+                        [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                      >
+                        <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
+                          <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
+                        </app-v2-pill>
+                      </button>
                     }
                   </div>
                 </div>

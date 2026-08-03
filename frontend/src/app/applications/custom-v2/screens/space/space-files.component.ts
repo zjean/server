@@ -80,6 +80,10 @@ export class SpaceFilesComponent extends FileBrowserBase {
     dialogOwnerId: (): number | null => null,
     compressRootAlias: (): string => this.repository.alias(),
 
+    // Ownership in a space is per-root, so the base falls back to the row's own
+    // `root.owner.login` — the other half of classic's file-owner test.
+    filesAreOwnedByUser: false,
+
     folderRoute: (segments: readonly string[]): unknown[] => ['/', V2_PATH, V2_ROUTES.SPACES, this.repository.alias(), ...segments],
 
     // targetPath maps each routable segment to a Sync-in absolute directory path
