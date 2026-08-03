@@ -49,6 +49,21 @@ export interface FileBrowserRepository {
   /** `rootAlias` on each entry of the compress DTO. */
   compressRootAlias(): string
 
+  /**
+   * Whether this repository's files are, by construction, owned by the logged-in
+   * user. Personal: true. A space: false — ownership is per-root there and comes
+   * off the row (`file.root.owner.login`).
+   *
+   * This is the screen half of classic's file-owner test, verbatim:
+   * `spacesBrowserService.inPersonalSpace || file.root?.owner?.login ===
+   * userLogin` (files-lock-dialog.component.ts:37). It decides whether the
+   * unlock dialog offers Unlock at all, and whether the unlock request carries
+   * `forceAsFileOwner=true` (files.service.ts:239). It lives here rather than as
+   * an `if` in the base because it is exactly the kind of per-screen wire fact
+   * this seam exists for.
+   */
+  readonly filesAreOwnedByUser: boolean
+
   // -- Routing -------------------------------------------------------------
 
   /** Router commands addressing a directory inside this repository. */

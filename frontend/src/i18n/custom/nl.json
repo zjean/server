@@ -245,5 +245,11 @@
   "Search users…": "Zoek gebruikers…",
   "Search for people to add to this group.": "Zoek personen om aan deze groep toe te voegen.",
   "You do not belong to any group yet.": "Je bent nog geen lid van een groep.",
-  "Failed to load groups": "Laden van groepen mislukt"
+  "Failed to load groups": "Laden van groepen mislukt",
+  "v2_locked_by": "Vergrendeld door {{ owner }}",
+  "v2_edited_by": "Wordt bewerkt door {{ owner }}",
+  "v2_file_unlocked": "{{ name }} is ontgrendeld",
+  "v2_unlock_request_sent": "Er is een ontgrendelverzoek naar {{ owner }} gestuurd",
+  "Unlock failed": "Ontgrendelen mislukt",
+  "Unlock request failed": "Ontgrendelverzoek mislukt"
 }

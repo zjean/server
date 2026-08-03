@@ -30,6 +30,7 @@ import { StoreService } from '../../../../store/store.service'
 import type { FileEvent } from '../../../files/interfaces/file-event.interface'
 import type { FileUpload } from '../../../files/interfaces/file-upload.interface'
 import type { FileModel } from '../../../files/models/file.model'
+import { fileLockPropsToString } from '../../../files/components/utils/file-lock.utils'
 import { FilesService } from '../../../files/services/files.service'
 import { FilesUploadService } from '../../../files/services/files-upload.service'
 import type { ActionSheetEntry } from '../../components/action-sheet.component'
@@ -37,6 +38,7 @@ import { CompressDialogService } from '../../components/compress-dialog.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import type { ContextMenuAnchor, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
 import { LinkDialogService } from '../../components/link-dialog.service'
+import { LockDialogService } from '../../components/lock-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
 import { ToastService } from '../../components/toast.service'
@@ -128,6 +130,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   private readonly promptDialog = inject(PromptDialogService)
   private readonly compressDialog = inject(CompressDialogService)
   private readonly linkDialog = inject(LinkDialogService)
+  private readonly lockDialog = inject(LockDialogService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
   protected readonly store = inject(StoreService)
@@ -792,6 +795,87 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       relativePath: [...segs, file.name].join('/'),
       ownerId: this.repository.dialogOwnerId()
     })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Locks
+  //
+  // Parity target: classic's clickable lock badge on a locked row
+  // (spaces-browser.component.html:252 list / :427 gallery →
+  // `filesService.openLockDialog`). The affordance is the badge, NOT a
+  // context-menu entry, and it is unlock-only: classic offers no way to TAKE a
+  // lock, because `filesService.lock()` belongs to editor sessions (including
+  // v2's own markdown and text/code editors). Do not add one here.
+  // ---------------------------------------------------------------------------
+
+  /** Tooltip text for a locked row — `Full Name (email) - <info> <app>`, classic's FileLockFormatPipe. */
+  protected lockLabel(file: FileProps): string {
+    return file.lock ? fileLockPropsToString(file.lock) : ''
+  }
+
+  /**
+   * Classic's `isFileOwner`, both halves: the screen-level fact
+   * (`spacesBrowserService.inPersonalSpace`, here `repository.filesAreOwnedByUser`)
+   * short-circuits the per-row one (`file.root?.owner?.login === userLogin`).
+   */
+  protected isFileOwner(file: FileProps): boolean {
+    if (this.repository.filesAreOwnedByUser) return true
+    const login = this.store.user.getValue()?.login
+    return !!login && file.root?.owner?.login === login
+  }
+
+  protected async openLockDialog(file: FileProps): Promise<void> {
+    const lock = file.lock
+    if (!lock) return
+    const isFileOwner = this.isFileOwner(file)
+    const choice = await this.lockDialog.open({ fileName: file.name, lock, isFileOwner })
+    if (choice === 'unlock') this.unlockFile(file, isFileOwner)
+    else if (choice === 'request') this.requestUnlock(file)
+  }
+
+  // `forceAsFileOwner` is classic's second argument to `unlock` verbatim — it
+  // sets the FORCE_AS_FILE_OWNER query param (files.service.ts:239), and classic
+  // passes `isFileOwner` regardless of whether the user also holds the lock.
+  private unlockFile(file: FileProps, forceAsFileOwner: boolean): void {
+    this.filesService.unlock(this.buildFileStub(file), forceAsFileOwner).subscribe({
+      next: () => {
+        // Optimistic strip so the badge goes at once (classic does the same with
+        // `file.removeLock()`), then refresh — the browse response is the
+        // authority on whether the lock is really gone.
+        this.stripLock(file.id)
+        this.toast.success('v2_file_unlocked', { name: file.name })
+        this.refresh()
+      },
+      error: (e: HttpErrorResponse) => this.toast.error(this.lockErrorMessage(e, 'Unlock failed'))
+    })
+  }
+
+  private requestUnlock(file: FileProps): void {
+    this.filesService.unlockRequest(this.buildFileStub(file)).subscribe({
+      next: () => this.toast.success('v2_unlock_request_sent', { owner: file.lock?.owner?.fullName ?? file.lock?.owner?.login ?? '' }),
+      error: (e: HttpErrorResponse) => this.toast.error(this.lockErrorMessage(e, 'Unlock request failed'))
+    })
+  }
+
+  private stripLock(fileId: number): void {
+    this.files.update((rows) => rows.map((f) => (f.id === fileId ? { ...f, lock: undefined } : f)))
+  }
+
+  /**
+   * The lock endpoints do NOT reliably answer with `{ message }`.
+   * `FileError` and `LockConflict` extend `Error` rather than `HttpException`, so
+   * whatever reaches the wire depends on the translation layer in front of them:
+   * a 409 lock conflict answers with a bare `FileLockProps` body (which is why
+   * the text editor reads `e.error as FileLockProps`), and an untranslated throw
+   * answers with a plain 500 whose body carries no message at all. So take a
+   * message only when there is a string one, and otherwise show our own.
+   */
+  private lockErrorMessage(e: HttpErrorResponse, fallback: string): string {
+    const body: unknown = e?.error
+    if (typeof body === 'string' && body.trim()) return body
+    const message = (body as { message?: unknown } | null)?.message
+    if (typeof message === 'string' && message.trim()) return message
+    return fallback
   }
 
   protected openComments(file: FileProps): void {

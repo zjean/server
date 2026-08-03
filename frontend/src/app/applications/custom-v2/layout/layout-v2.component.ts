@@ -4,6 +4,7 @@ import { L10nTranslateDirective } from 'angular-l10n'
 import { CompressDialogComponent } from '../components/compress-dialog.component'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
+import { LockDialogComponent } from '../components/lock-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
 import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
@@ -46,6 +47,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     PromptDialogComponent,
     CompressDialogComponent,
     LinkDialogComponent,
+    LockDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
     BottomTabBarComponent,

@@ -245,5 +245,11 @@
   "Search users…": "Search users…",
   "Search for people to add to this group.": "Search for people to add to this group.",
   "You do not belong to any group yet.": "You do not belong to any group yet.",
-  "Failed to load groups": "Failed to load groups"
+  "Failed to load groups": "Failed to load groups",
+  "v2_locked_by": "Locked by {{ owner }}",
+  "v2_edited_by": "Being edited by {{ owner }}",
+  "v2_file_unlocked": "{{ name }} was unlocked",
+  "v2_unlock_request_sent": "An unlock request was sent to {{ owner }}",
+  "Unlock failed": "Unlock failed",
+  "Unlock request failed": "Unlock request failed"
 }

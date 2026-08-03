@@ -35,6 +35,7 @@ import { SpacesService } from '../../../../spaces/services/spaces.service'
 import { CompressDialogService } from '../../../components/compress-dialog.service'
 import { ConfirmDialogService } from '../../../components/confirm-dialog.service'
 import { LinkDialogService } from '../../../components/link-dialog.service'
+import { LockDialogService } from '../../../components/lock-dialog.service'
 import { PromptDialogService } from '../../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../../components/share-dialog.service'
 import { ToastService } from '../../../components/toast.service'
@@ -211,11 +212,15 @@ export class HarnessDeps {
   promptResults: DialogQueue<string | null> = { results: [], fallback: null }
   treePickerResults: DialogQueue<{ path: string } | null> = { results: [], fallback: null }
   compressResults: DialogQueue<Record<string, unknown> | null> = { results: [], fallback: null }
+  lockResults: DialogQueue<'unlock' | 'request' | null> = { results: [], fallback: null }
 
   // --- FilesService behaviour -------------------------------------------
   /** `rename` / `make` resolve by default; set to a status to make them error. */
   renameError: { status: number; message: string } | null = null
   makeError: { status: number; message: string } | null = null
+  /** `unlock` / `unlockRequest` resolve by default; set to make them error. */
+  unlockError: { status: number; body: unknown } | null = null
+  unlockRequestError: { status: number; body: unknown } | null = null
   /** Value assigned to FilesService.currentRoute, in assignment order. */
   readonly currentRouteWrites: string[] = []
 
@@ -223,7 +228,9 @@ export class HarnessDeps {
   readonly routeUrl = new BehaviorSubject<UrlSegmentLike[]>([])
   readonly routeParams = new BehaviorSubject<Record<string, string>>({})
   readonly filesOnEvent = new Subject<unknown>()
-  readonly user = new BehaviorSubject<{ id: number } | null>(null)
+  // `login` matters as well as `id`: it is what the lock flow compares against
+  // `file.lock.owner.login` / `file.root.owner.login`.
+  readonly user = new BehaviorSubject<{ id: number; login?: string } | null>(null)
   readonly spaces = new BehaviorSubject<{ alias: string; name: string }[]>([])
 
   // --- misc state -------------------------------------------------------
@@ -276,6 +283,16 @@ export class HarnessDeps {
         log.record('files.make', type, name, dirPath, asCallBack)
         if (this.makeError) return this.httpError(this.makeError.status, this.makeError.message)
         return of({})
+      },
+      unlock: (file: unknown, forceAsFileOwner?: boolean) => {
+        log.record('files.unlock', file, forceAsFileOwner)
+        if (this.unlockError) return throwError(() => ({ status: this.unlockError!.status, error: this.unlockError!.body }))
+        return of(undefined)
+      },
+      unlockRequest: (file: unknown) => {
+        log.record('files.unlockRequest', file)
+        if (this.unlockRequestError) return throwError(() => ({ status: this.unlockRequestError!.status, error: this.unlockRequestError!.body }))
+        return of(undefined)
       },
       downloadFromUrl: (url: string, name: string) => log.record('files.downloadFromUrl', url, name),
       downloadTaskArchive: (taskId: string) => log.record('files.downloadTaskArchive', taskId),
@@ -383,6 +400,15 @@ export class HarnessDeps {
           open: (opts: unknown) => {
             log.record('linkDialog.open', opts)
             return Promise.resolve(undefined)
+          }
+        }
+      },
+      {
+        provide: LockDialogService,
+        useValue: {
+          open: (opts: unknown) => {
+            log.record('lockDialog.open', opts)
+            return Promise.resolve(this.next(this.lockResults))
           }
         }
       },

@@ -70,6 +70,12 @@ export class PersonalComponent extends FileBrowserBase {
     dialogOwnerId: (): number | null => this.store.user.getValue()?.id ?? null,
     compressRootAlias: (): string => SPACE_ALIAS.PERSONAL,
 
+    // In your personal space you are always the file owner — classic states the
+    // same thing as `spacesBrowserService.inPersonalSpace` in the short-circuit
+    // of its file-owner test. So the unlock dialog always offers Unlock here,
+    // and the unlock carries forceAsFileOwner=true.
+    filesAreOwnedByUser: true,
+
     folderRoute: (segments: readonly string[]): unknown[] => ['/', V2_PATH, V2_ROUTES.PERSONAL, ...segments],
 
     // targetPath is the Sync-in absolute directory path each breadcrumb segment
