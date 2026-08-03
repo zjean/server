@@ -6,6 +6,7 @@ import { AdminToolsComponent } from './screens/admin/admin-tools.component'
 import { AdminUsersComponent } from './screens/admin/admin-users.component'
 import { FavoritesComponent } from './screens/favorites/favorites.component'
 import { FileDetailComponent } from './screens/file-detail/file-detail.component'
+import { GroupsComponent } from './screens/groups/groups.component'
 import { KitComponent } from './screens/kit/kit.component'
 import { PeopleComponent } from './screens/people/people.component'
 import { PersonalComponent } from './screens/personal/personal.component'
@@ -75,6 +76,14 @@ export const v2Routes: Routes = [
   { path: V2_ROUTES.SEARCH, component: SearchComponent },
   { path: V2_ROUTES.SETTINGS, component: SettingsComponent },
   { path: V2_ROUTES.PEOPLE, component: PeopleComponent },
+  // Same one-'**'-child shape as PERSONAL and SPACES above, for the same reason:
+  // root ('/v2/groups') and inside-a-group ('/v2/groups/<name>') are one component
+  // that reloads in place off route.url, so both levels must resolve through a
+  // SINGLE route config or Angular destroys and recreates it on every hop.
+  {
+    path: V2_ROUTES.GROUPS,
+    children: [{ path: '**', component: GroupsComponent }]
+  },
   { path: V2_ROUTES.ADMIN, pathMatch: 'full', component: AdminComponent },
   { path: V2_ROUTES.ADMIN_USERS, component: AdminUsersComponent },
   { path: V2_ROUTES.ADMIN_GROUPS, component: AdminGroupsComponent },

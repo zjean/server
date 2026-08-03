@@ -23,6 +23,7 @@ export const V2_ROUTES = {
   SEARCH: 'search',
   SETTINGS: 'settings',
   PEOPLE: 'people',
+  GROUPS: 'groups',
   ADMIN: 'admin',
   ADMIN_USERS: 'admin/users',
   ADMIN_GROUPS: 'admin/groups',

@@ -166,6 +166,11 @@ export class UserGroupPickerComponent {
   // instead of the default /api/users (members visible to the current user).
   @Input() adminScope = false
   @Input() onlyUsers = false
+  // Restrict results to one USER_ROLE. Classic's add-users-to-group dialog sets
+  // USER_ROLE.USER when the target is a regular (admin-provisioned) group, so
+  // guests cannot be added to one, and leaves it unset for a personal group
+  // (user-group-add-users-dialog.component.ts:35). Unset means "any role".
+  @Input() usersRole?: number
   @Output() pick = new EventEmitter<PickedMember>()
 
   @ViewChild('input') protected input?: ElementRef<HTMLInputElement>
@@ -193,7 +198,8 @@ export class UserGroupPickerComponent {
             search: trimmed,
             ignoreUserIds: this.ignoreUserIds,
             ignoreGroupIds: this.ignoreGroupIds,
-            onlyUsers: this.onlyUsers || undefined
+            onlyUsers: this.onlyUsers || undefined,
+            usersRole: this.usersRole
           }
           const url = this.adminScope ? API_ADMIN_MEMBERS : USERS_ROUTE.BASE
           return this.http.request<Member[]>('search', url, { body })
