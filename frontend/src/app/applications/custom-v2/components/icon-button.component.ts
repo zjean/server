@@ -45,7 +45,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         color: var(--si-fg);
       }
       .icon-btn--active {
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg);
       }
       .icon-btn:disabled {

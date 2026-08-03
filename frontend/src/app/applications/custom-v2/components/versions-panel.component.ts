@@ -230,7 +230,7 @@ interface VersionRow extends VersionModel {
       .vp__state-lede {
         margin-top: var(--si-space-2);
         font-size: var(--si-text-4);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .vp__list {
         list-style: none;
@@ -270,7 +270,7 @@ interface VersionRow extends VersionModel {
       }
       .vp-row__sub {
         font-size: var(--si-text-3);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         overflow-wrap: anywhere;
       }
       .vp-row__mono {
@@ -288,14 +288,14 @@ interface VersionRow extends VersionModel {
         background: transparent;
         border: none;
         cursor: pointer;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0;
 
         &:hover:not(:disabled) {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
         &:disabled {
@@ -303,7 +303,7 @@ interface VersionRow extends VersionModel {
           opacity: 0.5;
         }
         &--on {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
         &--danger:hover:not(:disabled) {
@@ -330,7 +330,7 @@ interface VersionRow extends VersionModel {
           border-color: var(--si-nav);
         }
         &::placeholder {
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
         }
       }
       .vp-row__editor-actions {
@@ -356,7 +356,7 @@ interface VersionRow extends VersionModel {
       .vp__usage-bar {
         height: 4px;
         border-radius: 2px;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         overflow: hidden;
       }
       .vp__usage-fill {
@@ -369,7 +369,7 @@ interface VersionRow extends VersionModel {
       }
       .vp__usage-note {
         font-size: var(--si-text-3);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
     `
   ]

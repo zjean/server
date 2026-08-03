@@ -63,8 +63,8 @@
     height: 18px;
     padding: 0 var(--si-space-4);
     border-radius: var(--si-r4);
-    background: var(--si-bg4);
-    color: var(--si-fg-faint);
+    background: var(--si-bg3);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
     line-height: 1;
@@ -112,7 +112,7 @@
     gap: var(--si-space-3);
     margin-top: var(--si-space-2);
     font-size: var(--si-text-5);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     min-width: 0;
   }
 
@@ -134,7 +134,7 @@
   &__time {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     white-space: nowrap;
     flex-shrink: 0;
   }

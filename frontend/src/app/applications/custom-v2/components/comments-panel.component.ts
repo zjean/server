@@ -148,7 +148,7 @@ interface CommentRow extends Comment {
           border-color: var(--si-nav);
         }
         &::placeholder {
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
         }
       }
       .cp__compose-actions {
@@ -195,7 +195,7 @@ interface CommentRow extends Comment {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg-muted);
           font-size: var(--si-text-4);
         }
@@ -214,7 +214,7 @@ interface CommentRow extends Comment {
       }
       .cp-comment__time {
         font-size: var(--si-text-3);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
         display: flex;
         align-items: center;
@@ -230,14 +230,14 @@ interface CommentRow extends Comment {
         background: transparent;
         border: none;
         cursor: pointer;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         padding: 0;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
 

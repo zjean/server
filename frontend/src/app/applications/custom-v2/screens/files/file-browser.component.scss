@@ -131,7 +131,7 @@
   }
 
   &__filter-icon {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     flex-shrink: 0;
   }
 
@@ -147,16 +147,16 @@
     min-width: 0;
 
     &::placeholder {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
   }
 
   &__filter-hint {
     font-size: var(--si-text-2);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     padding: 1px var(--si-space-3);
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     border-radius: 3px;
     border: 1px solid var(--si-line);
     flex-shrink: 0;
@@ -188,7 +188,7 @@
       color 120ms ease;
 
     &:hover:not(:disabled) {
-      background: var(--si-bg4);
+      background: var(--si-bg3);
       color: var(--si-fg);
     }
 
@@ -317,11 +317,11 @@
   // bg3 hover. The checked checkbox already carries the brand cue, so no
   // accent edge-bar is needed (and a warm wash over navy would muddy).
   &--selected {
-    background: var(--si-bg4);
+    background: var(--si-bg3);
   }
 
   &--selected:hover {
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     filter: brightness(1.05);
   }
 
@@ -393,7 +393,7 @@
   }
 
   &__modified-pill {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     font-size: var(--si-text-5);
     letter-spacing: -0.1px;
@@ -566,7 +566,7 @@
 
   &__meta {
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     display: flex;
     align-items: center;
@@ -660,7 +660,7 @@
     // Measured in-browser — a gallery of ten file types yields ten distinct
     // tints, e.g. a .docx row resolves --fc-bg to oklch(.8 .13 240 / .2).
     // The literal fallbacks are kept as the unmapped-type floor.
-    background: linear-gradient(135deg, var(--fc-bg, var(--si-bg4)), var(--si-bg3));
+    background: linear-gradient(135deg, var(--fc-bg, var(--si-bg3)), var(--si-bg3));
     color: var(--fc-fg, var(--si-fg-muted));
     display: flex;
     align-items: center;
@@ -705,7 +705,7 @@
 
   &__meta {
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     display: flex;
     align-items: center;
@@ -774,7 +774,7 @@
   &:hover,
   &:focus-visible {
     opacity: 1;
-    background: var(--si-bg4);
+    background: var(--si-bg3);
   }
 }
 
@@ -782,4 +782,3 @@
   opacity: 0.6;
   letter-spacing: 1px;
 }
-

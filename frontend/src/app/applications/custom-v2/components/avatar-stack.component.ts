@@ -62,7 +62,7 @@ export interface AvatarStackUser extends AvatarUser {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         font-family: var(--si-sans);
         font-weight: 600;

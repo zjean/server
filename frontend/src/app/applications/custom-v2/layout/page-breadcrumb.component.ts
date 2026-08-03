@@ -66,7 +66,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
         font-family: var(--si-sans);
         font-size: var(--si-text-6);
         line-height: 1.4;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .pcb__sep {
         opacity: 0.55;
@@ -84,15 +84,15 @@ import { V2BreadcrumbService } from './breadcrumb.service'
         background: transparent;
         border: 0;
         font: inherit;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         text-decoration: none;
         cursor: default;
         white-space: nowrap;
       }
       .pcb__crumb--link {
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
-        transition: color var(--si-dur-2) var(--si-ease);
+        transition: color var(--si-dur-2) var(--si-ease-out);
       }
       .pcb__crumb--link:hover {
         color: var(--si-fg-muted);

@@ -105,7 +105,7 @@
   &__role {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     margin-top: var(--si-space-2);
@@ -121,7 +121,7 @@
     font-size: var(--si-text-2);
     font-weight: 600;
     letter-spacing: 1.4px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     text-transform: uppercase;
     font-family: var(--si-display);
   }
@@ -138,7 +138,7 @@
 
   &__storage-bar {
     height: 6px;
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     border-radius: 3px;
     overflow: hidden;
   }
@@ -152,7 +152,7 @@
   &__storage-meta {
     font-family: var(--si-mono);
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__grid {
@@ -235,7 +235,7 @@
 
   &__hint {
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     max-width: 420px;
   }
 
@@ -319,7 +319,7 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__select .settings__input {
@@ -350,10 +350,12 @@
   text-align: left;
   font-family: inherit;
   color: inherit;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease;
 
   &:hover {
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     border-color: var(--si-line-strong);
   }
 
@@ -383,12 +385,12 @@
 
   &__description {
     font-size: var(--si-text-5);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-1);
   }
 
   &__chev {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     flex-shrink: 0;
   }
 }

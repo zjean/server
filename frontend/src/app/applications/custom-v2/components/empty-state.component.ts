@@ -36,7 +36,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         justify-content: center;
         padding: 56px var(--si-space-10);
         margin: var(--si-space-8) var(--si-space-12) var(--si-space-12);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         text-align: center;
         background: var(--si-bg3);
         border: 1px dashed var(--si-line-strong);
@@ -46,7 +46,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         width: 48px;
         height: 48px;
         border-radius: 24px;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         // tertiary, not ghost: ghost on bg4 measured 2.59, below the 3:1 that
         // SC 1.4.11 asks of a meaningful glyph. The icon is arguably decorative
         // (the title states the same thing), but it was also simply too faint
@@ -69,7 +69,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
       .empty__lede {
         margin-top: var(--si-space-3);
         font-size: var(--si-text-9);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         max-width: 32ch;
         line-height: 1.5;
       }

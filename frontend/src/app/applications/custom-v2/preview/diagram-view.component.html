@@ -22,9 +22,7 @@
     (click)="$event.stopPropagation()"
   >
     <div class="diagram-conflict__title" l10nTranslate>Conflict — someone else saved this diagram</div>
-    <div class="diagram-conflict__message" l10nTranslate>
-      Your unsaved edits are still on the canvas. Pick one:
-    </div>
+    <div class="diagram-conflict__message" l10nTranslate>Your unsaved edits are still on the canvas. Pick one:</div>
     <div class="diagram-conflict__actions">
       <button type="button" class="diagram-conflict__btn diagram-conflict__btn--ghost" (click)="cancelConflict()">
         {{ 'Cancel' | translate: locale.language }}

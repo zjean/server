@@ -331,7 +331,7 @@ interface GroupDraft {
       }
       .mg__count {
         font-size: var(--si-text-4);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
       }
       .mg__actions {
@@ -370,7 +370,7 @@ interface GroupDraft {
         border: 1px solid var(--si-line);
         color: var(--si-fg-muted);
         &--muted {
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
         }
       }
       .mg__state {
@@ -408,7 +408,7 @@ interface GroupDraft {
           font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
           font-weight: 600;
           font-family: var(--si-display);
         }
@@ -447,7 +447,7 @@ interface GroupDraft {
         object-fit: cover;
       }
       .mg-row__glyph {
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         display: inline-flex;
         align-items: center;
@@ -491,7 +491,7 @@ interface GroupDraft {
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         padding: 0;
         display: inline-flex;
@@ -499,7 +499,7 @@ interface GroupDraft {
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
         &--danger:hover {
@@ -564,7 +564,7 @@ interface GroupDraft {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .mg-field input[type='text'],
@@ -617,14 +617,14 @@ interface GroupDraft {
         border-radius: 4px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-rose);
         }
       }

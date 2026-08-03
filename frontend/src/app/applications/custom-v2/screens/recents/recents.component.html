@@ -12,12 +12,7 @@
       </header>
       <div class="recents__pinned-grid">
         @for (f of pinnedFiles(); track f.id) {
-          <button
-            type="button"
-            class="pinned-card"
-            (click)="openFile(f.path, f.name)"
-            (auxclick)="onRowAuxClick($event, f.path, f.name)"
-          >
+          <button type="button" class="pinned-card" (click)="openFile(f.path, f.name)" (auxclick)="onRowAuxClick($event, f.path, f.name)">
             <div class="pinned-card__thumb">
               <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="56" [rounded]="12" />
               <span class="pinned-card__time">{{ f.mtime | amTimeAgo }}</span>
@@ -72,12 +67,7 @@
           <div class="bucket-rule"></div>
         </header>
         @for (f of g.items; track f.id) {
-          <button
-            type="button"
-            class="recent-row"
-            (click)="openFile(f.path, f.name)"
-            (auxclick)="onRowAuxClick($event, f.path, f.name)"
-          >
+          <button type="button" class="recent-row" (click)="openFile(f.path, f.name)" (auxclick)="onRowAuxClick($event, f.path, f.name)">
             <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
             <div class="recent-row__meta">
               <div class="recent-row__name">{{ f.name }}</div>

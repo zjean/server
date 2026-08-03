@@ -81,6 +81,40 @@
   .v2-prose:focus-visible {
     outline: none;
   }
+
+  // ─── Tooltip (appV2Tooltip) ──────────────────────────────────────────
+  // Styled here rather than in the directive because the directive has no view of
+  // its own — it inserts a plain element into .v2-root so the tokens resolve.
+  // Opacity starts at 0 and the directive sets it after measuring, so the tooltip
+  // never flashes at the wrong position on its first frame.
+  .v2-tooltip {
+    position: fixed;
+    z-index: var(--si-z-popover);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--si-space-4);
+    max-width: 280px;
+    padding: var(--si-space-3) var(--si-space-5);
+    background: var(--si-bg6);
+    color: var(--si-fg);
+    border-radius: var(--si-r1);
+    box-shadow: var(--si-shadow2);
+    font-size: var(--si-text-7);
+    line-height: 1.4;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--si-dur-1) var(--si-ease-out);
+  }
+
+  .v2-tooltip__kbd {
+    flex: none;
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-fg-muted);
+    background: var(--si-line-strong);
+    border-radius: 3px;
+    padding: 2px var(--si-space-3);
+  }
 }
 
 // ─── Reduced motion (#398) ─────────────────────────────────────────────

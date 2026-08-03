@@ -55,7 +55,7 @@
   }
 
   &__icon {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     flex-shrink: 0;
   }
 
@@ -71,7 +71,7 @@
     min-width: 0;
 
     &::placeholder {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
 
     &::-webkit-search-cancel-button {
@@ -89,7 +89,10 @@
     cursor: pointer;
     font-family: var(--si-sans);
     font-size: var(--si-text-5);
-    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease;
 
     &:hover {
       color: var(--si-fg);
@@ -124,7 +127,7 @@
   &__count {
     padding: var(--si-space-4) var(--si-space-2);
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: 0.02em;
   }
@@ -165,7 +168,7 @@
 
   &__path {
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-1);
     overflow: hidden;
     text-overflow: ellipsis;

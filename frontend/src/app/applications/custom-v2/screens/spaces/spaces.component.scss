@@ -103,7 +103,7 @@
 
   &:hover {
     border-color: var(--si-line-strong);
-    background: var(--si-bg4);
+    background: var(--si-bg3);
   }
 
   &:active {
@@ -149,7 +149,7 @@
 
   &__description {
     font-size: var(--si-text-7);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     line-height: 1.4;
     display: -webkit-box;
@@ -211,7 +211,7 @@
   }
 
   &__quota-sep {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin: 0 var(--si-space-2);
   }
 
@@ -246,7 +246,7 @@
 
   &__modified {
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     letter-spacing: -0.1px;
     font-variant-numeric: tabular-nums;

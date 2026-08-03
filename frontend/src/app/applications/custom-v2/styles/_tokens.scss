@@ -114,11 +114,11 @@
   --si-bg5: #2d2a28; // surface-3   · dialogs, context menus, sheets, popovers
   --si-bg6: #383431; // surface-4   · tooltips, pressed, drag-over, segmented-on
 
-  // Retired. `bg4` was documented as "selected row", and in this system a
-  // selected row is --si-accent-soft plus a 2px cobalt marker — not a surface
-  // step, so the slot has no remaining role. Aliased rather than deleted so its
-  // ~40 consumers keep rendering; the alias goes when the table is rebuilt.
-  --si-bg4: var(--si-bg3);
+  // `bg4` is GONE, not renumbered. It was documented as "selected row", and in
+  // this system a selected row is --si-accent-soft plus a 2px cobalt marker — not
+  // a surface step. Its 23 consumers moved to bg3. Do not reintroduce the name:
+  // the ladder deliberately has a hole where a seventh step would tempt someone
+  // to skip two steps between adjacent planes.
 
   // ─── Lines — three values, and that is the whole budget ───────────────
   // Note what these are NOT for: there is no `border-left` or `border-right`
@@ -144,11 +144,10 @@
   --si-fg-tertiary: #8a857d; // tertiary  · metadata, sizes, timestamps (bg0–bg3)
   --si-fg-ghost: #635e58; // quiet     · disabled labels, column heads. Decorative.
 
-  // Collapsed. The design's budget is four tiers; v2 had five, and `faint` sat
-  // between primary and secondary with no counterpart. Aliasing it to secondary
-  // IS the behavioural change — ~150 call sites across 31 files get the design's
-  // value immediately. The textual rename follows in the primitives phase.
-  --si-fg-faint: var(--si-fg-muted);
+  // There is no fifth tier. `faint` sat between primary and secondary with no
+  // counterpart in the design's four-value budget; its 31 files now say
+  // --si-fg-muted. New emphasis comes from size and weight, never from a new
+  // colour — if you want a tier between these two, you want a different size.
 
   // ─── Accent — cobalt. One accent, three jobs ──────────────────────────
   // The single primary action, the active navigation state, and focus. It is
@@ -342,10 +341,6 @@
   --si-ease-out: cubic-bezier(0.2, 0.8, 0.3, 1); // everything entering or settling
   --si-ease-in: cubic-bezier(0.4, 0, 1, 1); // everything leaving
 
-  // Alias so nothing breaks in this PR. Existing call sites move to ease-out /
-  // ease-in in the primitives phase; new code must not use this.
-  --si-ease: var(--si-ease-out);
-
   // ─── Stacking ────────────────────────────────────────────────────────
   // Unchanged from #405. Expressed as calc(band + n) at the call site so a
   // backdrop and the thing over it stay visibly related.
@@ -378,6 +373,11 @@
   --si-shadow1: 0 1px 2px rgba(0, 0, 0, 0.45); // cards on hover, sticky toolbars
   --si-shadow2: 0 4px 12px -2px rgba(0, 0, 0, 0.55); // popovers, dropdowns, tooltips
   --si-shadow3: 0 16px 40px -8px rgba(0, 0, 0, 0.65); // dialogs, sheets, bulk bar
+
+  // The pressed state, for every control kind. The design's rule is "active is a
+  // surface step plus a 1px inset", and NO CONTROL EVER MOVES ON PRESS — so the
+  // feedback has to come from shading rather than from transform.
+  --si-shadow-press: inset 0 1px 2px rgba(0, 0, 0, 0.35);
 
   // ─── File-type colour coding — ten hues, low saturation ──────────────
   // This reverses #419, which collapsed eight hues to four families because "a

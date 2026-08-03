@@ -104,9 +104,11 @@
     background: transparent;
     border: 0;
     border-radius: 6px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     cursor: pointer;
-    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
       background: var(--si-bg3);
@@ -133,7 +135,7 @@
     font-size: var(--si-text-1);
     font-weight: 500;
     letter-spacing: 1.1px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     text-transform: uppercase;
   }
@@ -142,7 +144,7 @@
     font-size: var(--si-text-2);
     font-weight: 600;
     letter-spacing: 1.2px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     padding: var(--si-space-4) var(--si-space-5) var(--si-space-3);
     text-transform: uppercase;
     font-family: var(--si-display);
@@ -181,7 +183,9 @@
     text-align: left;
     position: relative;
     text-decoration: none;
-    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
       background: var(--si-bg3);
@@ -218,7 +222,7 @@
   &__caret {
     margin-left: auto;
     opacity: 0.55;
-    transition: transform var(--si-dur-2) var(--si-ease);
+    transition: transform var(--si-dur-2) var(--si-ease-out);
 
     &--collapsed {
       transform: rotate(-90deg);
@@ -253,7 +257,7 @@
 
   &__user-usage {
     font-size: var(--si-text-2);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -272,13 +276,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     border-radius: 6px;
     text-decoration: none;
-    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
-      background: var(--si-bg4);
+      background: var(--si-bg3);
       color: var(--si-fg);
     }
   }
@@ -294,10 +300,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    transition: color var(--si-dur-2) var(--si-ease);
+    transition: color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
   }
 
@@ -310,7 +316,7 @@
     color: var(--si-fg-ghost);
     text-decoration: none;
     cursor: pointer;
-    transition: color var(--si-dur-2) var(--si-ease);
+    transition: color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
       color: var(--si-accent-ink);
@@ -339,7 +345,9 @@
     border-radius: 7px;
     cursor: pointer;
     text-decoration: none;
-    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
       background: var(--si-bg3);
@@ -357,7 +365,7 @@
   // separates it from the nav items, so it reads as chrome rather than
   // another nav item.
   &__rail-toggle {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__rail-divider {
@@ -378,6 +386,6 @@
 
   &__rail-expand {
     margin-top: var(--si-space-2);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 }

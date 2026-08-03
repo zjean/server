@@ -191,8 +191,12 @@
 // losing the cascade tiebreaker against those components' Emulated rules.
 
 @keyframes layout-v2-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

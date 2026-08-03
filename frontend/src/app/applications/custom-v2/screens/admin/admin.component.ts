@@ -110,7 +110,7 @@ interface AdminCard {
           border-color 120ms ease;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           border-color: var(--si-line-strong);
         }
         &--disabled {

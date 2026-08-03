@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core'
+import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { AvatarComponent, AvatarUser } from '../../components/avatar.component'
@@ -6,7 +6,13 @@ import { ButtonComponent, ButtonKind, ButtonSize } from '../../components/button
 import { FileGlyphComponent, FileGlyphType } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { LogoComponent } from '../../components/logo.component'
+import { InputComponent } from '../../components/input.component'
+import { PaginationComponent } from '../../components/pagination.component'
 import { PillComponent, PillColor } from '../../components/pill.component'
+import { SegmentedComponent, SegmentedOption } from '../../components/segmented.component'
+import { SkeletonComponent } from '../../components/skeleton.component'
+import { TabItem, TabsComponent } from '../../components/tabs.component'
+import { TooltipDirective } from '../../components/tooltip.directive'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 
 @Component({
@@ -22,7 +28,13 @@ import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
     LogoComponent,
     PillComponent,
     ButtonComponent,
-    IconButtonComponent
+    IconButtonComponent,
+    SegmentedComponent,
+    InputComponent,
+    TabsComponent,
+    SkeletonComponent,
+    PaginationComponent,
+    TooltipDirective
   ]
 })
 export class KitComponent implements OnInit {
@@ -123,7 +135,53 @@ export class KitComponent implements OnInit {
 
   readonly fileTypes: FileGlyphType[] = ['image', 'video', 'doc', 'sheet', 'deck', 'pdf', 'code', 'audio', 'archive', 'folder', 'default']
 
-  readonly pillColors: PillColor[] = ['gray', 'green', 'amber', 'rose', 'violet', 'cyan']
+  readonly pillColors: PillColor[] = ['gray', 'green', 'amber', 'rose', 'violet', 'cyan', 'accent']
+
+  // The design's seven badge meanings, each with the one colour it is allowed to
+  // be. Rendered as a row so a reviewer can check the set rather than the shapes.
+  readonly badgeMeanings: { color: PillColor; icon: IconV2Name | null; label: string }[] = [
+    { color: 'amber', icon: 'star', label: 'Favorite' },
+    { color: 'rose', icon: 'lock', label: 'Locked' },
+    { color: 'violet', icon: 'link', label: 'Link' },
+    { color: 'accent', icon: 'users', label: 'Shared · 3' },
+    { color: 'gray', icon: 'comment', label: '4' },
+    { color: 'green', icon: null, label: 'v3' },
+    { color: 'cyan', icon: null, label: 'Read-only' }
+  ]
+
+  // ─── Live state for the interactive primitives ──────────────────────────
+  readonly density = signal<'compact' | 'comfortable' | 'relaxed'>('comfortable')
+  readonly densityOptions: SegmentedOption<'compact' | 'comfortable' | 'relaxed'>[] = [
+    { id: 'compact', label: 'Compact' },
+    { id: 'comfortable', label: 'Comfortable' },
+    { id: 'relaxed', label: 'Relaxed' }
+  ]
+
+  readonly viewMode = signal<'list' | 'grid' | 'gallery'>('list')
+  readonly viewOptions: SegmentedOption<'list' | 'grid' | 'gallery'>[] = [
+    { id: 'list', icon: 'list', title: 'List' },
+    { id: 'grid', icon: 'grid', title: 'Grid' },
+    { id: 'gallery', icon: 'gallery', title: 'Gallery' }
+  ]
+
+  readonly scope = signal<'name' | 'fulltext'>('fulltext')
+  readonly scopeOptions: SegmentedOption<'name' | 'fulltext'>[] = [
+    { id: 'name', label: 'Name' },
+    { id: 'fulltext', label: 'Full-text' }
+  ]
+
+  readonly panelTab = signal<'props' | 'comments' | 'versions' | 'activity'>('props')
+  readonly panelTabs: TabItem<'props' | 'comments' | 'versions' | 'activity'>[] = [
+    { id: 'props', label: 'Properties', icon: 'info' },
+    { id: 'comments', label: 'Comments', count: 4, icon: 'comment' },
+    { id: 'versions', label: 'Versions', count: 3, icon: 'restore' },
+    { id: 'activity', label: 'Activity', icon: 'activity', disabled: true, disabledReason: 'No activity yet' }
+  ]
+
+  readonly filterValue = signal('')
+  readonly errorValue = signal('Roadmap.md')
+  readonly searchValue = signal('versioning')
+  readonly pageNo = signal(1)
 
   readonly buttonKinds: ButtonKind[] = ['primary', 'secondary', 'ghost', 'outline', 'danger']
   readonly buttonSizes: ButtonSize[] = ['xs', 'sm', 'md', 'lg']

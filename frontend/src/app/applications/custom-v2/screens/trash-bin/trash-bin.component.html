@@ -51,12 +51,7 @@
           <span></span>
         </div>
         @for (f of filteredFiles(); track f.id) {
-          <button
-            type="button"
-            class="file-row"
-            (click)="openEntry(f)"
-            (contextmenu)="openRowMenu($event, f)"
-          >
+          <button type="button" class="file-row" (click)="openEntry(f)" (contextmenu)="openRowMenu($event, f)">
             <span class="file-row__select"></span>
             <div class="file-row__name">
               <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
@@ -93,10 +88,5 @@
     }
   </div>
 
-  <app-v2-context-menu
-    [items]="menuItems()"
-    [open]="menu() !== null"
-    [anchor]="menu()"
-    (closed)="closeMenu()"
-  />
+  <app-v2-context-menu [items]="menuItems()" [open]="menu() !== null" [anchor]="menu()" (closed)="closeMenu()" />
 </div>

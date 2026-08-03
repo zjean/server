@@ -103,7 +103,7 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         width: 48px;
         height: 48px;
         border-radius: 24px;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-rose-ink);
         display: flex;
         align-items: center;
@@ -145,9 +145,9 @@ import { buildFileModelStub } from '../utils/file-model-stub'
         font-size: var(--si-text-8);
         text-decoration: none;
         cursor: pointer;
-        transition: background var(--si-dur-2) var(--si-ease);
+        transition: background var(--si-dur-2) var(--si-ease-out);
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
         }
         &--primary {
           background: var(--si-accent);

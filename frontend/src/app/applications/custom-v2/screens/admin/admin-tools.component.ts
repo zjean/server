@@ -325,12 +325,12 @@ function formatDate(ts: number | null | undefined): string {
           color: var(--si-amber-ink);
         }
         &--idle {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg-muted);
         }
         &--disabled {
-          background: var(--si-bg4);
-          color: var(--si-fg-faint);
+          background: var(--si-bg3);
+          color: var(--si-fg-muted);
         }
       }
 
@@ -355,7 +355,7 @@ function formatDate(ts: number | null | undefined): string {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .at-stat dd {
@@ -384,7 +384,7 @@ function formatDate(ts: number | null | undefined): string {
         font-size: var(--si-text-4);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
 
@@ -406,7 +406,7 @@ function formatDate(ts: number | null | undefined): string {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
         background: var(--si-bg2);
         white-space: nowrap;
@@ -427,14 +427,14 @@ function formatDate(ts: number | null | undefined): string {
       .at-table__hint {
         display: block;
         font-size: var(--si-text-3);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .at-kind {
         display: inline-block;
         margin-right: var(--si-space-4);
         padding: 1px var(--si-space-4);
         border-radius: var(--si-r4);
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         font-size: var(--si-text-2);
         text-transform: uppercase;

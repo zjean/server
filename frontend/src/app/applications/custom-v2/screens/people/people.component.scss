@@ -49,7 +49,7 @@
 
   &__summary {
     font-size: var(--si-text-5);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
   }
 
@@ -70,7 +70,7 @@
   }
 
   &__filter-icon {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     flex-shrink: 0;
   }
 
@@ -86,7 +86,7 @@
     min-width: 0;
 
     &::placeholder {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
 
     &::-webkit-search-cancel-button {
@@ -104,7 +104,7 @@
     padding: var(--si-space-11) var(--si-space-8);
     text-align: center;
     font-size: var(--si-text-6);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__detail {
@@ -115,7 +115,7 @@
   }
 
   &__detail-empty {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-size: var(--si-text-8);
     text-align: center;
     padding: 80px var(--si-space-10);
@@ -185,7 +185,7 @@
     font-size: var(--si-text-3);
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
 
     &::before {
       content: '';
@@ -215,7 +215,7 @@
     font-size: var(--si-text-7);
 
     dt {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
 
     dd {
@@ -317,7 +317,7 @@
 
   &__sub {
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     margin-top: var(--si-space-1);
     overflow: hidden;

@@ -10,11 +10,7 @@
   <app-v2-left-nav />
   @if (!layoutV2.isMobile() && layoutV2.sidebarCollapsed() && layoutV2.sidebarOverlay()) {
     <app-v2-left-nav [forceFullRender]="true" />
-    <div
-      class="layout-v2__backdrop layout-v2__backdrop--desktop"
-      (click)="layoutV2.closeSidebarOverlay()"
-      aria-hidden="true"
-    ></div>
+    <div class="layout-v2__backdrop layout-v2__backdrop--desktop" (click)="layoutV2.closeSidebarOverlay()" aria-hidden="true"></div>
   }
   <main class="layout-v2__content" id="v2-main-content" tabindex="-1">
     @if (!layoutV2.isMobile()) {
@@ -25,10 +21,7 @@
     <router-outlet />
   </main>
   @if (layoutV2.dockActive() !== null) {
-    <aside
-      class="layout-v2__dock-panel"
-      [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null"
-    >
+    <aside class="layout-v2__dock-panel" [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null">
       <app-v2-dock-panel />
     </aside>
   }

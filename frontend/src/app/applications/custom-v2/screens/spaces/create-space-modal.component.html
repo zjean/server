@@ -10,9 +10,13 @@
       </header>
 
       <nav class="csm__tabs" role="tablist">
-        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'settings'" (click)="setTab('settings')" l10nTranslate>Settings</button>
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'settings'" (click)="setTab('settings')" l10nTranslate>
+          Settings
+        </button>
         <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'files'" (click)="setTab('files')" l10nTranslate>Files</button>
-        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'members'" (click)="setTab('members')" l10nTranslate>Members</button>
+        <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'members'" (click)="setTab('members')" l10nTranslate>
+          Members
+        </button>
         <button type="button" class="csm__tab" [class.csm__tab--active]="tab() === 'links'" (click)="setTab('links')" l10nTranslate>Links</button>
       </nav>
 

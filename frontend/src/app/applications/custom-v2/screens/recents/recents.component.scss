@@ -70,8 +70,8 @@
     height: 18px;
     padding: 0 var(--si-space-4);
     border-radius: var(--si-r4);
-    background: var(--si-bg4);
-    color: var(--si-fg-faint);
+    background: var(--si-bg3);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
     line-height: 1;
@@ -129,7 +129,7 @@
     transform 120ms ease;
 
   &:hover {
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     border-color: var(--si-line-strong);
   }
 
@@ -181,7 +181,7 @@
     align-items: center;
     gap: var(--si-space-3);
     font-size: var(--si-text-5);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     min-width: 0;
   }
 
@@ -216,7 +216,7 @@
     transform 120ms ease;
 
   &:hover {
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     border-color: var(--si-line-strong);
   }
 
@@ -264,7 +264,7 @@
   &__when {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-left: auto;
     flex-shrink: 0;
   }
@@ -343,7 +343,7 @@
     gap: var(--si-space-3);
     margin-top: var(--si-space-2);
     font-size: var(--si-text-5);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     min-width: 0;
   }
 
@@ -360,7 +360,7 @@
   &__time {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     white-space: nowrap;
     flex-shrink: 0;
   }
@@ -373,7 +373,7 @@
   justify-content: center;
   padding: 56px var(--si-space-10);
   margin: var(--si-space-8) var(--si-space-12) var(--si-space-12);
-  color: var(--si-fg-faint);
+  color: var(--si-fg-muted);
   text-align: center;
   background: var(--si-bg3);
   border: 1px dashed var(--si-line-strong);
@@ -383,7 +383,7 @@
     width: 48px;
     height: 48px;
     border-radius: 24px;
-    background: var(--si-bg4);
+    background: var(--si-bg3);
     // see empty-state.component.ts — ghost on bg4 is 2.59 (#397)
     color: var(--si-fg-tertiary);
     display: flex;
@@ -404,7 +404,7 @@
   &__lede {
     margin-top: var(--si-space-3);
     font-size: var(--si-text-7);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     max-width: 32ch;
     line-height: 1.5;
   }

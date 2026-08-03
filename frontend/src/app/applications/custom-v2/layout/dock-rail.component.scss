@@ -33,7 +33,9 @@
     border-radius: 7px;
     cursor: pointer;
     position: relative;
-    transition: background var(--si-dur-2) var(--si-ease), color var(--si-dur-2) var(--si-ease);
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      color var(--si-dur-2) var(--si-ease-out);
 
     &:hover {
       background: var(--si-bg3);

@@ -64,7 +64,7 @@
 
   &__meta {
     font-size: var(--si-text-6);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     margin-top: 1px;
     overflow: hidden;
@@ -206,7 +206,7 @@
 
   &__no-preview-lede {
     font-size: var(--si-text-8);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     margin-bottom: var(--si-space-3);
   }
 
@@ -262,7 +262,7 @@
 
   &__inspector-meta {
     font-size: var(--si-text-6);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     font-family: var(--si-mono);
     margin-top: var(--si-space-1);
     overflow: hidden;
@@ -297,7 +297,9 @@
     font-weight: 500;
     font-family: var(--si-sans);
     letter-spacing: -0.05px;
-    transition: background 120ms ease, color 120ms ease;
+    transition:
+      background 120ms ease,
+      color 120ms ease;
 
     &:hover {
       color: var(--si-fg);
@@ -336,7 +338,7 @@
     flex-direction: column;
     align-items: center;
     gap: var(--si-space-3);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     text-align: center;
   }
 
@@ -350,7 +352,7 @@
 
   &__placeholder-lede {
     font-size: var(--si-text-7);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     line-height: 1.45;
     max-width: 240px;
   }
@@ -364,7 +366,7 @@
     font-size: var(--si-text-4);
     font-weight: 600;
     letter-spacing: 1.2px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     text-transform: uppercase;
     margin-bottom: var(--si-space-4);
     font-family: var(--si-display);
@@ -380,7 +382,7 @@
   align-items: center;
 
   > span:first-child {
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   > span:last-child {

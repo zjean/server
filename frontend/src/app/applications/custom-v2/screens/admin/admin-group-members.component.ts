@@ -156,7 +156,7 @@ export interface GroupRef {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1.1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
         font-family: var(--si-display);
       }
@@ -176,14 +176,14 @@ export interface GroupRef {
         border-radius: 6px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
       }
@@ -213,7 +213,7 @@ export interface GroupRef {
         color: var(--si-fg-muted);
       }
       .gmd__count--muted {
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .gmd__list {
         list-style: none;
@@ -243,7 +243,7 @@ export interface GroupRef {
         object-fit: cover;
       }
       .gmd__glyph {
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         display: inline-flex;
         align-items: center;
@@ -295,14 +295,14 @@ export interface GroupRef {
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-rose);
         }
         &:disabled {
@@ -321,7 +321,7 @@ export interface GroupRef {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .gmd__foot-actions {
