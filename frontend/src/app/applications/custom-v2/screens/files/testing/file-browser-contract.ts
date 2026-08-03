@@ -854,6 +854,53 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     })
 
     // -----------------------------------------------------------------------
+    // K2. Thumbnails (#428)
+    //
+    // `app-v2-file-thumb` needs an addressable path to build its URL from, and
+    // a browse row cannot supply one: `path` is the parent directory and the
+    // repository prefix is a fact about the screen. The screen resolves it.
+    // -----------------------------------------------------------------------
+    describe('thumbnails', () => {
+      it('resolves a row at the repository root to a repository-qualified path', () => {
+        const { c } = start()
+        expect(c.thumbPath(FIXTURE_FILES[0])).toBe(filePath('alpha.txt'))
+      })
+
+      it('includes the folder segments and the filename', () => {
+        const { c } = start(['sub', 'deeper'])
+        expect(c.thumbPath(FIXTURE_FILES[2])).toBe(filePath('gamma.pdf', ['sub', 'deeper']))
+      })
+
+      it('has no address before the first listing lands', () => {
+        const res = mount(p.ctor as new () => unknown, (deps) => seed(deps))
+        expect((res.component as BrowserApi).thumbPath(FIXTURE_FILES[0])).toBe('')
+      })
+
+      it('has no address after a failed listing', () => {
+        const res = mount(p.ctor as new () => unknown, (deps) => {
+          seed(deps)
+          deps.httpGetError = 404
+        })
+        const c = res.component as BrowserApi
+        c.ngOnInit()
+        expect(c.thumbPath(FIXTURE_FILES[0])).toBe('')
+      })
+
+      it('keys on the loaded listing, not the route', () => {
+        // `loadFiles()` leaves the previous listing on screen while the next one
+        // is in flight, so for that window the route names the new folder while
+        // the rows being painted belong to the old one — deriving the address
+        // from the route would request `<new folder>/<old row's name>`. The
+        // harness resolves every GET synchronously, so the in-flight state is
+        // staged by rewinding `loadedDirPath` to what the visible rows describe.
+        const { c, deps } = start(['sub'])
+        deps.routeUrl.next(urlSegments('elsewhere'))
+        c.loadedDirPath.set(dirPath(['sub']))
+        expect(c.thumbPath(FIXTURE_FILES[0])).toBe(filePath('alpha.txt', ['sub']))
+      })
+    })
+
+    // -----------------------------------------------------------------------
     // L. Links and shares — the per-screen DTO seam
     // -----------------------------------------------------------------------
     describe('links and shares', () => {
