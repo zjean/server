@@ -29,7 +29,7 @@ export type PillColor = 'gray' | 'green' | 'amber' | 'rose' | 'violet' | 'cyan'
         letter-spacing: -0.05px;
       }
       .pill--gray {
-        background: rgba(255, 255, 255, 0.05);
+        background: var(--si-neutral-soft);
         color: var(--si-fg-muted);
         border-color: var(--si-line);
       }

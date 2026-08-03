@@ -65,7 +65,7 @@
   }
 
   code {
-    background: var(--si-bg3, rgba(0, 0, 0, 0.06));
+    background: var(--si-bg3);
     padding: 1px var(--si-space-2);
     border-radius: 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -73,7 +73,7 @@
   }
 
   pre {
-    background: var(--si-bg3, rgba(0, 0, 0, 0.06));
+    background: var(--si-bg3);
     padding: var(--si-space-6);
     border-radius: 6px;
     overflow: auto;
@@ -85,7 +85,7 @@
   }
 
   a {
-    color: var(--si-accent);
+    color: var(--si-accent-ink);
     text-decoration: underline;
   }
 
@@ -96,7 +96,7 @@
 
     th,
     td {
-      border: 1px solid var(--si-border, rgba(0, 0, 0, 0.18));
+      border: 1px solid var(--si-border);
       padding: var(--si-space-3) var(--si-space-4);
     }
   }

@@ -103,7 +103,7 @@ import { V2BreadcrumbService } from './breadcrumb.service'
         font-weight: 500;
       }
       .pcb__crumb--drop-hover {
-        background: var(--si-accent-soft, rgba(58, 122, 254, 0.14));
+        background: var(--si-accent-soft);
         color: var(--si-fg-strong);
         border-radius: 6px;
         padding: var(--si-space-1) var(--si-space-3);

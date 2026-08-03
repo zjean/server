@@ -78,7 +78,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
       .as__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.45);
+        background: var(--si-scrim);
         z-index: var(--si-z-popover);
         animation: as-fade-in 140ms ease-out;
       }

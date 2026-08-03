@@ -75,7 +75,7 @@
   &__divider {
     width: 1px;
     height: 22px;
-    background: oklch(0.7 0.04 255 / 0.16);
+    background: var(--si-line);
     margin: 0 var(--si-space-3);
 
     &--small {
@@ -136,26 +136,28 @@
     max-height: 100%;
     object-fit: contain;
     border-radius: 4px;
-    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    box-shadow: var(--si-shadow3);
   }
 
   // The two raw colours below are deliberate, not token drift: they are the
   // canvas an embedded document or video is composited on, not app chrome. A
   // PDF or office document is authored against white regardless of the app
   // theme, and letterbox bars belong black. Tokenising them would tie foreign
-  // content to the navy ramp and make it look broken.
+  // content to our surface ramp and make it look broken — which is as true of
+  // the warm-neutral ramp as it was of the navy one it replaced.
+  // raw-colour-ok: foreign content canvas, not app chrome
   &__iframe {
     width: 100%;
     height: 100%;
     border: none;
-    background: #fff;
+    background: #fff; // raw-colour-ok: see above
     display: block;
   }
 
   &__video {
     max-width: 100%;
     max-height: 100%;
-    background: #000;
+    background: #000; // raw-colour-ok: see above
   }
 
   &__audio-wrap {
@@ -236,7 +238,7 @@
 
   &__inspector-head {
     padding: var(--si-space-7) var(--si-space-8) var(--si-space-6);
-    border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
+    border-bottom: 1px solid var(--si-line);
     display: flex;
     align-items: center;
     gap: var(--si-space-5);
@@ -272,7 +274,7 @@
     display: flex;
     padding: var(--si-space-4) var(--si-space-6);
     gap: var(--si-space-2);
-    border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
+    border-bottom: 1px solid var(--si-line);
     background: var(--si-bg1);
     flex-shrink: 0;
   }
@@ -356,7 +358,7 @@
 
 .kv-section {
   padding: var(--si-space-7) var(--si-space-8);
-  border-bottom: 1px solid oklch(0.7 0.04 255 / 0.16);
+  border-bottom: 1px solid var(--si-line);
 
   &__title {
     font-size: var(--si-text-4);

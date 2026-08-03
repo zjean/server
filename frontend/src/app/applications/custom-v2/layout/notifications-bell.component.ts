@@ -94,7 +94,7 @@ import { ToastService } from '../components/toast.service'
         background: transparent;
         border: none;
         border-radius: var(--si-r2);
-        color: rgba(255, 255, 255, 0.75);
+        color: var(--si-fg-muted);
         cursor: pointer;
         padding: 0;
         transition:
@@ -102,12 +102,12 @@ import { ToastService } from '../components/toast.service'
           color var(--si-dur-2) var(--si-ease);
 
         &:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: #fff;
+          background: var(--si-bg3);
+          color: var(--si-fg);
         }
         &--open {
-          background: rgba(255, 255, 255, 0.12);
-          color: #fff;
+          background: var(--si-bg5);
+          color: var(--si-fg);
         }
       }
       .nb__badge {
@@ -119,11 +119,11 @@ import { ToastService } from '../components/toast.service'
         padding: 0 var(--si-space-2);
         border-radius: var(--si-r4);
         background: var(--si-rose);
-        // Dark ink, NOT #fff. White on the rose fill measured 2.78:1 at this
-        // size and weight — the app's only WCAG AA text failure, and it was on
-        // every route. Ink at L 0.18 on the same fill reads 6.69:1, so the
-        // badge keeps its colour and becomes legible.
-        color: oklch(0.18 0.04 25);
+        // White is safe on THIS fill (4.83:1) but was not on the previous one,
+        // where it measured 2.78:1 and was the app's only AA text failure. That
+        // is why this used to be hand-written dark ink; the token now carries the
+        // decision, and the design uses the same pairing for "Delete forever".
+        color: var(--si-rose-fg);
         font-size: var(--si-text-1);
         font-weight: 700;
         font-family: var(--si-mono);
@@ -143,7 +143,7 @@ import { ToastService } from '../components/toast.service'
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
-        box-shadow: var(--si-shadow2, 0 8px 24px rgba(0, 0, 0, 0.25));
+        box-shadow: var(--si-shadow2);
         z-index: var(--si-z-popover);
         overflow: hidden;
       }
@@ -167,7 +167,7 @@ import { ToastService } from '../components/toast.service'
         color: var(--si-fg-muted);
         cursor: pointer;
         padding: var(--si-space-2) var(--si-space-3);
-        border-radius: var(--si-r1, 4px);
+        border-radius: var(--si-r1);
 
         &:hover {
           color: var(--si-fg);

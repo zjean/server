@@ -121,8 +121,10 @@
     height: 36px;
     border-radius: 8px;
     flex-shrink: 0;
-    background: var(--si-accent-soft);
-    color: var(--si-accent);
+    // Periwinkle, not cobalt: this is a Space identity mark, and the design
+    // reserves the accent for the action next to it (Create space).
+    background: var(--si-violet-soft);
+    color: var(--si-violet);
     display: flex;
     align-items: center;
     justify-content: center;

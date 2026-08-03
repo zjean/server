@@ -26,7 +26,7 @@ import { MemberModel } from '../../../users/models/member.model'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { ButtonComponent } from '../../components/button.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
-import { AvatarComponent, AvatarUser, avatarHue } from '../../components/avatar.component'
+import { AvatarComponent, AvatarUser, avatarTone } from '../../components/avatar.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 
 type Tab = 'settings' | 'files' | 'members' | 'links'
@@ -178,7 +178,7 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
   }
 
   // Hue comes from the shared helper, not a local hash — this component used
-  // its own (h * 31) while the rest of the app used avatarHue()'s djb2, so the
+  // its own (h * 31) while the rest of the app used avatarTone()'s djb2, so the
   // same member appeared in two different colours depending on the screen.
   protected avatarUser(m: { login?: string; name: string }): AvatarUser {
     const seed = m.login || m.name || ''
@@ -189,7 +189,7 @@ export class CreateSpaceModalComponent implements OnDestroy, OnChanges {
         .map((p) => p[0])
         .join('')
         .toUpperCase() || '?'
-    return { initials, hue: avatarHue(seed) }
+    return { initials, tone: avatarTone(seed) }
   }
 
   protected submit(): void {

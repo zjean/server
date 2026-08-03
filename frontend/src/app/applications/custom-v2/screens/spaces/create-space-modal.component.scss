@@ -1,7 +1,7 @@
 .csm-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--si-scrim);
   backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
@@ -342,9 +342,9 @@
     margin: 0 var(--si-space-10) var(--si-space-4);
     padding: var(--si-space-4) var(--si-space-5);
     border-radius: var(--si-r2);
-    background: oklch(0.7 0.17 20 / 0.12);
-    border: 1px solid oklch(0.7 0.17 20 / 0.3);
-    color: oklch(0.88 0.15 20);
+    background: var(--si-rose-soft);
+    border: 1px solid var(--si-rose-line);
+    color: var(--si-rose-ink);
     font-size: var(--si-text-6);
   }
 

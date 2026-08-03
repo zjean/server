@@ -196,7 +196,6 @@
     &--active:hover {
       background: var(--si-bg5);
       color: var(--si-fg);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 
     &:disabled {
@@ -334,7 +333,7 @@
   }
 
   &--drop-hover {
-    background: var(--si-accent-soft, rgba(58, 122, 254, 0.18));
+    background: var(--si-accent-soft);
     outline: 2px solid var(--si-accent);
     outline-offset: -2px;
   }
@@ -371,7 +370,7 @@
   }
 
   &__favorite {
-    color: var(--si-accent, var(--si-fg-muted));
+    color: var(--si-amber-ink);
     flex-shrink: 0;
   }
 
@@ -503,7 +502,7 @@
     // Clean opaque chip so the checkbox reads on any file-type header tint
     // (the old translucent color-mix went muddy over the colored headers).
     background: var(--si-bg1);
-    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+    box-shadow: var(--si-shadow1);
   }
 
   &:hover &__select,
@@ -530,7 +529,7 @@
     position: absolute;
     top: 8px;
     left: 8px;
-    color: var(--si-accent, var(--si-fg-muted));
+    color: var(--si-amber-ink);
     line-height: 0;
   }
 
@@ -644,7 +643,7 @@
     border-radius: 7px;
     // Clean opaque chip (was a muddy translucent color-mix over the stage).
     background: var(--si-bg1);
-    box-shadow: 0 1px 3px oklch(0 0 0 / 0.3);
+    box-shadow: var(--si-shadow1);
   }
 
   &:hover &__select,

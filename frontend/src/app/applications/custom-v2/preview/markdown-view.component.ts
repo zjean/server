@@ -268,13 +268,13 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         align-items: center;
         gap: var(--si-space-4);
         padding: var(--si-space-4) var(--si-space-6);
-        background: var(--si-bg2, #f5f5f7);
-        border-bottom: 1px solid var(--si-border, rgba(0, 0, 0, 0.08));
+        background: var(--si-bg2);
+        border-bottom: 1px solid var(--si-border);
         flex-wrap: wrap;
       }
       .md-view__status {
         font-size: var(--si-text-6);
-        color: var(--si-fg-muted, #666);
+        color: var(--si-fg-muted);
         font-variant-numeric: tabular-nums;
         min-width: 90px;
       }
@@ -289,7 +289,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         background: transparent;
         border: none;
         border-radius: 6px;
-        color: var(--si-fg-muted, #666);
+        color: var(--si-fg-muted);
         cursor: pointer;
         font: inherit;
         height: 30px;
@@ -305,12 +305,12 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
           color 120ms ease;
       }
       .md-tool:hover {
-        background: var(--si-bg3, rgba(0, 0, 0, 0.05));
-        color: var(--si-fg, #111);
+        background: var(--si-bg3);
+        color: var(--si-fg);
       }
       .md-tool--active {
-        background: var(--si-bg4, rgba(0, 0, 0, 0.08));
-        color: var(--si-fg, #111);
+        background: var(--si-bg4);
+        color: var(--si-fg);
       }
       .md-tool--bold {
         font-weight: 700;
@@ -328,7 +328,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-tool__sep {
         width: 1px;
         height: 18px;
-        background: var(--si-border, rgba(0, 0, 0, 0.12));
+        background: var(--si-border);
         margin: 0 var(--si-space-2);
       }
       .md-view__spacer {
@@ -390,7 +390,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__state {
         padding: var(--si-space-11);
         font-size: var(--si-text-8);
-        color: var(--si-fg-muted, #666);
+        color: var(--si-fg-muted);
       }
       .md-view__state--error {
         color: var(--si-rose);

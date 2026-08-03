@@ -174,6 +174,9 @@ export class DiagramViewComponent implements OnInit {
     if (!w) return
     if (this.printWindow && !this.printWindow.closed) this.printWindow.close()
     this.printWindow = w
+    // raw-colour-ok: this HTML is a separate print document, not app DOM. It
+    // must not inherit the app theme — a diagram printed on a dark ground
+    // wastes ink and loses stroke contrast on paper.
     try {
       w.document.open()
       w.document.write(
@@ -202,6 +205,7 @@ export class DiagramViewComponent implements OnInit {
     // Inline the SVG so the browser can vectorise it at print DPI. We wrap it
     // in print-friendly CSS that fits one page and triggers print() after the
     // SVG has laid out (rAF gives layout a tick to settle).
+    // raw-colour-ok: the print document again — see printWindow above.
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${this.escapeHtml(this.deriveBaseName())}</title>
 <style>
   html, body { margin: 0; padding: 0; }

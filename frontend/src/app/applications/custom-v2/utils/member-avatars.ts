@@ -1,6 +1,6 @@
 import type { MemberModel } from '../../users/models/member.model'
 import type { AvatarStackUser } from '../components/avatar-stack.component'
-import { avatarHue, avatarInitials } from '../components/avatar.component'
+import { avatarTone, avatarInitials } from '../components/avatar.component'
 
 /**
  * Maps space members (managers, in practice) onto `app-v2-avatar-stack` entries.
@@ -17,7 +17,7 @@ export function memberAvatars(members: MemberModel[] | undefined | null): Avatar
   return (members ?? []).map((m) => ({
     id: m.login ?? m.id,
     initials: avatarInitials(m.name ?? m.login ?? ''),
-    hue: avatarHue(m.login ?? m.name ?? String(m.id)),
+    tone: avatarTone(m.login ?? m.name ?? String(m.id)),
     imageUrl: m.avatarUrl ?? null,
     // Drives the avatar-stack hover tooltip (member-name parity, #295).
     label: m.name ?? m.login ?? ''

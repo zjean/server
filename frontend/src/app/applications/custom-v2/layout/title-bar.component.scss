@@ -11,7 +11,7 @@
   color: var(--si-fg);
   font-family: var(--si-sans);
   font-size: var(--si-text-7);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid var(--si-line-subtle);
 
   // Brand button is mobile-only — it acts as the left-nav drawer toggle.
   // On desktop the wordmark already lives in the left-nav, so the chip
@@ -62,7 +62,7 @@
     // Stack avatar pattern: amber tint fill + brand-colored initials with
     // a faint border. Reads as warm chrome, not a primary CTA.
     background: var(--si-accent-soft);
-    color: var(--si-accent);
+    color: var(--si-accent-ink);
     border: 1px solid var(--si-accent-line);
     font-size: var(--si-text-4);
     font-weight: 600;

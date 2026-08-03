@@ -281,7 +281,7 @@ function formatDate(ts: number | null | undefined): string {
         height: 32px;
         border-radius: var(--si-r2);
         background: var(--si-nav-soft);
-        color: var(--si-nav);
+        color: var(--si-accent-ink);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -317,12 +317,12 @@ function formatDate(ts: number | null | undefined): string {
         flex-shrink: 0;
 
         &--running {
-          background: var(--si-green-soft, rgba(80, 180, 120, 0.2));
-          color: oklch(0.86 0.13 155);
+          background: var(--si-green-soft);
+          color: var(--si-green-ink);
         }
         &--stopping {
-          background: var(--si-amber-soft, rgba(220, 160, 40, 0.2));
-          color: oklch(0.82 0.15 75);
+          background: var(--si-amber-soft);
+          color: var(--si-amber-ink);
         }
         &--idle {
           background: var(--si-bg4);

@@ -3,7 +3,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { USER_ONLINE_STATUS } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { UserOnlineModel } from '../../../users/models/user-online.model'
 import { StoreService } from '../../../../store/store.service'
-import { avatarHue } from '../../components/avatar.component'
+import { avatarTone } from '../../components/avatar.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 
@@ -80,10 +80,14 @@ export class PeopleComponent implements OnInit {
 
   // Delegates to the shared helper rather than hashing locally. This screen
   // used its own hash (h * 31) while the user-card and avatar stacks used
-  // avatarHue()'s djb2 — so one login rendered as two different colours
+  // avatarTone()'s djb2 — so one login rendered as two different colours
   // depending on which screen you were looking at.
-  protected hueForUser(u: UserOnlineModel): number {
-    return avatarHue(u.login)
+  //
+  // It also built its own oklch ramp in the template, at a different lightness
+  // and chroma from the avatar component's, which is a second way the same
+  // person looked like two people. Both halves now come from the same six tones.
+  protected toneVarFor(u: UserOnlineModel, suffix = ''): string {
+    return `var(--si-avatar-${avatarTone(u.login)}${suffix})`
   }
 
   protected initials(u: UserOnlineModel): string {

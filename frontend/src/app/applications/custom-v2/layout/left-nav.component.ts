@@ -5,7 +5,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { filter } from 'rxjs/operators'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { StoreService } from '../../../store/store.service'
-import { AvatarComponent, AvatarUser, avatarHue, avatarInitials } from '../components/avatar.component'
+import { AvatarComponent, AvatarUser, avatarTone, avatarInitials } from '../components/avatar.component'
 import { LogoComponent } from '../components/logo.component'
 import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { clearUiVersion } from '../ui-version'
@@ -67,7 +67,7 @@ export class LeftNavComponent {
     const seed = u?.login ?? u?.fullName ?? ''
     return {
       initials: avatarInitials(u?.fullName ?? u?.login ?? ''),
-      hue: avatarHue(seed),
+      tone: avatarTone(seed),
       imageUrl: this.userAvatar() ?? null
     }
   })

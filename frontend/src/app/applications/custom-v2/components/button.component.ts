@@ -78,11 +78,19 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
       .btn--primary:hover {
         background: var(--si-accent-hover);
       }
+      // Filled surface-3, no border. The design's secondary is a solid step above
+      // the content plane; an outline here made it read as a disabled outline
+      // button next to the filled primary. This lands in the token PR rather than
+      // with the rest of the button work because it is a token-mapping fix: the
+      // old value only looked right against the old ramp, where bg4 was light
+      // enough to read as a fill on its own.
       .btn--secondary {
-        background: var(--si-bg4);
+        background: var(--si-bg5);
         color: var(--si-fg);
-        border-color: var(--si-line-strong);
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        border-color: transparent;
+      }
+      .btn--secondary:hover:not(:disabled) {
+        background: var(--si-bg6);
       }
       .btn--ghost {
         background: transparent;

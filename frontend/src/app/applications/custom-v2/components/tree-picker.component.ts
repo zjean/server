@@ -133,7 +133,7 @@ const ROOT_SHARES: FileTree = {
       .tree-picker__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .tree-picker {
@@ -246,7 +246,7 @@ const ROOT_SHARES: FileTree = {
         color: var(--si-fg-muted);
       }
       .tree-picker__path {
-        font-family: var(--si-mono, ui-monospace, monospace);
+        font-family: var(--si-mono);
         color: var(--si-fg);
         word-break: break-all;
       }

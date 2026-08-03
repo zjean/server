@@ -438,7 +438,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
           white-space: nowrap;
         }
         &:hover {
-          color: var(--si-nav);
+          color: var(--si-accent-ink);
         }
       }
       .as-col-desc,
@@ -583,7 +583,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       .au-dialog__backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.35);
+        background: var(--si-scrim);
         z-index: var(--si-z-dialog);
       }
       .au-dialog {
@@ -598,7 +598,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         background: var(--si-bg2);
         border: 1px solid var(--si-line);
         border-radius: var(--si-r3);
-        box-shadow: var(--si-shadow2, 0 16px 32px rgba(0, 0, 0, 0.35));
+        box-shadow: var(--si-shadow2);
         padding: var(--si-space-9) var(--si-space-10);
         display: flex;
         flex-direction: column;
