@@ -638,6 +638,22 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     this.openEntry(file)
   }
 
+  /**
+   * `M6`: long-press enters selection.
+   *
+   * On a touchscreen this is the only way in. The row checkboxes are `opacity: 0` until
+   * `:hover` or `.file-table--selecting`, and a phone has no hover — so until this,
+   * nothing on mobile could select a row, which also meant the inspector (which
+   * describes the selected row) could not be opened for a file at all.
+   *
+   * Replaces the selection rather than adding to it, exactly as a plain click does: the
+   * press says "this one", and the checkboxes it reveals are how a second is added.
+   */
+  protected onRowLongPress(file: FileProps): void {
+    this.selection.set(new Set([file.id]))
+    this.selectionAnchorId = file.id
+  }
+
   protected toggleSelection(file: FileProps): void {
     this.selection.update((current) => {
       const next = new Set(current)

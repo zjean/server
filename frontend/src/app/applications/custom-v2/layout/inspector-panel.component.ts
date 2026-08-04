@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
+import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { SHARE_TYPE } from '@sync-in-server/backend/src/applications/shares/constants/shares'
 import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { ButtonComponent } from '../components/button.component'
@@ -14,6 +16,7 @@ import { TooltipDirective } from '../components/tooltip.directive'
 import { ShareDialogService } from '../components/share-dialog.service'
 import { VersionsPanelComponent, VersionsStats } from '../components/versions-panel.component'
 import { IconV2Component } from '../icons/icon-v2.component'
+import { FavoritesService } from '../services/favorites.service'
 import { FolderSizeService } from '../services/folder-size.service'
 import { VersionsService } from '../services/versions.service'
 import { mimeLabel, mimeToGlyph } from '../utils/mime-to-glyph'
@@ -70,9 +73,10 @@ interface AccessRow {
 export class InspectorPanelComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private readonly translation = inject(L10nTranslationService)
-  private readonly layoutV2 = inject(LayoutV2Service)
+  protected readonly layoutV2 = inject(LayoutV2Service)
   private readonly inspector = inject(InspectorService)
   private readonly folderSize = inject(FolderSizeService)
+  private readonly favorites = inject(FavoritesService)
   private readonly versions = inject(VersionsService)
   private readonly shareDialog = inject(ShareDialogService)
 
@@ -260,6 +264,32 @@ export class InspectorPanelComponent {
 
   protected bytes(n: number): string {
     return this.toBytes.transform(n, 1, true)
+  }
+
+  /**
+   * The two secondaries beside `M3`'s Share button.
+   *
+   * Both are the same call the file browser's row menu makes, against the same path:
+   * `InspectorFile.path` is already `buildFullPath(f)`, which is the repository shape
+   * (`files/<alias>/dir/name`) that the download route and the favorites route both
+   * take. Nothing new is reachable from the sheet — it is the row menu's actions where
+   * a thumb can get at them.
+   */
+  protected download(): void {
+    const f = this.file()
+    if (!f || typeof window === 'undefined') return
+    window.open(`${API_FILES_OPERATION}/${encodeUrl(f.path)}`, '_self')
+  }
+
+  protected isFavorite(): boolean {
+    const f = this.file()
+    return !!f && this.favorites.isFavorite(f.id)
+  }
+
+  protected toggleFavorite(): void {
+    const f = this.file()
+    if (!f) return
+    this.favorites.toggle(f.path, f.id, !this.favorites.isFavorite(f.id))
   }
 
   // Mirrors file-detail's own Share entry point, including the space alias split

@@ -16,6 +16,7 @@ import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuComponent } from '../../components/context-menu.component'
 import { DropZoneDirective } from '../../components/drop-zone.directive'
+import { LongPressDirective } from '../../components/long-press.directive'
 import { EmptyPanelComponent } from '../../components/empty-panel.component'
 import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FabComponent } from '../../components/fab.component'
@@ -51,6 +52,7 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
     PillComponent,
     ContextMenuComponent,
     DropZoneDirective,
+    LongPressDirective,
     EmptyPanelComponent,
     EmptyStateComponent,
     FabComponent,

@@ -1,4 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core'
+import { SheetSnap } from '../utils/sheet-snap'
 import { INSPECTOR_TABS, InspectorService, InspectorTabId } from './inspector.service'
 
 const MOBILE_BREAKPOINT = 768
@@ -63,6 +64,15 @@ export class LayoutV2Service {
   // floats over the content on a scrim instead of narrowing it. Mobile is a third
   // case handled in CSS (a right-anchored sheet), so this is desktop-only.
   readonly dockOverlay = computed(() => !this.isMobile() && this.viewportWidth() < DOCK_OVERLAY_BREAKPOINT)
+
+  /**
+   * Which of the two heights the mobile inspector sheet is resting at (`M3`).
+   *
+   * Session state, and reset to `half` on every close rather than remembered: the sheet
+   * opens over whatever the user was just reading, and a sheet that opens at 92% because
+   * of a gesture three files ago covers the file it is describing.
+   */
+  readonly sheetSnap = signal<SheetSnap>('half')
 
   /**
    * The sidebar is a rail because the viewport says so, not because the user asked.
@@ -172,6 +182,12 @@ export class LayoutV2Service {
   setDockOpen(open: boolean): void {
     this.dockOpen.set(open)
     if (open) this.leftNavOpen.set(false)
+    else this.sheetSnap.set('half')
+  }
+
+  /** The handle is also a button: tapping it steps between the two heights. */
+  toggleSheetSnap(): void {
+    this.sheetSnap.update((s) => (s === 'half' ? 'full' : 'half'))
   }
 
   setDockTab(tab: InspectorTabId): void {

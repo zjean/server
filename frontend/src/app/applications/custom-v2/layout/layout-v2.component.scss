@@ -185,25 +185,30 @@
     padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
-  // The inspector becomes a right-anchored slide-in sheet over content.
-  // bottom is offset by the tab-bar height so the sheet doesn't overlap
-  // the tab destinations. `right: 0` since #437 — there is no rail left to keep
-  // clear, so the sheet may reach the edge.
-  .layout-v2__dock-panel {
-    position: fixed;
-    top: 40px;
-    right: 0;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    width: 85vw;
-    max-width: 360px;
-    z-index: calc(var(--si-z-panel) + 2);
-    transform: translateX(110%);
-    transition: transform 200ms ease-out;
-    box-shadow: var(--si-shadow2);
+  // The inspector is a BOTTOM sheet here (`M3`), not the right-anchored slide-in it
+  // was until then: `.layout-v2__dock-panel` is no longer rendered on mobile at all,
+  // and the geometry lives in `_sheet.scss` where the share and action sheets can
+  // share it. What is left is fitting the panel INSIDE that shell.
+  //
+  // The sheet is `--si-bg5` (surface-3), a step above the panel's own `--si-bg1`, so
+  // the inspector must not paint a surface of its own here.
+  .v2-sheet .insp {
+    height: 100%;
+  }
 
-    &--open {
-      transform: translateX(0);
-    }
+  // Tighter than the desktop panel's 24px gutters: 50vh is not a lot of height, and
+  // the sheet's own handle already provides the top spacing.
+  .v2-sheet .insp__head {
+    padding: 0 var(--si-space-8) var(--si-space-2);
+  }
+
+  .v2-sheet .insp__tabs {
+    padding: var(--si-space-4) var(--si-space-8) var(--si-space-6);
+  }
+
+  // The pills ARE the boundary — a hairline under them reads as a second one.
+  .v2-sheet .insp__rule {
+    display: none;
   }
 
   // Backdrop covers content while an overlay is open. Neither side has a rail
