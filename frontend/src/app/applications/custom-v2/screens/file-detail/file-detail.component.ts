@@ -27,20 +27,22 @@ import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ButtonComponent } from '../../components/button.component'
-import { CommentsPanelComponent } from '../../components/comments-panel.component'
-import { VersionsPanelComponent } from '../../components/versions-panel.component'
-import { VersionsService } from '../../services/versions.service'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
+import { PillColor, PillComponent } from '../../components/pill.component'
+import { TooltipDirective } from '../../components/tooltip.directive'
 import { IconV2Component, IconV2Name } from '../../icons/icon-v2.component'
 import { BreadcrumbSegment, V2BreadcrumbService } from '../../layout/breadcrumb.service'
+import { INSPECTOR_TABS, InspectorService, InspectorTabId } from '../../layout/inspector.service'
 import { LayoutV2Service } from '../../layout/layout-v2.service'
+import { VersionsService } from '../../services/versions.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { isTextEditable, isDiagramExt } from '../../utils/classify-file'
 import { isFileWriteable } from '../../utils/file-writeable'
 import { isAudioMime, isImageMime, isMarkdownMime, isPdfMime, isTextViewerMime, isVideoMime, mimeLabel, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { isOfficeEditorEnabled, isOfficeExtension } from '../../utils/office'
 import { assetsUrl } from '../../../files/files.constants'
+import { EditorStatus } from '../../preview/editor-save-state'
 import { OfficeViewComponent } from '../../preview/office-view.component'
 import { TextCodeViewComponent } from '../../preview/text-code-view.component'
 import { MarkdownViewComponent } from '../../preview/markdown-view.component'
@@ -48,12 +50,11 @@ import { DiagramViewComponent } from '../../preview/diagram-view.component'
 import { CloseGuardService } from '../../preview/close-guard.service'
 import { StoreService } from '../../../../store/store.service'
 
-type InspectorTab = 'info' | 'comment' | 'versions' | 'activity' | 'share'
-
-interface TabDef {
-  id: InspectorTab
+interface SaveBadge {
   label: string
-  icon: IconV2Name
+  color: PillColor
+  icon: IconV2Name | null
+  title: string | null
 }
 
 @Component({
@@ -66,8 +67,8 @@ interface TabDef {
     IconButtonComponent,
     FileGlyphComponent,
     ButtonComponent,
-    CommentsPanelComponent,
-    VersionsPanelComponent,
+    PillComponent,
+    TooltipDirective,
     OfficeViewComponent,
     TextCodeViewComponent,
     MarkdownViewComponent,
@@ -87,7 +88,8 @@ export class FileDetailComponent implements OnInit {
   private readonly closeGuard = inject(CloseGuardService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly destroyRef = inject(DestroyRef)
-  private readonly layoutV2 = inject(LayoutV2Service)
+  protected readonly layoutV2 = inject(LayoutV2Service)
+  private readonly inspector = inject(InspectorService)
   private readonly store = inject(StoreService)
   private readonly versions = inject(VersionsService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
@@ -108,29 +110,11 @@ export class FileDetailComponent implements OnInit {
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly loadError = signal<string | null>(null)
   protected readonly resolution = signal<string>('')
-  protected readonly tab = signal<InspectorTab>('info')
-  protected readonly infoOpen = signal(false)
   protected readonly pdfStage = signal<'pdf' | 'office'>('pdf')
-
-  // Every tab this screen can address, including ones not currently shown —
-  // `?tab=` is validated against this, so a deep link survives a tab that is
-  // still resolving its availability.
-  private readonly allTabs: TabDef[] = [
-    { id: 'info', label: 'Info', icon: 'info' },
-    { id: 'comment', label: 'Comments', icon: 'comment' },
-    { id: 'versions', label: 'Versions', icon: 'clock' },
-    { id: 'activity', label: 'Activity', icon: 'activity' },
-    { id: 'share', label: 'Sharing', icon: 'shareTree' }
-  ]
-
-  // Versions is hidden until the server has confirmed the feature exists (it is
-  // off by default and env-only, so there is nothing to ask but the API itself)
-  // and never applies to a directory. Hidden rather than disabled: a tab for a
-  // feature this server does not have is noise, not information.
-  protected readonly tabs = computed<TabDef[]>(() => {
-    const show = this.versions.availability() === 'available' && !!this.file() && !this.file()!.isDir
-    return show ? this.allTabs : this.allTabs.filter((t) => t.id !== 'versions')
-  })
+  // Reported by whichever inline editor is mounted. Null for everything that has
+  // no save state of its own (an image, a PDF, the office embed — which owns its
+  // own indicator inside the document server's chrome).
+  protected readonly editorStatus = signal<EditorStatus | null>(null)
 
   protected readonly glyphType = computed(() => {
     const f = this.file()
@@ -138,10 +122,43 @@ export class FileDetailComponent implements OnInit {
     return f.isDir ? 'folder' : mimeToGlyph(f.mime)
   })
 
-  // Exposed to the template so the three places that used to print the raw
-  // stored mime can show a human label instead, keeping the machine string in
-  // a title attribute for anyone who wants it.
+  // Exposed to the template so the places that used to print the raw stored mime
+  // can show a human label instead, keeping the machine string in a title
+  // attribute for anyone who wants it.
   protected readonly mimeLabel = mimeLabel
+
+  protected readonly inspectorShortcutLabel: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl I'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘I' : 'Ctrl I'
+  })()
+
+  /**
+   * The save state, as a badge.
+   *
+   * The design is explicit about this one: "Save state is a badge, not a sentence
+   * — the old `Read-only (user – Sync-in)` string is gone." The five-word sentence
+   * used to live inside the editor's own formatting bar, which is both the wrong
+   * place (the state is about the file, and the file is named here) and the wrong
+   * shape. The lock owner survives as the badge's title, because WHO holds a lock
+   * is the one part of it a user may need.
+   */
+  protected readonly saveBadge = computed<SaveBadge | null>(() => {
+    const st = this.editorStatus()
+    if (!st) return null
+    switch (st.state) {
+      case 'saved':
+        return { label: 'Saved', color: 'green', icon: 'check', title: null }
+      case 'saving':
+        return { label: 'Saving…', color: 'gray', icon: null, title: null }
+      case 'modified':
+        return { label: 'Modified', color: 'amber', icon: null, title: null }
+      case 'readonly':
+        return { label: 'Read-only', color: 'cyan', icon: 'lock', title: st.lockOwner ?? null }
+      default:
+        return null
+    }
+  })
 
   protected readonly previewUrl = computed(() => {
     const p = this.currentPath()
@@ -196,10 +213,6 @@ export class FileDetailComponent implements OnInit {
   // the embed must not be offered either. `showOfficeEmbed` reaches the embed for
   // a PDF solely through `pdfStage`, which only `toggleToOffice` ever advances.
   protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf() && this.officeEditorEnabled())
-  protected readonly commentsAvailable = computed(() => {
-    const f = this.file()
-    return !!f && !f.isDir
-  })
 
   protected readonly canShare = computed(() => {
     const parts = this.currentPath().split('/').filter(Boolean)
@@ -233,7 +246,46 @@ export class FileDetailComponent implements OnInit {
         else this.layoutV2.endAutoCollapse()
       })
     })
-    this.destroyRef.onDestroy(() => this.layoutV2.endAutoCollapse())
+
+    // This screen has an inspector, and it is THE inspector — the layout's docked
+    // panel, not a second one built into this component. That aside used to be
+    // ~200 lines of near-duplicate property table and tab strip; D4 and D5 draw one
+    // panel, and two implementations of it had already drifted apart.
+    effect(() => {
+      const f = this.file()
+      const path = this.currentPath()
+      untracked(() => {
+        if (!f || !path) {
+          this.inspector.currentSelected.set(null)
+          return
+        }
+        this.inspector.currentSelected.set({
+          id: f.id,
+          name: f.name,
+          path,
+          mime: f.mime,
+          size: f.size,
+          isDir: f.isDir,
+          mtime: f.mtime,
+          ctime: f.ctime,
+          shares: (f as FileProps & { shares?: { id: number; name?: string; alias?: string; type?: number }[] }).shares,
+          hasComments: f.hasComments
+        })
+      })
+    })
+
+    // A restore in the inspector rewrote the live bytes, so the size, the mtime and
+    // whatever is rendering the file are all stale. Reloading the path is the same
+    // work entry does, and cheaper to reason about than patching each field.
+    this.inspector.contentReplaced.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      const path = this.currentPath()
+      if (path) this.loadFile(path)
+    })
+
+    this.destroyRef.onDestroy(() => {
+      this.layoutV2.endAutoCollapse()
+      this.inspector.clear()
+    })
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -253,7 +305,7 @@ export class FileDetailComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.layoutV2.setDock(null)
+    this.inspector.setAvailable(true)
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const path = params.get('path')
       if (!path) {
@@ -261,21 +313,18 @@ export class FileDetailComponent implements OnInit {
         this.loading.set(false)
         return
       }
-      const tab = params.get('tab') as InspectorTab | null
-      if (tab && this.allTabs.some((t) => t.id === tab)) {
-        this.tab.set(tab)
-        this.infoOpen.set(true)
+      // `?tab=` is a deep link INTO the inspector, so it both selects the tab and
+      // opens the panel. Validated against the tab list, and the legacy spellings
+      // this screen's own aside used ('info', 'comment') are still accepted — they
+      // are in links people have already saved.
+      const tab = params.get('tab')
+      const resolved = resolveTabParam(tab)
+      if (resolved) {
+        this.layoutV2.setDockTab(resolved)
+        this.layoutV2.openDock()
       }
       this.loadFile(path)
     })
-  }
-
-  protected setTab(t: InspectorTab): void {
-    this.tab.set(t)
-  }
-
-  protected toggleInfo(): void {
-    this.infoOpen.update((v) => !v)
   }
 
   protected toggleToOffice(): void {
@@ -290,21 +339,6 @@ export class FileDetailComponent implements OnInit {
 
   protected fullscreen(): void {
     this.imageEl()?.nativeElement.requestFullscreen().catch(console.error)
-  }
-
-  protected onHasCommentsChange(has: boolean): void {
-    const f = this.file()
-    if (!f) return
-    if (!!f.hasComments === has) return
-    this.file.set({ ...f, hasComments: has })
-  }
-
-  // A restore rewrote the live file, so its size, mtime and rendered content are
-  // all stale. Reloading the path is the same work the screen does on entry, and
-  // cheaper to reason about than patching each stale field.
-  protected onVersionRestored(): void {
-    const path = this.currentPath()
-    if (path) this.loadFile(path)
   }
 
   protected onImageLoad(): void {
@@ -377,6 +411,7 @@ export class FileDetailComponent implements OnInit {
     this.pdfStage.set('pdf')
     this.resolution.set('')
     this.loadError.set(null)
+    this.editorStatus.set(null)
     this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path }, replaceUrl: true }).catch(console.error)
   }
 
@@ -422,6 +457,7 @@ export class FileDetailComponent implements OnInit {
     this.pdfStage.set('pdf')
     this.resolution.set('')
     this.loadError.set(null)
+    this.editorStatus.set(null)
     // Cleared, not left stale: a failed or still-pending browse must not let the
     // previous folder's grant decide whether this file is editable.
     this.permissions.set('')
@@ -454,8 +490,9 @@ export class FileDetailComponent implements OnInit {
           this.siblings.set(result.files.filter((f) => !f.isDir))
           this.loading.set(false)
           this.breadcrumbs.setBreadcrumbs([...this.rootBreadcrumb(path), ...this.folderTrail(path), { label: match.name }])
-          // Settles whether to offer the Versions tab. No-ops after the first
-          // answer of the session.
+          // Settles whether this server has versioning at all, which decides both
+          // the inspector's Versions tab and the editors' "⌘S saves a version"
+          // hint. No-ops after the first answer of the session.
           if (!match.isDir) this.versions.probe(path)
         },
         error: (e: HttpErrorResponse) => {
@@ -464,4 +501,14 @@ export class FileDetailComponent implements OnInit {
         }
       })
   }
+}
+
+// The `?tab=` deep link, including the two spellings this screen's own aside used
+// before the panels were unified. Returns null for anything unrecognised, which
+// leaves the panel closed rather than opening it on a guess.
+function resolveTabParam(raw: string | null): InspectorTabId | null {
+  if (!raw) return null
+  const legacy: Record<string, InspectorTabId> = { info: 'properties', comment: 'comments', share: 'properties' }
+  if ((INSPECTOR_TABS as readonly string[]).includes(raw)) return raw as InspectorTabId
+  return legacy[raw] ?? null
 }

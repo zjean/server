@@ -1,0 +1,213 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+.insp {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  font-family: var(--si-sans);
+  color: var(--si-fg);
+}
+
+// The panel's own surface (--si-bg1) comes from the layout aside. There is no
+// border between panel and content: "Panel steps down in value, no border
+// between panel and body" — the value change IS the edge.
+.insp__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-6);
+  padding: var(--si-space-9) var(--si-space-10) 0;
+}
+
+.insp__head-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.insp__name {
+  font-family: var(--si-sans);
+  font-size: var(--si-text-9);
+  font-weight: 500;
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp__head-meta {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-4);
+  color: var(--si-fg-tertiary);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp__tabs {
+  flex: 0 0 auto;
+  padding: var(--si-space-8) var(--si-space-10) 0;
+}
+
+.insp__rule {
+  flex: 0 0 auto;
+  height: 1px;
+  background: var(--si-line-subtle);
+}
+
+// The body does NOT scroll: it hands its height to whichever tab is mounted, and
+// the tab decides. Comments pins a composer to the bottom and Versions pins the
+// quota footer, so both need to own the scroll region themselves — a scrolling
+// parent would carry the pinned element away with the content.
+.insp__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.insp__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.insp__section {
+  padding: var(--si-space-10);
+
+  & + & {
+    padding-top: 0;
+  }
+}
+
+.insp__section-label {
+  margin-bottom: var(--si-space-7);
+}
+
+// Key left, value right — a property table, not prose. The value is the thing
+// being looked up, so it takes the alignment that makes a column of them scan.
+.insp__row {
+  display: flex;
+  gap: var(--si-space-8);
+  padding: var(--si-space-4) 0;
+  border-bottom: 1px solid var(--si-line-subtle);
+  font-size: var(--si-text-7);
+}
+
+.insp__key {
+  width: 96px;
+  flex: none;
+  color: var(--si-fg-tertiary);
+}
+
+.insp__val {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &--mono {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-6);
+  }
+
+  &--quiet {
+    color: var(--si-fg-tertiary);
+  }
+}
+
+// A share is a card on the panel: one surface step up (bg1 → bg2), no border.
+.insp__access {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  background: var(--si-bg2);
+  border-radius: var(--si-r2);
+  padding: var(--si-space-5) var(--si-space-6);
+  margin-bottom: var(--si-space-4);
+}
+
+.insp__access-glyph {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--si-r1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--si-neutral-soft);
+  color: var(--si-fg-muted);
+
+  // "Periwinkle marks identity so cobalt stays reserved for the action" — a link
+  // is a thing, the Manage sharing button below it is the action.
+  &--link {
+    background: var(--si-violet-soft);
+    color: var(--si-violet-ink);
+  }
+}
+
+.insp__access-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.insp__access-name {
+  font-size: var(--si-text-7);
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp__access-kind {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-3);
+  color: var(--si-fg-ghost);
+}
+
+.insp__access-none {
+  font-size: var(--si-text-7);
+  color: var(--si-fg-tertiary);
+  margin-bottom: var(--si-space-6);
+}
+
+.insp__manage {
+  margin-top: var(--si-space-2);
+}
+
+.insp__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--si-space-4);
+  padding: var(--si-space-13) var(--si-space-10);
+  text-align: center;
+  color: var(--si-fg-tertiary);
+}
+
+.insp__empty-title {
+  font-family: var(--si-sans);
+  font-size: var(--si-text-11);
+  font-weight: 500;
+  color: var(--si-fg);
+  margin-top: var(--si-space-2);
+}
+
+.insp__empty-lede {
+  font-size: var(--si-text-7);
+  color: var(--si-fg-tertiary);
+  max-width: 220px;
+  line-height: 1.45;
+}

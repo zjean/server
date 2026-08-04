@@ -25,7 +25,7 @@ import { PillComponent } from '../../components/pill.component'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService, BreadcrumbSegment } from '../../layout/breadcrumb.service'
-import { DockRailService } from '../../layout/dock-rail.service'
+import { InspectorService } from '../../layout/inspector.service'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
 
@@ -56,7 +56,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   private readonly confirmDialog = inject(ConfirmDialogService)
   private readonly toast = inject(ToastService)
   private readonly store = inject(StoreService)
-  private readonly dockRail = inject(DockRailService)
+  private readonly inspector = inject(InspectorService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
@@ -107,8 +107,8 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     // Trash rows act as direct links (click → open) and the only
     // available action is permanent-delete from the row menu — there's
     // no single-row selection state for the dock panel to read against.
-    // Skip the dock-rail registration so the rail auto-hides.
-    this.dockRail.clear()
+    // Leave the inspector unavailable so the top bar hides its toggle.
+    this.inspector.clear()
     this.navSubscription = combineLatest([this.route.params, this.route.url]).subscribe(() => {
       this.syncBreadcrumbs()
       this.loadFiles()
@@ -137,7 +137,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.navSubscription?.unsubscribe()
-    this.dockRail.clear()
+    this.inspector.clear()
   }
 
   protected refresh(): void {

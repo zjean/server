@@ -54,14 +54,67 @@
   overflow: auto;
 }
 
+// The inspector, docked (the design's option `2a`): a flex sibling of the
+// content, so opening it reflows the content narrower rather than covering it.
+// Width is the user's, 300–520, and lives in LayoutV2Service.
 .layout-v2__dock-panel {
-  width: 320px;
+  width: 340px;
   flex-shrink: 0;
-  // Separated by surface tone (dock-panel bg1 vs content bg2), not a line.
+  // Separated by surface tone (panel bg1 vs content bg2), not a line: "Panel
+  // steps down in value, no border between panel and body."
   background: var(--si-bg1);
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
+}
+
+// Under 1180px the same panel becomes option `2b` — floating over the content on
+// a scrim, so the content's measure stops changing on every toggle.
+.layout-v2__dock-panel--overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--si-z-panel) + 2);
+  box-shadow: var(--si-shadow3);
+}
+
+// The resize separator. 7px of grab area straddling the panel's leading edge,
+// invisible until pointed at — a permanent vertical rule is exactly the divider
+// the surface-step edge exists to avoid.
+.layout-v2__dock-grip {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  z-index: 1;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--si-dur-2) var(--si-ease-out);
+
+  &:hover,
+  &:focus-visible {
+    background: var(--si-accent-line);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: -2px;
+  }
+}
+
+// While dragging, no text on the page should select and every element should
+// keep the resize cursor — otherwise the cursor flickers as the pointer crosses
+// a row and the drag reads as broken.
+.v2-resizing-col {
+  cursor: col-resize;
+  user-select: none;
+
+  * {
+    cursor: col-resize !important;
+  }
 }
 
 .layout-v2__backdrop {
@@ -86,6 +139,18 @@
   animation: layout-v2-backdrop-in 160ms ease-out;
 }
 
+// Desktop scrim behind the OVERLAY inspector (`2b`, under 1180px). Scoped to
+// `.layout-v2__body`, which is the positioned ancestor the panel is absolute
+// against, so the two cannot disagree about what they cover.
+.layout-v2__backdrop--dock {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--si-z-panel) + 1);
+  background: var(--si-scrim);
+  animation: layout-v2-backdrop-in 160ms ease-out;
+}
+
 // ---------------------------------------------------------------------------
 // Mobile (< 768px) overrides. The `.layout-v2--mobile` class is set on the
 // LayoutV2Component host element. ViewEncapsulation.None on this component
@@ -102,13 +167,14 @@
     padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
-  // Dock-panel becomes a right-anchored slide-in sheet over content.
+  // The inspector becomes a right-anchored slide-in sheet over content.
   // bottom is offset by the tab-bar height so the sheet doesn't overlap
-  // the tab destinations.
+  // the tab destinations. `right: 0` since #437 — there is no rail left to keep
+  // clear, so the sheet may reach the edge.
   .layout-v2__dock-panel {
     position: fixed;
     top: 40px;
-    right: 48px; // dock-rail width
+    right: 0;
     bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     width: 85vw;
     max-width: 360px;
@@ -122,10 +188,9 @@
     }
   }
 
-  // Backdrop covers content while an overlay is open. The right modifier
-  // leaves the dock-rail uncovered so its icons stay tappable while the
-  // dock-panel sheet is open. The left side has no rail any more — the
-  // drawer slides in from x=0 directly.
+  // Backdrop covers content while an overlay is open. Neither side has a rail
+  // any more, so both the drawer and the inspector sheet slide in from the
+  // viewport edge and the scrim spans the full width.
   .layout-v2__backdrop {
     display: block;
     position: fixed;
@@ -138,10 +203,6 @@
     z-index: calc(var(--si-z-panel) + 1);
     background: var(--si-scrim);
     animation: layout-v2-backdrop-in 160ms ease-out;
-
-    &--right {
-      right: 48px; // keep dock-rail interactive while dock-panel sheet is open
-    }
   }
 
   // Lock content scroll while an overlay is open.
@@ -200,6 +261,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .layout-v2__dock-grip {
+    transition: none;
+  }
   .layout-v2--mobile .layout-v2__dock-panel {
     transition: none;
   }

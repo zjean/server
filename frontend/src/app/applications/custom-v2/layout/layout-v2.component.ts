@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
-import { L10nTranslateDirective } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { CompressDialogComponent } from '../components/compress-dialog.component'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LinkDialogComponent } from '../components/link-dialog.component'
@@ -12,9 +12,8 @@ import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { setUiVersion } from '../ui-version'
 import { BottomTabBarComponent } from './bottom-tab-bar.component'
-import { DockPanelComponent } from './dock-panel.component'
-import { DockRailComponent, DockTabId } from './dock-rail.component'
-import { LayoutV2Service } from './layout-v2.service'
+import { InspectorPanelComponent } from './inspector-panel.component'
+import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
 import { PageBreadcrumbComponent } from './page-breadcrumb.component'
 import { TitleBarComponent } from './title-bar.component'
@@ -30,7 +29,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
   host: {
     class: 'v2-root',
     '[class.layout-v2--mobile]': 'layoutV2.isMobile()',
-    '[class.layout-v2--overlay-open]': 'layoutV2.leftNavOpen() || layoutV2.dockActive() !== null'
+    '[class.layout-v2--overlay-open]': 'layoutV2.leftNavOpen() || layoutV2.dockVisible()'
   },
   imports: [
     RouterOutlet,
@@ -38,8 +37,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     TopBarComponent,
     LeftNavComponent,
     PageBreadcrumbComponent,
-    DockRailComponent,
-    DockPanelComponent,
+    InspectorPanelComponent,
     TransfersPopoverComponent,
     ToastHostComponent,
     ConfirmDialogComponent,
@@ -51,12 +49,17 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     ShareDialogComponent,
     TwoFaDialogComponent,
     BottomTabBarComponent,
-    L10nTranslateDirective
+    L10nTranslateDirective,
+    L10nTranslatePipe
   ]
 })
 export class LayoutV2Component implements OnInit {
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly layoutV2 = inject(LayoutV2Service)
+  protected readonly dockWidthMin = DOCK_WIDTH_MIN
+  protected readonly dockWidthMax = DOCK_WIDTH_MAX
   private resizeRaf: number | null = null
+  private dockResizeCleanup: (() => void) | null = null
 
   ngOnInit() {
     setUiVersion('v2')
@@ -83,8 +86,40 @@ export class LayoutV2Component implements OnInit {
     })
   }
 
-  protected onDockChange(tab: DockTabId | null): void {
-    this.layoutV2.setDock(tab)
+  // Panel resize. The width is `viewport - pointer`, because the panel is
+  // anchored right; the service clamps to 300–520 so the arithmetic here never
+  // has to. Only the pointerup persists — a pointermove per pixel would write
+  // localStorage a few hundred times per drag.
+  protected startDockResize(ev: PointerEvent): void {
+    if (typeof window === 'undefined') return
+    ev.preventDefault()
+    this.dockResizeCleanup?.()
+    const onMove = (e: PointerEvent) => this.layoutV2.setDockWidth(window.innerWidth - e.clientX, false)
+    const onUp = (e: PointerEvent) => {
+      this.layoutV2.setDockWidth(window.innerWidth - e.clientX)
+      this.dockResizeCleanup?.()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    document.body.classList.add('v2-resizing-col')
+    this.dockResizeCleanup = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      document.body.classList.remove('v2-resizing-col')
+      this.dockResizeCleanup = null
+    }
+  }
+
+  // A drag handle that only responds to a pointer is unusable from the keyboard,
+  // and this one is in the tab order because it is a real separator.
+  protected onDockGripKey(ev: KeyboardEvent): void {
+    const step = ev.shiftKey ? 40 : 16
+    if (ev.key === 'ArrowLeft') this.layoutV2.setDockWidth(this.layoutV2.dockWidth() + step)
+    else if (ev.key === 'ArrowRight') this.layoutV2.setDockWidth(this.layoutV2.dockWidth() - step)
+    else return
+    ev.preventDefault()
   }
 
   protected onBackdropClick(): void {
@@ -92,8 +127,8 @@ export class LayoutV2Component implements OnInit {
       this.layoutV2.closeLeftNav()
       return
     }
-    if (this.layoutV2.dockActive() !== null) {
-      this.layoutV2.setDock(null)
+    if (this.layoutV2.dockOpen()) {
+      this.layoutV2.closeDock()
     }
   }
 }

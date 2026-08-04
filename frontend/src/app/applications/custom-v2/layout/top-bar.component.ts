@@ -4,9 +4,12 @@ import { Router, RouterLink } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { StoreService } from '../../../store/store.service'
 import { AvatarComponent, AvatarUser, avatarTone, avatarInitials } from '../components/avatar.component'
+import { IconButtonComponent } from '../components/icon-button.component'
+import { TooltipDirective } from '../components/tooltip.directive'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { V2_PATH, V2_ROUTES } from '../v2.constants'
 import { V2BreadcrumbService } from './breadcrumb.service'
+import { InspectorService } from './inspector.service'
 import { LayoutV2Service } from './layout-v2.service'
 import { NotificationsBellComponent } from './notifications-bell.component'
 import { TransfersPopoverComponent } from './transfers-popover.component'
@@ -23,7 +26,16 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
 @Component({
   selector: 'app-v2-top-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconV2Component, AvatarComponent, NotificationsBellComponent, TransfersPopoverComponent, RouterLink, L10nTranslatePipe],
+  imports: [
+    IconV2Component,
+    IconButtonComponent,
+    TooltipDirective,
+    AvatarComponent,
+    NotificationsBellComponent,
+    TransfersPopoverComponent,
+    RouterLink,
+    L10nTranslatePipe
+  ],
   template: `
     <header class="topbar">
       <div class="topbar__history">
@@ -70,6 +82,22 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
       </form>
 
       <div class="topbar__actions">
+        <!-- The inspector toggle. It replaces the icon rail that used to stand to
+             the right of the content: one control in the chrome that owns the
+             panel, rather than a column of unlabelled glyphs beside it. Hidden on
+             screens with no single-row selection, which is the same condition that
+             makes ⌘I inert there. -->
+        @if (inspector.available()) {
+          <app-v2-icon-btn
+            iconName="panelRight"
+            [size]="32"
+            [active]="layoutV2.dockOpen()"
+            appV2Tooltip="Toggle right panel"
+            [tooltipShortcut]="inspectorShortcutLabel"
+            [ariaLabel]="'Toggle right panel' | translate: locale.language"
+            (click)="layoutV2.toggleDock()"
+          />
+        }
         <app-v2-transfers-popover />
         <app-v2-notifications-bell />
         <a class="topbar__avatar" [routerLink]="settingsRoute" [attr.title]="'Settings' | translate: locale.language">
@@ -86,6 +114,7 @@ export class TopBarComponent {
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   protected readonly layoutV2 = inject(LayoutV2Service)
+  protected readonly inspector = inject(InspectorService)
   private readonly store = inject(StoreService)
   protected readonly segments = this.breadcrumbs.segments
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput')
@@ -113,6 +142,12 @@ export class TopBarComponent {
     if (typeof navigator === 'undefined') return 'Ctrl K'
     const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
     return isMac ? '⌘ K' : 'Ctrl K'
+  })()
+
+  protected readonly inspectorShortcutLabel: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl I'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘I' : 'Ctrl I'
   })()
 
   protected readonly placeholder = computed(() => {
