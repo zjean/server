@@ -45,6 +45,12 @@ export type InputSize = 'sm' | 'md' | 'lg'
         (keydown.enter)="submitted.emit(value())"
         (keydown.escape)="onEscape()"
       />
+      <!-- Trailing slot, inside the field's boundary and before the clear button.
+           One caller: the search page, whose 48px field carries the Name/Full-text
+           segmented INSIDE it (D6). Projecting it keeps that screen on the real
+           primitive — its measured hairline, focus ring and clear button — instead of
+           rebuilding a 48px lookalike beside it. -->
+      <ng-content select="[inputTrailing]" />
       @if (value() && clearable()) {
         <button type="button" class="inp__clear" [attr.aria-label]="clearLabel()" (click)="clear()">
           <app-v2-icon name="x" [size]="14" />
@@ -104,6 +110,12 @@ export type InputSize = 'sm' | 'md' | 'lg'
         font-family: var(--si-sans);
         font-weight: 400;
         padding: 0;
+      }
+      /* type="search" draws a browser clear button of its own, which lands beside
+         ours and gives the field two of them. The primitive owns the control, so it
+         owns suppressing that. */
+      .inp__field::-webkit-search-cancel-button {
+        display: none;
       }
       .inp__field::placeholder {
         color: var(--si-fg-tertiary);

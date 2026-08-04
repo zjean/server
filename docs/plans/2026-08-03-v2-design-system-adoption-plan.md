@@ -619,6 +619,62 @@ One PR, `feat/v2-search-results`. Files: `screens/search/search.{ts,html,scss}`.
 - Result meta: `5 results in 3 spaces · 41 ms`.
 - **No-results gets its own copy**, distinct from the zero state and from the error state — the design forbids reusing "nothing here" across the three. Its actions: `Search names only`, `Include trash`, `Clear filters`.
 
+### 6.1 What Phase 4 actually settled
+
+Shipped in **#438**. The 48px field, the scope segmented, grouped results, match
+highlighting, the facet chips and three distinct empty states all landed. Five
+things for later phases.
+
+**The backend already highlights full-text matches, and rendering that as text
+prints markup on screen.** `files-content-store-mysql.service.ts:217` wraps every
+matched term in `<mark>…</mark>` before returning `matches[]`, so a snippet arrives
+with markup in it. Classic binds it with `[innerHTML]`
+(`applications/search/components/search.component.html:69`); this screen parses the
+markers into segments instead (`markSegments`), because the text AROUND the markers
+is raw file content that the backend does not escape — a document containing
+`<img onerror=…>` reaches the browser as markup, and Angular's sanitizer defangs the
+handler but still renders the element. The same screen highlights NAMES itself, by
+query, because the server marks only contents. Both paths return segments and the
+template renders them with `@for`; nothing on this screen binds `innerHTML`.
+
+**`.row` is not a usable class name anywhere in this app.** The classic UI loads
+Bootstrap globally, and its `.row > * { width: 100% }` puts every child of a `.row`
+on its own line — which is what the first render of the result row did. It cannot be
+won with a class, because the rule targets the CHILDREN, which carry none of ours.
+Renamed to `.result`. A sweep found this is the only collision in all of
+`custom-v2`; `.chip`, `.group`, `.field`, `.tabs` and `.pill` are all clear of
+Bootstrap's top-level selectors.
+
+**The facets filter the fetched page, not the query.** `SearchFilesDto` carries
+`content`, `fullText` and `limit` and nothing else — no type, no date range, no
+trash flag. So `All types` and `Any time` narrow the ≤100 rows already returned,
+which is honest only because the meta line counts what is ON SCREEN rather than
+claiming a total. Two consequences: D6b's `Include trash` action does not exist
+(there is no flag to set, so it is not offered), and a fourth empty state was
+needed — "no results match these filters" is a different sentence from "no matches
+for X", because in the second case the query DID match.
+
+**Whether full-text is available is discovered, not configured.** `ServerConfig`
+does not expose `files.contentIndexing.enabled`, and the endpoint 400s a full-text
+query when it is off. So the screen asks by doing: a 400 settles it, the scope falls
+back to names, the same query re-runs and the segmented stops offering a choice that
+does not exist. Same shape as `VersionsService.availability`.
+
+**The empty panel is a component now.** D6b's spec says "empty: same panel as D2",
+so the panel phase 2 built inside `file-browser.component.html` moved to
+`components/empty-panel.component.ts` and both screens use it — search with three
+different copies, the browser with its own. Note the ordering trap in its
+stylesheet: `:not(:has(*))` contributes **no specificity** (`:not()` takes its
+argument's, and `*` has none), so the rule that collapses the footer has to come
+AFTER the one it overrides or source order silently wins. Written first, it did
+nothing and the panel drew a divider with empty space under it.
+
+Two smaller notes: the input primitive gained a **trailing content slot** (the scope
+segmented lives inside the field, per D6) and now suppresses
+`::-webkit-search-cancel-button`, because `type="search"` was drawing a second clear
+button beside the primitive's own. And group headers print space NAMES, which costs
+one `listSpaces()` per visit — a result carries only the alias, which is a slug.
+
 ---
 
 ## 7. Phase 5 — the share dialog (D7)

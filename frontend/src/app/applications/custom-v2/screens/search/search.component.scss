@@ -12,187 +12,198 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
 
-  &__hero {
-    padding: var(--si-space-13) var(--si-space-12) var(--si-space-10);
-    display: flex;
-    flex-direction: column;
-    gap: var(--si-space-8);
-    max-width: 820px;
-  }
+.search__head {
+  flex: 0 0 auto;
+  padding: var(--si-space-12) var(--si-space-12) 0;
+}
 
-  // Compact page header, matching every other screen (26px title + 14px meta).
-  &__title-text {
-    margin: 0;
-    font-family: var(--si-display);
-    font-size: var(--si-text-15);
-    font-weight: 500;
+// The field is `lg` (48px) — the only oversized input in the product, "because it
+// is the page's subject". The 720px cap is the design's: a 1400px-wide text field
+// invites a sentence, and the query is two words.
+.search__field {
+  display: block;
+  max-width: 720px;
+  margin-top: var(--si-space-9);
+}
+
+.search__facets {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  margin-top: var(--si-space-7);
+  max-width: 720px;
+  flex-wrap: wrap;
+}
+
+.search__facets-spacer {
+  flex: 1 1 auto;
+}
+
+.search__meta {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-5);
+  color: var(--si-fg-tertiary);
+  white-space: nowrap;
+}
+
+// A filter chip is a lozenge, not a badge: it is something the user put there and
+// can take away, which is the distinction pill.component.ts documents. Active
+// carries the accent tint.
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-3);
+  height: 28px;
+  padding: 0 var(--si-space-5);
+  border: 0;
+  border-radius: var(--si-r4);
+  background: var(--si-bg3);
+  color: var(--si-fg-muted);
+  font-family: var(--si-sans);
+  font-size: var(--si-text-6);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--si-dur-2) var(--si-ease-out),
+    color var(--si-dur-2) var(--si-ease-out);
+
+  &:hover {
+    background: var(--si-bg5);
     color: var(--si-fg);
-    letter-spacing: -0.018em;
-    line-height: 1.15;
   }
 
-  &__title-meta {
-    margin: var(--si-space-2) 0 0;
-    font-size: var(--si-text-10);
-    line-height: 1.4;
-    color: var(--si-fg-muted);
-    font-family: var(--si-sans);
+  &--on,
+  &--on:hover {
+    background: var(--si-accent-soft);
+    color: var(--si-accent-ink);
   }
 
-  &__form {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-4);
-    background: var(--si-bg3);
-    border: 1px solid var(--si-line);
-    border-radius: var(--si-r3);
-    padding: var(--si-space-3) var(--si-space-4) var(--si-space-3) var(--si-space-7);
-
-    &:focus-within {
-      border-color: var(--si-accent-line);
-    }
-  }
-
-  &__icon {
-    color: var(--si-fg-muted);
-    flex-shrink: 0;
-  }
-
-  &__input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--si-fg);
-    font-family: var(--si-sans);
-    font-size: var(--si-text-10);
-    letter-spacing: -0.1px;
-    min-width: 0;
-
-    &::placeholder {
-      color: var(--si-fg-muted);
-    }
-
-    &::-webkit-search-cancel-button {
-      display: none;
-    }
-  }
-
-  &__toggle {
-    height: 26px;
-    padding: 0 9px;
-    background: transparent;
-    color: var(--si-fg-muted);
-    border: 1px solid var(--si-line);
-    border-radius: var(--si-r1);
-    cursor: pointer;
-    font-family: var(--si-sans);
-    font-size: var(--si-text-5);
-    transition:
-      background 120ms ease,
-      color 120ms ease,
-      border-color 120ms ease;
-
-    &:hover {
-      color: var(--si-fg);
-      border-color: var(--si-line-strong);
-    }
-
-    &--active {
-      background: var(--si-accent-soft);
-      border-color: var(--si-accent-line);
-      color: var(--si-accent-ink);
-    }
-  }
-
-  &__state {
-    padding: var(--si-space-13);
-    font-size: var(--si-text-8);
-    color: var(--si-fg-muted);
-    text-align: center;
-
-    &--error {
-      color: var(--si-rose);
-    }
-  }
-
-  &__results {
-    padding: 0 var(--si-space-9) var(--si-space-11);
-    display: flex;
-    flex-direction: column;
-    gap: var(--si-space-1);
-  }
-
-  &__count {
-    padding: var(--si-space-4) var(--si-space-2);
-    font-size: var(--si-text-4);
-    color: var(--si-fg-muted);
-    font-family: var(--si-mono);
-    letter-spacing: 0.02em;
+  &:focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 2px;
   }
 }
 
-.search-row {
-  width: 100%;
+.search__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--si-space-11) var(--si-space-12) var(--si-space-13);
+}
+
+.search__skeleton {
+  display: block;
+  max-width: 720px;
+}
+
+.search__results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--si-space-11);
+}
+
+// Group header: the label role, then a hairline filling the remaining width. The
+// rule is what makes a header read as a divider without drawing a box around the
+// group.
+.group__head {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  padding: 0 var(--si-space-6) var(--si-space-5);
+}
+
+// Periwinkle marks space identity so cobalt stays reserved for actions.
+.group__glyph {
+  color: var(--si-violet-ink);
+  flex: none;
+}
+
+.group__rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--si-line-subtle);
+}
+
+// `.result`, not `.row`: the app loads Bootstrap globally for the classic UI, and
+// its `.row > * { width: 100% }` puts every child of a `.row` on its own line. That
+// is not a specificity fight a component can win with a class — the rule targets
+// the CHILDREN, which carry no class of ours. The only fix is not to use the name.
+// It is the one collision in all of custom-v2; `.chip` and `.group` are clear.
+.result {
   display: flex;
   align-items: flex-start;
   gap: var(--si-space-6);
   padding: var(--si-space-5) var(--si-space-6);
   border-radius: var(--si-r2);
-  background: transparent;
-  border: none;
-  color: inherit;
   cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease;
+  transition: background var(--si-dur-2) var(--si-ease-out);
 
   &:hover {
     background: var(--si-bg3);
   }
 
-  &__meta {
-    flex: 1;
-    min-width: 0;
+  &:focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: -2px;
   }
+}
 
-  &__name {
-    font-size: var(--si-text-8);
-    color: var(--si-fg);
-    font-weight: 500;
-    letter-spacing: -0.05px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.result__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
-  &__path {
-    font-size: var(--si-text-4);
-    color: var(--si-fg-muted);
-    margin-top: var(--si-space-1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--si-mono);
-  }
+.result__name {
+  font-family: var(--si-sans);
+  font-size: var(--si-text-10);
+  font-weight: 500;
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  &__snippets {
-    margin-top: var(--si-space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--si-space-1);
-  }
+// The matched run. accent-400 rather than the accent fill, because this is TYPE:
+// accent-600 measures 3.48:1 on the content plane and fails.
+.result__hit {
+  color: var(--si-accent-ink);
+}
 
-  &__snippet {
-    font-size: var(--si-text-4);
-    color: var(--si-fg-muted);
-    background: var(--si-bg3);
-    border-left: 2px solid var(--si-accent-line);
-    padding: var(--si-space-2) var(--si-space-4);
-    border-radius: 0 var(--si-r1) var(--si-r1) 0;
-    line-height: 1.45;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.result__path {
+  margin-top: var(--si-space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The snippet steps DOWN to bg1, which is the one direction available: a card at
+// bg3 inside a row that highlights to bg3 on hover would vanish under the pointer.
+.result__snippet {
+  margin-top: var(--si-space-4);
+  padding: var(--si-space-4) var(--si-space-5);
+  background: var(--si-bg1);
+  border-radius: var(--si-r1);
+  font-size: var(--si-text-7);
+  line-height: 1.6;
+  color: var(--si-fg-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.result__tail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  margin-top: 1px;
+}
+
+.result__when {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-5);
+  color: var(--si-fg-tertiary);
+  white-space: nowrap;
 }

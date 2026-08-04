@@ -30,9 +30,9 @@ Only then open the design project.
 | 1 | Primitives, verified in `_kit` | #433 | merged |
 | 2 | File browser chrome (D1, D2) | #434 | merged |
 | 2b | Grid view | #435 | merged |
-| 3 | Inspector (D4, D5) | #437 | open |
-| **4** | **Search (D6)** | — | **next** |
-| 5 | Share dialog (D7) | — | not started |
+| 3 | Inspector (D4, D5) | #437 | merged |
+| 4 | Search (D6) | #438 | open |
+| **5** | **Share dialog (D7)** | — | **next** |
 | 6 | Gallery + upload dock (D8) | — | not started |
 | 7 | Mobile (M1–M6) | — | not started |
 | 8 | Keyboard hints + session error strip | — | not started |
@@ -292,12 +292,20 @@ phases touch:
   inspector toggle is a stopgap in the title bar. **Phase 7 owns replacing it**
   with whatever M1–M6 draws.
 
-### Phase 4 — search
+### Phase 4 — search (shipped in #438)
 
-- **No backend work needed.** `FileContentModel` already carries
-  `matches: string[]`, and full-text is already gated on
-  `files.contentIndexing.enabled` (400 when disabled).
-- The 48px `lg` input already exists in `app-v2-input` and is for this screen only.
+Read the plan's **§6.1**. Three of its findings apply to every later phase, not just
+to search:
+
+- **Never name a class `.row`.** Bootstrap is loaded globally for the classic UI and
+  its `.row > * { width: 100% }` stacks every child of one. It is the only such
+  collision in `custom-v2` today — a sweep cleared `.chip`, `.group`, `.field`,
+  `.tabs` and `.pill` — but the next generic name may not be.
+- **`:not(:has(*))` has zero specificity**, so a rule using it must come after the
+  rule it overrides. It failed silently the first time.
+- **Backend-supplied strings may contain markup.** Full-text snippets arrive with
+  `<mark>` in them. Parse markers into segments; do not bind `innerHTML`, and do not
+  assume a server string is plain text just because its type is `string`.
 
 ### Phase 5 — share dialog
 

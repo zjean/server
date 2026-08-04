@@ -1,56 +1,161 @@
 <div class="search">
-  <header class="search__hero">
-    <div class="search__head-text">
-      <h1 class="search__title-text" l10nTranslate>Search</h1>
-      <div class="search__title-meta" l10nTranslate>Find files by name or content across your spaces.</div>
-    </div>
-    <form class="search__form" (submit)="onSubmit($event)">
-      <app-v2-icon name="search" [size]="16" class="search__icon" />
-      <input
-        #queryInput
-        type="search"
-        class="search__input"
-        [value]="query()"
-        (input)="onQueryInput($event)"
-        [placeholder]="'Find a file by name or content…' | translate: locale.language"
-        autocomplete="off"
+  <header class="search__head">
+    <h1 class="v2-page-title" l10nTranslate>Search</h1>
+
+    <!-- The one oversized input in the product, "because it is the page's subject".
+         The scope segmented lives INSIDE the field (D6), projected into the
+         primitive's trailing slot so this screen does not rebuild a 48px lookalike. -->
+    <app-v2-input
+      #field
+      class="search__field"
+      size="lg"
+      type="search"
+      icon="search"
+      [value]="query()"
+      [clearable]="true"
+      [placeholder]="'Find a file by name or content…' | translate: locale.language"
+      [ariaLabel]="'Search' | translate: locale.language"
+      (changed)="onQueryInput($event)"
+      (submitted)="search()"
+    >
+      <app-v2-segmented
+        inputTrailing
+        size="sm"
+        [options]="scopeOptions()"
+        [value]="fullText() ? 'content' : 'name'"
+        [ariaLabel]="'Search scope' | translate: locale.language"
+        (changed)="setScope($event)"
       />
-      <button type="button" class="search__toggle" [class.search__toggle--active]="fullText()" (click)="toggleFullText()" l10nTranslate>
-        Full-text
-      </button>
-      <app-v2-btn kind="primary" size="sm" icon="search">{{ 'Search' | translate: locale.language }}</app-v2-btn>
-    </form>
+    </app-v2-input>
+
+    @if (searched()) {
+      <div class="search__facets">
+        <span class="search__meta">{{ metaLine() }}</span>
+        <span class="search__facets-spacer"></span>
+
+        <!-- Both facets narrow the fetched page rather than re-querying: the search
+             DTO takes a query, a full-text flag and a limit, and nothing else. The
+             meta line therefore counts what is on screen. -->
+        <button #typeAnchor type="button" class="chip" [class.chip--on]="type() !== 'all'" (click)="openTypeMenu(typeAnchor)">
+          {{ typeLabel() | translate: locale.language }}
+          <app-v2-icon name="chevDown" [size]="13" />
+        </button>
+        <button #timeAnchor type="button" class="chip" [class.chip--on]="time() !== 'any'" (click)="openTimeMenu(timeAnchor)">
+          {{ timeLabel() | translate: locale.language }}
+          <app-v2-icon name="chevDown" [size]="13" />
+        </button>
+        @if (hasFacets()) {
+          <button type="button" class="chip chip--clear" (click)="clearFacets()">
+            {{ 'Clear filters' | translate: locale.language }}
+            <app-v2-icon name="x" [size]="12" />
+          </button>
+        }
+      </div>
+    }
   </header>
 
-  @if (loading()) {
-    <div class="search__state" l10nTranslate>Searching…</div>
-  } @else if (errorMessage(); as err) {
-    <div class="search__state search__state--error">{{ err | translate: locale.language }}</div>
-  } @else if (searched() && results().length === 0) {
-    <app-v2-empty-state icon="search" title="no_results_for_query" [titleParams]="{ query: query() }" />
-  } @else if (results().length > 0) {
-    <div class="search__results">
-      <div class="search__count">
-        {{ (results().length === 1 ? 'one_result' : 'nb_results') | translate: locale.language : { nb: results().length } }}
-      </div>
-      @for (r of results(); track r.id) {
-        <button type="button" class="search-row" (click)="openResult(r)" (auxclick)="onResultAuxClick($event, r)">
-          <app-v2-file-glyph [type]="mimeToGlyph(r.mime)" [size]="28" [rounded]="6" />
-          <div class="search-row__meta">
-            <div class="search-row__name">{{ r.name }}</div>
-            <div class="search-row__path">{{ r.showedPath || r.path }}</div>
-            @if (r.matches && r.matches.length > 0) {
-              <div class="search-row__snippets">
-                @for (m of r.matches.slice(0, 2); track $index) {
-                  <div class="search-row__snippet">{{ m }}</div>
-                }
+  <div class="search__body">
+    @if (loading()) {
+      <app-v2-skeleton class="search__skeleton" [rows]="4" [rowHeight]="56" [ariaLabel]="'Searching…' | translate: locale.language" />
+    } @else if (errorMessage(); as err) {
+      <!-- Its own copy. The design forbids reusing "nothing here" across the zero
+           state, the no-results state and the error state, and an error is the one
+           of the three where the user has done nothing wrong. -->
+      <app-v2-empty-panel icon="info" title="Search could not run" [body]="err">
+        <app-v2-btn kind="secondary" size="md" icon="refresh" (click)="search()">{{ 'Try again' | translate: locale.language }}</app-v2-btn>
+      </app-v2-empty-panel>
+    } @else if (searched() && results().length > 0 && visible().length === 0) {
+      <!-- A FOURTH state, and it needs its own copy for the same reason the design
+           gives the other three theirs: the query did match — the facets are what
+           hid everything, so "no matches for X" would be a lie and Clear filters is
+           the action. -->
+      <app-v2-empty-panel icon="filter" title="No results match these filters" body="v2_no_results_filters_body">
+        <app-v2-btn kind="primary" size="md" (click)="clearFacets()">{{ 'Clear filters' | translate: locale.language }}</app-v2-btn>
+      </app-v2-empty-panel>
+    } @else if (searched() && visible().length === 0) {
+      <app-v2-empty-panel
+        icon="search"
+        title="v2_no_matches_for"
+        [titleParams]="{ query: lastQuery() }"
+        [body]="fullText() ? 'v2_no_matches_fulltext_body' : 'v2_no_matches_names_body'"
+      >
+        @if (fullText()) {
+          <app-v2-btn kind="secondary" size="md" (click)="setScope('name')">{{ 'Search names only' | translate: locale.language }}</app-v2-btn>
+        } @else if (contentIndexingEnabled()) {
+          <app-v2-btn kind="secondary" size="md" (click)="setScope('content')">{{ 'Search file contents' | translate: locale.language }}</app-v2-btn>
+        }
+        @if (hasFacets()) {
+          <app-v2-btn kind="secondary" size="md" (click)="clearFacets()">{{ 'Clear filters' | translate: locale.language }}</app-v2-btn>
+        }
+      </app-v2-empty-panel>
+    } @else if (groups().length > 0) {
+      <div class="search__results">
+        @for (g of groups(); track g.key) {
+          <section class="group">
+            <header class="group__head">
+              <app-v2-icon [name]="g.isShares ? 'share' : 'box'" [size]="13" class="group__glyph" />
+              <span class="v2-label">{{ g.label | translate: locale.language }}</span>
+              <span class="group__rule"></span>
+            </header>
+            @for (r of g.rows; track r.id) {
+              <div
+                class="result"
+                role="button"
+                tabindex="0"
+                (click)="openResult(r)"
+                (keydown.enter)="openResult(r)"
+                (auxclick)="onResultAuxClick($event, r)"
+              >
+                <app-v2-file-glyph [type]="mimeToGlyph(r.mime)" [size]="28" [rounded]="7" />
+                <div class="result__main">
+                  <!-- Segments, not innerHTML: a file name is attacker-controlled in
+                       any multi-user install, so the match highlight must never turn
+                       one into markup. -->
+                  <div class="result__name">
+                    @for (s of nameSegments(r); track $index) {
+                      <span [class.result__hit]="s.hit">{{ s.text }}</span>
+                    }
+                  </div>
+                  <!-- Only when the file is somewhere INSIDE the space; the group
+                       header already names the space itself, and a file at its root
+                       has no in-space path to print. -->
+                  @if (r.showedPath) {
+                    <div class="v2-mono-path result__path">{{ r.showedPath }}</div>
+                  }
+                  @if (snippet(r); as segs) {
+                    <div class="result__snippet">
+                      @for (s of segs; track $index) {
+                        <span [class.result__hit]="s.hit">{{ s.text }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+                <div class="result__tail">
+                  <span class="result__when">{{ r.mtime | amTimeAgo }}</span>
+                  <app-v2-icon-btn
+                    iconName="more"
+                    [size]="28"
+                    [title]="'More' | translate: locale.language"
+                    [ariaLabel]="'More' | translate: locale.language"
+                    (click)="openRowMenu(r, $event)"
+                  />
+                </div>
               </div>
             }
-          </div>
-        </button>
-      }
-    </div>
-  } @else {
-    <app-v2-empty-state icon="search" title="Type at least two characters to search." />
-  }
+          </section>
+        }
+      </div>
+    } @else {
+      <!-- The zero state: nothing has been searched yet. Distinct copy again, and it
+           says what the field will do rather than that the page is empty. -->
+      <app-v2-empty-panel
+        icon="search"
+        title="Search your files"
+        [body]="contentIndexingEnabled() ? 'v2_search_zero_body_full' : 'v2_search_zero_body'"
+      >
+        <span emptyPanelFooter>{{ 'v2_search_min_chars' | translate: locale.language : { n: minQuery } }}</span>
+      </app-v2-empty-panel>
+    }
+  </div>
 </div>
+<app-v2-context-menu [items]="menuItems()" [open]="menuAnchor() !== null" [anchor]="menuAnchor()" (closed)="closeMenu()" />
