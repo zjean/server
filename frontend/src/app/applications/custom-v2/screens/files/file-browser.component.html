@@ -17,74 +17,52 @@
         </div>
       </div>
 
-      @if (hasSelection()) {
-        <div class="personal__selection">
-          <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Deselect all' | translate: locale.language" />
-          <span class="personal__selection-count">
-            {{ 'v2_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
-            @if (selectionSize() > 0) {
-              · {{ selectionSize() | toBytes: 1 : true }}
-            }
-          </span>
-          <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{
-            'Copy to…' | translate: locale.language
-          }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{
-            'Move to…' | translate: locale.language
-          }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
-        </div>
-      } @else {
-        <span class="personal__create-actions">
-          <span #newBtnAnchor class="personal__new-anchor">
-            <app-v2-btn kind="primary" size="sm" icon="plus" (click)="onNewMenuClick(newBtnAnchor)">
-              {{ 'New' | translate: locale.language }}
-            </app-v2-btn>
-          </span>
-          @if (repository.showDownloadFromUrlAction) {
-            <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{
-              'Download from URL' | translate: locale.language
-            }}</app-v2-btn>
-          }
-          <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+      <span class="personal__create-actions">
+        <span #newBtnAnchor class="personal__new-anchor">
+          <app-v2-btn kind="primary" size="md" icon="plus" (click)="onNewMenuClick(newBtnAnchor)">
+            {{ 'New' | translate: locale.language }}
+          </app-v2-btn>
         </span>
-        <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
-        <app-v2-icon-btn iconName="more" [size]="28" [title]="'More' | translate: locale.language" [disabled]="true" />
-      }
+        @if (repository.showDownloadFromUrlAction) {
+          <app-v2-btn kind="ghost" size="md" icon="globe" (click)="downloadFromUrl()">{{
+            'Download from URL' | translate: locale.language
+          }}</app-v2-btn>
+        }
+        <app-v2-btn kind="secondary" size="md" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+      </span>
+      <app-v2-icon-btn iconName="refresh" [size]="32" appV2Tooltip="Refresh" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
+      <app-v2-icon-btn iconName="more" [size]="32" [title]="'More' | translate: locale.language" [disabled]="true" />
     </div>
 
-    @if (!hasSelection()) {
-      <div class="personal__row personal__row--bottom">
-        <div class="personal__filter">
-          <app-v2-icon name="search" [size]="12" class="personal__filter-icon" />
-          <input
-            #filterInput
-            type="text"
-            class="personal__filter-input"
-            [value]="filter()"
-            (input)="onFilterInput($event)"
-            [placeholder]="repository.filterPlaceholder | translate: locale.language"
-          />
-          <span class="personal__filter-hint">{{ repository.filterHint() }}</span>
-        </div>
-        <div class="personal__mode">
-          @for (opt of viewOptions; track opt.id) {
-            <button
-              type="button"
-              class="personal__mode-btn"
-              [class.personal__mode-btn--active]="mode() === opt.id"
-              [attr.title]="opt.title | translate: locale.language"
-              (click)="setMode(opt.id)"
-            >
-              <app-v2-icon [name]="opt.icon" [size]="13" />
-            </button>
-          }
-        </div>
-      </div>
-    }
+    <div class="personal__row personal__row--bottom">
+      <app-v2-input
+        #filterInput
+        class="personal__filter"
+        icon="search"
+        [value]="filter()"
+        [placeholder]="filterPlaceholder()"
+        [hint]="repository.filterHint()"
+        [clearable]="true"
+        [ariaLabel]="filterPlaceholder()"
+        (changed)="setFilter($event)"
+      />
+      <span class="personal__control-label" l10nTranslate>density</span>
+      <app-v2-segmented
+        [options]="densityOptions"
+        [value]="density()"
+        size="sm"
+        [ariaLabel]="'Density' | translate: locale.language"
+        (changed)="setDensity($event)"
+      />
+      <span class="personal__control-spacer"></span>
+      <app-v2-segmented
+        [options]="viewOptions"
+        [value]="mode()"
+        size="sm"
+        [ariaLabel]="'View' | translate: locale.language"
+        (changed)="setMode($event)"
+      />
+    </div>
 
     <input #fileInput type="file" multiple hidden (change)="onFilePicked($event)" />
   </header>
@@ -102,13 +80,30 @@
     }
 
     @if (loading()) {
-      <div class="personal__state" l10nTranslate>Loading…</div>
+      <app-v2-skeleton class="personal__skeleton" [rows]="4" [rowHeight]="rowHeight()" [ariaLabel]="'Loading…' | translate: locale.language" />
     } @else if (errorMessage(); as err) {
       <div class="personal__state personal__state--error">{{ err | translate: locale.language }}</div>
     } @else if (filteredFiles().length === 0 && filter()) {
       <app-v2-empty-state icon="search" title="no_files_match_query" [titleParams]="{ query: filter() }" />
     } @else if (files().length === 0) {
-      <app-v2-empty-state icon="folder" title="This folder is empty." />
+      <div class="personal__empty">
+        <div class="personal__empty-icon"><app-v2-icon name="folderOpen" [size]="22" /></div>
+        <div class="personal__empty-title" l10nTranslate>This folder is empty</div>
+        <div class="personal__empty-body">
+          {{ 'v2_empty_folder_body' | translate: locale.language }}
+        </div>
+        <div class="personal__empty-actions">
+          <app-v2-btn kind="primary" size="md" icon="plus" (click)="onNewMenuClick(emptyNewAnchor)">
+            <span #emptyNewAnchor>{{ 'New' | translate: locale.language }}</span>
+          </app-v2-btn>
+          <app-v2-btn kind="secondary" size="md" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
+        </div>
+        <div class="personal__empty-keys">
+          <span>{{ 'v2_key_hint_new' | translate: locale.language }}</span>
+          <span>{{ 'v2_key_hint_upload' | translate: locale.language }}</span>
+          <span>{{ 'v2_key_hint_filter' | translate: locale.language : { key: repository.filterHint() } }}</span>
+        </div>
+      </div>
     } @else {
       @switch (mode()) {
         @case ('list') {
@@ -118,15 +113,16 @@
                 <app-v2-checkbox [state]="selectAllState()" (toggled)="toggleSelectAll()" [ariaLabel]="'Select all' | translate: locale.language" />
               </span>
               <span l10nTranslate>Name</span>
+              <span l10nTranslate>Badges</span>
               <span l10nTranslate>Size</span>
               <span l10nTranslate>Modified</span>
-              <span l10nTranslate>Info</span>
               <span></span>
             </div>
             @for (f of filteredFiles(); track f.id) {
               <button
                 type="button"
                 class="file-row"
+                [style.height.px]="rowHeight()"
                 [class.file-row--selected]="isSelected(f)"
                 [class.file-row--drop-hover]="dropHoverId() === f.id"
                 [class.file-row--dragging]="drag.active() && drag.payload()?.draggedIds?.has(f.id)"
@@ -148,10 +144,18 @@
                   />
                 </span>
                 <div class="file-row__name">
-                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
+                  <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="26" [rounded]="6" />
                   <span class="file-row__name-text">{{ f.name }}</span>
+                </div>
+                <!-- Badges get their own column so the NAME column has a single
+                     clean left edge — the design's reason, and the thing that
+                     makes a folder of mixed states scannable. Everything that used
+                     to trail the file name lives here now. -->
+                <div class="file-row__badges">
                   @if (favoritesService.isFavorite(f.id)) {
-                    <app-v2-icon name="star" [size]="13" class="file-row__favorite" [attr.title]="'Favorites' | translate: locale.language" />
+                    <app-v2-pill color="amber" [size]="11" [attr.title]="'Favorites' | translate: locale.language">
+                      <app-v2-icon name="star" [size]="11" />
+                    </app-v2-pill>
                   }
                   <!-- Locked-row badge, list mode. Classic's equivalent is the
                        `@case ('info')` badge at spaces-browser.component.html:427 —
@@ -176,6 +180,18 @@
                     >
                       <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="11">
                         <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="10" />
+                      </app-v2-pill>
+                    </button>
+                  }
+                  @if (f.hasComments) {
+                    <button
+                      type="button"
+                      class="file-row__comments-btn"
+                      (click)="$event.stopPropagation(); openComments(f)"
+                      [attr.title]="'Show comments' | translate: locale.language"
+                    >
+                      <app-v2-pill color="gray" [size]="11">
+                        <app-v2-icon name="comment" [size]="10" />
                       </app-v2-pill>
                     </button>
                   }
@@ -213,26 +229,19 @@
                     —
                   }
                 </div>
-                <div class="file-row__info">
-                  @if (f.hasComments) {
-                    <button
-                      type="button"
-                      class="file-row__comments-btn"
-                      (click)="$event.stopPropagation(); openComments(f)"
-                      [attr.title]="'Show comments' | translate: locale.language"
-                    >
-                      <app-v2-pill color="green" [size]="11">
-                        <app-v2-icon name="comment" [size]="10" />
-                        <span>·</span>
-                      </app-v2-pill>
-                    </button>
-                  }
-                </div>
                 <div class="file-row__actions" (click)="openRowMenu($event, f)">
                   <app-v2-icon-btn iconName="more" [size]="26" [title]="'More' | translate: locale.language" />
                 </div>
               </button>
             }
+            <div class="file-table__footer">
+              <span class="file-table__footer-totals">{{ listFooterSummary() }}</span>
+              <span class="file-table__footer-sort">{{ 'v2_sorted_by_name' | translate: locale.language }}</span>
+            </div>
+          </div>
+          <div class="personal__drop-target" aria-hidden="true">
+            <app-v2-icon name="upload" [size]="18" />
+            <span>{{ 'v2_drop_to_upload_here' | translate: locale.language : { folder: folderLabel() } }}</span>
           </div>
         }
         @case ('grid') {
@@ -408,4 +417,39 @@
     (selected)="onFabSheetSelect($event)"
     (closed)="fabSheetOpen.set(false)"
   />
+
+  @if (hasSelection()) {
+    <div class="bulk-bar" role="toolbar" [attr.aria-label]="'v2_bulk_actions' | translate: locale.language">
+      <span class="bulk-bar__count">
+        {{ 'v2_n_items_selected' | translate: locale.language : { nb: selectionCount() } }}
+        @if (selectionSize() > 0) {
+          · {{ selectionSize() | toBytes: 1 : true }}
+        }
+      </span>
+      @if (selectAllState() !== 'checked') {
+        <button type="button" class="bulk-bar__select-all" (click)="toggleSelectAll()">
+          {{ 'v2_select_all_n' | translate: locale.language : { nb: filteredFiles().length } }}
+        </button>
+      }
+      <span class="bulk-bar__divider"></span>
+      <app-v2-btn kind="secondary" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{
+        'Move to…' | translate: locale.language
+      }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{
+        'Copy to…' | translate: locale.language
+      }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+      <span class="bulk-bar__spacer"></span>
+      <app-v2-btn kind="danger" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
+      <app-v2-icon-btn
+        iconName="x"
+        [size]="32"
+        appV2Tooltip="Clear selection"
+        tooltipShortcut="esc"
+        [title]="'Cancel' | translate: locale.language"
+        (click)="clearSelection()"
+      />
+    </div>
+  }
 </div>

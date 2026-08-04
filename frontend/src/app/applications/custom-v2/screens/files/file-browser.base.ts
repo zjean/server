@@ -15,7 +15,7 @@ import {
 } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslationService } from 'angular-l10n'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
@@ -55,6 +55,9 @@ import { FOLDER_README_NAMES, pickFolderReadme } from '../../utils/folder-readme
 import { isArchiveMime, mimeToGlyph } from '../../utils/mime-to-glyph'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 import { buildNewEntryMenu, buildNewEntrySheetItems, NewEntryId } from './new-entry-menu'
+import { convertBytesToText } from '../../../../common/utils/functions'
+import { InputComponent } from '../../components/input.component'
+import type { SegmentedOption } from '../../components/segmented.component'
 import type { FileBrowserRepository } from './file-browser-repository'
 
 export type BrowserMode = 'list' | 'grid' | 'gallery'
@@ -65,10 +68,31 @@ export interface BrowserViewOption {
   title: string
 }
 
+// Row density. The design offers three and recommends the middle one, which is
+// also a change from what v2 shipped: rows were 56px, i.e. the RELAXED step, so
+// the default here moves everyone up one notch in information density.
+//
+//   compact      36px  ~24 rows per screen, for admins and large spaces
+//   comfortable  44px  ~19 rows — the default
+//   relaxed      56px  ~15 rows, metadata under the name (mobile is always this)
+export type BrowserDensity = 'compact' | 'comfortable' | 'relaxed'
+
+export const DENSITY_ROW_HEIGHT: Record<BrowserDensity, number> = {
+  compact: 36,
+  comfortable: 44,
+  relaxed: 56
+}
+
 function readStoredMode(key: string): BrowserMode {
   if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return 'list'
   const raw = window.localStorage.getItem(key)
   return raw === 'grid' || raw === 'gallery' || raw === 'list' ? raw : 'list'
+}
+
+function readStoredDensity(key: string): BrowserDensity {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return 'comfortable'
+  const raw = window.localStorage.getItem(key)
+  return raw === 'compact' || raw === 'comfortable' || raw === 'relaxed' ? raw : 'comfortable'
 }
 
 // The ONE v2 file browser. Both `PersonalComponent` and `SpaceFilesComponent`
@@ -117,6 +141,17 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
    */
   protected abstract viewModeStorageKey(): string
 
+  /**
+   * localStorage key for row density. A METHOD for the same reason
+   * `viewModeStorageKey()` is one — see above; `density` below initialises before
+   * the subclass's `repository` field exists.
+   *
+   * Per-view rather than per-account deliberately: the design calls density "a
+   * user setting stored per view", and someone who wants a dense Personal list
+   * does not necessarily want a dense shared space.
+   */
+  protected abstract densityStorageKey(): string
+
   protected readonly http = inject(HttpClient)
   protected readonly route = inject(ActivatedRoute)
   protected readonly router = inject(Router)
@@ -138,6 +173,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly drag = inject(V2DragService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  private readonly translation = inject(L10nTranslationService)
   private navSubscription: Subscription | null = null
   private unregisterDropHandler: (() => void) | null = null
 
@@ -147,7 +183,11 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly dropHoverId = signal<number | null>(null)
 
   @ViewChild('fileInput') protected fileInput?: ElementRef<HTMLInputElement>
-  @ViewChild('filterInput') protected filterInput?: ElementRef<HTMLInputElement>
+  // The filter is an <app-v2-input> now, so ⌘F focuses THROUGH the component
+  // rather than an ElementRef. `select()` is gone with it: the primitive owns its
+  // <input> and exposing it just to select the text would give every caller write
+  // access to the DOM node. Focus alone is what the kbd hint promises.
+  @ViewChild('filterInput') protected filterInput?: InputComponent
 
   // The folder-readme banner rendered above the listing by the shared template.
   // Queried here so `newFolderDescription()` can hand the freshly created file
@@ -185,6 +225,8 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
   protected readonly mode = signal<BrowserMode>(readStoredMode(this.viewModeStorageKey()))
+  protected readonly density = signal<BrowserDensity>(readStoredDensity(this.densityStorageKey()))
+  protected readonly rowHeight = computed(() => DENSITY_ROW_HEIGHT[this.density()])
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
 
   // Mobile FAB-driven action sheet. Mirrors the desktop "+ New" menu, then
@@ -211,10 +253,16 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
 
   protected readonly pathSegments = toSignal(this.route.url, { initialValue: [] })
 
-  protected readonly viewOptions: BrowserViewOption[] = [
+  protected readonly viewOptions: SegmentedOption<BrowserMode>[] = [
     { id: 'list', icon: 'list', title: 'List' },
     { id: 'grid', icon: 'grid', title: 'Grid' },
     { id: 'gallery', icon: 'gallery', title: 'Gallery' }
+  ]
+
+  protected readonly densityOptions: SegmentedOption<BrowserDensity>[] = [
+    { id: 'compact', label: 'Compact' },
+    { id: 'comfortable', label: 'Comfortable' },
+    { id: 'relaxed', label: 'Relaxed' }
   ]
 
   protected readonly folderLabel = computed(() => {
@@ -231,6 +279,32 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   })
 
   protected readonly totalSize = computed(() => this.files().reduce((s, f) => s + (f.isDir ? 0 : f.size), 0))
+
+  // The list footer's totals line. Built here rather than in the template because
+  // it is four facts joined by separators and the pluralisation differs per fact —
+  // in a template that is four nested @if blocks reading as one sentence.
+  //
+  // It counts the FILTERED set, not the folder: when a filter is active the number
+  // under the list has to agree with the rows above it.
+  // Placeholders describe SCOPE, never the control — and the scope is the folder
+  // you are in, not the screen you came from. The per-repository constant said
+  // "Filter in Personal…" three folders deep.
+  protected readonly filterPlaceholder = computed(() =>
+    this.translation.translate('v2_filter_in_folder', { folder: this.folderLabel() }, this.locale.language)
+  )
+
+  protected readonly listFooterSummary = computed(() => {
+    const shown = this.filteredFiles()
+    const folders = shown.filter((f) => f.isDir).length
+    const files = shown.length - folders
+    const bytes = shown.reduce((sum, f) => sum + (f.isDir ? 0 : f.size), 0)
+    const t = (key: string, params?: Record<string, unknown>) => this.translation.translate(key, params, this.locale.language)
+    const parts = [t(shown.length === 1 ? 'one_item' : 'nb_items', { nb: shown.length })]
+    if (files > 0) parts.push(t(files === 1 ? 'v2_one_file' : 'v2_n_files', { nb: files }))
+    if (folders > 0) parts.push(t(folders === 1 ? 'v2_one_folder' : 'v2_n_folders', { nb: folders }))
+    if (bytes > 0) parts.push(convertBytesToText(bytes, 1, true))
+    return parts.join(' · ')
+  })
 
   protected readonly selectedFiles = computed(() => {
     const ids = this.selection()
@@ -455,8 +529,17 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
 
   protected setMode(mode: BrowserMode): void {
     this.mode.set(mode)
+    this.persist(this.viewModeStorageKey(), mode)
+  }
+
+  protected setDensity(density: BrowserDensity): void {
+    this.density.set(density)
+    this.persist(this.densityStorageKey(), density)
+  }
+
+  private persist(key: string, value: string): void {
     if (typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
-      window.localStorage.setItem(this.viewModeStorageKey(), mode)
+      window.localStorage.setItem(key, value)
     }
   }
 
@@ -471,11 +554,10 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     // already in another input — because the kbd hint next to the filter
     // promises this and a stuck-elsewhere focus would surprise the user.
     if (this.repository.filterShortcutEnabled && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
-      const el = this.filterInput?.nativeElement
+      const el = this.filterInput
       if (el) {
         event.preventDefault()
         el.focus()
-        el.select()
         return
       }
     }
@@ -721,8 +803,8 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     return dir ? `${dir}/${file.name}` : ''
   }
 
-  protected onFilterInput(event: Event): void {
-    this.filter.set((event.target as HTMLInputElement).value)
+  protected setFilter(value: string): void {
+    this.filter.set(value)
   }
 
   protected openRowMenu(event: MouseEvent, file: FileProps): void {

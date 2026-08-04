@@ -20,6 +20,7 @@ describeFileBrowserContract({
   alias: 'personal',
   routeParams: {},
   viewModeKey: 'ui.personal.viewMode',
+  densityKey: 'ui.personal.density',
   folderRoute: (segs, name) => ['/', 'v2', 'personal', ...segs, name],
   rootBreadcrumbs: [{ label: 'Personal', icon: 'folder', route: ['/', 'v2', 'personal'], targetPath: 'files/personal' }],
   nestedBreadcrumbs: (segs) => [
@@ -70,13 +71,13 @@ describe('personal file browser — personal-only behaviour', () => {
     expect(c.folderLabel()).toBe('deeper')
   })
 
-  it('focuses and selects the filter input on cmd/ctrl-F', () => {
+  it('focuses the filter input on cmd/ctrl-F', () => {
     const { c } = start()
     const calls: string[] = []
-    c.filterInput = { nativeElement: { focus: () => calls.push('focus'), select: () => calls.push('select') } }
+    c.filterInput = { focus: () => calls.push('focus') }
     let prevented = 0
     c.onWindowKeydown({ key: 'f', metaKey: true, target: {}, preventDefault: () => prevented++ } as unknown as KeyboardEvent)
-    expect(calls).toEqual(['focus', 'select'])
+    expect(calls).toEqual(['focus'])
     expect(prevented).toBe(1)
   })
 
@@ -85,10 +86,10 @@ describe('personal file browser — personal-only behaviour', () => {
     // the handler runs before the "typing in an input" bail-out.
     const { c } = start()
     const calls: string[] = []
-    c.filterInput = { nativeElement: { focus: () => calls.push('focus'), select: () => calls.push('select') } }
+    c.filterInput = { focus: () => calls.push('focus') }
     const target = new (globalThis as Record<string, any>)['HTMLInputElement']()
     c.onWindowKeydown({ key: 'F', ctrlKey: true, target, preventDefault: () => undefined } as unknown as KeyboardEvent)
-    expect(calls).toEqual(['focus', 'select'])
+    expect(calls).toEqual(['focus'])
   })
 
   it('falls through when the filter input is not rendered', () => {

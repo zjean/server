@@ -32,6 +32,7 @@ export interface BrowserContractParams {
   routeParams: Record<string, string>
   /** localStorage key holding the view mode. Deliberately different per screen. */
   viewModeKey: string
+  densityKey: string
   /** Router commands for navigating INTO a folder. */
   folderRoute: (segs: string[], name: string) => unknown[]
   /** Expected breadcrumb array at the repository root. */
@@ -356,7 +357,7 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     describe('filter and keyboard', () => {
       it('filters case-insensitively on a name substring', () => {
         const { c } = start()
-        c.onFilterInput({ target: { value: 'GAM' } } as unknown as Event)
+        c.setFilter('GAM')
         expect(c.filter()).toBe('GAM')
         expect(c.filteredFiles().map((f: FileProps) => f.id)).toEqual([3])
       })
@@ -440,6 +441,62 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
           c.setMode('grid')
           expect(c.mode()).toBe('grid')
           expect(win.storage.get(p.viewModeKey)).toBe('grid')
+        } finally {
+          restore()
+        }
+      })
+    })
+
+    // -----------------------------------------------------------------------
+    // F2. Density
+    //
+    // Same shape as view mode, and pinned for the same reason: both are stored
+    // per view, so a shared key would make one screen's preference silently
+    // change the other's. The default matters on its own — v2 shipped 56px rows,
+    // i.e. the RELAXED step, so 'comfortable' moves every existing user up one
+    // notch in density and a regression here would be invisible in a diff.
+    // -----------------------------------------------------------------------
+    describe('density', () => {
+      it('defaults to comfortable with nothing stored', () => {
+        const { restore } = installWindowStub()
+        try {
+          const res = mount(p.ctor as new () => unknown, (deps) => seed(deps))
+          expect((res.component as BrowserApi).density()).toBe('comfortable')
+          expect((res.component as BrowserApi).rowHeight()).toBe(44)
+        } finally {
+          restore()
+        }
+      })
+
+      it('reads the initial density from its own localStorage key', () => {
+        const { restore } = installWindowStub({ [p.densityKey]: 'compact' })
+        try {
+          const res = mount(p.ctor as new () => unknown, (deps) => seed(deps))
+          expect((res.component as BrowserApi).density()).toBe('compact')
+          expect((res.component as BrowserApi).rowHeight()).toBe(36)
+        } finally {
+          restore()
+        }
+      })
+
+      it('falls back to comfortable for an unknown stored value', () => {
+        const { restore } = installWindowStub({ [p.densityKey]: 'enormous' })
+        try {
+          const res = mount(p.ctor as new () => unknown, (deps) => seed(deps))
+          expect((res.component as BrowserApi).density()).toBe('comfortable')
+        } finally {
+          restore()
+        }
+      })
+
+      it('persists a density change to its own key, and moves the row height', () => {
+        const { win, restore } = installWindowStub()
+        try {
+          const { c } = start()
+          c.setDensity('relaxed')
+          expect(c.density()).toBe('relaxed')
+          expect(c.rowHeight()).toBe(56)
+          expect(win.storage.get(p.densityKey)).toBe('relaxed')
         } finally {
           restore()
         }

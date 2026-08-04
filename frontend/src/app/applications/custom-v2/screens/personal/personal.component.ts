@@ -5,6 +5,10 @@ import { Observable } from 'rxjs'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ActionSheetComponent } from '../../components/action-sheet.component'
+import { InputComponent } from '../../components/input.component'
+import { SegmentedComponent } from '../../components/segmented.component'
+import { SkeletonComponent } from '../../components/skeleton.component'
+import { TooltipDirective } from '../../components/tooltip.directive'
 import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuComponent } from '../../components/context-menu.component'
@@ -48,6 +52,10 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
     // <app-v2-folder-readme>; the wiring behind it is entirely in
     // FileBrowserBase, same as for every other component in this list.
     FolderReadmeComponent,
+    InputComponent,
+    SegmentedComponent,
+    SkeletonComponent,
+    TooltipDirective,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -107,7 +115,6 @@ export class PersonalComponent extends FileBrowserBase {
     translateRootLabel: true,
     // Lower-case: the archive name is a filename, not a title.
     rootArchiveName: (): string => SPACE_ALIAS.PERSONAL,
-    filterPlaceholder: 'Filter in Personal…',
     filterHint: (): string => this.filterShortcutLabel,
 
     filterShortcutEnabled: true,
@@ -124,5 +131,9 @@ export class PersonalComponent extends FileBrowserBase {
 
   protected viewModeStorageKey(): string {
     return 'ui.personal.viewMode'
+  }
+
+  protected densityStorageKey(): string {
+    return 'ui.personal.density'
   }
 }

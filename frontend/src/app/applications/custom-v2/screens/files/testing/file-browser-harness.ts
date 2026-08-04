@@ -25,7 +25,7 @@
 
 import { HttpClient } from '@angular/common/http'
 import { DestroyRef, Injector, runInInjectionContext, signal, ɵChangeDetectionScheduler, ɵEffectScheduler } from '@angular/core'
-import { L10N_LOCALE } from 'angular-l10n'
+import { L10N_LOCALE, L10nTranslationService } from 'angular-l10n'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { BehaviorSubject, Observable, of, Subject, throwError } from 'rxjs'
 import { StoreService } from '../../../../../store/store.service'
@@ -318,6 +318,17 @@ export class HarnessDeps {
       { provide: ɵChangeDetectionScheduler, useValue: new StubChangeDetectionScheduler() },
       { provide: DestroyRef, useValue: { onDestroy: (cb: () => void) => (this.destroyCallbacks.push(cb), () => undefined) } },
       { provide: L10N_LOCALE, useValue: { language: 'en' } },
+      // The base injects this for the list footer, which joins four pluralised
+      // facts into one line. The stub returns the KEY plus its params rather than
+      // a translation, so a spec can assert which key and which count were used
+      // without the i18n bundles being loaded — asserting on English prose here
+      // would make every copy edit a test failure.
+      {
+        provide: L10nTranslationService,
+        useValue: {
+          translate: (key: string, params?: Record<string, unknown>) => (params ? `${key}:${JSON.stringify(params)}` : key)
+        }
+      },
       { provide: HttpClient, useValue: http },
       { provide: ActivatedRoute, useValue: { url: this.routeUrl.asObservable(), params: this.routeParams.asObservable() } },
       {

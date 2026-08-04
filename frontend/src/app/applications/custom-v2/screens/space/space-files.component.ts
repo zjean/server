@@ -8,6 +8,10 @@ import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { ActionSheetComponent } from '../../components/action-sheet.component'
+import { InputComponent } from '../../components/input.component'
+import { SegmentedComponent } from '../../components/segmented.component'
+import { SkeletonComponent } from '../../components/skeleton.component'
+import { TooltipDirective } from '../../components/tooltip.directive'
 import { ButtonComponent } from '../../components/button.component'
 import { CheckboxComponent } from '../../components/checkbox.component'
 import { ContextMenuComponent } from '../../components/context-menu.component'
@@ -51,6 +55,10 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
     // <app-v2-folder-readme>; the wiring behind it is entirely in
     // FileBrowserBase, same as for every other component in this list.
     FolderReadmeComponent,
+    InputComponent,
+    SegmentedComponent,
+    SkeletonComponent,
+    TooltipDirective,
     ToBytesPipe,
     TimeAgoPipe,
     L10nTranslateDirective,
@@ -121,7 +129,6 @@ export class SpaceFilesComponent extends FileBrowserBase {
     // A space name is user data, never an i18n key.
     translateRootLabel: false,
     rootArchiveName: (): string => this.spaceName() || this.repository.alias(),
-    filterPlaceholder: 'Filter in this space…',
     // Shared with personal via the base, so the hint names the key the platform
     // actually uses. Was a hard-coded '⌘F' advertising a shortcut that had no
     // handler behind it — filterShortcutEnabled was false (#368).
@@ -146,6 +153,10 @@ export class SpaceFilesComponent extends FileBrowserBase {
 
   protected viewModeStorageKey(): string {
     return 'ui.space.viewMode'
+  }
+
+  protected densityStorageKey(): string {
+    return 'ui.space.density'
   }
 
   // Angular reuses this component across any hop that stays within the single
