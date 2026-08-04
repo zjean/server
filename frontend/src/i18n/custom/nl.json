@@ -320,5 +320,17 @@
   "v2_search_zero_body_full": "Zoek op naam, of schakel over naar volledige tekst om in markdown-, tekst- en PDF-bestanden te zoeken.",
   "v2_search_min_chars": "minimaal {{ n }} tekens",
   "No results match these filters": "Geen resultaten met deze filters",
-  "v2_no_results_filters_body": "De zoekopdracht vond resultaten, maar geen enkele valt binnen het gekozen type of tijdvak."
+  "v2_no_results_filters_body": "De zoekopdracht vond resultaten, maar geen enkele valt binnen het gekozen type of tijdvak.",
+  "(you)": "(jij)",
+  "Expires": "Verloopt",
+  "Invite": "Uitnodigen",
+  "Permission": "Rechten",
+  "Public link": "Openbare link",
+  "v2_share_title": "“{{ name }}” delen",
+  "v2_share_with_access": "MET TOEGANG · {{ nb }}",
+  "v2_share_revoke_link": "Link intrekken",
+  "v2_share_link_off_lede": "Uit — alleen de personen hierboven hebben toegang",
+  "v2_share_link_open_lede": "Iedereen met de link",
+  "v2_share_link_password_lede": "Iedereen met de link en het wachtwoord",
+  "v2_share_link_on_save": "De link wordt aangemaakt als je op Gereed klikt"
 }

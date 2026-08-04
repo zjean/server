@@ -1,0 +1,309 @@
+// Geometry, surfaces and the footer band come from `styles/_dialog.scss` — 560px,
+// radius-lg, shadow-lg, 60% scrim, one spelling for all of it. Only what is specific
+// to sharing lives here.
+:host {
+  display: contents;
+}
+
+.sd__head-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd__state {
+  padding: var(--si-space-12) 0;
+  text-align: center;
+  color: var(--si-fg-tertiary);
+  font-size: var(--si-text-8);
+}
+
+// Add-people row: who · at what role · the zone's one primary.
+.sd__invite {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  margin-bottom: var(--si-space-6);
+}
+
+.sd__picker {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd__staged {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-3);
+  margin-bottom: var(--si-space-7);
+}
+
+// The dismiss on a recipient chip. A chip is something the user put there and can take
+// away — that is the whole distinction between a chip and a badge.
+.sd__chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: var(--si-space-1);
+  padding: 0;
+  border: 0;
+  border-radius: var(--si-r4);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.sd__section {
+  margin-bottom: var(--si-space-6);
+}
+
+.sd__rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--si-space-4);
+}
+
+// A row is a card on the dialog surface: one step DOWN from bg5, because the dialog is
+// already high on the ramp and there is nothing above it to spend.
+.sd__row {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-6);
+  padding: var(--si-space-5) var(--si-space-6);
+  background: var(--si-bg3);
+  border-radius: var(--si-r2);
+}
+
+.sd__row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd__row-name {
+  font-size: var(--si-text-8);
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd__row-you {
+  color: var(--si-fg-ghost);
+  font-size: var(--si-text-7);
+}
+
+.sd__row-desc {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-3);
+  color: var(--si-fg-ghost);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The owner's role, as text. Tertiary rather than the body tone: it states a fact, and
+// the selects beside it are the things you can act on.
+.sd__row-static {
+  font-size: var(--si-text-7);
+  color: var(--si-fg-tertiary);
+  padding: 0 var(--si-space-4);
+  white-space: nowrap;
+}
+
+// Periwinkle marks identity — a group and a link are both "a thing", and cobalt stays
+// reserved for the actions beside them.
+.sd__group-glyph {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--si-r1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--si-violet-soft);
+  color: var(--si-violet-ink);
+}
+
+.sd__empty {
+  font-size: var(--si-text-7);
+  color: var(--si-fg-tertiary);
+  padding: var(--si-space-4) 0;
+}
+
+/* ─── The link zone ─────────────────────────────────────────────────────────── */
+
+.sd__link {
+  flex: 0 0 auto;
+  padding: var(--si-space-9) var(--si-space-10) var(--si-space-10);
+}
+
+.sd__link-head {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-6);
+}
+
+.sd__link-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--si-r1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--si-violet-soft);
+  color: var(--si-violet-ink);
+}
+
+.sd__link-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sd__link-title {
+  font-size: var(--si-text-10);
+  font-weight: 500;
+  color: var(--si-fg);
+}
+
+.sd__link-lede {
+  font-size: var(--si-text-6);
+  color: var(--si-fg-tertiary);
+}
+
+.sd__url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-5);
+  margin-top: var(--si-space-7);
+}
+
+// The URL is machine output, so mono — and read-only, because the uuid is the server's.
+.sd__url {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 36px;
+  padding: 0 var(--si-space-6);
+  background: var(--si-bg3);
+  border: 1px solid var(--si-border);
+  border-radius: var(--si-r1);
+  color: var(--si-fg-muted);
+  font-family: var(--si-mono);
+  font-size: var(--si-text-5);
+
+  &:focus {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 1px;
+  }
+}
+
+.sd__url-pending {
+  margin-top: var(--si-space-7);
+  font-size: var(--si-text-6);
+  color: var(--si-fg-tertiary);
+}
+
+// Inline rows, two across — no "advanced" disclosure, which is the design's point
+// here: every option a link has is on screen.
+.sd__opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--si-space-4);
+  margin-top: var(--si-space-6);
+}
+
+.sd__opt {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-4);
+  min-width: 0;
+  padding: var(--si-space-4) var(--si-space-5);
+  background: var(--si-bg3);
+  border-radius: var(--si-r1);
+}
+
+.sd__opt-glyph {
+  color: var(--si-fg-tertiary);
+  flex: none;
+
+  // The two options that CHANGE the link's reach get their semantic tone once set: an
+  // expiry is a warning (it will stop working), a password is a success (it is
+  // protected). Both are -ink tones because they are type-sized glyphs.
+  &--amber {
+    color: var(--si-amber-ink);
+  }
+
+  &--green {
+    color: var(--si-green-ink);
+  }
+}
+
+.sd__opt-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--si-text-7);
+  color: var(--si-fg-muted);
+  white-space: nowrap;
+}
+
+.sd__opt-date,
+.sd__opt-input {
+  min-width: 0;
+  width: 118px;
+  height: 26px;
+  padding: 0 var(--si-space-4);
+  background: var(--si-bg5);
+  border: 1px solid var(--si-border);
+  border-radius: var(--si-r0);
+  color: var(--si-fg);
+  font-family: var(--si-mono);
+  font-size: var(--si-text-4);
+
+  &:focus {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 1px;
+  }
+
+  &::placeholder {
+    color: var(--si-fg-tertiary);
+    font-family: var(--si-sans);
+  }
+}
+
+.sd__opt-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--si-r0);
+  background: transparent;
+  color: var(--si-fg-tertiary);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--si-bg6);
+    color: var(--si-fg);
+  }
+}
+
+.sd__opt-error {
+  margin-top: var(--si-space-5);
+  font-size: var(--si-text-6);
+  color: var(--si-rose-ink);
+}
+
+// A single option is a full-width row rather than a lonely half — a 2-column grid with
+// three items already leaves one gap, and two would read as a mistake.
+.sd__opts > .sd__opt:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}

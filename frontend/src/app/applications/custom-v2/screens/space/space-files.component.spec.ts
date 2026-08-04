@@ -160,7 +160,7 @@ describe('space-files browser — space-only behaviour', () => {
     it('carries the resolved space name into the link and share DTOs', async () => {
       const { c, deps } = start(['sub'], ALIAS, [{ alias: ALIAS, name: 'Demo Space' }])
       await c.getLink(FIXTURE_FILES[0])
-      expect(deps.log.only('linkDialog.open').args[0]).toEqual({
+      expect(deps.log.only('shareDialog.open').args[0]).toEqual({
         file: {
           id: 1,
           name: 'alpha.txt',
@@ -169,7 +169,8 @@ describe('space-files browser — space-only behaviour', () => {
           space: { alias: ALIAS, name: 'Demo Space', root: { alias: ALIAS, name: 'Demo Space' } }
         },
         relativePath: 'sub/alpha.txt',
-        ownerId: null
+        ownerId: null,
+        focusLink: true
       })
     })
 

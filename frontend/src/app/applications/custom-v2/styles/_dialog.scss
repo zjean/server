@@ -1,0 +1,127 @@
+// Sync-In v2 dialog geometry.
+//
+// The design gives every dialog the same frame: **560px, `--si-r3`, `--si-shadow3`,
+// on a 60% scrim**. Eight components were each declaring their own — all eight at
+// `border-radius: 10px` (the design says 12), with widths of 440, 500 and unset, and
+// each with its own copy of the fixed-centring block. That is the same problem
+// `_type.scss` solved for type roles, and it gets the same solution: classes, loaded
+// globally, so there is one spelling instead of eight that drift.
+//
+// Emitted as CLASSES rather than a mixin because most of these dialogs declare their
+// styles as inline `styles: [...]` strings in a `.ts` file, which cannot `@use` a
+// partial. Loaded by v2.scss, which LayoutV2Component pulls in with
+// `encapsulation: None` — so these reach into every dialog's template regardless of
+// that component's own encapsulation.
+//
+// A dialog that genuinely needs a different width overrides `max-width` on
+// `.v2-dialog` from its own stylesheet; the tree picker does, because it is a file
+// browser in a box rather than a form.
+
+.v2-root {
+  // The scrim. 60% per the design, and it owns the dismiss-on-click behaviour that
+  // every one of these dialogs implements identically.
+  .v2-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--si-z-dialog);
+    background: var(--si-scrim);
+  }
+
+  .v2-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    // The surface is one step ABOVE the popover ramp: a dialog sits over everything,
+    // including the menus that open inside it.
+    z-index: calc(var(--si-z-dialog) + 1);
+    display: flex;
+    flex-direction: column;
+    width: min(560px, calc(100vw - 24px));
+    max-height: calc(100vh - 48px);
+    background: var(--si-bg5);
+    border-radius: var(--si-r3);
+    box-shadow: var(--si-shadow3);
+    // No border. The shadow and the surface step are the edge; a 1px line on top of
+    // both is the bevel this system builds depth without.
+    overflow: hidden;
+  }
+
+  // Head: the object being acted on. "Title states the object; the primary button
+  // states the verb."
+  .v2-dialog__head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: var(--si-space-6);
+    padding: var(--si-space-10) var(--si-space-10) var(--si-space-9);
+  }
+
+  .v2-dialog__title {
+    font-family: var(--si-sans);
+    font-size: var(--si-text-12);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--si-fg);
+  }
+
+  .v2-dialog__subject {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-5);
+    color: var(--si-fg-tertiary);
+    margin-top: var(--si-space-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Body scrolls; the head and the footer do not. A dialog whose footer scrolls away
+  // hides the one control that ends the interaction.
+  .v2-dialog__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 var(--si-space-10) var(--si-space-10);
+  }
+
+  // The footer is a BAND — a surface step down from the dialog — which is what makes
+  // it read as chrome rather than as the last row of the form.
+  .v2-dialog__footer {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: var(--si-space-5);
+    padding: var(--si-space-7) var(--si-space-10);
+    background: var(--si-bg3);
+  }
+
+  // Pushes what follows to the right. Destructive actions go on the LEFT of it, far
+  // from the primary: "revoke is left-aligned away from Done."
+  .v2-dialog__spacer {
+    flex: 1 1 auto;
+  }
+
+  // A hairline between two zones of one dialog. line-strong rather than line,
+  // because this divides SECTIONS and has to read at a glance.
+  .v2-dialog__rule {
+    flex: 0 0 auto;
+    height: 1px;
+    background: var(--si-line-strong);
+  }
+
+  // Inline error, above the footer.
+  .v2-dialog__error {
+    font-size: var(--si-text-7);
+    color: var(--si-rose-ink);
+    padding: 0 var(--si-space-10) var(--si-space-6);
+  }
+
+  // `esc` next to the Close label — the design prints the shortcut where the action
+  // is, and mono because a keystroke is machine vocabulary.
+  .v2-dialog__kbd {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-fg-ghost);
+    margin-left: var(--si-space-3);
+  }
+}

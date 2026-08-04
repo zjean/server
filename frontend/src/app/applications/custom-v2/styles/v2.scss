@@ -22,6 +22,7 @@
 @use './tokens';
 @use './type';
 @use './prose';
+@use './dialog';
 
 .v2-root {
   display: flex;

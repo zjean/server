@@ -39,6 +39,14 @@ export interface CreateLinkParams {
   // owner id of the file; null when the current user owns the file
   ownerId: number | null
   settings: LinkSettingsInput
+  /**
+   * People to share with in the SAME create, because a share holds both. The merged
+   * dialog can enable a link and invite two people before its first save, and that is
+   * one POST — the create endpoint takes `members` and `links` together.
+   */
+  members?: { id: number; type: unknown; permissions: string }[]
+  /** The link member's own permissions, i.e. what the URL may do. */
+  linkPermissions?: string
 }
 
 export function genLinkUuid(http: HttpClient): Observable<string> {
@@ -55,14 +63,14 @@ export function createLinkShare(http: HttpClient, p: CreateLinkParams): Observab
       path: p.relativePath,
       space: p.file.space as never
     },
-    members: [],
+    members: (p.members ?? []).map((m) => ({ id: m.id, type: m.type as never, permissions: m.permissions })),
     links: [
       {
         // Backend's shares-manager treats link.id < 0 as "new"; id ≥ 0 goes through an update
         // path that 404s for unknown ids. Classic uses -1, so we match.
         id: -1,
         type: 'link' as never,
-        permissions: '',
+        permissions: p.linkPermissions ?? '',
         // `name` defaults to the file's, because the column is NOT NULL — see
         // LinkSettingsInput.name.
         linkSettings: toLinkDto({ name: p.file.name, ...p.settings })
@@ -70,6 +78,19 @@ export function createLinkShare(http: HttpClient, p: CreateLinkParams): Observab
     ]
   }
   return http.post<ShareProps>(SHARES_ROUTE.BASE, dto)
+}
+
+/**
+ * One link's own settings — uuid, expiry, requireAuth.
+ *
+ * Needed because `GET /shares/:id` does NOT include them: its members carry
+ * `linkId` but no `linkSettings`, so a dialog that wants to show the URL or the
+ * expiry has to ask. Classic does the same thing from the same place
+ * (`links.service.ts:174`, before it opens its link dialog), which is how this was
+ * found — the merged dialog rendered a link with no URL until it asked.
+ */
+export function getLinkOnShare(http: HttpClient, shareId: number, linkId: number): Observable<LinkGuest> {
+  return http.get<LinkGuest>(`${API_SHARES_LINKS}/${linkId}/${LINK_TYPE.SHARE}/${shareId}`)
 }
 
 export function updateLinkOnShare(http: HttpClient, shareId: number, linkId: number, settings: LinkSettingsInput): Observable<LinkGuest> {
@@ -102,7 +123,10 @@ export function generateLinkPassword(length = 12): string {
   return out
 }
 
-function toLinkDto(settings: LinkSettingsInput): CreateOrUpdateLinkDto {
+// Exported because `share-crud`'s update path builds link members too: a link can be
+// created or changed by the same PUT that edits the share's people, and both call
+// sites must encode it identically.
+export function toLinkDto(settings: LinkSettingsInput): CreateOrUpdateLinkDto {
   const dto: CreateOrUpdateLinkDto = {
     uuid: settings.uuid,
     isActive: settings.isActive,

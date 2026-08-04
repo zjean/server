@@ -31,9 +31,9 @@ Only then open the design project.
 | 2 | File browser chrome (D1, D2) | #434 | merged |
 | 2b | Grid view | #435 | merged |
 | 3 | Inspector (D4, D5) | #437 | merged |
-| 4 | Search (D6) | #438 | open |
-| **5** | **Share dialog (D7)** | — | **next** |
-| 6 | Gallery + upload dock (D8) | — | not started |
+| 4 | Search (D6) | #438 | merged |
+| 5 | Share dialog (D7) | #440 | open |
+| **6** | **Gallery + upload dock (D8)** | — | **next** |
 | 7 | Mobile (M1–M6) | — | not started |
 | 8 | Keyboard hints + session error strip | — | not started |
 
@@ -64,14 +64,16 @@ left for later with its measurement: **`color: var(--si-rose)` at 31 declaration
 across 20 files**, where `--si-rose` is a fill and measures ~3.6:1 as type. That
 sweep wants its own PR.
 
-### Two things deferred out of Phase 1 that Phase 5 needs
+### The phase-1 deferrals are done — and one thing is newly owed
 
-- **Dialog geometry consolidation** — 560px / `--si-r3` / `--si-shadow3` /
-  `--si-scrim` across the eight dialog components.
-- **Select/menu extension** of `context-menu.component.ts`.
+Both landed in #440: `app-v2-select` (a trigger over the existing context menu) and
+the dialog geometry, now `styles/_dialog.scss`. A `app-v2-toggle` had to be written
+too — phase 1 listed it and shipped only the checkbox.
 
-Both are additive. Fold them into Phase 5, which is the first phase that needs
-either.
+**Newly owed: migrate the other seven dialogs to `_dialog.scss`.** Only the share
+dialog uses it so far. The rest still carry their own `border-radius: 10px` (the
+design says 12) and their own centring block. Mechanical, but it is seven dialogs to
+re-verify, so it wants its own PR.
 
 ---
 
@@ -307,13 +309,17 @@ to search:
   `<mark>` in them. Parse markers into segments; do not bind `innerHTML`, and do not
   assume a server string is plain text just because its type is `string`.
 
-### Phase 5 — share dialog
+### Phase 5 — share dialog (shipped in #440, after the fixes in #439)
 
-- **Read the classic implementation first.** `shares-manager.service.ts:581` treats
-  `link.id < 0` as "new link"; anything else is update-by-id and 404s for unknown
-  ids. This exact detail has produced a v2 bug before. CLAUDE.md's
-  classic-UI-as-ground-truth rule exists because of this family of mistake.
-- Fold in the two deferred Phase 1 items here (§2 above).
+Read the plan's **§7.1**. The rule that mattered most: reading classic first found
+**three shipped wire bugs** before a line of the dialog was written — including a 500
+on every link creation. Two more things later phases will hit:
+
+- **`GET /shares/:id` does not describe a share's links** — a link member has a
+  `linkId` and nothing else. Its uuid and expiry need `getLinkOnShare`.
+- **Absence is a deletion.** The share PUT rebuilds the member set from the body, so
+  a field you leave out is a thing you delete. `UpdateShareParams.links` is required
+  for exactly this reason.
 
 ### Phase 6 — gallery
 

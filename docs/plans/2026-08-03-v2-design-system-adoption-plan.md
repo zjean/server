@@ -693,6 +693,63 @@ Destruction follows the two-tier rule: revoking a link is *reversible* — act i
 
 **Ground-truth requirement.** Per `CLAUDE.md`, read the classic implementation before touching the wire calls — in particular `shares-manager.service.ts:581`, where `link.id < 0` means "new link" and anything else is update-by-id (which 404s for unknown ids). This exact detail has produced a v2 bug before.
 
+### 7.1 What Phase 5 actually settled
+
+Shipped in **#440**, on top of **#439** — which exists because this phase started by
+reading the classic implementation and found three wire bugs in the code it was about
+to build on (a 500 on every link creation, a member edit that deleted the share's
+link, and a member edit that renamed the share to `_keep`). That is the
+classic-UI-as-ground-truth rule earning its place in CLAUDE.md.
+
+**The merge is real and it changes the wire shape, not just the layout.** One dialog
+holds people and the link, so one save has to express both — and it can, because the
+share PUT reads all four link outcomes from one array:
+
+| intent | body |
+|---|---|
+| keep the link | `id >= 0`, no `linkSettings` |
+| change it | `id >= 0`, with `linkSettings` |
+| create one | `id < 0`, with `linkSettings` |
+| revoke it | absent from `links` entirely |
+
+The last row is the one that bit us in #439: absence is a deletion, not a no-op.
+
+**`GET /shares/:id` does not describe a share's links.** A link member arrives with
+its `linkId` and nothing else — no uuid, no expiry, no requireAuth — so the dialog
+fetches each link's settings separately (`getLinkOnShare`), exactly as classic does
+before opening its link dialog (`links.service.ts:174`). Until that was added, an
+existing link rendered as though it were about to be created, with no URL to copy.
+
+**Three things the design draws that the API cannot support.** Same pattern as phases
+3 and 4, and worth the count now: this is the eighth such row in the programme.
+ • **Inherited rights.** `ShareProps.members` are the share's OWN members and `Member`
+   has no inherited marker, so nothing tells the dialog who reaches the file through
+   its space. A disabled row would invent an access grant.
+ • **Allow download.** `CreateOrUpdateLinkDto` has no download flag.
+ • **Immediate revoke with an 8s Undo.** Deviated deliberately: the update is ONE PUT
+   that rebuilds the member set, so an immediate link write plus a later member write
+   is a lost update. `Revoke link` turns the link off locally and Done commits it.
+   The dialog's other edits batch the same way, which also makes Escape mean
+   "discard" consistently.
+
+**The two deferred phase-1 items landed here**, as the plan expected: `app-v2-select`
+(value-only trigger over the existing context menu — a native `<select>` can honour
+neither the "show the value, never a label" rule nor the 4px-offset menu) and the
+dialog geometry, now `styles/_dialog.scss`. A toggle primitive turned out to be
+missing too — phase 1 listed it beside the checkbox and shipped only the checkbox —
+and D7 needs two.
+
+**Only the share dialog consumes the geometry partial so far.** The other seven
+dialogs still declare their own 10px radius and their own centring block; migrating
+them is mechanical but it is seven visual changes to verify, so it is owed as its own
+PR rather than smuggled into a feature diff. The partial is the single source of truth
+from now on; each dialog adopts it as it is touched.
+
+One trap in that partial, recorded in a comment because it cost a real debugging
+round: **`:not(:has(*))` contributes no specificity**, so a collapse rule using it
+must come AFTER the rule it overrides. Same finding as phase 4's empty panel — twice
+now, in two different files.
+
 ---
 
 ## 8. Phase 6 — gallery and the upload dock (D8)

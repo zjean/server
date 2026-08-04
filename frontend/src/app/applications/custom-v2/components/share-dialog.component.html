@@ -1,0 +1,249 @@
+@if (pending()) {
+  <div class="v2-dialog-backdrop" (click)="close()"></div>
+  <div class="v2-dialog sd" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <header class="v2-dialog__head">
+      <app-v2-file-glyph [type]="glyphType()" [size]="34" [rounded]="8" />
+      <div class="sd__head-text">
+        <div class="v2-dialog__title">
+          @if (isMulti()) {
+            {{ 'v2_share_n_items_subject' | translate: locale.language : { nb: multiCount() } }}
+          } @else {
+            {{ 'v2_share_title' | translate: locale.language : { name: subjectName() } }}
+          }
+        </div>
+        @if (subjectPath()) {
+          <div class="v2-dialog__subject" [attr.title]="subjectPath()">{{ subjectPath() }}</div>
+        }
+      </div>
+      <app-v2-icon-btn iconName="x" [size]="30" [ariaLabel]="'Close' | translate: locale.language" (click)="close()" />
+    </header>
+
+    @if (loading()) {
+      <div class="v2-dialog__body">
+        <div class="sd__state" l10nTranslate>Loading…</div>
+      </div>
+    } @else {
+      <div class="v2-dialog__body">
+        <!-- Add-people row: who, at what role, then the one primary of this zone. The
+             role applies to everyone in this batch, which is what having it beside the
+             input (rather than per staged chip) means. -->
+        <div class="sd__invite">
+          <app-v2-user-group-picker
+            class="sd__picker"
+            [adminScope]="isAdmin"
+            [ignoreUserIds]="ignoredUserIds()"
+            [ignoreGroupIds]="ignoredGroupIds()"
+            (pick)="stage($event)"
+          />
+          <app-v2-select
+            size="md"
+            [options]="roleOptions()"
+            [value]="invitePreset()"
+            [ariaLabel]="'Permission' | translate: locale.language"
+            (changed)="invitePreset.set($event)"
+          />
+          <app-v2-btn kind="primary" size="md" [disabled]="staged().length === 0" (click)="invite()">{{
+            'Invite' | translate: locale.language
+          }}</app-v2-btn>
+        </div>
+
+        @if (staged().length > 0) {
+          <div class="sd__staged">
+            @for (s of staged(); track s.type + ':' + s.id) {
+              <app-v2-pill shape="chip" color="accent">
+                {{ s.name }}
+                <button type="button" class="sd__chip-x" [attr.aria-label]="'Remove' | translate: locale.language" (click)="unstage(s)">
+                  <app-v2-icon name="x" [size]="11" />
+                </button>
+              </app-v2-pill>
+            }
+          </div>
+        }
+
+        <div class="v2-label sd__section">{{ 'v2_share_with_access' | translate: locale.language : { nb: accessCount() } }}</div>
+
+        <div class="sd__rows">
+          <!-- The owner, as text. Not a control: the owner cannot be demoted here, and
+               a disabled select would imply it could be somewhere. -->
+          @if (ownerRow(); as owner) {
+            <div class="sd__row">
+              <app-v2-avatar [user]="owner.avatar" [size]="28" />
+              <div class="sd__row-text">
+                <div class="sd__row-name">
+                  {{ owner.name }}
+                  <span class="sd__row-you" l10nTranslate>(you)</span>
+                </div>
+                @if (owner.description) {
+                  <div class="sd__row-desc">{{ owner.description }}</div>
+                }
+              </div>
+              <span class="sd__row-static" l10nTranslate>Owner</span>
+            </div>
+          }
+
+          @for (m of people(); track m.type + ':' + m.id) {
+            <div class="sd__row">
+              @if (isGroupType(m.type)) {
+                <span class="sd__group-glyph"><app-v2-icon name="people" [size]="14" /></span>
+              } @else {
+                <app-v2-avatar [user]="m.avatar" [size]="28" />
+              }
+              <div class="sd__row-text">
+                <div class="sd__row-name">{{ m.name }}</div>
+                @if (m.description) {
+                  <div class="sd__row-desc">{{ m.description }}</div>
+                }
+              </div>
+              <app-v2-select
+                size="sm"
+                [options]="roleOptions()"
+                [value]="m.preset"
+                [ariaLabel]="'Permission' | translate: locale.language"
+                (changed)="setPreset(m, $event)"
+              />
+              <app-v2-icon-btn
+                iconName="x"
+                [size]="28"
+                [title]="'Remove' | translate: locale.language"
+                [ariaLabel]="'Remove' | translate: locale.language"
+                (click)="removePerson(m)"
+              />
+            </div>
+          } @empty {
+            @if (!ownerRow()) {
+              <div class="sd__empty" l10nTranslate>v2_share_no_recipients</div>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="v2-dialog__rule"></div>
+
+      <!-- The public link. Below the divider because it is a different KIND of access:
+           everything above is a person, this is a URL. -->
+      <div class="sd__link">
+        <div class="sd__link-head">
+          <span class="sd__link-mark"><app-v2-icon name="link" [size]="15" /></span>
+          <div class="sd__link-text">
+            <div class="sd__link-title" l10nTranslate>Public link</div>
+            <div class="sd__link-lede">{{ linkLede() | translate: locale.language }}</div>
+          </div>
+          <app-v2-toggle
+            [checked]="linkOn()"
+            [disabled]="busy() || isMulti()"
+            [ariaLabel]="'Public link' | translate: locale.language"
+            (changed)="toggleLink($event)"
+          />
+        </div>
+
+        @if (linkOn()) {
+          @if (linkUrl(); as url) {
+            <div class="sd__url-row">
+              <input
+                class="sd__url"
+                readonly
+                [value]="url"
+                (focus)="selectAll($event)"
+                [attr.aria-label]="'Public link' | translate: locale.language"
+              />
+              <app-v2-btn kind="secondary" size="sm" icon="copy" (click)="copy(url)">{{ 'Copy' | translate: locale.language }}</app-v2-btn>
+            </div>
+          } @else {
+            <div class="sd__url-pending" l10nTranslate>v2_share_link_on_save</div>
+          }
+
+          <!-- Inline rows, no "advanced" disclosure: every option a link has is on
+               screen. Three of them, not the design's four — see the class comment for
+               why Allow download is absent. -->
+          <div class="sd__opts">
+            <div class="sd__opt">
+              <app-v2-icon name="clock" [size]="14" class="sd__opt-glyph sd__opt-glyph--amber" />
+              <span class="sd__opt-label" l10nTranslate>Expires</span>
+              <input
+                class="sd__opt-date"
+                type="date"
+                [value]="form().expiresAt"
+                [min]="minExpiryDate"
+                [attr.aria-label]="'Expires' | translate: locale.language"
+                (input)="onExpiryInput($event)"
+              />
+              @if (form().expiresAt) {
+                <button type="button" class="sd__opt-clear" [attr.aria-label]="'Remove' | translate: locale.language" (click)="clearExpiry()">
+                  <app-v2-icon name="x" [size]="11" />
+                </button>
+              }
+            </div>
+
+            <div class="sd__opt">
+              <app-v2-icon name="lock" [size]="14" class="sd__opt-glyph" [class.sd__opt-glyph--green]="form().requireAuth" />
+              <span class="sd__opt-label" l10nTranslate>Password</span>
+              @if (form().requireAuth) {
+                <input
+                  class="sd__opt-input"
+                  type="text"
+                  [value]="form().password"
+                  [placeholder]="passwordPlaceholder()"
+                  autocomplete="new-password"
+                  [attr.aria-label]="'Password' | translate: locale.language"
+                  (input)="onPasswordInput($event)"
+                />
+                <app-v2-icon-btn
+                  iconName="refresh"
+                  [size]="26"
+                  [title]="'Generate' | translate: locale.language"
+                  [ariaLabel]="'Generate' | translate: locale.language"
+                  (click)="generatePassword()"
+                />
+              }
+              <app-v2-toggle
+                size="sm"
+                [checked]="form().requireAuth"
+                [ariaLabel]="'Password' | translate: locale.language"
+                (changed)="toggleRequireAuth($event)"
+              />
+            </div>
+
+            <div class="sd__opt">
+              <app-v2-icon name="eye" [size]="14" class="sd__opt-glyph" />
+              <span class="sd__opt-label" l10nTranslate>Permission</span>
+              <app-v2-select
+                size="sm"
+                [options]="linkRoleOptions()"
+                [value]="form().preset"
+                [ariaLabel]="'Permission' | translate: locale.language"
+                (changed)="setLinkPreset($event)"
+              />
+            </div>
+          </div>
+
+          @if (passwordError(); as err) {
+            <div class="sd__opt-error">{{ err | translate: locale.language }}</div>
+          }
+        }
+      </div>
+    }
+
+    @if (errorMessage(); as err) {
+      <div class="v2-dialog__error">{{ err | translate: locale.language }}</div>
+    }
+
+    <div class="v2-dialog__footer">
+      <!-- Destructive, and as far from Done as the row allows. -->
+      @if (canRevokeLink()) {
+        <app-v2-btn kind="danger" size="sm" icon="unlink" [disabled]="busy()" (click)="revokeLink()">{{
+          'v2_share_revoke_link' | translate: locale.language
+        }}</app-v2-btn>
+      }
+      @if (isEdit()) {
+        <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="busy()" (click)="revokeShare()">{{
+          'v2_share_revoke' | translate: locale.language
+        }}</app-v2-btn>
+      }
+      <span class="v2-dialog__spacer"></span>
+      <app-v2-btn kind="ghost" size="sm" (click)="close()">
+        {{ 'Close' | translate: locale.language }}<span class="v2-dialog__kbd">esc</span>
+      </app-v2-btn>
+      <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">{{ 'Done' | translate: locale.language }}</app-v2-btn>
+    </div>
+  </div>
+}

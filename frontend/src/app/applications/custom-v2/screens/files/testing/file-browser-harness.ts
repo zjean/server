@@ -34,7 +34,6 @@ import { FilesUploadService } from '../../../../files/services/files-upload.serv
 import { SpacesService } from '../../../../spaces/services/spaces.service'
 import { CompressDialogService } from '../../../components/compress-dialog.service'
 import { ConfirmDialogService } from '../../../components/confirm-dialog.service'
-import { LinkDialogService } from '../../../components/link-dialog.service'
 import { LockDialogService } from '../../../components/lock-dialog.service'
 import { PromptDialogService } from '../../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../../components/share-dialog.service'
@@ -403,15 +402,6 @@ export class HarnessDeps {
           open: (opts: unknown) => {
             log.record('compressDialog.open', opts)
             return Promise.resolve(this.next(this.compressResults))
-          }
-        }
-      },
-      {
-        provide: LinkDialogService,
-        useValue: {
-          open: (opts: unknown) => {
-            log.record('linkDialog.open', opts)
-            return Promise.resolve(undefined)
           }
         }
       },
