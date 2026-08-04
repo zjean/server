@@ -97,23 +97,70 @@ export function createShare(http: HttpClient, p: CreateShareParams): Observable<
   return http.post<ShareProps>(SHARES_ROUTE.BASE, dto)
 }
 
+/** A link already on the share, echoed back on update so it survives. See `links`. */
+export interface ShareLinkInput {
+  /** The link MEMBER's user id — `>= 0` means "already exists, leave it alone". */
+  id: number
+  /** The link's own id, which is what identifies it for deletion. */
+  linkId: number
+  permissions: string
+}
+
 export interface UpdateShareParams {
   shareId: number
+  /**
+   * The share's name — its CURRENT one, unless the caller means to rename it.
+   *
+   * Required because the placeholder that used to sit here (`'_keep'`, with a comment
+   * saying the backend would ignore it) is not ignored at all: `updateShare` diffs
+   * every own-property against the stored row and writes the ones that differ
+   * (`shares-manager.service.ts:240`), and a changed `name` ALSO regenerates the
+   * share's alias — which is the URL people were given. Editing the people on a share
+   * therefore renamed it to "_keep" and broke its link.
+   */
+  name: string
   description?: string
   // Full member list AFTER the edit (backend replaces the set).
   members: ShareMemberInput[]
+  /**
+   * The share's links, echoed back — and REQUIRED, which is the whole point of the
+   * field.
+   *
+   * `updateShare` on the server rebuilds the member set from
+   * `[...dto.members, ...dto.links]` and DELETES every member of the old set that is
+   * missing from the new one — links included
+   * (`shares-manager.service.ts:267` → `updateMembers` → `deleteLinkMembers`, line
+   * 778). `links` defaults to `[]` in the DTO, so omitting it is not "leave the links
+   * alone", it is "delete every link on this share".
+   *
+   * That is what this call did before: editing the people on a share silently
+   * revoked its public link. Required rather than optional so the next caller cannot
+   * reintroduce it by leaving the field out.
+   *
+   * Pass the links UNCHANGED (id >= 0, no `linkSettings`) to preserve them; the
+   * server pushes those straight through.
+   */
+  links: ShareLinkInput[]
 }
 
 export function updateShare(http: HttpClient, p: UpdateShareParams): Observable<ShareProps> {
   const dto: Partial<CreateOrUpdateShareDto> & { id: number; name: string; members: CreateOrUpdateShareDto['members'] } = {
     id: p.shareId,
-    name: '_keep', // backend requires non-empty; will be overwritten by its own state for existing shares
+    name: p.name,
     description: p.description,
     enabled: true,
     members: p.members.map((m) => ({
       id: m.id,
       type: m.type as never,
       permissions: m.permissions
+    })),
+    links: p.links.map((l) => ({
+      id: l.id,
+      linkId: l.linkId,
+      type: MEMBER_TYPE.LINK as never,
+      permissions: l.permissions
+      // No `linkSettings`: that is what marks a link as MODIFIED. Without it the
+      // server treats the row as unchanged and simply keeps it.
     }))
   }
   return http.put<ShareProps>(`${SHARES_ROUTE.BASE}/${p.shareId}`, dto)
