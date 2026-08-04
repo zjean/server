@@ -559,58 +559,11 @@
 // ─── Empty state ────────────────────────────────────────────────────────────
 // The empty state IS the drop target: one bounded panel, LEFT-ALIGNED to the
 // content gutter and never vertically centred in the viewport, so the page still
-// reads top-down.
+// reads top-down. The panel itself is `app-v2-empty-panel` — shared with the search
+// screen, whose no-results state the design specifies as "the same panel as D2".
+// Only its placement in this layout is here.
 .personal__empty {
-  width: 100%;
-  max-width: 560px;
   margin: var(--si-space-13) var(--si-space-6) 0;
-  padding: var(--si-space-13) var(--si-space-13);
-  background: var(--si-bg1);
-  border-radius: var(--si-r3);
-  box-shadow: inset 0 0 0 1px var(--si-line-subtle);
-
-  &-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 52px;
-    height: 52px;
-    border-radius: var(--si-r4);
-    background: var(--si-bg3);
-    color: var(--si-fg-tertiary);
-    margin-bottom: var(--si-space-9);
-  }
-
-  &-title {
-    font-size: var(--si-text-12);
-    font-weight: 500;
-    color: var(--si-fg);
-    margin-bottom: var(--si-space-4);
-  }
-
-  &-body {
-    max-width: 44ch;
-    font-size: var(--si-text-7);
-    line-height: 1.65;
-    color: var(--si-fg-tertiary);
-    margin-bottom: var(--si-space-10);
-  }
-
-  &-actions {
-    display: flex;
-    gap: var(--si-space-5);
-  }
-
-  &-keys {
-    display: flex;
-    gap: var(--si-space-10);
-    margin-top: var(--si-space-11);
-    padding-top: var(--si-space-10);
-    border-top: 1px solid var(--si-line-subtle);
-    font-family: var(--si-mono);
-    font-size: var(--si-text-4);
-    color: var(--si-fg-ghost);
-  }
 }
 
 .personal__skeleton {
