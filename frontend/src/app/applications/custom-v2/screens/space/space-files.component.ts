@@ -37,7 +37,9 @@ import type { FileBrowserRepository } from '../files/file-browser-repository'
   selector: 'app-v2-space-files',
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: '../files/file-browser.component.html',
-  styleUrl: '../files/file-browser.component.scss',
+  // Three entries, not one: list + chrome, grid, gallery. See
+  // file-browser-grid.scss for why they are separate sheets.
+  styleUrls: ['../files/file-browser.component.scss', '../files/file-browser-grid.scss', '../files/file-browser-gallery.scss'],
   imports: [
     IconV2Component,
     FileGlyphComponent,

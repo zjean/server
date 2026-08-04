@@ -272,42 +272,49 @@
                 </span>
                 <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
                   <app-v2-file-thumb [file]="f" [serverPath]="thumbPath(f)" [glyphSize]="38" [rounded]="8" [imageRes]="256" />
-                  @if (f.hasComments) {
-                    <span class="file-card__pill">
-                      <app-v2-pill color="green" [size]="10">
-                        <app-v2-icon name="comment" [size]="9" />
+                  <!-- One grouped strip, mirroring the list view's badge column.
+                       Favourite is a pill now rather than a bare icon, so all
+                       three badges are the same shape at the same size. -->
+                  <span class="file-card__badges">
+                    @if (favoritesService.isFavorite(f.id)) {
+                      <app-v2-pill color="amber" [size]="10" [attr.title]="'Favorites' | translate: locale.language">
+                        <app-v2-icon name="star" [size]="10" />
                       </app-v2-pill>
-                    </span>
-                  }
-                  @if (favoritesService.isFavorite(f.id)) {
-                    <span class="file-card__favorite" [attr.title]="'Favorites' | translate: locale.language">
-                      <app-v2-icon name="star" [size]="12" />
-                    </span>
-                  }
-                  <!-- Grid-mode counterpart of classic's gallery badge
-                       (spaces-browser.component.html:427). Bottom-right so it
-                       cannot collide with the comments pill above it. -->
-                  @if (f.lock) {
-                    <button
-                      type="button"
-                      class="file-card__lock"
-                      (click)="$event.stopPropagation(); openLockDialog(f)"
-                      [attr.title]="lockLabel(f)"
-                      [attr.aria-label]="
-                        (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
-                      "
-                    >
-                      <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
-                        <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
-                      </app-v2-pill>
-                    </button>
-                  }
+                    }
+                    @if (f.lock) {
+                      <button
+                        type="button"
+                        class="file-card__badge-btn"
+                        (click)="$event.stopPropagation(); openLockDialog(f)"
+                        [attr.title]="lockLabel(f)"
+                        [attr.aria-label]="
+                          (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
+                        "
+                      >
+                        <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
+                          <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="10" />
+                        </app-v2-pill>
+                      </button>
+                    }
+                    @if (f.hasComments) {
+                      <button
+                        type="button"
+                        class="file-card__badge-btn"
+                        (click)="$event.stopPropagation(); openComments(f)"
+                        [attr.title]="'Show comments' | translate: locale.language"
+                      >
+                        <app-v2-pill color="gray" [size]="10">
+                          <app-v2-icon name="comment" [size]="10" />
+                        </app-v2-pill>
+                      </button>
+                    }
+                  </span>
                 </div>
                 <div class="file-card__body">
                   <div class="file-card__name">{{ f.name }}</div>
                   <div class="file-card__meta">
                     @if (!f.isDir) {
-                      <span class="file-card__size">{{ f.size | toBytes: 1 : true }}</span>
+                      <span>{{ f.size | toBytes: 1 : true }}</span>
                     }
                     @if (f.mtime) {
                       <span class="file-card__sep">·</span>

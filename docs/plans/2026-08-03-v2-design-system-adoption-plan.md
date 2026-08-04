@@ -456,9 +456,54 @@ state all landed as specced. Three notes for later phases:
   viewport-fixed bar would sit over the mobile bottom tab bar, so `.personal`
   gained `position: relative`. Phase 7 depends on that.
 
-Grid and gallery still use the pre-adoption geometry; gallery is phase 6, and grid
-is not in any phase's scope yet — worth a decision before phase 7, since mobile
-re-lays-out whatever grid ends up being.
+---
+
+## 4.8 Phase 2b — grid view
+
+**Maintainer decision (2026-08-04):** grid gets its own small phase rather than
+riding along with gallery, because phase 7 re-lays-out whatever grid becomes and
+doing it twice was the default outcome otherwise.
+
+The design gives grid **no mockup** — D8 is the gallery, D3 is space cards, and the
+Components page has no file card. So this phase applies the *conventions* rather
+than transcribing a screen: the card rules from the Components page (surface step
+at rest, `radius-md`, hover = next step + `shadow-sm`), D1's badge and selection
+rules, and the sans/mono split.
+
+Shipped in **#435**:
+
+- **Card is flat at rest, lifts on hover.** It carried `shadow-1` permanently,
+  which the design lists under "cards ON HOVER" — a card already lifted has nowhere
+  to go, and thirty of them read as noise. Radius drops `radius-lg` → `radius-md`;
+  dialog radius on a card reads as a floating surface.
+- **Selection matches the row**: accent tint plus a 2px cobalt edge, as an inset
+  ring rather than a left marker — a card has no row rhythm to preserve, and a 2px
+  stripe down one side of a 180px tile reads as a defect.
+- **One grouped badge strip, top-right**, replacing three scattered corners
+  (comments top-right, favourite top-left, lock bottom-right). Favourite becomes a
+  pill so all three are the same shape. Top-right and not bottom-left/top-left:
+  bottom-left crowds the name, top-left is the selection chip's corner and a badge
+  under the checkbox target is a mis-click waiting to happen.
+- **Metadata is mono for the whole line**, not just the byte count. A size and a
+  timestamp are both machine output; mixing families inside one line was the
+  clearest remaining violation of the split in this component.
+
+**Two traps this phase hit, both worth remembering:**
+
+- **There is no surface step to spend between the page and a card.** The header was
+  set to `bg2` on the reasoning that a step *down* makes a thumbnail read as inset
+  — but `bg2` IS the content plane, so the header went invisible, the card appeared
+  to start at its own body, and the badge strip floated outside it. The header is
+  `transparent` and inherits the card's surface.
+- **`file-browser.component.scss` crossed the 14 kB `anyComponentStyle` error
+  budget** by 7 bytes. It is now three `styleUrls` entries — list + chrome, grid,
+  gallery — which is the same fix as `fonts.scss` in #432 and also the honest
+  shape: these are three independent view modes that share only the toolbar above
+  them, and one 970-line file made that invisible.
+
+The initial-bundle warning is now 993 kB over (was 958 on develop before phase 0).
+That ~35 kB is the design system's own weight across phases 0–2b; the error
+threshold is 5 MB, so it is a number to watch rather than act on.
 
 ---
 

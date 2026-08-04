@@ -1,0 +1,177 @@
+// Grid view — the card layout. Split out of file-browser.component.scss and
+// loaded as a sibling `styleUrls` entry, for the same reason fonts.scss was split
+// out of v2.scss in #432: Angular measures `anyComponentStyle` per stylesheet, and
+// one sheet carrying the toolbar, the list, the grid AND the gallery for two
+// screens crossed the 14 kB error budget.
+//
+// The split is also the honest shape. These are three independent view modes that
+// share only the toolbar above them, and the single 970-line file made that
+// invisible.
+
+.file-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--si-space-6);
+  // Left/right margin matches the page title + toolbar (28px content margin).
+  padding: var(--si-space-8) var(--si-space-12) var(--si-space-12);
+}
+
+.file-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--si-bg3);
+  border: none;
+  // No shadow at rest. The design lists shadow-sm under "cards ON HOVER" — a card
+  // that is already lifted has nowhere to go, and a grid of thirty lifted cards
+  // reads as noise rather than depth. Rest is a surface step; hover adds the next
+  // step plus the shadow.
+  box-shadow: none;
+  // radius-md, the design's card radius. Was radius-lg, which is the dialog and
+  // panel radius — a card at dialog radius reads as a floating surface.
+  border-radius: var(--si-r2);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  // No transform in the transition: nothing sets one, and "no control ever moves
+  // on press" means nothing should.
+  transition:
+    background var(--si-dur-2) var(--si-ease-out),
+    box-shadow var(--si-dur-2) var(--si-ease-out);
+
+  &:hover {
+    background: var(--si-bg5);
+    box-shadow: var(--si-shadow1);
+  }
+
+  // The same signal as a selected row — accent tint plus a 2px cobalt edge — so
+  // the two view modes agree about what "selected" looks like. On a card the edge
+  // is an inset ring rather than a left marker: a card has no row rhythm to
+  // preserve, and a 2px stripe down one side of a 180px tile reads as a defect.
+  &--selected {
+    background: var(--si-accent-soft);
+    box-shadow: inset 0 0 0 2px var(--si-accent-hover);
+  }
+
+  &--selected:hover {
+    background: color-mix(in srgb, var(--si-accent) 16%, transparent);
+    box-shadow: inset 0 0 0 2px var(--si-accent-hover);
+  }
+
+  &--dragging {
+    opacity: 0.45;
+  }
+
+  // `border-color` was here too and did nothing — the card has `border: none`.
+  &--drop-hover {
+    background: var(--si-accent-soft);
+    box-shadow: inset 0 0 0 2px var(--si-accent);
+  }
+
+  &__select {
+    position: absolute;
+    top: var(--si-space-4);
+    left: var(--si-space-4);
+    z-index: calc(var(--si-z-base) + 1);
+    opacity: 0;
+    transition: opacity 120ms ease;
+    // Flex so the chip hugs the 16px checkbox (otherwise the inline line-box
+    // from the inherited font size makes the chip taller than the checkbox).
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--si-space-2);
+    border-radius: var(--si-r1);
+    // Clean opaque chip so the checkbox reads on any file-type header tint
+    // (the old translucent color-mix went muddy over the colored headers).
+    background: var(--si-bg1);
+    box-shadow: var(--si-shadow1);
+  }
+
+  &:hover &__select,
+  &--selected &__select {
+    opacity: 1;
+  }
+
+  &__header {
+    height: 92px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    // Transparent — it inherits the card's own surface. It was bg2 for one
+    // revision, on the reasoning that a step DOWN would make a thumbnail read as
+    // inset; bg2 IS the content plane, so the header became invisible and the card
+    // appeared to start at its own body, with the badge strip floating above it.
+    // There is no surface step between the page and the card to spend here.
+    //
+    // The file-type tint lives on the glyph inside, not on this box — "the tile is
+    // the only place a file-type colour appears", and tinting the header would
+    // make the whole card the tile.
+    background: transparent;
+  }
+
+  // ONE badge strip replacing three scattered corners (comments top-right,
+  // favourite top-left, lock bottom-right). Grouping is what makes a card's state
+  // legible at a glance, and it is the same reason the list view gave badges their
+  // own column.
+  // TOP-RIGHT, not bottom-left. Bottom-left put the strip against the name, and
+  // top-left is the selection chip's corner — a badge under the checkbox's target
+  // is a mis-click waiting to happen.
+  &__badges {
+    position: absolute;
+    right: var(--si-space-4);
+    top: var(--si-space-4);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--si-space-3);
+  }
+
+  // The lock badge is an action (it opens the unlock dialog); the others are not.
+  // One class for whichever of them is a button, so the strip stays visually even.
+  &__badge-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    display: inline-flex;
+    color: inherit;
+    font: inherit;
+    line-height: 0;
+  }
+
+  &__body {
+    padding: var(--si-space-5) var(--si-space-6);
+  }
+
+  &__name {
+    font-size: var(--si-text-7);
+    color: var(--si-fg);
+    font-weight: 500;
+    letter-spacing: -0.1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Mono for the WHOLE line, not just the byte count. A size and a timestamp are
+  // both machine output, and mixing families inside one metadata line was the
+  // clearest remaining violation of the sans/mono split in this component.
+  &__meta {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-fg-tertiary);
+    margin-top: var(--si-space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--si-space-3);
+  }
+
+  &__sep {
+    opacity: 0.5;
+  }
+}
