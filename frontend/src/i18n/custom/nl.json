@@ -332,5 +332,16 @@
   "v2_share_link_off_lede": "Uit — alleen de personen hierboven hebben toegang",
   "v2_share_link_open_lede": "Iedereen met de link",
   "v2_share_link_password_lede": "Iedereen met de link en het wachtwoord",
-  "v2_share_link_on_save": "De link wordt aangemaakt als je op Gereed klikt"
+  "v2_share_link_on_save": "De link wordt aangemaakt als je op Gereed klikt",
+  "v2_uploading_pct": "Uploaden · {{ pct }}%",
+  "v2_uploading_n_of_m": "{{ n }} van {{ m }} uploaden",
+  "v2_transfer_one_done": "1 overdracht voltooid",
+  "v2_transfer_n_done": "{{ nb }} overdrachten voltooid",
+  "v2_transfer_one_failed": "1 overdracht mislukt",
+  "v2_transfer_n_failed": "{{ nb }} overdrachten mislukt",
+  "v2_eta_seconds": "{{ n }} s resterend",
+  "v2_eta_minutes": "{{ n }} min resterend",
+  "Expand": "Uitvouwen",
+  "Collapse": "Invouwen",
+  "Retry": "Opnieuw"
 }

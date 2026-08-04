@@ -12,7 +12,6 @@ import { V2BreadcrumbService } from './breadcrumb.service'
 import { InspectorService } from './inspector.service'
 import { LayoutV2Service } from './layout-v2.service'
 import { NotificationsBellComponent } from './notifications-bell.component'
-import { TransfersPopoverComponent } from './transfers-popover.component'
 
 // Desktop top-bar — Stack-style chrome strip above the body. Owns the
 // breadcrumb (consumed from V2BreadcrumbService, same source the in-page
@@ -26,16 +25,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
 @Component({
   selector: 'app-v2-top-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    IconV2Component,
-    IconButtonComponent,
-    TooltipDirective,
-    AvatarComponent,
-    NotificationsBellComponent,
-    TransfersPopoverComponent,
-    RouterLink,
-    L10nTranslatePipe
-  ],
+  imports: [IconV2Component, IconButtonComponent, TooltipDirective, AvatarComponent, NotificationsBellComponent, RouterLink, L10nTranslatePipe],
   template: `
     <header class="topbar">
       <div class="topbar__history">
@@ -98,7 +88,6 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
             (click)="layoutV2.toggleDock()"
           />
         }
-        <app-v2-transfers-popover />
         <app-v2-notifications-bell />
         <a class="topbar__avatar" [routerLink]="settingsRoute" [attr.title]="'Settings' | translate: locale.language">
           <app-v2-avatar [user]="meAvatar()" [size]="28" />

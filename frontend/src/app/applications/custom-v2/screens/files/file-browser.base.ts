@@ -47,6 +47,7 @@ import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { InspectorService } from '../../layout/inspector.service'
 import { FavoritesService } from '../../services/favorites.service'
 import { FolderSizeService } from '../../services/folder-size.service'
+import { TransfersService } from '../../services/transfers.service'
 import { V2DragService } from '../../services/drag.service'
 import { FolderReadmeComponent } from '../../components/folder-readme.component'
 import { buildFileModelStub, buildSpaceFilePath } from '../../utils/file-model-stub'
@@ -157,6 +158,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   protected readonly filesService = inject(FilesService)
   private readonly folderSize = inject(FolderSizeService)
+  private readonly transfers = inject(TransfersService)
   protected readonly favoritesService = inject(FavoritesService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
@@ -420,6 +422,25 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       })
     })
   }
+
+  /**
+   * Uploads landing in THIS folder, as tiles.
+   *
+   * D8 draws in-flight items in place, which needs two things the browse response
+   * cannot give: the task's destination and its byte progress. Both live on
+   * `FileTask` (`path`, `props.size`/`totalSize`), and `TransfersService` owns the
+   * re-read timer that makes mutated progress visible to an OnPush view.
+   *
+   * Compared by exact path, not prefix: an upload into a SUBFOLDER of this one is not
+   * arriving here, and showing it as a tile would promise a row that never appears.
+   */
+  protected readonly uploadingHere = computed(() =>
+    this.transfers.uploadsIn(this.currentUploadRoute()).map((t) => ({
+      id: t.id,
+      name: t.name,
+      percent: this.transfers.percentOf(t)
+    }))
+  )
 
   ngOnInit(): void {
     this.inspector.setAvailable(true)
@@ -1309,7 +1330,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   // The folder the ROUTE currently points at. Callers that act on a user gesture
   // want this; anything that has to agree with the loaded listing wants
   // `loadedDirPath` instead.
-  private currentUploadRoute(): string {
+  protected currentUploadRoute(): string {
     const segs = this.pathSegments().map((s) => s.path)
     return [SPACE_REPOSITORY.FILES, this.repository.alias(), ...segs].join('/')
   }

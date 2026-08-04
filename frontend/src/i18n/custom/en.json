@@ -336,5 +336,17 @@
   "v2_share_link_off_lede": "Off — only the people above have access",
   "v2_share_link_open_lede": "Anyone with the link",
   "v2_share_link_password_lede": "Anyone with the link and password",
-  "v2_share_link_on_save": "The link is created when you press Done"
+  "v2_share_link_on_save": "The link is created when you press Done",
+  "v2_uploading_pct": "Uploading · {{ pct }}%",
+  "v2_uploading_n_of_m": "Uploading {{ n }} of {{ m }}",
+  "v2_transfer_one_done": "1 transfer complete",
+  "v2_transfer_n_done": "{{ nb }} transfers complete",
+  "v2_transfer_one_failed": "1 transfer failed",
+  "v2_transfer_n_failed": "{{ nb }} transfers failed",
+  "v2_eta_seconds": "{{ n }} s left",
+  "v2_eta_minutes": "{{ n }} min left",
+  "Transfers": "Transfers",
+  "Expand": "Expand",
+  "Collapse": "Collapse",
+  "Retry": "Retry"
 }

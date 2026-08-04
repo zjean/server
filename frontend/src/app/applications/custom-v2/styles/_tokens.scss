@@ -268,6 +268,18 @@
   // pure black, so it darkens the warm ground without cooling it.
   --si-scrim: rgba(11, 10, 9, 0.6);
 
+  // ─── Media surfaces — the gallery's two overlays ──────────────────────
+  // D8's rule, and it is a rule rather than a decoration: "media placeholders are
+  // striped, never coloured blocks — the stripe says image goes here." A flat
+  // coloured block reads as a swatch, i.e. as content; 3.5% white at 135° reads as
+  // an absence. Lives here because a component may not name a colour, and both of
+  // these are alphas over whatever the tile's type tint happens to be.
+  --si-media-stripe: rgba(255, 255, 255, 0.035);
+  // The veil over a tile whose file is still uploading. Lighter than --si-scrim
+  // (45% vs 60%): a dialog scrim must make the page unreadable, this one must leave
+  // the thumbnail recognisable while saying "not yet".
+  --si-media-veil: rgba(11, 10, 9, 0.45);
+
   // ─── Type system — IBM Plex ──────────────────────────────────────────
   // The division that governs everything: IBM Plex Sans for anything a PERSON
   // wrote, IBM Plex Mono for anything a SYSTEM produced. Paths, byte sizes,

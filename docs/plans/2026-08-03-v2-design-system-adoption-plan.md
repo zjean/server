@@ -761,6 +761,49 @@ One PR, `feat/v2-gallery-upload`. Files: `screens/files/file-browser.component.{
 - In-flight items appear **as tiles in place** with a determinate bar at the bottom edge, a 45% scrim, and a spinner; their name renders in `--si-accent-ink`.
 - The aggregate lives in a **bottom-right dock** (360px, `--si-bg5`, `--si-shadow3`) that collapses to a single line: `Uploading 3 of 5` / `4.2 MB/s · 12 s left`, a progress bar, then per-file rows with success / in-flight / failed-with-Retry states.
 
+### 8.1 What Phase 6 actually settled
+
+Shipped in **#441**. The gallery is D8 and the aggregate has moved out of the chrome
+into a dock. Five things for later.
+
+**The transfers pill and its popover are gone.** The design puts the aggregate in a
+bottom-right dock, and the reason is worth keeping: a pill in the chrome has to be
+noticed and clicked, while an upload is the one background job a user wants to watch
+without doing either. Two surfaces for one thing was the alternative, so the dock
+replaced both. It appears on its own when a transfer starts, collapses to one line, and
+can only be dismissed once nothing is running.
+
+**Progress is mutated in place, and that is now solved once.** `FilesUploadService`
+writes `task.props.size` without re-emitting `filesActiveTasks`; classic survives it on
+zone-based change detection, an OnPush signal view freezes on the first snapshot. The
+250ms re-publish that fixes it used to live in the transfers popover as its only copy —
+it is `TransfersService` now, because THREE surfaces need the same numbers (the dock,
+the gallery's in-place tiles, and anything asking "is something uploading here").
+**Rate and ETA are derived there too**, over a 4-second trailing window: nothing on the
+wire reports them, and a single instantaneous delta reads as noise on a slow link.
+
+**Two of D8's controls have nothing behind them:**
+ • **Pause.** The task layer registers a CANCELLATION per upload and nothing else
+   (`files-tasks.service.ts:152`) — an HTTP upload in flight cannot be suspended. The
+   per-row action is Cancel, which is real; the header has none.
+ • **Retry** on a failed row. An upload's source is a `File` from the picker and the
+   browser does not keep it once the dialog closes, so there is nothing to send again.
+   The row states the failure reason instead — the actionable half of a retry.
+
+**In-place tiles compare the destination by EXACT path.** `FileTask.path` is the target
+folder, so an upload into a subfolder of the open one is not arriving here; a tile for
+it would promise a row that never appears. Pinned in the browser contract.
+
+**Adding a service to the base means adding a stub to the harness** — trap §3.11 again,
+and it cost 298 failing tests this time. `file-browser-harness.ts` builds providers by
+hand; a newly injected dependency is an `NG0201` in every case at once.
+
+Two token notes: `--si-media-stripe` and `--si-media-veil` are new, because a component
+may not name a colour and both are alphas over whatever tint a tile happens to have.
+And `--si-accent-ink` as a spinner's `border-top-color` **fails the tokens test** — an
+`-ink` tone is type — so the arc takes `--si-accent-hover`, which is also the value
+every determinate progress fill uses.
+
 ---
 
 ## 9. Phase 7 — mobile (M1–M6)

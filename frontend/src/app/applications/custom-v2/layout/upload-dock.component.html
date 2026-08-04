@@ -1,0 +1,92 @@
+@if (visible()) {
+  <div class="dock" [class.dock--collapsed]="collapsed()" role="status" [attr.aria-label]="'Transfers' | translate: locale.language">
+    <!-- The aggregate line. It is the whole control when collapsed, which is the
+         point: an upload you are not watching should cost one line. -->
+    <div class="dock__head">
+      <span class="dock__mark" [class.dock__mark--failed]="idleWithFailures()" [class.dock__mark--done]="idleAndClean()">
+        <app-v2-icon [name]="markGlyph()" [size]="15" />
+      </span>
+      <div class="dock__text">
+        <div class="dock__title">{{ headline() | translate: locale.language : headlineParams() }}</div>
+        @if (subline(); as sub) {
+          <div class="dock__sub">{{ sub }}</div>
+        }
+      </div>
+      <app-v2-icon-btn
+        [iconName]="collapsed() ? 'chevUp' : 'chevDown'"
+        [size]="28"
+        [title]="(collapsed() ? 'Expand' : 'Collapse') | translate: locale.language"
+        [ariaLabel]="(collapsed() ? 'Expand' : 'Collapse') | translate: locale.language"
+        (click)="collapsed.set(!collapsed())"
+      />
+      <!-- Dismiss is for a finished batch. While anything is still running there is
+           nothing to dismiss — closing would hide the only progress indicator. -->
+      <app-v2-icon-btn
+        iconName="x"
+        [size]="28"
+        [title]="'Close' | translate: locale.language"
+        [ariaLabel]="'Close' | translate: locale.language"
+        [disabled]="agg().active > 0"
+        (click)="dismiss()"
+      />
+    </div>
+
+    <!-- The aggregate bar stays visible when collapsed: it is the one question a
+         collapsed dock still has to answer. -->
+    @if (agg().percent !== null && agg().active > 0) {
+      <div class="dock__bar" role="progressbar" [attr.aria-valuenow]="agg().percent">
+        <div class="dock__bar-fill" [style.width.%]="agg().percent"></div>
+      </div>
+    }
+
+    @if (!collapsed()) {
+      <div class="dock__rows">
+        @for (t of active(); track t.id) {
+          <div class="dock-row">
+            <span class="dock-row__spinner"></span>
+            <span class="dock-row__name dock-row__name--active">{{ t.name }}</span>
+            <span class="dock-row__pct">{{ percentOf(t) }}%</span>
+            @if (canCancel(t)) {
+              <app-v2-icon-btn
+                iconName="x"
+                [size]="24"
+                [title]="'Cancel' | translate: locale.language"
+                [ariaLabel]="'Cancel' | translate: locale.language"
+                (click)="cancel(t)"
+              />
+            }
+          </div>
+        }
+        @for (t of ended(); track t.id) {
+          <div class="dock-row">
+            @if (isError(t)) {
+              <app-v2-icon name="info" [size]="15" class="dock-row__glyph dock-row__glyph--failed" />
+            } @else {
+              <app-v2-icon name="check" [size]="15" class="dock-row__glyph dock-row__glyph--done" />
+            }
+            <div class="dock-row__stack">
+              <span class="dock-row__name">{{ t.name }}</span>
+              <!-- D8 puts a `Retry` here. Nothing can retry: an upload's source is a
+                   `File` handed over by the picker, and the browser does not keep it
+                   once the dialog closes — `FilesUploadService` exposes cancellation
+                   and nothing else. So the row states WHY it failed, which is the
+                   actionable half, instead of offering a button that cannot work. -->
+              @if (isError(t) && t.result) {
+                <span class="dock-row__why">{{ t.result }}</span>
+              }
+            </div>
+            @if (!isError(t) && t.props.totalSize) {
+              <span class="dock-row__pct dock-row__pct--quiet">{{ t.props.totalSize | toBytes: 1 : true }}</span>
+            }
+          </div>
+        }
+      </div>
+
+      @if (ended().length > 0) {
+        <div class="dock__foot">
+          <app-v2-btn kind="ghost" size="xs" (click)="clearDone()">{{ 'Clear done' | translate: locale.language }}</app-v2-btn>
+        </div>
+      }
+    }
+  </div>
+}
