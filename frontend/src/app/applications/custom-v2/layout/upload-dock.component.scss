@@ -5,10 +5,13 @@
 // Bottom-right, 24px in from both edges. `fixed` rather than absolute: the dock is
 // about the SESSION's transfers, not about the screen underneath it, and it must
 // survive a navigation.
+// `--si-dock-lift` is how much other bottom-anchored chrome asks the dock to move up;
+// it is set by the layout, which is the only thing that can see both. Read through a
+// fallback rather than declared here, so the corner is unchanged when nothing asks.
 .dock {
   position: fixed;
   right: var(--si-space-11);
-  bottom: var(--si-space-11);
+  bottom: calc(var(--si-space-11) + var(--si-dock-lift, 0px));
   z-index: var(--si-z-popover);
   width: 360px;
   max-width: calc(100vw - 2 * var(--si-space-11));
@@ -26,7 +29,7 @@
   right: var(--si-space-6);
   left: var(--si-space-6);
   width: auto;
-  bottom: calc(60px + env(safe-area-inset-bottom, 0px) + var(--si-space-6));
+  bottom: calc(60px + env(safe-area-inset-bottom, 0px) + var(--si-space-6) + var(--si-dock-lift, 0px));
 }
 
 .dock__head {

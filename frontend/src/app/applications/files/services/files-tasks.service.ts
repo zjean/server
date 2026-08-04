@@ -108,7 +108,10 @@ export class FilesTasksService {
     })
   }
 
-  private removeSelectedTasks(tasks: FileTask[]) {
+  // mod(files): public rather than private — the v2 upload dock's `Clear done` deletes
+  // the finished tasks it is showing, which is `removeAll` scoped to a set of ids. The
+  // server keeps finished tasks for a day, so a client-side clear alone reappears.
+  removeSelectedTasks(tasks: FileTask[]) {
     const taskIds = [...new Set(tasks.map((task: FileTask) => task.id))]
     if (!taskIds.length) return
     this.http.post<void>(API_FILES_TASKS_DELETE, { taskIds }).subscribe({

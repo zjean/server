@@ -41,7 +41,7 @@
         icon="search"
         [value]="filter()"
         [placeholder]="filterPlaceholder()"
-        [hint]="repository.filterHint()"
+        [hint]="layoutV2.isMobile() ? null : repository.filterHint()"
         [clearable]="true"
         [ariaLabel]="filterPlaceholder()"
         (changed)="setFilter($event)"
@@ -97,11 +97,16 @@
           <span #emptyNewAnchor>{{ 'New' | translate: locale.language }}</span>
         </app-v2-btn>
         <app-v2-btn kind="secondary" size="md" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
-        <ng-container emptyPanelFooter>
-          <span>{{ 'v2_key_hint_new' | translate: locale.language }}</span>
-          <span>{{ 'v2_key_hint_upload' | translate: locale.language }}</span>
-          <span>{{ 'v2_key_hint_filter' | translate: locale.language : { key: repository.filterHint() } }}</span>
-        </ng-container>
+        <!-- Keyboard hints are one of the things M1 drops on mobile, and this is why:
+             the filter's badge printed "Ctrl F" on a touchscreen, which names a key the
+             device does not have. -->
+        @if (!layoutV2.isMobile()) {
+          <ng-container emptyPanelFooter>
+            <span>{{ 'v2_key_hint_new' | translate: locale.language }}</span>
+            <span>{{ 'v2_key_hint_upload' | translate: locale.language }}</span>
+            <span>{{ 'v2_key_hint_filter' | translate: locale.language : { key: repository.filterHint() } }}</span>
+          </ng-container>
+        }
       </app-v2-empty-panel>
     } @else {
       @switch (mode()) {

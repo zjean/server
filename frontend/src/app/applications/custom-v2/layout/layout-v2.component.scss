@@ -117,6 +117,24 @@
   }
 }
 
+// A file browser with a selection puts its bulk bar in the bottom band, and the upload
+// dock is bottom-right at the same time: measured at 1280px wide, the dock covered the
+// bar completely from x896 to its right edge — Delete included, which is the whole
+// reason this rule exists rather than being left to whichever painted last.
+//
+// The lift is declared here because this is the only element that contains both, and it
+// travels as a custom property so the dock keeps owning its own geometry (it has two
+// resting positions already, one per breakpoint, and neither belongs in this file).
+// 52px is the bar's measured height and the step is the clearance; the bar rests 8px
+// nearer the edge than the dock does, so the two end up 20px apart.
+//
+// `:has()` rather than a signal on LayoutV2Service: the adjacency is what matters, and
+// a class toggled by every screen that grows a bottom bar is a second thing to keep in
+// step with the first.
+.v2-root:has(.bulk-bar) {
+  --si-dock-lift: calc(52px + var(--si-space-6));
+}
+
 .layout-v2__backdrop {
   display: none;
 }

@@ -3,7 +3,6 @@ import { FileTask, FileTaskStatus } from '@sync-in-server/backend/src/applicatio
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { FilesTasksService } from '../../files/services/files-tasks.service'
-import { StoreService } from '../../../store/store.service'
 import { ButtonComponent } from '../components/button.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { IconV2Component } from '../icons/icon-v2.component'
@@ -40,7 +39,6 @@ import { TransfersService } from '../services/transfers.service'
 export class UploadDockComponent {
   private readonly transfers = inject(TransfersService)
   private readonly tasks = inject(FilesTasksService)
-  private readonly store = inject(StoreService)
   private readonly translation = inject(L10nTranslationService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
@@ -49,14 +47,10 @@ export class UploadDockComponent {
   protected readonly agg = this.transfers.aggregate
 
   protected readonly collapsed = signal(false)
-  // Set when the user closes a finished batch, cleared the moment a new transfer
-  // starts — otherwise one dismissal would silence every upload for the session.
-  private readonly dismissed = signal(false)
 
-  protected readonly visible = computed(() => {
-    if (this.agg().active > 0) return true
-    return this.ended().length > 0 && !this.dismissed()
-  })
+  // Dismissal is per task id and lives in TransfersService, so `ended()` is already
+  // only what this dock may still announce — nothing here has to remember a boolean.
+  protected readonly visible = computed(() => this.agg().active > 0 || this.ended().length > 0)
 
   protected readonly idleWithFailures = computed(() => this.agg().active === 0 && this.agg().failed > 0)
   // A finished batch is not "working": the accent tint means in-flight, so a completed
@@ -102,15 +96,13 @@ export class UploadDockComponent {
   private readonly toBytes = new ToBytesPipe()
 
   constructor() {
-    // A new transfer un-dismisses the dock and re-expands it: the user closed the
-    // LAST batch, not this one.
+    // A new transfer re-expands the dock: the user collapsed the LAST batch, not this
+    // one. It does not need to un-dismiss anything — a new task has a new id, and the
+    // ledger only ever silences the ids that were dismissed.
     effect(() => {
       const active = this.agg().active
       untracked(() => {
-        if (active > 0) {
-          this.dismissed.set(false)
-          this.collapsed.set(false)
-        }
+        if (active > 0) this.collapsed.set(false)
       })
     })
   }
@@ -131,13 +123,27 @@ export class UploadDockComponent {
     this.tasks.cancel(t)
   }
 
+  /**
+   * `Clear done` deletes the finished tasks, on the server as well as here.
+   *
+   * That is what classic's own button does (`FilesTasksService.removeAll`, from the
+   * task sidebar), and it is the difference between this and the `×` beside it: the
+   * server holds finished tasks for a day, so a clear that only emptied the client's
+   * list left them to be re-reported on the next load. Scoped to the ids the dock is
+   * showing rather than classic's delete-everything, since the dock is not the only
+   * thing that reads that list.
+   *
+   * Safe for a compress-to-download task, whose archive the server deletes along with
+   * it: v2 downloads that archive the moment the task completes (`file-browser.base`
+   * subscribes to `archiveId`), so by the time a row is clearable the file has been
+   * fetched.
+   */
   protected clearDone(): void {
-    this.store.filesEndedTasks.next([])
+    this.tasks.removeSelectedTasks(this.ended())
   }
 
   protected dismiss(): void {
-    this.store.filesEndedTasks.next([])
-    this.dismissed.set(true)
+    this.transfers.dismissEnded()
   }
 
   private bytes(n: number): string {
