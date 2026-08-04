@@ -15,6 +15,21 @@ export interface LinkSettingsInput {
   requireAuth: boolean
   expiresAt?: Date | null
   isActive: boolean
+  /**
+   * The link's display name. REQUIRED when creating — `links.name` is
+   * `varchar NOT NULL` with no default (`links/schemas/links.schema.ts:17`), so an
+   * insert without it fails and the whole share POST comes back as
+   * `500 Unable to update link`. Which is exactly what "Get link" did in v2 until
+   * this was found: the feature never worked.
+   *
+   * Classic passes the shared object's own name (`links.service.ts:149`), so a link
+   * is named after the file it points at, and we do the same.
+   *
+   * Left OUT of an update on purpose: the update path patches only the columns it is
+   * given, and sending the file name again would silently rename a link the user had
+   * renamed.
+   */
+  name?: string
 }
 
 export interface CreateLinkParams {
@@ -48,7 +63,9 @@ export function createLinkShare(http: HttpClient, p: CreateLinkParams): Observab
         id: -1,
         type: 'link' as never,
         permissions: '',
-        linkSettings: toLinkDto(p.settings)
+        // `name` defaults to the file's, because the column is NOT NULL — see
+        // LinkSettingsInput.name.
+        linkSettings: toLinkDto({ name: p.file.name, ...p.settings })
       }
     ]
   }
@@ -92,6 +109,7 @@ function toLinkDto(settings: LinkSettingsInput): CreateOrUpdateLinkDto {
     requireAuth: settings.requireAuth,
     permissions: ''
   }
+  if (settings.name) dto.name = settings.name
   if (settings.password) dto.password = settings.password
   if (settings.expiresAt) dto.expiresAt = settings.expiresAt
   return dto

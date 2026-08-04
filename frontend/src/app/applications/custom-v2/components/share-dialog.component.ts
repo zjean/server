@@ -15,6 +15,7 @@ import {
   permissionTokens,
   type PermissionPreset,
   presetToPermissions,
+  type ShareLinkInput,
   type ShareMemberInput,
   updateShare
 } from '../utils/share-crud'
@@ -336,6 +337,11 @@ export class ShareDialogComponent {
   // Edit flow: the loaded share.
   private readonly createCtxs = signal<ShareDialogFileCtx[]>([])
   private readonly editShare = signal<ShareProps | null>(null)
+  // The share's links, kept so `save()` can echo them back. An update rebuilds the
+  // member set from members + links and deletes whatever is missing, so a dialog
+  // that only knows about people would revoke the link on every save — see
+  // UpdateShareParams.links.
+  private readonly editLinks = signal<ShareLinkInput[]>([])
 
   protected readonly subjectName = computed(() => {
     const share = this.editShare()
@@ -389,8 +395,12 @@ export class ShareDialogComponent {
     getShare(this.http, shareId).subscribe({
       next: (share) => {
         this.editShare.set(share)
+        // Link members are not people and have no row here — the link UX lives in
+        // link-dialog — but they must still be carried through the save.
+        this.editLinks.set(
+          (share.members ?? []).filter((m) => !!m.linkId).map((m) => ({ id: m.id, linkId: m.linkId as number, permissions: m.permissions ?? '' }))
+        )
         const rows: RowMember[] = (share.members ?? [])
-          // Skip link "members" — link UX lives in link-dialog.
           .filter((m) => !m.linkId)
           .map((m) => ({
             id: m.id,
@@ -486,7 +496,10 @@ export class ShareDialogComponent {
 
     if (this.isEdit() && p.existingShareId) {
       const shareId = p.existingShareId
-      updateShare(this.http, { shareId, members }).subscribe({
+      // The share's own name, not a placeholder: sending one renames the share and
+      // regenerates its alias. See UpdateShareParams.name.
+      const name = this.editShare()?.name ?? ''
+      updateShare(this.http, { shareId, name, members, links: this.editLinks() }).subscribe({
         next: () => {
           this.busy.set(false)
           this.toast.success('v2_share_updated')
@@ -616,6 +629,7 @@ export class ShareDialogComponent {
     this.members.set([])
     this.createCtxs.set([])
     this.editShare.set(null)
+    this.editLinks.set([])
     this.loadingExisting.set(false)
     this.busy.set(false)
     this.errorMessage.set(null)
