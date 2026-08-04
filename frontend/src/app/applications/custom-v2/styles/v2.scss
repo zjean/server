@@ -23,6 +23,7 @@
 @use './type';
 @use './prose';
 @use './dialog';
+@use './touch';
 
 .v2-root {
   display: flex;

@@ -17,9 +17,18 @@ interface TabEntry {
   matches: string[]
 }
 
-// Mobile-only bottom tab bar. Mirrors the Stack mock: 4 destinations
-// (Recents, Files, Spaces, Settings) anchored at the viewport bottom,
-// each rendered as icon + label. Active tab is brand-colored.
+// Mobile-only bottom tab bar. FIVE destinations anchored at the viewport bottom —
+// `Files · Spaces · Shared · Recents · Search` — each an icon plus a label, with the
+// active one in the brand tone.
+//
+// It was four, ending in Settings. Two changes, both the design's (M1):
+//   • **Search joins the bar.** There is no ⌘K on a phone and no top-bar field, so
+//     without a tab the search screen was reachable only through the drawer — i.e. the
+//     one screen you reach BY typing had the longest path to it.
+//   • **Settings leaves.** It is already in the drawer footer, next to the account it
+//     belongs to, so a tab spent on it was a duplicate of a link one swipe away.
+// Order is by expected traffic, not alphabet: Files first because it is where the app
+// opens.
 //
 // Mounted unconditionally by layout-v2 — the host's CSS gates display
 // to .layout-v2--mobile so the bar doesn't take vertical room on
@@ -54,7 +63,7 @@ interface TabEntry {
         height: calc(60px + env(safe-area-inset-bottom, 0px));
         padding-bottom: env(safe-area-inset-bottom, 0px);
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         align-items: center;
         background: var(--si-bg1);
         border-top: 1px solid var(--si-line);
@@ -66,7 +75,11 @@ interface TabEntry {
         align-items: center;
         justify-content: center;
         gap: var(--si-space-2);
-        padding: var(--si-space-4) var(--si-space-2);
+        padding: var(--si-space-4) var(--si-space-1);
+        // Five labels in a 390px viewport is 78px each. The label truncates rather
+        // than wrapping: a two-line tab makes the bar taller than the 60px every
+        // other surface offsets against.
+        min-width: 0;
         background: transparent;
         border: 0;
         font-family: var(--si-sans);
@@ -86,6 +99,10 @@ interface TabEntry {
         color: var(--si-accent-ink);
       }
       .bb__label {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         line-height: 1;
       }
     `
@@ -96,16 +113,20 @@ export class BottomTabBarComponent {
   private readonly router = inject(Router)
 
   protected readonly tabs: TabEntry[] = [
-    { id: 'recents', label: 'Recents', icon: 'clock', route: ['/', V2_PATH, V2_ROUTES.RECENTS], matches: [`/${V2_PATH}/${V2_ROUTES.RECENTS}`] },
     {
       id: 'files',
       label: 'Files',
       icon: 'folder',
       route: ['/', V2_PATH, V2_ROUTES.PERSONAL],
-      matches: [`/${V2_PATH}/${V2_ROUTES.PERSONAL}`, `/${V2_PATH}/${V2_ROUTES.SHARED}`, `/${V2_PATH}/${V2_ROUTES.TRASH}`]
+      // Trash rides with Files: it is where deleted files are, and it has no tab.
+      // `Shared` has its own tab now, so it no longer matches here — otherwise both
+      // would light up on /v2/shared and the first would win.
+      matches: [`/${V2_PATH}/${V2_ROUTES.PERSONAL}`, `/${V2_PATH}/${V2_ROUTES.TRASH}`]
     },
     { id: 'spaces', label: 'Spaces', icon: 'box', route: ['/', V2_PATH, V2_ROUTES.SPACES], matches: [`/${V2_PATH}/${V2_ROUTES.SPACES}`] },
-    { id: 'settings', label: 'Settings', icon: 'settings', route: ['/', V2_PATH, V2_ROUTES.SETTINGS], matches: [`/${V2_PATH}/${V2_ROUTES.SETTINGS}`] }
+    { id: 'shared', label: 'Shared', icon: 'share', route: ['/', V2_PATH, V2_ROUTES.SHARED], matches: [`/${V2_PATH}/${V2_ROUTES.SHARED}`] },
+    { id: 'recents', label: 'Recents', icon: 'clock', route: ['/', V2_PATH, V2_ROUTES.RECENTS], matches: [`/${V2_PATH}/${V2_ROUTES.RECENTS}`] },
+    { id: 'search', label: 'Search', icon: 'search', route: ['/', V2_PATH, V2_ROUTES.SEARCH], matches: [`/${V2_PATH}/${V2_ROUTES.SEARCH}`] }
   ]
 
   // Track the current url so the active-tab class re-evaluates on

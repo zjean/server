@@ -7,6 +7,11 @@ const MOBILE_BREAKPOINT = 768
 // panel explorations. It is the width at which a 340px panel plus a 248px nav
 // stops leaving the content plane its 640px minimum.
 const DOCK_OVERLAY_BREAKPOINT = 1180
+// The same figure from the other side: below 1180 the design's navigation is "icon
+// rail 64px with tooltips; ⌘B expands as overlay". One constant, because the two rules
+// are one decision — at that width there is not room for a 248px sidebar AND a 640px
+// content plane AND a panel.
+const RAIL_BREAKPOINT = 1180
 
 export const DOCK_WIDTH_MIN = 300
 export const DOCK_WIDTH_MAX = 520
@@ -58,6 +63,18 @@ export class LayoutV2Service {
   // floats over the content on a scrim instead of narrowing it. Mobile is a third
   // case handled in CSS (a right-anchored sheet), so this is desktop-only.
   readonly dockOverlay = computed(() => !this.isMobile() && this.viewportWidth() < DOCK_OVERLAY_BREAKPOINT)
+
+  /**
+   * The sidebar is a rail because the viewport says so, not because the user asked.
+   *
+   * Kept separate from `sidebarCollapsed` — which is the user's own preference and the
+   * editors' auto-collapse — so that widening the window restores whatever the user had
+   * rather than whatever the last breakpoint forced.
+   */
+  readonly railForced = computed(() => !this.isMobile() && this.viewportWidth() < RAIL_BREAKPOINT)
+
+  /** What the nav actually renders as: forced by width, or chosen by the user. */
+  readonly sidebarIsRail = computed(() => this.railForced() || this.sidebarCollapsed())
   // Open AND on a screen that has an inspector. The two are separate because
   // `dockOpen` is the user's standing intent and survives navigation: leaving a
   // file browser for /shared must hide the panel, and coming back must bring it
@@ -172,13 +189,20 @@ export class LayoutV2Service {
 
   toggleSidebar(): void {
     if (this.isMobile()) return
+    // Below the rail breakpoint the sidebar cannot expand in place — there is no room
+    // for it. ⌘B opens it over the content instead, which is what the design specifies
+    // for this band and what the collapsed-rail user already gets on click.
+    if (this.railForced()) {
+      this.sidebarOverlay.update((v) => !v)
+      return
+    }
     const next = !this.sidebarCollapsed()
     this.sidebarCollapsed.set(next)
     this.sidebarOverlay.set(false)
   }
 
   openSidebarOverlay(): void {
-    if (this.isMobile() || !this.sidebarCollapsed()) return
+    if (this.isMobile() || !this.sidebarIsRail()) return
     this.sidebarOverlay.set(true)
   }
 

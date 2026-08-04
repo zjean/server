@@ -33,8 +33,9 @@ Only then open the design project.
 | 3 | Inspector (D4, D5) | #437 | merged |
 | 4 | Search (D6) | #438 | merged |
 | 5 | Share dialog (D7) | #440 | merged |
-| 6 | Gallery + upload dock (D8) | #441 | open |
-| **7** | **Mobile (M1–M6)** | — | **next** |
+| 6 | Gallery + upload dock (D8) | #441 | merged |
+| 7a | Mobile frame (bands, tabs, rows, touch) | #442 | open |
+| **7b** | **Mobile sheets (M3, M5, M6)** | — | **next — verify on a real device** |
 | 8 | Keyboard hints + session error strip | — | not started |
 
 Everything merged is on `develop` as of `13d30cda`.
@@ -334,14 +335,27 @@ Read the plan's **§8.1**. Three things phase 7 inherits:
 - **The dock and the bulk bar can collide at narrow widths.** The bar positions against
   `.personal`; the dock is viewport-fixed bottom-right. Untested below ~600px.
 
-### Phase 7 — mobile
+### Phase 7 — mobile, SPLIT into 7a (shipped, #442) and 7b (next)
 
-- **The bulk bar positions against `.personal`, not the viewport** — `.personal`
-  gained `position: relative` in Phase 2 for this. A viewport-fixed bar would sit
-  over the mobile bottom tab bar.
-- The bottom tab bar goes 4 tabs → 5 (`Files · Spaces · Shared · Recents · Search`),
-  displacing Settings into the drawer footer where it already is.
-- Sheet snapping must be CSS + `afterNextRender`, not rAF — see §4.
+The split and the verification method are maintainer decisions (2026-08-04) — see the
+plan's §9.1. **7b is M3 (info bottom sheet, 50%/92%), M5 (share sheet) and M6
+(long-press action sheet), and it is to be verified on a real Android device via
+`agent-device`**, not by measurement: measured CSS is not evidence that a drag works.
+
+What 7a already put in place, so 7b does not re-derive it:
+
+- The four bands are in `layout-v2.service.ts` as `railForced` / `dockOverlay` /
+  `isMobile`, all off ONE `viewportWidth` signal. Do not add a fourth breakpoint
+  constant — `RAIL_BREAKPOINT` and `DOCK_OVERLAY_BREAKPOINT` are deliberately the same
+  1180 because they are one decision.
+- Touch sizing is global (`styles/_touch.scss`) and grows the target without moving the
+  box. A sheet action wants 52px; that rule is already there and keyed on `.as__item`.
+- **The bulk bar positions against `.personal`, not the viewport** — `.personal` gained
+  `position: relative` in Phase 2 for this. A viewport-fixed bar would sit over the
+  bottom tab bar. The upload dock IS viewport-fixed, and the two are untested together
+  below ~600px.
+- Sheet snapping must be CSS + `afterNextRender`, not rAF — see §4. On a real device
+  that limitation does not apply, which is the other reason 7b goes to `agent-device`.
 
 ### Phase 8 — keyboard
 

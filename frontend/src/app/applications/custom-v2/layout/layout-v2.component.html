@@ -6,7 +6,7 @@
 }
 <div class="layout-v2__body">
   <app-v2-left-nav />
-  @if (!layoutV2.isMobile() && layoutV2.sidebarCollapsed() && layoutV2.sidebarOverlay()) {
+  @if (!layoutV2.isMobile() && layoutV2.sidebarIsRail() && layoutV2.sidebarOverlay()) {
     <app-v2-left-nav [forceFullRender]="true" />
     <div class="layout-v2__backdrop layout-v2__backdrop--desktop" (click)="layoutV2.closeSidebarOverlay()" aria-hidden="true"></div>
   }

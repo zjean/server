@@ -46,14 +46,18 @@
         [ariaLabel]="filterPlaceholder()"
         (changed)="setFilter($event)"
       />
-      <span class="personal__control-label" l10nTranslate>density</span>
-      <app-v2-segmented
-        [options]="densityOptions"
-        [value]="density()"
-        size="sm"
-        [ariaLabel]="'Density' | translate: locale.language"
-        (changed)="setDensity($event)"
-      />
+      <!-- Wrapped so one CSS rule can drop the label and the control together at the
+           breakpoint where the toolbar starts to overflow. -->
+      <span class="personal__density">
+        <span class="personal__control-label" l10nTranslate>density</span>
+        <app-v2-segmented
+          [options]="densityOptions"
+          [value]="density()"
+          size="sm"
+          [ariaLabel]="'Density' | translate: locale.language"
+          (changed)="setDensity($event)"
+        />
+      </span>
       <span class="personal__control-spacer"></span>
       <app-v2-segmented
         [options]="viewOptions"
@@ -140,7 +144,23 @@
                 </span>
                 <div class="file-row__name">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="26" [rounded]="6" />
-                  <span class="file-row__name-text">{{ f.name }}</span>
+                  <span class="file-row__stack">
+                    <span class="file-row__name-text">{{ f.name }}</span>
+                    <!-- Mobile only (hidden by default in CSS): the size and modified
+                         COLUMNS are dropped below 768px, so what they held moves under
+                         the name rather than off the screen. -->
+                    <span class="file-row__submeta">
+                      @if (!f.isDir) {
+                        {{ f.size | toBytes: 1 : true }}
+                      }
+                      @if (f.mtime) {
+                        @if (!f.isDir) {
+                          ·
+                        }
+                        {{ f.mtime | amTimeAgo }}
+                      }
+                    </span>
+                  </span>
                 </div>
                 <!-- Badges get their own column so the NAME column has a single
                      clean left edge — the design's reason, and the thing that

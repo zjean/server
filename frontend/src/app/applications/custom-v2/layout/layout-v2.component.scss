@@ -122,13 +122,13 @@
 }
 
 // Desktop backdrop shown behind the temporarily-expanded sidebar overlay.
-// Sits to the right of the persistent 48px rail and under the overlayed
-// left-nav (z-index 41). Clicking dismisses the overlay.
+// Sits to the right of the persistent rail and under the overlayed left-nav
+// (z-index 41). Clicking dismisses the overlay.
 .layout-v2__backdrop--desktop {
   display: block;
   position: fixed;
   top: 0;
-  left: 48px;
+  left: var(--si-rail-w);
   right: 0;
   bottom: 0;
   // Desktop scrim for the dock panel. This and the panel itself were BOTH 40 — a

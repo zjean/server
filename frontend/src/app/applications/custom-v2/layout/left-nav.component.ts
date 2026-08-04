@@ -60,7 +60,7 @@ export class LeftNavComponent {
 
   // True when this instance should render as the 48px icon rail. The
   // overlay instance (forceFullRender=true) always renders full.
-  protected readonly compact = computed(() => !this.layoutV2.isMobile() && this.layoutV2.sidebarCollapsed() && !this.forceFullRender())
+  protected readonly compact = computed(() => !this.layoutV2.isMobile() && this.layoutV2.sidebarIsRail() && !this.forceFullRender())
 
   protected readonly meAvatar = computed<AvatarUser>(() => {
     const u = this.user()

@@ -11,7 +11,7 @@
 :host.left-nav--overlay {
   position: fixed;
   top: 0;
-  left: 48px; // sits immediately to the right of the persistent rail
+  left: var(--si-rail-w); // sits immediately to the right of the persistent rail
   bottom: 0;
   z-index: calc(var(--si-z-panel) + 3);
   box-shadow: var(--si-shadow2);
@@ -327,7 +327,11 @@
   // collapsed the sidebar on desktop. The :host gets .left-nav--compact;
   // this .left-nav--rail variant replaces the full nav inside.
   &--rail {
-    width: 48px;
+    // The design's figure for this band. It was 48: enough for a 34px glyph button, not
+    // enough for the 44px target the same document asks of every tappable thing — and
+    // this rail is what a 1024px tablet navigates with. Tokenised because two other
+    // stylesheets offset against it and a literal in three files is how they drift.
+    width: var(--si-rail-w);
     padding: var(--si-space-4) 0;
     align-items: center;
     gap: var(--si-space-1);

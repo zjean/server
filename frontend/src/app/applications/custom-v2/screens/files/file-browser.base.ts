@@ -45,6 +45,7 @@ import { TreePickerService } from '../../components/tree-picker.service'
 import type { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { InspectorService } from '../../layout/inspector.service'
+import { LayoutV2Service } from '../../layout/layout-v2.service'
 import { FavoritesService } from '../../services/favorites.service'
 import { FolderSizeService } from '../../services/folder-size.service'
 import { TransfersService } from '../../services/transfers.service'
@@ -159,6 +160,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly filesService = inject(FilesService)
   private readonly folderSize = inject(FolderSizeService)
   private readonly transfers = inject(TransfersService)
+  protected readonly layoutV2 = inject(LayoutV2Service)
   protected readonly favoritesService = inject(FavoritesService)
   private readonly filesUpload = inject(FilesUploadService)
   private readonly confirmDialog = inject(ConfirmDialogService)
@@ -226,7 +228,14 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly filter = signal('')
   protected readonly mode = signal<BrowserMode>(readStoredMode(this.viewModeStorageKey()))
   protected readonly density = signal<BrowserDensity>(readStoredDensity(this.densityStorageKey()))
-  protected readonly rowHeight = computed(() => DENSITY_ROW_HEIGHT[this.density()])
+  /**
+   * Row height in pixels.
+   *
+   * Mobile is always the relaxed step, which is the design's `1c`: a two-line row needs
+   * 56px, and the density control is not offered there. It does NOT write `density` —
+   * the stored preference is the user's desktop choice and must survive a phone visit.
+   */
+  protected readonly rowHeight = computed(() => (this.layoutV2.isMobile() ? DENSITY_ROW_HEIGHT.relaxed : DENSITY_ROW_HEIGHT[this.density()]))
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
 
   // Mobile FAB-driven action sheet. Mirrors the desktop "+ New" menu, then
