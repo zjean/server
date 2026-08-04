@@ -141,6 +141,32 @@ stylesheet, and `file-browser-repository.ts`. The two screens differ in exactly 
 how a file is addressed on the wire — and those 16 are the repository interface. **Add screen-specific behaviour to
 the repository, not to the base with an `if`.** `viewModeStorageKey()` is the one exception and stays a component
 method: the base's `mode` signal initialises before the subclass field holding the repository exists.
+`densityStorageKey()` is the second, added by #434, for exactly the same reason.
+
+## v2 is mid-way through a design-system adoption — read the handoff before touching it
+
+`custom-v2` is being rebuilt against a Claude Design project (*Sync-In Design System v1.0*,
+`4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP). **Nine phases; four have shipped.**
+
+**If you are touching anything under `custom-v2/`, start with
+[`docs/plans/2026-08-04-v2-design-adoption-handoff.md`](docs/plans/2026-08-04-v2-design-adoption-handoff.md).** It is
+the traps, not the design: how to check a build (never grep for `[ERROR]` — ANSI codes split the brackets and three
+builds read as clean while failing), the `agent-browser` recipe that actually works, and the defect class that has now
+appeared twice — a hue change breaking declarations that were correct before it, none of which fails a build.
+
+| Document | Status |
+|---|---|
+| [`2026-08-04-v2-design-adoption-handoff.md`](docs/plans/2026-08-04-v2-design-adoption-handoff.md) | **Entry point.** State, decisions already made, and every trap phases 0–2b hit. |
+| [`2026-08-03-v2-design-system-adoption-plan.md`](docs/plans/2026-08-03-v2-design-system-adoption-plan.md) | **The authority on design.** Nine phases. Its §2.13 / §3.1 / §4.7 / §4.8 record what each shipped phase settled *and what the plan got wrong* — read those before the phase body. |
+
+Three things that are settled and must not be quietly reverted, all in `_tokens.scss`'s header with their measurements:
+the **focus ring is opaque accent-500** (the design's 60%-alpha version fails SC 1.4.11 on all seven surfaces),
+`--si-border` is **not** an alias of `--si-line-strong` (which measures 1.69:1 on the input fill), and `--si-amber` is
+**not** an alias of `--si-accent` (it was, while the brand was warm).
+
+And one rule now enforced by a test rather than convention: **no component under `custom-v2/` may name a colour**.
+`styles/tokens.spec.ts` fails on any raw hex/rgb/oklch outside `_tokens.scss`, on the accent fill used as type, and on
+an `-ink` tone used as a fill. Two files are exempt *with an expected count*, so an exemption cannot quietly grow.
 
 ## NC mobile compat: always read upstream NC source first
 
