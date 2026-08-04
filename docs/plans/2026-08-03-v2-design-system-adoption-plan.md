@@ -541,6 +541,71 @@ Threaded list with 24px indent for replies, composer pinned to the bottom on its
 
 ---
 
+### 5.5 What Phase 3 actually settled
+
+Shipped in **#437**. The panel, the four labelled tabs, the version cards, the
+comments composer and the D4 identity band all landed. Five things are worth
+knowing before Phase 4.
+
+**The phase's real content was a consolidation the plan did not name.** There were
+TWO inspectors: the layout's dock panel (Info / Comments, opened from the icon
+rail) and a second, near-identical aside built into `file-detail` (five unlabelled
+glyph tabs, its own property table). D4 and D5 draw one panel. So `file-detail`
+now publishes its file to `InspectorService` like every other screen and its aside
+is deleted — which is why the file-detail diff is mostly subtraction, and why the
+panel gained the Versions tab on the *browser* screens for free.
+
+**`dockOpen` and `dockVisible` are not the same thing, and conflating them is a
+bug.** Open-ness is the user's standing intent and survives navigation; what
+renders is `dockOpen() && inspector.available()`. Rendering on `dockOpen` alone
+left an empty panel sitting open on `/shared` and `/trash`, which register no
+selection — and closing it on arrival would have cost a second ⌘I on the way back.
+Pinned in `layout-v2.service.spec.ts`.
+
+**Two of the design's own instructions could not be transcribed, both because the
+backend has nothing behind them:**
+
+- **Comment threading.** D5 draws a 24px reply indent plus Reply / Resolve.
+  `Comment` carries `fileId` and `userId` and *no* parent or thread id, so every
+  comment is top-level. An indent with no threading, or a Reply that posts another
+  top-level comment, is a promise the server does not keep. The list is flat.
+- **The editor bar's edit/preview segmented.** Our two markdown modes are
+  *formatted vs source* and *edit vs read-only*, and the second one is a real
+  server LOCK/UNLOCK (`markdown-view.toggleReadonly` → `filesService.lock`).
+  Presenting a locking operation as a view switch would be worse than the icon
+  button it replaced, so the icon buttons stay and only the `⌘S saves a version`
+  hint was added — gated on `versions.availability()`, because on a server with
+  versioning off the hint would be false.
+
+Two smaller substitutions in the same family: D4's `edited 14 min ago **by you**`
+drops the "by you" (no field on the browse response names a last editor), and the
+version card's `Current` / `Original` tags are gone — `listVersions` returns
+history only, never the live file, and thinning means the oldest surviving row is
+not necessarily the original. Every row carries its signed byte delta instead,
+measured against the next-newer content (the live file, for the newest row).
+
+**Phase 1 shipped the icon button's active state as a plain surface step, i.e.
+identical to hover.** The design's Components page specifies `rgba(76,126,243,0.14)`
++ accent-400 for it, and its own icon rule licenses that ("an icon is never cobalt
+unless its control is the active one"). This phase depends on it — the panel
+toggle's active state is the only feedback that the panel is open — so
+`icon-button.component.ts` now uses `--si-accent-soft` / `--si-accent-ink`. That
+touches eight `[active]` call sites, all of which are genuine toggles.
+
+**One finding left for later, with its measurement:** `color: var(--si-rose)`
+appears at **31 declarations across 20 files**. `--si-rose` (#C4483F) is a FILL; as
+type it measures ~3.6:1 on the content plane, under the 4.5 a 13–14px string needs,
+and `--si-rose-ink` is the pair's type tone. The four sites in files this phase
+rewrote are fixed; the remaining ~27 are a mechanical sweep that wants its own PR
+and its own measured table, not a drive-by inside a feature diff. It is the same
+shape as the 25 accent bugs Phase 0/1 found.
+
+Also here, and additive: `app-v2-btn` gained a `block` input (the panel's
+full-width "Manage sharing" is the design's one instance), and the `panelRight`
+glyph was added to `app-v2-icon`.
+
+---
+
 ## 6. Phase 4 — search (D6)
 
 One PR, `feat/v2-search-results`. Files: `screens/search/search.{ts,html,scss}`.

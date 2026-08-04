@@ -1,20 +1,40 @@
 import { HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, DestroyRef, EventEmitter, inject, Input, OnChanges, Output, signal, SimpleChanges } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  EventEmitter,
+  inject,
+  Input,
+  OnChanges,
+  Output,
+  signal,
+  SimpleChanges
+} from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { FormsModule } from '@angular/forms'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { userAvatarUrl } from '../../users/user.functions'
-import { IconV2Component } from '../icons/icon-v2.component'
 import { isDiffableFile, VersionModel, VersionsUsage, versionsUsageRatio } from '../models/version.model'
 import { VersionsService } from '../services/versions.service'
 import { AvatarComponent, avatarTone, avatarInitials, AvatarUser } from './avatar.component'
 import { ButtonComponent } from './button.component'
 import { ConfirmDialogService } from './confirm-dialog.service'
+import { ContextMenuAnchor, ContextMenuComponent, ContextMenuEntry } from './context-menu.component'
+import { IconButtonComponent } from './icon-button.component'
 import { PillComponent } from './pill.component'
 import { ToastService } from './toast.service'
 import { VersionsDiffComponent } from './versions-diff.component'
+
+/** What the host's tab strip and panel header label this history with. */
+export interface VersionsStats {
+  count: number
+  /** Bytes this FILE's history holds — not the root-scoped quota figure. */
+  bytes: number
+}
 
 interface VersionRow extends VersionModel {
   // Inline label editing, mirroring how comments-panel handles an edit in place.
@@ -27,17 +47,30 @@ interface VersionRow extends VersionModel {
   // which is the right default and the wrong thing to squint at when deciding
   // which revision to restore.
   timesTitle: string
+  // Positional handle — `v3` is the third-oldest row CURRENTLY held, not a stored
+  // identity. Deleting or thinning a row renumbers the ones below it, which is
+  // fine for a label and would not be for a reference: every action here keys on
+  // `id`.
+  ordinal: number
+  // How this revision's size compares with the content that replaced it, which is
+  // the next-newer row or — for the newest row — the live file. Two saves in the
+  // same minute are indistinguishable without it.
+  delta: number
 }
 
 /**
- * Version history for a single file. Consumed by the file-detail inspector as a
- * tab beside Comments.
+ * Version history for a single file. Consumed by the inspector as a tab beside
+ * Comments.
  *
  * Rows are labeled with `mtime` — when the revision's own bytes were written —
  * because the question being asked here is "restore it to how it was on…".
  * `createdAt` (when the overwrite retired the revision) is in the tooltip on the
  * same line, since the two can be far apart and the difference matters exactly
  * once: when a file edited long ago is overwritten today.
+ *
+ * The card follows D5: ONE primary action. `Restore` is a real button; `Compare`
+ * and `Download` are ghost; naming and deleting a version live in the overflow
+ * menu, because both are rarer than restoring and one of them is destructive.
  *
  * Permissions are the server's to decide, and they mirror the live file: anyone
  * who can read the file can list and download its history, while restore, label
@@ -54,7 +87,8 @@ interface VersionRow extends VersionModel {
   imports: [
     AvatarComponent,
     ButtonComponent,
-    IconV2Component,
+    ContextMenuComponent,
+    IconButtonComponent,
     PillComponent,
     VersionsDiffComponent,
     FormsModule,
@@ -70,167 +104,175 @@ interface VersionRow extends VersionModel {
       } @else if (errorMessage(); as err) {
         <div class="vp__state vp__state--error">{{ err | translate: locale.language }}</div>
       } @else {
-        @if (rows().length === 0) {
-          <div class="vp__state">
-            <div l10nTranslate>No earlier versions yet</div>
-            <div class="vp__state-lede" l10nTranslate>A version is kept each time this file's contents are replaced.</div>
-          </div>
-        } @else {
-          <ul class="vp__list">
-            @for (r of rows(); track r.id) {
-              <li class="vp-row" [class.vp-row--busy]="r.busy">
-                <div class="vp-row__head">
-                  <app-v2-avatar [user]="r.avatar" [size]="24" />
-                  <div class="vp-row__meta">
-                    <div class="vp-row__when" [attr.title]="r.timesTitle">{{ r.mtime | amTimeAgo }}</div>
-                    <div class="vp-row__sub">
-                      {{ r.author?.name ?? ('Unknown' | translate: locale.language) }}
-                      · <span class="vp-row__mono">{{ r.size | toBytes: 1 : true }}</span> · {{ r.originLabel | translate: locale.language }}
-                    </div>
-                  </div>
-                  @if (r.isLabeled && !r.editing) {
-                    <app-v2-pill color="amber">{{ r.label }}</app-v2-pill>
-                  }
-                </div>
-
-                @if (r.editing) {
-                  <div class="vp-row__editor">
-                    <input
-                      class="vp-row__input"
-                      type="text"
-                      maxlength="255"
-                      [placeholder]="'Version name' | translate: locale.language"
-                      [(ngModel)]="r.draft"
-                      (keydown.enter)="saveLabel(r)"
-                      (keydown.escape)="cancelLabel(r)"
-                    />
-                    <div class="vp-row__editor-actions">
-                      <app-v2-btn kind="ghost" size="sm" (click)="cancelLabel(r)">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
-                      <app-v2-btn kind="primary" size="sm" [disabled]="r.busy" (click)="saveLabel(r)">
-                        {{ 'Save' | translate: locale.language }}
-                      </app-v2-btn>
-                    </div>
-                  </div>
-                } @else {
-                  <div class="vp-row__actions">
-                    <button
-                      class="vp-row__action"
-                      type="button"
-                      [disabled]="r.busy"
-                      (click)="download(r)"
-                      [attr.title]="'Download this version' | translate: locale.language"
-                    >
-                      <app-v2-icon name="download" [size]="12" />
-                    </button>
-                    @if (diffable) {
-                      <button
-                        class="vp-row__action"
-                        type="button"
-                        [class.vp-row__action--on]="diffFor() === r.id"
-                        [disabled]="r.busy"
-                        (click)="toggleDiff(r)"
-                        [attr.title]="'Compare with the current file' | translate: locale.language"
-                      >
-                        <app-v2-icon name="code" [size]="12" />
-                      </button>
-                    }
-                    <button
-                      class="vp-row__action"
-                      type="button"
-                      [disabled]="r.busy"
-                      (click)="startLabel(r)"
-                      [attr.title]="'Name this version' | translate: locale.language"
-                    >
-                      <app-v2-icon name="pencil" [size]="12" />
-                    </button>
-                    <button
-                      class="vp-row__action"
-                      type="button"
-                      [disabled]="r.busy"
-                      (click)="restore(r)"
-                      [attr.title]="'Restore this version' | translate: locale.language"
-                    >
-                      <app-v2-icon name="restore" [size]="12" />
-                    </button>
-                    <button
-                      class="vp-row__action vp-row__action--danger"
-                      type="button"
-                      [disabled]="r.busy"
-                      (click)="remove(r)"
-                      [attr.title]="'Delete' | translate: locale.language"
-                    >
-                      <app-v2-icon name="trash" [size]="12" />
-                    </button>
-                  </div>
-                }
-
-                @if (diffFor() === r.id) {
-                  <div class="vp-row__diff">
-                    @if (diffLoading()) {
-                      <div class="vp__state" l10nTranslate>Loading…</div>
-                    } @else if (diffError(); as derr) {
-                      <div class="vp__state vp__state--error">{{ derr | translate: locale.language }}</div>
-                    } @else if (diffIdentical()) {
-                      <div class="vp__state" l10nTranslate>Identical to the current file.</div>
+        <div class="vp__scroll">
+          @if (rows().length === 0) {
+            <div class="vp__state">
+              <div l10nTranslate>No earlier versions yet</div>
+              <div class="vp__state-lede" l10nTranslate>A version is kept each time this file's contents are replaced.</div>
+            </div>
+          } @else {
+            <ul class="vp__list">
+              @for (r of rows(); track r.id) {
+                <li class="vp-row" [class.vp-row--busy]="r.busy">
+                  <div class="vp-row__head">
+                    <span class="vp-row__ordinal">v{{ r.ordinal }}</span>
+                    @if (r.isLabeled && !r.editing) {
+                      <app-v2-pill color="amber">{{ r.label }}</app-v2-pill>
                     } @else {
-                      <app-v2-versions-diff [diff]="diffText()" />
+                      <!-- Neutral, always: a byte delta is information, not a
+                           warning, and this badge shares a line with the version
+                           handle it must not outrank. -->
+                      <app-v2-pill color="gray">{{ deltaLabel(r) }}</app-v2-pill>
                     }
+                    <span class="vp-row__spacer"></span>
+                    <span class="vp-row__when" [attr.title]="r.timesTitle">{{ r.mtime | amTimeAgo }}</span>
                   </div>
-                }
-              </li>
-            }
-          </ul>
-        }
 
-        <!-- Shown even with an empty list: the point is that history consumes
-             the same quota as files, which is worth knowing BEFORE a history
-             exists (ADR §7). -->
-        @if (usage(); as u) {
-          <div class="vp__usage">
-            <div class="vp__usage-text">
-              @if (u.ceiling) {
-                {{ 'v2_versions_usage' | translate: locale.language : { used: bytes(u.used), ceiling: bytes(u.ceiling) } }}
-              } @else {
-                {{ 'v2_versions_usage_uncapped' | translate: locale.language : { used: bytes(u.used) } }}
+                  <div class="vp-row__author">
+                    <app-v2-avatar [user]="r.avatar" [size]="20" />
+                    <span class="vp-row__who">{{ r.author?.name ?? ('Unknown' | translate: locale.language) }}</span>
+                    <span class="vp-row__origin">· {{ r.size | toBytes: 1 : true }} · {{ r.originLabel | translate: locale.language }}</span>
+                  </div>
+
+                  @if (r.editing) {
+                    <div class="vp-row__editor">
+                      <input
+                        class="vp-row__input"
+                        type="text"
+                        maxlength="255"
+                        [placeholder]="'Version name' | translate: locale.language"
+                        [(ngModel)]="r.draft"
+                        (keydown.enter)="saveLabel(r)"
+                        (keydown.escape)="cancelLabel(r)"
+                      />
+                      <div class="vp-row__editor-actions">
+                        <app-v2-btn kind="ghost" size="sm" (click)="cancelLabel(r)">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
+                        <app-v2-btn kind="primary" size="sm" [disabled]="r.busy" (click)="saveLabel(r)">
+                          {{ 'Save' | translate: locale.language }}
+                        </app-v2-btn>
+                      </div>
+                    </div>
+                  } @else {
+                    <div class="vp-row__actions">
+                      <app-v2-btn kind="secondary" size="sm" icon="restore" [disabled]="r.busy" (click)="restore(r)">{{
+                        'Restore' | translate: locale.language
+                      }}</app-v2-btn>
+                      @if (diffable) {
+                        <app-v2-btn
+                          kind="ghost"
+                          size="sm"
+                          icon="code"
+                          [disabled]="r.busy"
+                          [title]="'Compare with the current file' | translate: locale.language"
+                          (click)="toggleDiff(r)"
+                          >{{ (diffFor() === r.id ? 'Close' : 'Compare') | translate: locale.language }}</app-v2-btn
+                        >
+                      }
+                      <app-v2-icon-btn
+                        iconName="download"
+                        [size]="30"
+                        [disabled]="r.busy"
+                        [title]="'Download this version' | translate: locale.language"
+                        [ariaLabel]="'Download this version' | translate: locale.language"
+                        (click)="download(r)"
+                      />
+                      <span class="vp-row__spacer"></span>
+                      <app-v2-icon-btn
+                        iconName="more"
+                        [size]="30"
+                        [disabled]="r.busy"
+                        [title]="'More' | translate: locale.language"
+                        [ariaLabel]="'More' | translate: locale.language"
+                        (click)="openRowMenu(r, $event)"
+                      />
+                    </div>
+                  }
+
+                  @if (diffFor() === r.id) {
+                    <div class="vp-row__diff">
+                      @if (diffLoading()) {
+                        <div class="vp__state" l10nTranslate>Loading…</div>
+                      } @else if (diffError(); as derr) {
+                        <div class="vp__state vp__state--error">{{ derr | translate: locale.language }}</div>
+                      } @else if (diffIdentical()) {
+                        <div class="vp__state" l10nTranslate>Identical to the current file.</div>
+                      } @else {
+                        <app-v2-versions-diff [diff]="diffText()" />
+                      }
+                    </div>
+                  }
+                </li>
               }
+            </ul>
+          }
+        </div>
+
+        <!-- A footer below a divider, not a card: the quota story belongs out of
+             the scan path but still on screen, because turning versioning on
+             reduces every user's effective quota (ADR §7). Shown even with an
+             empty list — that is when it is news. -->
+        @if (usage(); as u) {
+          <div class="vp__footer">
+            <!-- "ALL version history": this figure is root-scoped (the whole
+                 space's history), while the panel header's is this file's. Same
+                 word on both would read as one number contradicting itself. -->
+            <div class="vp__footer-row">
+              <span l10nTranslate>All version history</span>
+              <span class="vp__footer-value">
+                @if (u.ceiling) {
+                  {{ bytes(u.used) }} / {{ bytes(u.ceiling) }}
+                } @else {
+                  {{ bytes(u.used) }}
+                }
+              </span>
             </div>
             @if (usageRatio(); as ratio) {
               <div class="vp__usage-bar" role="presentation">
                 <div class="vp__usage-fill" [class.vp__usage-fill--full]="ratio >= 0.9" [style.width.%]="ratio * 100"></div>
               </div>
             }
-            <div class="vp__usage-note" l10nTranslate>Version history counts towards your storage quota.</div>
+            <div class="vp__footer-note" l10nTranslate>Version history counts towards your storage quota.</div>
           </div>
         }
       }
     </div>
+    <app-v2-context-menu [items]="menuItems()" [open]="menuFor() !== null" [anchor]="menuAnchor()" (closed)="closeRowMenu()" />
   `,
   styles: [
     `
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
         min-width: 0;
       }
       .vp {
         display: flex;
         flex-direction: column;
-        gap: var(--si-space-5);
-        padding: var(--si-space-6) var(--si-space-7);
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .vp__scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: var(--si-space-9) var(--si-space-10);
       }
       .vp__state {
         padding: var(--si-space-9) var(--si-space-5);
         font-size: var(--si-text-6);
-        color: var(--si-fg-muted);
+        color: var(--si-fg-tertiary);
         text-align: center;
 
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .vp__state-lede {
         margin-top: var(--si-space-2);
         font-size: var(--si-text-4);
-        color: var(--si-fg-muted);
+        color: var(--si-fg-ghost);
       }
       .vp__list {
         list-style: none;
@@ -238,13 +280,14 @@ interface VersionRow extends VersionModel {
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: var(--si-space-4);
+        gap: var(--si-space-5);
       }
+      /* A card on the panel: one surface step up from bg1, no border. The border
+         was doing the work the surface step does. */
       .vp-row {
-        background: var(--si-bg3);
-        border: 1px solid var(--si-line);
+        background: var(--si-bg2);
         border-radius: var(--si-r2);
-        padding: var(--si-space-4) var(--si-space-5);
+        padding: var(--si-space-6) var(--si-space-7);
 
         &--busy {
           opacity: 0.6;
@@ -255,82 +298,74 @@ interface VersionRow extends VersionModel {
         align-items: center;
         gap: var(--si-space-4);
         min-width: 0;
+        margin-bottom: var(--si-space-5);
       }
-      .vp-row__meta {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
+      .vp-row__spacer {
         flex: 1 1 auto;
       }
-      .vp-row__when {
-        font-size: var(--si-text-6);
-        font-weight: 600;
-        color: var(--si-fg);
-        letter-spacing: -0.1px;
-      }
-      .vp-row__sub {
-        font-size: var(--si-text-3);
-        color: var(--si-fg-muted);
-        overflow-wrap: anywhere;
-      }
-      .vp-row__mono {
+      /* A version handle is machine output, so mono — and it is the card's entry
+         point, so it takes the bright tone. */
+      .vp-row__ordinal {
         font-family: var(--si-mono);
+        font-size: var(--si-text-6);
+        font-weight: 500;
+        color: var(--si-fg);
+      }
+      .vp-row__when {
+        font-family: var(--si-mono);
+        font-size: var(--si-text-4);
+        color: var(--si-fg-tertiary);
+        white-space: nowrap;
+      }
+      .vp-row__author {
+        display: flex;
+        align-items: center;
+        gap: var(--si-space-4);
+        min-width: 0;
+      }
+      .vp-row__who {
+        font-size: var(--si-text-7);
+        color: var(--si-fg-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .vp-row__origin {
+        font-family: var(--si-mono);
+        font-size: var(--si-text-3);
+        color: var(--si-fg-ghost);
+        white-space: nowrap;
       }
       .vp-row__actions {
         display: flex;
-        gap: var(--si-space-2);
-        margin-top: var(--si-space-3);
-      }
-      .vp-row__action {
-        width: 24px;
-        height: 24px;
-        border-radius: 5px;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        color: var(--si-fg-muted);
-        display: inline-flex;
         align-items: center;
-        justify-content: center;
-        padding: 0;
-
-        &:hover:not(:disabled) {
-          background: var(--si-bg3);
-          color: var(--si-fg);
-        }
-        &:disabled {
-          cursor: default;
-          opacity: 0.5;
-        }
-        &--on {
-          background: var(--si-bg3);
-          color: var(--si-fg);
-        }
-        &--danger:hover:not(:disabled) {
-          color: var(--si-rose);
-        }
+        gap: var(--si-space-3);
+        margin-top: var(--si-space-5);
       }
       .vp-row__editor {
-        margin-top: var(--si-space-3);
+        margin-top: var(--si-space-5);
         display: flex;
         flex-direction: column;
-        gap: var(--si-space-3);
+        gap: var(--si-space-4);
       }
+      /* Mirrors app-v2-input: filled, with a resting hairline because the fill
+         alone measures 1.10:1 against the plane. */
       .vp-row__input {
-        background: var(--si-bg2);
-        border: 1px solid var(--si-line);
+        background: var(--si-bg3);
+        border: 1px solid var(--si-border);
         border-radius: var(--si-r1);
-        padding: var(--si-space-3) var(--si-space-4);
+        padding: var(--si-space-4) var(--si-space-5);
         color: var(--si-fg);
-        font: inherit;
-        font-size: var(--si-text-6);
+        font-family: var(--si-sans);
+        font-size: var(--si-text-7);
 
         &:focus {
-          outline: none;
-          border-color: var(--si-nav);
+          border-color: var(--si-focus-ring);
+          outline: 2px solid var(--si-focus-ring);
+          outline-offset: 1px;
         }
         &::placeholder {
-          color: var(--si-fg-muted);
+          color: var(--si-fg-tertiary);
         }
       }
       .vp-row__editor-actions {
@@ -339,19 +374,26 @@ interface VersionRow extends VersionModel {
         gap: var(--si-space-3);
       }
       .vp-row__diff {
-        margin-top: var(--si-space-4);
+        margin-top: var(--si-space-5);
         min-width: 0;
       }
-      .vp__usage {
-        border-top: 1px solid var(--si-line);
-        padding-top: var(--si-space-5);
+      .vp__footer {
+        flex: 0 0 auto;
+        border-top: 1px solid var(--si-line-subtle);
+        padding: var(--si-space-7) var(--si-space-10) var(--si-space-9);
         display: flex;
         flex-direction: column;
-        gap: var(--si-space-3);
+        gap: var(--si-space-4);
       }
-      .vp__usage-text {
-        font-size: var(--si-text-5);
-        color: var(--si-fg-muted);
+      .vp__footer-row {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--si-space-5);
+        font-size: var(--si-text-6);
+        color: var(--si-fg-tertiary);
+      }
+      .vp__footer-value {
+        font-family: var(--si-mono);
       }
       .vp__usage-bar {
         height: 4px;
@@ -361,15 +403,16 @@ interface VersionRow extends VersionModel {
       }
       .vp__usage-fill {
         height: 100%;
-        background: var(--si-nav);
+        background: var(--si-accent-hover);
 
         &--full {
           background: var(--si-rose);
         }
       }
-      .vp__usage-note {
-        font-size: var(--si-text-3);
-        color: var(--si-fg-muted);
+      .vp__footer-note {
+        font-size: var(--si-text-4);
+        color: var(--si-fg-ghost);
+        line-height: 1.55;
       }
     `
   ]
@@ -379,19 +422,21 @@ export class VersionsPanelComponent implements OnChanges {
   // and undecorated — the service encodes it.
   @Input({ required: true }) filePath!: string
   @Input({ required: true }) fileId!: number
-  // Stored-form mime and current size. Used only to decide whether to offer a
-  // text comparison.
+  // Stored-form mime and current size. The mime decides whether to offer a text
+  // comparison; the size is what the newest revision's delta is measured against.
   @Input() mime: string | null = null
   @Input() size = 0
 
   // A restore replaces the live file's bytes, so whatever renders that file is
   // now stale. The host reloads; this panel does not guess what to refresh.
-  //
-  // There is deliberately no count output. A count could only be emitted once
-  // this panel has mounted, which happens when the tab is opened — so a badge
-  // driven by it would appear only after a visit, which reads as a bug. Doing it
-  // properly needs a count on the file props, the way `hasComments` works.
   @Output() readonly restored = new EventEmitter<void>()
+
+  // How many revisions there are and what they weigh, for the host's tab count
+  // and panel header. Reported rather than fetched twice: this panel is the thing
+  // that loads the list, so it is the only place that knows. It follows that the
+  // count exists only once the tab has been opened — which is why nothing outside
+  // the inspector (a row badge, say) is driven from it.
+  @Output() readonly statsChange = new EventEmitter<VersionsStats>()
 
   private readonly versions = inject(VersionsService)
   private readonly confirm = inject(ConfirmDialogService)
@@ -411,9 +456,27 @@ export class VersionsPanelComponent implements OnChanges {
   protected readonly diffLoading = signal(false)
   protected readonly diffError = signal<string | null>(null)
 
+  protected readonly menuFor = signal<VersionRow | null>(null)
+  protected readonly menuAnchor = signal<ContextMenuAnchor | null>(null)
+
   // Recomputed on input change rather than per render: it depends only on the
   // file, not on any row.
   protected diffable = false
+
+  protected readonly menuItems = computed<ContextMenuEntry[]>(() => {
+    const r = this.menuFor()
+    if (!r) return []
+    return [
+      {
+        id: 'label',
+        label: r.isLabeled ? 'Rename this version' : 'Name this version',
+        icon: 'pencil',
+        action: () => this.startLabel(r)
+      },
+      { id: 'sep', kind: 'divider' },
+      { id: 'delete', label: 'Delete', icon: 'trash', kind: 'danger', action: () => void this.remove(r) }
+    ]
+  })
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['mime'] || changes['size']) {
@@ -422,6 +485,10 @@ export class VersionsPanelComponent implements OnChanges {
     if (changes['filePath'] || changes['fileId']) {
       this.closeDiff()
       this.load()
+    } else if (changes['size']) {
+      // The live size is the newest row's comparison point, so a save that only
+      // changed the size still moves every delta.
+      this.rows.update((list) => this.decorate(list))
     }
   }
 
@@ -437,6 +504,13 @@ export class VersionsPanelComponent implements OnChanges {
     return this.toBytes.transform(n, 1, true)
   }
 
+  /** `+123 B`, `−48 B`, `±0 B`. Machine output, so no translation. */
+  protected deltaLabel(r: VersionRow): string {
+    if (r.delta === 0) return '±0 B'
+    const sign = r.delta > 0 ? '+' : '−'
+    return `${sign}${this.bytes(Math.abs(r.delta))}`
+  }
+
   /* ----------------------------------------------------------------- load */
 
   private load(): void {
@@ -448,8 +522,9 @@ export class VersionsPanelComponent implements OnChanges {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (list) => {
-          this.rows.set(list.map((v) => this.buildRow(v)))
+          this.rows.set(this.decorate(list.map((v) => this.buildRow(v))))
           this.loading.set(false)
+          this.emitStats()
           this.loadUsage()
         },
         error: (e: HttpErrorResponse) => {
@@ -472,6 +547,24 @@ export class VersionsPanelComponent implements OnChanges {
       })
   }
 
+  private emitStats(): void {
+    const list = this.rows()
+    this.statsChange.emit({ count: list.length, bytes: list.reduce((sum, r) => sum + r.size, 0) })
+  }
+
+  // Ordinal and delta are both positional, so they are recomputed for the whole
+  // list whenever it changes rather than stored per row at build time.
+  // The API returns newest-first, so index 0 is the most recent revision and the
+  // content that replaced it is the LIVE file.
+  private decorate(list: VersionRow[]): VersionRow[] {
+    const n = list.length
+    return list.map((r, i) => ({
+      ...r,
+      ordinal: n - i,
+      delta: (i === 0 ? this.size : list[i - 1].size) - r.size
+    }))
+  }
+
   private buildRow(v: VersionModel): VersionRow {
     return {
       ...v,
@@ -479,7 +572,9 @@ export class VersionsPanelComponent implements OnChanges {
       draft: v.label ?? '',
       busy: false,
       avatar: this.buildAvatar(v),
-      timesTitle: this.buildTimesTitle(v)
+      timesTitle: this.buildTimesTitle(v),
+      ordinal: 0,
+      delta: 0
     }
   }
 
@@ -503,6 +598,21 @@ export class VersionsPanelComponent implements OnChanges {
   }
 
   /* -------------------------------------------------------------- actions */
+
+  // Anchored to the trigger's own bottom-left edge with the design's 4px offset,
+  // rather than to the pointer — a menu opened from a button belongs on the
+  // button, and this one is also reachable by keyboard.
+  protected openRowMenu(r: VersionRow, ev: Event): void {
+    const el = ev.currentTarget as HTMLElement | null
+    const rect = el?.getBoundingClientRect()
+    this.menuAnchor.set(rect ? { x: rect.left, y: rect.bottom + 4 } : { x: 0, y: 0 })
+    this.menuFor.set(r)
+  }
+
+  protected closeRowMenu(): void {
+    this.menuFor.set(null)
+    this.menuAnchor.set(null)
+  }
 
   protected download(r: VersionRow): void {
     this.versions.download(this.filePath, r.id)
@@ -590,9 +700,9 @@ export class VersionsPanelComponent implements OnChanges {
     this.versions.remove(this.filePath, r.id, r.isLabeled).subscribe({
       next: () => {
         if (this.diffFor() === r.id) this.closeDiff()
-        const remaining = this.rows().filter((row) => row.id !== r.id)
-        this.rows.set(remaining)
+        this.rows.update((list) => this.decorate(list.filter((row) => row.id !== r.id)))
         this.toast.success('Version deleted')
+        this.emitStats()
         // Freed bytes change the usage figure.
         this.loadUsage()
       },

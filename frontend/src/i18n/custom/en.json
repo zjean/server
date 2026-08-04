@@ -269,5 +269,20 @@
   "v2_one_file": "1 file",
   "v2_one_folder": "1 folder",
   "v2_select_all_n": "Select all {{ nb }}",
-  "v2_sorted_by_name": "sorted by name ↑"
+  "v2_sorted_by_name": "sorted by name ↑",
+  "Details": "Details",
+  "No file selected": "No file selected",
+  "Not shared yet": "Not shared yet",
+  "Manage sharing": "Manage sharing",
+  "Resize panel": "Resize panel",
+  "Toggle right panel": "Toggle right panel",
+  "Compare": "Compare",
+  "Rename this version": "Rename this version",
+  "v2_inspector_versions": "{{ count }} versions · {{ total }}",
+  "v2_inspector_one_version": "1 version · {{ total }}",
+  "v2_inspector_comments": "{{ count }} comments",
+  "v2_inspector_one_comment": "1 comment",
+  "v2_post_shortcut": "{{ key }} to post",
+  "v2_saves_a_version": "{{ key }} saves a version",
+  "All version history": "All version history"
 }

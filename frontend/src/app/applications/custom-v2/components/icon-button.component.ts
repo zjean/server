@@ -44,9 +44,19 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         background: var(--si-bg3);
         color: var(--si-fg);
       }
+      /* Active is the accent tint, which the design's Components page specifies
+         for this control (rgba(76,126,243,0.14) + accent-400) and which its own
+         icon rule licenses: "an icon is never cobalt unless its control is the
+         active one". Phase 1 shipped this as a plain surface step, i.e. identical
+         to hover — so a toggled control was indistinguishable from a pointed-at
+         one, which matters most for the inspector toggle this phase adds. */
       .icon-btn--active {
-        background: var(--si-bg3);
-        color: var(--si-fg);
+        background: var(--si-accent-soft);
+        color: var(--si-accent-ink);
+      }
+      .icon-btn--active:hover:not(:disabled) {
+        background: var(--si-accent-soft);
+        color: var(--si-accent-300);
       }
       .icon-btn:disabled {
         cursor: not-allowed;

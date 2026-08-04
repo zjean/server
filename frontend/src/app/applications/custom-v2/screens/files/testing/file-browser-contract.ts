@@ -134,9 +134,9 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
       it('runs the per-navigation sequence: breadcrumbs, folder-size reset, listing, favorites', () => {
         const { deps } = start()
         const seq = deps.log.sequence()
-        expect(seq.slice(0, 2)).toEqual(['dock.setTabs', 'drag.registerDropHandler'])
+        expect(seq.slice(0, 2)).toEqual(['inspector.setAvailable', 'drag.registerDropHandler'])
         // clearSelection() is a no-op with an empty selection, so it records nothing.
-        expect(seq.filter((s) => s !== 'dock.setTabs' && s !== 'drag.registerDropHandler')).toEqual(p.navSequence)
+        expect(seq.filter((s) => s !== 'inspector.setAvailable' && s !== 'drag.registerDropHandler')).toEqual(p.navSequence)
       })
 
       it('refresh() re-issues the same listing request', () => {
@@ -162,7 +162,7 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
         const { c, deps } = start()
         deps.log.clear()
         c.ngOnDestroy()
-        expect(deps.log.sequence()).toEqual(['drag.unregisterDropHandler', 'folderSize.clear', 'dock.clear'])
+        expect(deps.log.sequence()).toEqual(['drag.unregisterDropHandler', 'folderSize.clear', 'inspector.clear'])
       })
     })
 
@@ -331,7 +331,7 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
         expect(c.selectionHasShares()).toBe(true)
       })
 
-      it('publishes exactly one selected row to the dock and clears it for multi-select', () => {
+      it('publishes exactly one selected row to the inspector and clears it for multi-select', () => {
         const { c, deps, flush } = start(['sub'])
         c.toggleSelection(FIXTURE_FILES[0])
         flush()
@@ -343,7 +343,12 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
           size: 10,
           isDir: false,
           mtime: FIXTURE_FILES[0].mtime,
-          ctime: FIXTURE_FILES[0].ctime
+          ctime: FIXTURE_FILES[0].ctime,
+          // Carried through from the browse response so the inspector's ACCESS
+          // band and Comments tab need no request of their own. Undefined here
+          // because the fixture row has neither.
+          shares: undefined,
+          hasComments: undefined
         })
         c.toggleSelection(FIXTURE_FILES[2])
         flush()

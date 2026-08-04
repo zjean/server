@@ -45,7 +45,7 @@ import { ToastService } from '../../components/toast.service'
 import { TreePickerService } from '../../components/tree-picker.service'
 import type { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
-import { DockRailService, FILE_BROWSER_DOCK_TABS } from '../../layout/dock-rail.service'
+import { InspectorService } from '../../layout/inspector.service'
 import { FavoritesService } from '../../services/favorites.service'
 import { FolderSizeService } from '../../services/folder-size.service'
 import { V2DragService } from '../../services/drag.service'
@@ -169,7 +169,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
   protected readonly store = inject(StoreService)
-  private readonly dockRail = inject(DockRailService)
+  private readonly inspector = inject(InspectorService)
   protected readonly drag = inject(V2DragService)
   private readonly destroyRef = inject(DestroyRef)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
@@ -395,18 +395,18 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       })
       if (changed) this.selection.set(next)
     })
-    // Push the single-row selection into the dock context so the right panel's
-    // Info / Comments tabs render against it. Multi-select, empty-select or an
+    // Push the single-row selection into the inspector context so the right
+    // panel's four tabs render against it. Multi-select, empty-select or an
     // unresolved repository clears the panel back to its empty state.
     effect(() => {
       const sel = this.selectedFiles()
       const alias = this.repository.alias()
       if (sel.length !== 1 || !alias) {
-        this.dockRail.currentSelected.set(null)
+        this.inspector.currentSelected.set(null)
         return
       }
       const f = sel[0]
-      this.dockRail.currentSelected.set({
+      this.inspector.currentSelected.set({
         id: f.id,
         name: f.name,
         path: this.buildFullPath(f),
@@ -414,13 +414,17 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
         size: f.size,
         isDir: f.isDir,
         mtime: f.mtime,
-        ctime: f.ctime
+        ctime: f.ctime,
+        // Both come straight off the browse response the row was built from, so
+        // the ACCESS band and the Comments tab need no request of their own.
+        shares: (f as FileProps & { shares?: { id: number; name?: string; alias?: string; type?: number }[] }).shares,
+        hasComments: f.hasComments
       })
     })
   }
 
   ngOnInit(): void {
-    this.dockRail.setTabs(FILE_BROWSER_DOCK_TABS)
+    this.inspector.setAvailable(true)
     // Register the drag-and-drop move handler. V2DragService invokes this when a
     // drop happens via a shared component (the breadcrumb) — the file-row drop
     // in the template calls executeMove directly, but threading both through the
@@ -447,6 +451,10 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe(() => this.refresh())
+    // A version restore in the inspector rewrites the live file, so this listing's
+    // size and mtime for that row are stale. Same reason the file-event refresh
+    // above exists; a restore just does not travel through the task queue.
+    this.inspector.contentReplaced.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.refresh())
     if (this.repository.autoDownloadTaskArchive) {
       // Trigger a browser download when a compress-to-archive task completes.
       // The task service emits archiveId on the event; classic spaces-browser
@@ -464,7 +472,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     this.navSubscription?.unsubscribe()
     this.unregisterDropHandler?.()
     this.folderSize.clear()
-    this.dockRail.clear()
+    this.inspector.clear()
     this.repository.onDestroy?.()
   }
 

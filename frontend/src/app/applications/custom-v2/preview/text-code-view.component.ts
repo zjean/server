@@ -10,6 +10,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
   untracked,
   viewChild
@@ -31,8 +32,10 @@ import { ButtonComponent } from '../components/button.component'
 import { ConfirmDialogService } from '../components/confirm-dialog.service'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { ToastService } from '../components/toast.service'
+import { VersionsService } from '../services/versions.service'
 import { buildFileModelStub } from '../utils/file-model-stub'
 import { CloseGuardService } from './close-guard.service'
+import { EditorStatus } from './editor-save-state'
 
 type EditorTheme = 'light' | 'dark'
 
@@ -54,22 +57,13 @@ type EditorTheme = 'light' | 'dark'
   template: `
     <div class="text-view">
       <header class="text-view__head">
-        <span class="text-view__status">
-          @if (loading()) {
-            {{ 'Loading…' | translate: locale.language }}
-          } @else if (saving()) {
-            {{ 'Saving…' | translate: locale.language }}
-          } @else if (isModified()) {
-            {{ 'Modified' | translate: locale.language }}
-          } @else if (lockOwner()) {
-            {{ 'Read-only' | translate: locale.language }} ({{ lockOwner() }})
-          } @else if (!writeable()) {
-            {{ 'Read-only' | translate: locale.language }}
-          } @else {
-            {{ 'Saved' | translate: locale.language }}
-          }
-        </span>
+        <!-- The state is a badge in the embedder's identity band (D4), not a
+             sentence here. This editor is only ever embedded by file-detail, which
+             has the band, so the sentence goes entirely. -->
         <span class="text-view__spacer"></span>
+        @if (versionsAvailable()) {
+          <span class="text-view__hint">{{ 'v2_saves_a_version' | translate: locale.language : { key: saveShortcutKey } }}</span>
+        }
         <app-v2-icon-btn
           iconName="search"
           [size]="26"
@@ -92,7 +86,8 @@ type EditorTheme = 'light' | 'dark'
             (click)="toggleReadonly()"
           />
         }
-        <app-v2-btn kind="primary" size="sm" [disabled]="!writeable() || readonly() || !isModified() || saving()" (click)="save()">
+        <!-- Secondary: the identity band's Share is this view's one primary. -->
+        <app-v2-btn kind="secondary" size="sm" [disabled]="!writeable() || readonly() || !isModified() || saving()" (click)="save()">
           {{ 'Save' | translate: locale.language }}
         </app-v2-btn>
       </header>
@@ -153,6 +148,15 @@ type EditorTheme = 'light' | 'dark'
         color: var(--si-fg-muted);
         font-variant-numeric: tabular-nums;
       }
+      /* A keystroke is machine vocabulary, so mono, and quiet: a reminder, not a
+         control. */
+      .text-view__hint {
+        font-family: var(--si-mono);
+        font-size: var(--si-text-4);
+        color: var(--si-fg-ghost);
+        white-space: nowrap;
+        margin-right: var(--si-space-4);
+      }
       .text-view__spacer {
         flex: 1 1 auto;
       }
@@ -178,8 +182,10 @@ type EditorTheme = 'light' | 'dark'
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
+      /* -ink, not the base tone: --si-rose is a FILL. As type on this surface it
+         measures 3.6:1, below the 4.5 a 13px string needs. */
       .text-view__state--error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
       }
     `
   ]
@@ -192,6 +198,7 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService)
   private readonly layoutService = inject(LayoutService)
   private readonly closeGuard = inject(CloseGuardService)
+  private readonly versions = inject(VersionsService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   protected readonly editor = viewChild<CodeEditor>('editor')
@@ -209,6 +216,9 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   // backend's LOCK request is still the enforcement; this is about not presenting
   // an affordance that the enforcement will refuse.
   readonly isWriteable = input<boolean>(false)
+  // The save state, for the embedder's identity badge. Same contract as
+  // markdown-view's, and for the same reason — see editor-save-state.ts.
+  readonly statusChange = output<EditorStatus>()
 
   protected readonly content = signal<string>('')
   protected readonly loading = signal(false)
@@ -222,6 +232,15 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
   protected readonly lockOwner = signal<string | null>(null)
   protected readonly theme = signal<EditorTheme>(this.layoutService.switchTheme.getValue() === themeDark ? 'dark' : 'light')
   protected readonly languagesList: LanguageDescription[] = languages
+  // Whether a save here mints a version, which is what makes the ⌘S hint true.
+  // Settled by the same session-wide probe the inspector's Versions tab uses.
+  protected readonly versionsAvailable = computed(() => this.versions.availability() === 'available')
+
+  protected readonly saveShortcutKey: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl S'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘S' : 'Ctrl S'
+  })()
   protected readonly language = computed<string | undefined>(() => {
     const f = this.file()
     if (!f) return undefined
@@ -245,6 +264,22 @@ export class TextCodeViewComponent implements OnInit, OnDestroy {
       if (!p || !f) return
       // Async work outside the reactive read so signal writes don't re-fire.
       untracked(() => this.openFile(p, f))
+    })
+    // One place to mirror the state the embedder draws as a badge. Ordered exactly
+    // like the sentence it replaces, so the two cannot disagree.
+    effect(() => {
+      const status: EditorStatus = this.loading()
+        ? { state: 'loading' }
+        : this.saving()
+          ? { state: 'saving' }
+          : this.isModified()
+            ? { state: 'modified' }
+            : this.lockOwner()
+              ? { state: 'readonly', lockOwner: this.lockOwner() }
+              : !this.writeable()
+                ? { state: 'readonly' }
+                : { state: 'saved' }
+      untracked(() => this.statusChange.emit(status))
     })
     // Theme tracking — global setting can flip while editor is open.
     this.layoutService.switchTheme.subscribe((t: string) => this.theme.set(t === themeDark ? 'dark' : 'light'))

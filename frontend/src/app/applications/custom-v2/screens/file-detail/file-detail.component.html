@@ -4,54 +4,111 @@
   } @else if (errorMessage(); as err) {
     <div class="detail__state detail__state--error">{{ err | translate: locale.language }}</div>
   } @else if (file(); as f) {
-    <header class="detail__toolbar">
-      <div class="detail__identity">
-        <app-v2-file-glyph [type]="glyphType()" [size]="26" [rounded]="6" />
-        <div class="detail__identity-text">
-          <div class="detail__name">{{ f.name }}</div>
-          <div class="detail__meta">
-            <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
-            @if (!f.isDir) {
-              · {{ f.size | toBytes: 1 : true }}
-            }
-            @if (f.mtime) {
-              · {{ f.mtime | amTimeAgo }}
-            }
-          </div>
+    <!-- Band 1 of D4: identity. The file-type tile, the name, the machine line
+         under it, then the state as a BADGE and the actions, with Share as the
+         one filled primary. -->
+    <header class="detail__identity">
+      <app-v2-file-glyph [type]="glyphType()" [size]="34" [rounded]="8" />
+      <div class="detail__identity-text">
+        <div class="detail__name" [title]="f.name">{{ f.name }}</div>
+        <div class="detail__meta">
+          <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
+          @if (!f.isDir) {
+            · {{ f.size | toBytes: 1 : true }}
+          }
+          @if (f.mtime) {
+            <!-- "edited 14 min ago". The design's line ends "by you", which no
+                 field on the browse response carries — FileProps has no last-editor
+                 — so the claim is left unmade rather than guessed. -->
+            · {{ 'edited' | translate: locale.language }} {{ f.mtime | amTimeAgo }}
+          }
         </div>
       </div>
-      <span class="detail__divider"></span>
-      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="!canShare()" (click)="openShare()">{{
-        'Share' | translate: locale.language
-      }}</app-v2-btn>
-      <app-v2-btn kind="ghost" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
-      @if (isDiagram()) {
-        <app-v2-btn kind="ghost" size="sm" icon="print" (click)="print()">{{ 'Print' | translate: locale.language }}</app-v2-btn>
-      }
-      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{
-        'Favorite' | translate: locale.language
-      }}</app-v2-btn>
-      <span class="detail__divider"></span>
-      @if (isImage()) {
-        <app-v2-icon-btn iconName="box" [title]="'Fullscreen' | translate: locale.language" (click)="fullscreen()" />
-      }
-      @if (canToggleToOffice()) {
-        <app-v2-icon-btn
-          iconName="pencil"
-          [active]="pdfStage() === 'office'"
-          [title]="(pdfStage() === 'office' ? 'Switch to PDF view' : editOfficeEditorText) | translate: locale.language"
-          (click)="toggleToOffice()"
-        />
-      }
-      <div class="detail__nav">
-        <app-v2-icon-btn iconName="chevLeft" [title]="'Previous (←)' | translate: locale.language" (click)="previous()" />
-        @if (siblings().length > 0) {
-          <span class="detail__counter">{{ currentIndex() + 1 }} / {{ siblings().length }}</span>
+
+      <div class="detail__actions">
+        @if (saveBadge(); as badge) {
+          <app-v2-pill [color]="badge.color" [attr.title]="badge.title">
+            @if (badge.icon) {
+              <app-v2-icon [name]="badge.icon" [size]="12" />
+            }
+            {{ badge.label | translate: locale.language }}
+          </app-v2-pill>
         }
-        <app-v2-icon-btn iconName="chevRight" [title]="'Next (→)' | translate: locale.language" (click)="next()" />
-        <span class="detail__divider detail__divider--small"></span>
-        <app-v2-icon-btn iconName="info" [title]="'Info' | translate: locale.language" [active]="infoOpen()" (click)="toggleInfo()" />
-        <app-v2-icon-btn iconName="x" [title]="'Close' | translate: locale.language" (click)="close()" />
+
+        @if (siblings().length > 1) {
+          <div class="detail__nav">
+            <app-v2-icon-btn
+              iconName="chevLeft"
+              [size]="30"
+              appV2Tooltip="Previous"
+              tooltipShortcut="←"
+              [ariaLabel]="'Previous' | translate: locale.language"
+              (click)="previous()"
+            />
+            <span class="detail__counter">{{ currentIndex() + 1 }} / {{ siblings().length }}</span>
+            <app-v2-icon-btn
+              iconName="chevRight"
+              [size]="30"
+              appV2Tooltip="Next"
+              tooltipShortcut="→"
+              [ariaLabel]="'Next' | translate: locale.language"
+              (click)="next()"
+            />
+          </div>
+        }
+
+        <span class="detail__divider"></span>
+
+        @if (isImage()) {
+          <app-v2-icon-btn
+            iconName="box"
+            [size]="32"
+            appV2Tooltip="Fullscreen"
+            [ariaLabel]="'Fullscreen' | translate: locale.language"
+            (click)="fullscreen()"
+          />
+        }
+        @if (isDiagram()) {
+          <app-v2-icon-btn iconName="print" [size]="32" appV2Tooltip="Print" [ariaLabel]="'Print' | translate: locale.language" (click)="print()" />
+        }
+        @if (canToggleToOffice()) {
+          <app-v2-icon-btn
+            iconName="pencil"
+            [size]="32"
+            [active]="pdfStage() === 'office'"
+            [appV2Tooltip]="pdfStage() === 'office' ? 'Switch to PDF view' : editOfficeEditorText"
+            [ariaLabel]="(pdfStage() === 'office' ? 'Switch to PDF view' : editOfficeEditorText) | translate: locale.language"
+            (click)="toggleToOffice()"
+          />
+        }
+        <app-v2-icon-btn
+          iconName="download"
+          [size]="32"
+          appV2Tooltip="Download"
+          [ariaLabel]="'Download' | translate: locale.language"
+          (click)="download()"
+        />
+        <app-v2-icon-btn
+          iconName="panelRight"
+          [size]="32"
+          [active]="layoutV2.dockOpen()"
+          appV2Tooltip="Toggle right panel"
+          [tooltipShortcut]="inspectorShortcutLabel"
+          [ariaLabel]="'Toggle right panel' | translate: locale.language"
+          (click)="layoutV2.toggleDock()"
+        />
+        <app-v2-btn kind="primary" size="md" icon="share" [disabled]="!canShare()" (click)="openShare()">{{
+          'Share' | translate: locale.language
+        }}</app-v2-btn>
+        <span class="detail__divider"></span>
+        <app-v2-icon-btn
+          iconName="x"
+          [size]="32"
+          appV2Tooltip="Close"
+          tooltipShortcut="Esc"
+          [ariaLabel]="'Close' | translate: locale.language"
+          (click)="close()"
+        />
       </div>
     </header>
 
@@ -62,9 +119,14 @@
         } @else if (showOfficeEmbed()) {
           <app-v2-preview-office-view [path]="currentPath()" [file]="f" />
         } @else if (isMarkdown()) {
-          <app-v2-preview-markdown-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" />
+          <app-v2-preview-markdown-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" (statusChange)="editorStatus.set($event)" />
         } @else if (isText()) {
-          <app-v2-preview-text-code-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" />
+          <app-v2-preview-text-code-view
+            [path]="currentPath()"
+            [file]="f"
+            [isWriteable]="fileWriteable()"
+            (statusChange)="editorStatus.set($event)"
+          />
         } @else if (isImage() && previewUrl()) {
           <img #imageEl class="detail__image" [src]="previewUrl()" [alt]="f.name" (load)="onImageLoad()" (error)="onImageError()" />
         } @else if (isPdf() && pdfSafeUrl(); as url) {
@@ -98,100 +160,10 @@
             <app-v2-file-glyph [type]="glyphType()" [size]="56" [rounded]="10" />
             <div class="detail__no-preview-title" l10nTranslate>Preview not available</div>
             <div class="detail__no-preview-lede" l10nTranslate>Download the file to view its contents.</div>
-            <app-v2-btn kind="outline" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
+            <app-v2-btn kind="secondary" size="md" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
           </div>
         }
       </div>
-
-      <aside class="detail__inspector" [class.detail__inspector--open]="infoOpen()">
-        <div class="detail__inspector-head">
-          <app-v2-file-glyph [type]="glyphType()" [size]="36" [rounded]="8" />
-          <div class="detail__inspector-head-text">
-            <div class="detail__inspector-name">{{ f.name }}</div>
-            <div class="detail__inspector-meta">
-              <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
-              @if (!f.isDir) {
-                · {{ f.size | toBytes: 1 : true }}
-              }
-            </div>
-          </div>
-        </div>
-        <div class="detail__tabs">
-          @for (t of tabs(); track t.id) {
-            <button
-              type="button"
-              class="detail__tab"
-              [class.detail__tab--active]="tab() === t.id"
-              [title]="t.label | translate: locale.language"
-              (click)="setTab(t.id)"
-            >
-              <app-v2-icon [name]="t.icon" [size]="14" />
-              <span class="detail__tab-label">{{ t.label | translate: locale.language }}</span>
-            </button>
-          }
-        </div>
-        <div class="detail__panel">
-          @switch (tab()) {
-            @case ('info') {
-              <section class="kv-section">
-                <div class="kv-section__title" l10nTranslate>Properties</div>
-                <div class="kv-row">
-                  <span l10nTranslate>Type</span>
-                  <span [title]="f.mime">{{ mimeLabel(f.mime) }}</span>
-                </div>
-                @if (!f.isDir) {
-                  <div class="kv-row">
-                    <span l10nTranslate>Size</span>
-                    <span class="kv-row__mono">{{ f.size | toBytes: 2 : true }}</span>
-                  </div>
-                }
-                @if (resolution()) {
-                  <div class="kv-row">
-                    <span l10nTranslate>Dimensions</span>
-                    <span class="kv-row__mono">{{ resolution() }}</span>
-                  </div>
-                }
-                <div class="kv-row">
-                  <span l10nTranslate>Location</span>
-                  <span>{{ f.path }}</span>
-                </div>
-                @if (f.mtime) {
-                  <div class="kv-row">
-                    <span l10nTranslate>Modified</span>
-                    <span>{{ f.mtime | amTimeAgo }}</span>
-                  </div>
-                }
-                @if (f.ctime) {
-                  <div class="kv-row">
-                    <span l10nTranslate>Created</span>
-                    <span>{{ f.ctime | amTimeAgo }}</span>
-                  </div>
-                }
-              </section>
-            }
-            @case ('comment') {
-              <app-v2-comments-panel [filePath]="currentPath()" [fileId]="f.id" (hasCommentsChange)="onHasCommentsChange($event)" />
-            }
-            @case ('versions') {
-              <app-v2-versions-panel [filePath]="currentPath()" [fileId]="f.id" [mime]="f.mime" [size]="f.size" (restored)="onVersionRestored()" />
-            }
-            @case ('activity') {
-              <div class="detail__placeholder">
-                <app-v2-icon name="activity" [size]="22" />
-                <div class="detail__placeholder-title" l10nTranslate>Activity</div>
-                <div class="detail__placeholder-lede" l10nTranslate>File activity feed will populate once the backend exposes it.</div>
-              </div>
-            }
-            @case ('share') {
-              <div class="detail__placeholder">
-                <app-v2-icon name="shareTree" [size]="22" />
-                <div class="detail__placeholder-title" l10nTranslate>Sharing</div>
-                <div class="detail__placeholder-lede" l10nTranslate>Sharing controls ship with the v2 shares browser.</div>
-              </div>
-            }
-          }
-        </div>
-      </aside>
     </div>
   }
 </div>

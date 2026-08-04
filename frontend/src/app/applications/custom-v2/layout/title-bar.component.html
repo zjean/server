@@ -14,6 +14,19 @@
   <div class="title-bar__spacer"></div>
   <div class="title-bar__right">
     <ng-content select="[titleBarRight]"></ng-content>
+    <!-- Mobile's inspector affordance. It lived on the icon rail, which is gone;
+         phase 7 re-lays-out this bar, but leaving the sheet unreachable in the
+         meantime is not a trade worth making. No tooltip — this is a touch
+         surface, so the accessible name carries the meaning. -->
+    @if (inspector.available()) {
+      <app-v2-icon-btn
+        iconName="panelRight"
+        [size]="30"
+        [active]="layoutV2.dockOpen()"
+        [ariaLabel]="'Toggle right panel' | translate: locale.language"
+        (click)="layoutV2.toggleDock()"
+      />
+    }
     <app-v2-notifications-bell />
     <div class="title-bar__avatar" [attr.title]="user?.fullName">
       @if (userAvatar) {

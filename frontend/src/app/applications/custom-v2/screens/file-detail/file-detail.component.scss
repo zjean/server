@@ -22,80 +22,84 @@
     align-items: center;
     justify-content: center;
 
+    // -ink, not the base tone: --si-rose is a FILL, and as type on this surface it
+    // measures 3.6:1 — under the 4.5 a 14px string needs.
     &--error {
-      color: var(--si-rose);
+      color: var(--si-rose-ink);
     }
   }
 
-  &__toolbar {
-    height: 52px;
-    padding: 0 var(--si-space-8);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-3);
-    // Separated from the preview below by surface tone, not a hard underline.
-    background: var(--si-bg2);
-  }
-
+  // Band 1 of D4. One row, and it must stay one row: the actions never wrap,
+  // because the file name is the thing that can afford to truncate and the primary
+  // action is not. That is what `flex: none` on the cluster plus `min-width: 0` on
+  // the text buys — the previous version capped the identity block at 380px
+  // instead, which wrapped the whole action cluster onto a second line as soon as
+  // the inspector narrowed the content.
   &__identity {
+    flex: 0 0 auto;
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: var(--si-space-5);
-    min-width: 0;
-    flex-shrink: 1;
-    max-width: 380px;
+    gap: var(--si-space-6);
+    padding: var(--si-space-9) var(--si-space-11);
+    // Separated from the stage below by surface tone, not a hard underline.
+    background: var(--si-bg2);
   }
 
   &__identity-text {
     min-width: 0;
+    flex: 1 1 auto;
   }
 
   &__name {
-    font-size: var(--si-text-10);
-    font-weight: 600;
+    font-family: var(--si-sans);
+    font-size: var(--si-text-11);
+    font-weight: 500;
+    letter-spacing: -0.01em;
     color: var(--si-fg);
-    letter-spacing: -0.15px;
-    font-family: var(--si-display);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   &__meta {
-    font-size: var(--si-text-6);
-    color: var(--si-fg-muted);
     font-family: var(--si-mono);
-    margin-top: 1px;
+    font-size: var(--si-text-5);
+    color: var(--si-fg-tertiary);
+    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  &__divider {
-    width: 1px;
-    height: 22px;
-    background: var(--si-line);
-    margin: 0 var(--si-space-3);
-
-    &--small {
-      height: 16px;
-      margin: 0 var(--si-space-2);
-    }
+  &__actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--si-space-3);
   }
 
   &__nav {
-    margin-left: auto;
     display: flex;
     align-items: center;
     gap: var(--si-space-1);
   }
 
   &__counter {
-    font-size: var(--si-text-6);
-    color: var(--si-fg-muted);
     font-family: var(--si-mono);
-    padding: 0 var(--si-space-3);
+    font-size: var(--si-text-4);
+    color: var(--si-fg-tertiary);
+    padding: 0 var(--si-space-2);
+    white-space: nowrap;
+  }
+
+  &__divider {
+    width: 1px;
+    height: 22px;
+    flex: none;
+    background: var(--si-line);
+    margin: 0 var(--si-space-2);
   }
 
   &__body {
@@ -197,7 +201,7 @@
   }
 
   &__no-preview-title {
-    font-family: var(--si-display);
+    font-family: var(--si-sans);
     font-weight: 500;
     font-size: var(--si-text-11);
     color: var(--si-fg);
@@ -208,194 +212,5 @@
     font-size: var(--si-text-8);
     color: var(--si-fg-muted);
     margin-bottom: var(--si-space-3);
-  }
-
-  // Inspector slides in from the right as an overlay — stage always takes
-  // the full body width so pdf.js / video / code never get squeezed.
-  &__inspector {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 320px;
-    background: var(--si-bg2);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    transform: translateX(100%);
-    transition: transform 220ms ease;
-    z-index: calc(var(--si-z-overlay) + 2);
-    // Establish a size container so .detail__tab-label can collapse to
-    // icon-only when the inspector is too narrow for the localized label set
-    // (Dutch / German / French overflow at the fixed 320px width).
-    container-type: inline-size;
-    container-name: inspector;
-
-    &--open {
-      transform: translateX(0);
-    }
-  }
-
-  &__inspector-head {
-    padding: var(--si-space-7) var(--si-space-8) var(--si-space-6);
-    border-bottom: 1px solid var(--si-line);
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-5);
-    flex-shrink: 0;
-  }
-
-  &__inspector-head-text {
-    min-width: 0;
-  }
-
-  &__inspector-name {
-    font-size: var(--si-text-10);
-    font-weight: 600;
-    color: var(--si-fg);
-    letter-spacing: -0.15px;
-    font-family: var(--si-display);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__inspector-meta {
-    font-size: var(--si-text-6);
-    color: var(--si-fg-muted);
-    font-family: var(--si-mono);
-    margin-top: var(--si-space-1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__tabs {
-    display: flex;
-    padding: var(--si-space-4) var(--si-space-6);
-    gap: var(--si-space-2);
-    border-bottom: 1px solid var(--si-line);
-    background: var(--si-bg1);
-    flex-shrink: 0;
-  }
-
-  &__tab {
-    flex: 1;
-    min-width: 0;
-    height: 32px;
-    padding: 0 var(--si-space-4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--si-space-2);
-    background: transparent;
-    color: var(--si-fg-muted);
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: var(--si-text-10);
-    font-weight: 500;
-    font-family: var(--si-sans);
-    letter-spacing: -0.05px;
-    transition:
-      background 120ms ease,
-      color 120ms ease;
-
-    &:hover {
-      color: var(--si-fg);
-    }
-
-    &--active,
-    &--active:hover {
-      background: var(--si-bg3);
-      color: var(--si-fg);
-    }
-  }
-
-  &__tab-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-
-  // Inspector is fixed at 320px today, so this query always matches; the
-  // breakpoint exists so labels reappear if the inspector is ever widened.
-  @container inspector (max-width: 360px) {
-    .detail__tab-label {
-      display: none;
-    }
-  }
-
-  &__panel {
-    flex: 1 1 auto;
-    overflow: auto;
-  }
-
-  &__placeholder {
-    padding: var(--si-space-12) var(--si-space-9);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--si-space-3);
-    color: var(--si-fg-muted);
-    text-align: center;
-  }
-
-  &__placeholder-title {
-    font-family: var(--si-display);
-    font-weight: 500;
-    font-size: var(--si-text-10);
-    color: var(--si-fg);
-    margin-top: var(--si-space-3);
-  }
-
-  &__placeholder-lede {
-    font-size: var(--si-text-7);
-    color: var(--si-fg-muted);
-    line-height: 1.45;
-    max-width: 240px;
-  }
-}
-
-.kv-section {
-  padding: var(--si-space-7) var(--si-space-8);
-  border-bottom: 1px solid var(--si-line);
-
-  &__title {
-    font-size: var(--si-text-4);
-    font-weight: 600;
-    letter-spacing: 1.2px;
-    color: var(--si-fg-muted);
-    text-transform: uppercase;
-    margin-bottom: var(--si-space-4);
-    font-family: var(--si-display);
-  }
-}
-
-.kv-row {
-  display: grid;
-  grid-template-columns: 82px 1fr;
-  gap: var(--si-space-4);
-  padding: var(--si-space-3) 0;
-  font-size: var(--si-text-5);
-  align-items: center;
-
-  > span:first-child {
-    color: var(--si-fg-muted);
-  }
-
-  > span:last-child {
-    color: var(--si-fg);
-    font-family: var(--si-sans);
-    letter-spacing: -0.05px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__mono {
-    font-family: var(--si-mono) !important;
-    font-size: var(--si-text-6);
   }
 }

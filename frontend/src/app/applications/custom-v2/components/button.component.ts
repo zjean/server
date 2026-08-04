@@ -20,6 +20,7 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 @Component({
   selector: 'app-v2-btn',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[class.btn-host--block]': 'block' },
   imports: [IconV2Component],
   template: `
     <button
@@ -46,6 +47,16 @@ export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
     `
       :host {
         display: inline-flex;
+      }
+      /* A button that owns its container's width. The panel's "Manage sharing" is
+         the design's one instance of this; a stretched control everywhere else
+         would flatten the hierarchy the sizes above establish. */
+      :host(.btn-host--block) {
+        display: flex;
+      }
+      :host(.btn-host--block) .btn {
+        flex: 1 1 auto;
+        justify-content: center;
       }
       .btn {
         display: inline-flex;
@@ -198,6 +209,8 @@ export class ButtonComponent {
   @Input() disabled = false
   @Input() loading = false
   @Input() title: string | null = null
+  /** Stretches to the container's full width. */
+  @Input() block = false
 
   get iconPx(): number {
     switch (this.size) {

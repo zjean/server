@@ -1,13 +1,70 @@
-import { Injectable, signal } from '@angular/core'
-import type { DockTabId } from './dock-rail.component'
+import { computed, inject, Injectable, signal } from '@angular/core'
+import { INSPECTOR_TABS, InspectorService, InspectorTabId } from './inspector.service'
 
 const MOBILE_BREAKPOINT = 768
+// The design's own figure: "Panel 340px — surface-0.5, docked; becomes an
+// overlay under 1180px" (Patterns §01), restated in the shared rules for the
+// panel explorations. It is the width at which a 340px panel plus a 248px nav
+// stops leaving the content plane its 640px minimum.
+const DOCK_OVERLAY_BREAKPOINT = 1180
+
+export const DOCK_WIDTH_MIN = 300
+export const DOCK_WIDTH_MAX = 520
+export const DOCK_WIDTH_DEFAULT = 340
+
+const DOCK_TAB_KEY = 'ui.inspector.tab'
+const DOCK_WIDTH_KEY = 'ui.inspector.width'
+
+const hasStorage = (): boolean => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+
+function readStoredTab(): InspectorTabId {
+  if (!hasStorage()) return 'properties'
+  const raw = window.localStorage.getItem(DOCK_TAB_KEY) ?? ''
+  return (INSPECTOR_TABS as readonly string[]).includes(raw) ? (raw as InspectorTabId) : 'properties'
+}
+
+function readStoredWidth(): number {
+  if (!hasStorage()) return DOCK_WIDTH_DEFAULT
+  const n = Number(window.localStorage.getItem(DOCK_WIDTH_KEY))
+  return Number.isFinite(n) && n > 0 ? clampDockWidth(n) : DOCK_WIDTH_DEFAULT
+}
+
+export function clampDockWidth(px: number): number {
+  return Math.min(DOCK_WIDTH_MAX, Math.max(DOCK_WIDTH_MIN, Math.round(px)))
+}
 
 @Injectable({ providedIn: 'root' })
 export class LayoutV2Service {
-  readonly isMobile = signal(typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT)
+  // Declared first because `dockVisible` below reads it. A computed would in fact
+  // tolerate the reverse order (it dereferences lazily), but this file is read by
+  // people who have been bitten by field-initialisation order elsewhere in v2.
+  private readonly inspector = inject(InspectorService)
+
+  // One source of truth for the viewport, because two breakpoints now read it.
+  // `isMobile` was a signal set by `syncViewport`; it is derived now so a second
+  // breakpoint cannot drift out of step with the first.
+  readonly viewportWidth = signal(typeof window !== 'undefined' ? window.innerWidth : 1440)
+  readonly isMobile = computed(() => this.viewportWidth() < MOBILE_BREAKPOINT)
   readonly leftNavOpen = signal(false)
-  readonly dockActive = signal<DockTabId | null>(null)
+
+  // The inspector. Open-ness is session state; which tab and how wide are the
+  // user's, and both persist — "tab selection persists across files. Width is
+  // drag-resizable 300–520px and remembered per user" (the design's shared rules
+  // for the panel).
+  readonly dockOpen = signal(false)
+  readonly dockTab = signal<InspectorTabId>(readStoredTab())
+  readonly dockWidth = signal(readStoredWidth())
+  // Below 1180px the docked panel (option `2a`) becomes the overlay (`2b`): it
+  // floats over the content on a scrim instead of narrowing it. Mobile is a third
+  // case handled in CSS (a right-anchored sheet), so this is desktop-only.
+  readonly dockOverlay = computed(() => !this.isMobile() && this.viewportWidth() < DOCK_OVERLAY_BREAKPOINT)
+  // Open AND on a screen that has an inspector. The two are separate because
+  // `dockOpen` is the user's standing intent and survives navigation: leaving a
+  // file browser for /shared must hide the panel, and coming back must bring it
+  // back without a second ⌘I. Rendering on `dockOpen` alone left an empty panel
+  // sitting open on every screen that has no selection model.
+  readonly dockVisible = computed(() => this.dockOpen() && this.inspector.available())
+
   // Desktop-only collapsed-rail state. Session-only — default expanded on
   // every fresh load. Mobile uses leftNavOpen (drawer) and ignores these.
   readonly sidebarCollapsed = signal(false)
@@ -24,6 +81,16 @@ export class LayoutV2Service {
   constructor() {
     if (typeof document === 'undefined') return
     document.addEventListener('keydown', (e: KeyboardEvent) => {
+      // ⌘I / Ctrl-I toggles the inspector. Bound on the document rather than in a
+      // component so it works on every screen that has one, and preventDefault is
+      // only called when we act — Firefox's "page info" is Ctrl-I and we should not
+      // eat it on a screen with no inspector.
+      if ((e.key === 'i' || e.key === 'I') && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        if (!this.inspector.available()) return
+        this.toggleDock()
+        e.preventDefault()
+        return
+      }
       if (e.key !== 'Escape') return
       if (this.isMobile()) {
         if (this.leftNavOpen()) {
@@ -31,10 +98,17 @@ export class LayoutV2Service {
           e.preventDefault()
           return
         }
-        if (this.dockActive() !== null) {
-          this.setDock(null)
+        if (this.dockOpen()) {
+          this.closeDock()
           e.preventDefault()
         }
+        return
+      }
+      // "Esc closes; click-outside closes" is a rule of the OVERLAY (`2b`) only.
+      // A docked panel is part of the layout, not something dismissible.
+      if (this.dockOverlay() && this.dockOpen()) {
+        this.closeDock()
+        e.preventDefault()
         return
       }
       if (this.sidebarOverlay()) {
@@ -45,11 +119,11 @@ export class LayoutV2Service {
   }
 
   syncViewport(width: number): void {
-    const next = width < MOBILE_BREAKPOINT
-    if (next !== this.isMobile()) {
-      this.isMobile.set(next)
+    const wasMobile = this.isMobile()
+    this.viewportWidth.set(width)
+    if (this.isMobile() !== wasMobile) {
       this.leftNavOpen.set(false)
-      this.dockActive.set(null)
+      this.dockOpen.set(false)
       this.sidebarCollapsed.set(false)
       this.sidebarOverlay.set(false)
       this.autoCollapseSavedState = null
@@ -59,16 +133,41 @@ export class LayoutV2Service {
   toggleLeftNav(): void {
     const next = !this.leftNavOpen()
     this.leftNavOpen.set(next)
-    if (next) this.dockActive.set(null)
+    if (next) this.dockOpen.set(false)
   }
 
   closeLeftNav(): void {
     this.leftNavOpen.set(false)
   }
 
-  setDock(id: DockTabId | null): void {
-    this.dockActive.set(id)
-    if (id !== null) this.leftNavOpen.set(false)
+  toggleDock(): void {
+    this.setDockOpen(!this.dockOpen())
+  }
+
+  openDock(): void {
+    this.setDockOpen(true)
+  }
+
+  closeDock(): void {
+    this.setDockOpen(false)
+  }
+
+  setDockOpen(open: boolean): void {
+    this.dockOpen.set(open)
+    if (open) this.leftNavOpen.set(false)
+  }
+
+  setDockTab(tab: InspectorTabId): void {
+    this.dockTab.set(tab)
+    if (hasStorage()) window.localStorage.setItem(DOCK_TAB_KEY, tab)
+  }
+
+  // `persist: false` is for the frames of a drag — the signal moves so the panel
+  // tracks the pointer, but only the release writes the preference.
+  setDockWidth(px: number, persist = true): void {
+    const next = clampDockWidth(px)
+    this.dockWidth.set(next)
+    if (persist && hasStorage()) window.localStorage.setItem(DOCK_WIDTH_KEY, String(next))
   }
 
   toggleSidebar(): void {

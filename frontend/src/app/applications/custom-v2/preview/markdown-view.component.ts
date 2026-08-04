@@ -1,6 +1,19 @@
 import { CodeEditor } from '@acrodata/code-editor'
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
-import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit, effect, inject, input, output, signal, untracked } from '@angular/core'
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  HostListener,
+  inject,
+  input,
+  OnDestroy,
+  OnInit,
+  output,
+  signal,
+  untracked
+} from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Editor } from '@tiptap/core'
 import Image from '@tiptap/extension-image'
@@ -24,7 +37,9 @@ import { ConfirmDialogService } from '../components/confirm-dialog.service'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { ToastService } from '../components/toast.service'
 import { buildFileModelStub } from '../utils/file-model-stub'
+import { VersionsService } from '../services/versions.service'
 import { CloseGuardService } from './close-guard.service'
+import { EditorStatus } from './editor-save-state'
 
 type EditorTheme = 'light' | 'dark'
 type HeadingLevel = 1 | 2 | 3
@@ -41,21 +56,26 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
   template: `
     <div class="md-view" [class.md-view--inline]="inline()">
       <header class="md-view__head">
-        <span class="md-view__status">
-          @if (loading()) {
-            {{ 'Loading…' | translate: locale.language }}
-          } @else if (saving()) {
-            {{ 'Saving…' | translate: locale.language }}
-          } @else if (isModified()) {
-            {{ 'Modified' | translate: locale.language }}
-          } @else if (lockOwner()) {
-            {{ 'Read-only' | translate: locale.language }} ({{ lockOwner() }})
-          } @else if (!writeable()) {
-            {{ 'Read-only' | translate: locale.language }}
-          } @else {
-            {{ 'Saved' | translate: locale.language }}
-          }
-        </span>
+        <!-- The state is a badge in the embedder's identity band (D4), not a
+             sentence here. It stays a sentence in inline mode, where the banner has
+             no band to carry a badge. -->
+        @if (inline()) {
+          <span class="md-view__status">
+            @if (loading()) {
+              {{ 'Loading…' | translate: locale.language }}
+            } @else if (saving()) {
+              {{ 'Saving…' | translate: locale.language }}
+            } @else if (isModified()) {
+              {{ 'Modified' | translate: locale.language }}
+            } @else if (lockOwner()) {
+              {{ 'Read-only' | translate: locale.language }} ({{ lockOwner() }})
+            } @else if (!writeable()) {
+              {{ 'Read-only' | translate: locale.language }}
+            } @else {
+              {{ 'Saved' | translate: locale.language }}
+            }
+          </span>
+        }
 
         @if (!loading() && canEditVisual()) {
           <nav class="md-view__toolbar" role="toolbar" [attr.aria-label]="'Formatting' | translate: locale.language">
@@ -184,6 +204,13 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
 
         <span class="md-view__spacer"></span>
 
+        <!-- Printed where the action lives (the design's keyboard option 4b).
+             Only where it is true: a save mints a version exactly when this server
+             has file versioning switched on. -->
+        @if (!inline() && versionsAvailable()) {
+          <span class="md-view__hint">{{ 'v2_saves_a_version' | translate: locale.language : { key: saveShortcutKey } }}</span>
+        }
+
         <app-v2-icon-btn
           iconName="code"
           [size]="26"
@@ -204,7 +231,11 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
             {{ 'Cancel' | translate: locale.language }}
           </app-v2-btn>
         }
-        <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">
+        <!-- Secondary on the file-detail stage, where the identity band's Share is
+             the view's one primary; primary inline, where the readme banner has no
+             other. "One primary per view" is the design's rule and two filled
+             buttons 60px apart is the case it exists for. -->
+        <app-v2-btn [kind]="inline() ? 'primary' : 'secondary'" size="sm" [disabled]="!canSave()" (click)="save()">
           {{ 'Save' | translate: locale.language }}
         </app-v2-btn>
       </header>
@@ -334,6 +365,15 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__spacer {
         flex: 1 1 auto;
       }
+      /* A keystroke is machine vocabulary, so mono, and quiet: it is a reminder,
+         not a control. */
+      .md-view__hint {
+        font-family: var(--si-mono);
+        font-size: var(--si-text-4);
+        color: var(--si-fg-ghost);
+        white-space: nowrap;
+        margin-right: var(--si-space-4);
+      }
       .md-view__body {
         flex: 1 1 auto;
         min-height: 0;
@@ -360,9 +400,14 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         inset: auto;
         min-height: 180px;
       }
+      /* "The document sets its own measure; the panel does not stretch the text."
+         72ch is the design's figure, and it is a measure rather than a pixel width
+         on purpose — it tracks the prose font, so it stays 72 characters when the
+         type scale moves. Was 880px, which is ~105ch and past the point where a
+         line's end stops leading back to the next line's start. */
       .md-view__editor {
         padding: var(--si-space-11) var(--si-space-13) 48px;
-        max-width: 880px;
+        max-width: 72ch;
         margin: 0 auto;
       }
       /* Inline mode (folder readme banner): the text column must line up with the
@@ -392,8 +437,10 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
       }
+      /* -ink, not the base tone: --si-rose is a FILL. As type on this surface it
+         measures 3.6:1, below the 4.5 a 13px string needs. */
       .md-view__state--error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
       }
     `
   ]
@@ -406,6 +453,7 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService)
   private readonly layoutService = inject(LayoutService)
   private readonly closeGuard = inject(CloseGuardService)
+  private readonly versions = inject(VersionsService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
   readonly path = input.required<string>()
@@ -430,6 +478,11 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   // ngOnDestroy runs it can neither serialize the content nor resolve this
   // component through its view query. A pushed boolean survives both.
   readonly dirtyChange = output<boolean>()
+  // The save state, pushed to whoever embeds this editor so it can draw the badge
+  // the design puts in the identity band. Pushed rather than pulled for the same
+  // reason `dirtyChange` is: the parent may be mid-teardown when it needs the
+  // value.
+  readonly statusChange = output<EditorStatus>()
 
   protected readonly editor = new Editor({
     extensions: [
@@ -465,6 +518,17 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
   // re-run via Angular's change detection.
   protected readonly editorRev = signal(0)
 
+  // Whether a save here mints a version, which is what makes the ⌘S hint true.
+  // Settled by the same session-wide probe the inspector's Versions tab uses, so
+  // this costs no request of its own.
+  protected readonly versionsAvailable = computed(() => this.versions.availability() === 'available')
+
+  protected readonly saveShortcutKey: string = (() => {
+    if (typeof navigator === 'undefined') return 'Ctrl S'
+    const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || '') || /Mac/.test(navigator.userAgent || '')
+    return isMac ? '⌘S' : 'Ctrl S'
+  })()
+
   private stub: FileModel | null = null
   private savedContent = ''
   private suppressNextUpdate = false
@@ -488,6 +552,22 @@ export class MarkdownViewComponent implements OnInit, OnDestroy {
     effect(() => {
       const dirty = this.isModified()
       untracked(() => this.dirtyChange.emit(dirty))
+    })
+    // ...and one place to mirror the state the embedder draws as a badge. Ordered
+    // exactly like the sentence it replaces, so the two cannot disagree.
+    effect(() => {
+      const status: EditorStatus = this.loading()
+        ? { state: 'loading' }
+        : this.saving()
+          ? { state: 'saving' }
+          : this.isModified()
+            ? { state: 'modified' }
+            : this.lockOwner()
+              ? { state: 'readonly', lockOwner: this.lockOwner() }
+              : !this.writeable()
+                ? { state: 'readonly' }
+                : { state: 'saved' }
+      untracked(() => this.statusChange.emit(status))
     })
     this.layoutService.switchTheme.subscribe((t: string) => this.theme.set(t === themeDark ? 'dark' : 'light'))
   }

@@ -41,7 +41,7 @@ import { ShareDialogService } from '../../../components/share-dialog.service'
 import { ToastService } from '../../../components/toast.service'
 import { TreePickerService } from '../../../components/tree-picker.service'
 import { V2BreadcrumbService } from '../../../layout/breadcrumb.service'
-import { DockRailService } from '../../../layout/dock-rail.service'
+import { InspectorService } from '../../../layout/inspector.service'
 import { FavoritesService } from '../../../services/favorites.service'
 import { FolderSizeService } from '../../../services/folder-size.service'
 import { V2DragService } from '../../../services/drag.service'
@@ -236,6 +236,7 @@ export class HarnessDeps {
   // --- misc state -------------------------------------------------------
   readonly favoriteIds = new Set<number>()
   readonly dockSelected = signal<unknown>(null)
+  readonly inspectorContentReplaced = new Subject<void>()
   readonly serverConfig = signal({ files: { editors: { onlyoffice: false, eurooffice: false, collabora: false } } })
   dragPayload: { files: FileProps[]; sourceDir: string; draggedIds: Set<number> } | null = null
   dragCanDropOnFile = true
@@ -442,11 +443,14 @@ export class HarnessDeps {
       },
       { provide: StoreService, useValue: { filesOnEvent: this.filesOnEvent, user: this.user, server: this.serverConfig } },
       {
-        provide: DockRailService,
+        provide: InspectorService,
         useValue: {
-          setTabs: (tabs: unknown) => log.record('dock.setTabs', tabs),
+          setAvailable: (available: boolean) => log.record('inspector.setAvailable', available),
           currentSelected: this.dockSelected,
-          clear: () => log.record('dock.clear')
+          // A real Subject, not a stub: the base subscribes to it, and a case can
+          // push through it to assert the refresh a restore owes.
+          contentReplaced: this.inspectorContentReplaced,
+          clear: () => log.record('inspector.clear')
         }
       },
       {

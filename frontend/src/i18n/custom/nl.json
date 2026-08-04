@@ -269,5 +269,20 @@
   "v2_one_file": "1 bestand",
   "v2_one_folder": "1 map",
   "v2_select_all_n": "Selecteer alle {{ nb }}",
-  "v2_sorted_by_name": "gesorteerd op naam ↑"
+  "v2_sorted_by_name": "gesorteerd op naam ↑",
+  "Details": "Details",
+  "No file selected": "Geen bestand geselecteerd",
+  "Not shared yet": "Nog niet gedeeld",
+  "Manage sharing": "Delen beheren",
+  "Resize panel": "Paneelbreedte aanpassen",
+  "Toggle right panel": "Rechterpaneel weergeven of verbergen",
+  "Compare": "Vergelijken",
+  "Rename this version": "Deze versie hernoemen",
+  "v2_inspector_versions": "{{ count }} versies · {{ total }}",
+  "v2_inspector_one_version": "1 versie · {{ total }}",
+  "v2_inspector_comments": "{{ count }} opmerkingen",
+  "v2_inspector_one_comment": "1 opmerking",
+  "v2_post_shortcut": "{{ key }} om te plaatsen",
+  "v2_saves_a_version": "{{ key }} slaat een versie op",
+  "All version history": "Alle versiegeschiedenis"
 }

@@ -20,20 +20,38 @@
     }
     <router-outlet />
   </main>
-  @if (layoutV2.dockActive() !== null) {
-    <aside class="layout-v2__dock-panel" [class.layout-v2__dock-panel--open]="layoutV2.dockActive() !== null">
-      <app-v2-dock-panel />
+  @if (!layoutV2.isMobile() && layoutV2.dockVisible() && layoutV2.dockOverlay()) {
+    <!-- Option `2b`: under 1180px the panel floats over the content instead of
+         narrowing it, and gets the dismissal a floating surface owes — scrim,
+         click-outside, Esc. -->
+    <div class="layout-v2__backdrop layout-v2__backdrop--dock" (click)="layoutV2.closeDock()" aria-hidden="true"></div>
+  }
+  @if (layoutV2.dockVisible()) {
+    <aside
+      class="layout-v2__dock-panel layout-v2__dock-panel--open"
+      [class.layout-v2__dock-panel--overlay]="!layoutV2.isMobile() && layoutV2.dockOverlay()"
+      [style.width.px]="layoutV2.isMobile() ? null : layoutV2.dockWidth()"
+    >
+      @if (!layoutV2.isMobile()) {
+        <div
+          #dockGrip
+          class="layout-v2__dock-grip"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          [attr.aria-label]="'Resize panel' | translate: locale.language"
+          [attr.aria-valuenow]="layoutV2.dockWidth()"
+          [attr.aria-valuemin]="dockWidthMin"
+          [attr.aria-valuemax]="dockWidthMax"
+          (pointerdown)="startDockResize($event)"
+          (keydown)="onDockGripKey($event)"
+        ></div>
+      }
+      <app-v2-inspector-panel />
     </aside>
   }
-  <app-v2-dock-rail [active]="layoutV2.dockActive()" (dockChange)="onDockChange($event)" />
-  @if (layoutV2.isMobile() && (layoutV2.leftNavOpen() || layoutV2.dockActive() !== null)) {
-    <div
-      class="layout-v2__backdrop"
-      [class.layout-v2__backdrop--left]="layoutV2.leftNavOpen()"
-      [class.layout-v2__backdrop--right]="layoutV2.dockActive() !== null"
-      (click)="onBackdropClick()"
-      aria-hidden="true"
-    ></div>
+  @if (layoutV2.isMobile() && (layoutV2.leftNavOpen() || layoutV2.dockVisible())) {
+    <div class="layout-v2__backdrop" [class.layout-v2__backdrop--left]="layoutV2.leftNavOpen()" (click)="onBackdropClick()" aria-hidden="true"></div>
   }
 </div>
 <app-v2-bottom-tab-bar />

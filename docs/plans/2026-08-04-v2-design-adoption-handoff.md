@@ -30,8 +30,8 @@ Only then open the design project.
 | 1 | Primitives, verified in `_kit` | #433 | merged |
 | 2 | File browser chrome (D1, D2) | #434 | merged |
 | 2b | Grid view | #435 | merged |
-| **3** | **Inspector (D4, D5)** | — | **next** |
-| 4 | Search (D6) | — | not started |
+| 3 | Inspector (D4, D5) | #437 | open |
+| **4** | **Search (D6)** | — | **next** |
 | 5 | Share dialog (D7) | — | not started |
 | 6 | Gallery + upload dock (D8) | — | not started |
 | 7 | Mobile (M1–M6) | — | not started |
@@ -54,6 +54,15 @@ Everything merged is on `develop` as of `13d30cda`.
   chances to veto each: density `1b`, toolbar `3b`, panel `2a`, keyboard `4b`;
   density stored per-view in `localStorage`; **the icon dock rail gets deleted**;
   no command palette this programme.
+
+### Phase 3 read the plan's §5.5 before anything else
+
+It records what the phase settled, including the two design instructions that could
+NOT be transcribed (comment threading and the editor's edit/preview segmented — the
+backend has neither), the `dockOpen` vs `dockVisible` distinction, and one finding
+left for later with its measurement: **`color: var(--si-rose)` at 31 declarations
+across 20 files**, where `--si-rose` is a fill and measures ~3.6:1 as type. That
+sweep wants its own PR.
 
 ### Two things deferred out of Phase 1 that Phase 5 needs
 
@@ -267,19 +276,21 @@ gh pr create --repo zjean/server --base develop --head feat/v2-<topic> …
 
 ## 6. Per-phase notes not in the plan
 
-### Phase 3 — the inspector (next)
+### Phase 3 — the inspector (shipped in #437)
 
-- The plan's §5 is accurate. The rail deletion is decided.
-- `app-v2-tabs` already exists with the `fill` layout the inspector wants. **The
-  `fill` layout suppresses icons deliberately** — four labelled tabs with icons and
-  counts do not fit 340px, and the design draws that strip label-only. Pass icons
-  anyway; the `inline` layout uses them.
-- Do not touch two things in the OnlyOffice path while you are in here, both
-  documented in CLAUDE.md and both load-bearing: `changeHistory: false` is
-  vestigial and must stay false, and **both** history handlers must re-mount the
-  editor.
-- `dock-rail.component.*` gets deleted; `dock-rail.service.ts` may still hold the
-  tab list that `dock-panel` reads — check before deleting either.
+Read the plan's **§5.5** for the outcome. Three things it left in place that later
+phases touch:
+
+- `dock-rail.component.*` and `dock-panel.component.ts` are gone;
+  `dock-rail.service.ts` is now `inspector.service.ts` (`InspectorService`), and
+  the ONE panel is `layout/inspector-panel.component.*`. `file-detail` has no
+  inspector of its own any more.
+- The panel's two pinned-bottom regions (the comments composer, the versions quota
+  footer) mean **`.insp__body` does not scroll** — each tab owns its own scroll
+  region. A tab added later has to bring its own `.insp__scroll`.
+- The mobile sheet still reserves nothing for a rail (`right: 0`), and the mobile
+  inspector toggle is a stopgap in the title bar. **Phase 7 owns replacing it**
+  with whatever M1–M6 draws.
 
 ### Phase 4 — search
 

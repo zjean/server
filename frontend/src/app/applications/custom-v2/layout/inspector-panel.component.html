@@ -1,0 +1,131 @@
+<div class="insp">
+  <header class="insp__head">
+    @if (file(); as f) {
+      <app-v2-file-glyph [type]="glyphType()" [size]="30" [rounded]="7" />
+      <div class="insp__head-text">
+        <div class="insp__name" [title]="f.name">{{ f.name }}</div>
+        <div class="insp__head-meta">{{ headMeta() }}</div>
+      </div>
+    } @else {
+      <div class="insp__head-text">
+        <div class="insp__name" l10nTranslate>Details</div>
+        <div class="insp__head-meta" l10nTranslate>No file selected</div>
+      </div>
+    }
+    <app-v2-icon-btn
+      iconName="x"
+      [size]="26"
+      appV2Tooltip="Close"
+      [tooltipShortcut]="shortcutLabel"
+      [ariaLabel]="'Close' | translate: locale.language"
+      (click)="close()"
+    />
+  </header>
+
+  <app-v2-tabs
+    class="insp__tabs"
+    layout="fill"
+    [tabs]="tabs()"
+    [value]="tab()"
+    [ariaLabel]="'Details' | translate: locale.language"
+    (changed)="setTab($event)"
+  />
+  <div class="insp__rule"></div>
+
+  <div class="insp__body">
+    @if (file(); as f) {
+      @switch (tab()) {
+        @case ('properties') {
+          <div class="insp__scroll">
+            <section class="insp__section">
+              <div class="v2-label insp__section-label" l10nTranslate>File</div>
+              <div class="insp__row">
+                <span class="insp__key" l10nTranslate>Type</span>
+                <span class="insp__val" [title]="f.mime">{{ typeLabel() }}</span>
+              </div>
+              <div class="insp__row">
+                <span class="insp__key" l10nTranslate>Size</span>
+                @if (!f.isDir) {
+                  <span class="insp__val insp__val--mono">{{ f.size | toBytes: 2 : true }}</span>
+                } @else if (folderSizeState() === 'done') {
+                  <span class="insp__val insp__val--mono">{{ folderSizeBytes() | toBytes: 2 : true }}</span>
+                } @else if (folderSizeState() === 'loading') {
+                  <span class="insp__val insp__val--quiet" l10nTranslate>Loading…</span>
+                } @else {
+                  <span class="insp__val insp__val--quiet">—</span>
+                }
+              </div>
+              <div class="insp__row">
+                <span class="insp__key" l10nTranslate>Location</span>
+                <!-- Truncated with the full path in the title, not wrapped: a path has
+                   no break opportunity a reader recognises, so `overflow-wrap:
+                   anywhere` split "Documents" mid-word and read as corruption. -->
+                <span class="insp__val insp__val--mono" [title]="locationLabel()">{{ locationLabel() }}</span>
+              </div>
+              @if (f.mtime) {
+                <div class="insp__row">
+                  <span class="insp__key" l10nTranslate>Modified</span>
+                  <span class="insp__val insp__val--mono" [title]="f.mtime | amTimeAgo">{{ stamp(f.mtime) }}</span>
+                </div>
+              }
+              @if (f.ctime) {
+                <div class="insp__row">
+                  <span class="insp__key" l10nTranslate>Created</span>
+                  <span class="insp__val insp__val--mono" [title]="f.ctime | amTimeAgo">{{ stamp(f.ctime) }}</span>
+                </div>
+              }
+            </section>
+
+            @if (canShare()) {
+              <section class="insp__section">
+                <div class="v2-label insp__section-label" l10nTranslate>Access</div>
+                @for (s of shares(); track s.id) {
+                  <div class="insp__access">
+                    <span class="insp__access-glyph" [class.insp__access-glyph--link]="s.isLink">
+                      <app-v2-icon [name]="s.isLink ? 'link' : 'people'" [size]="13" />
+                    </span>
+                    <div class="insp__access-text">
+                      <div class="insp__access-name">{{ s.label }}</div>
+                      <div class="insp__access-kind">{{ (s.isLink ? 'Link' : 'Share') | translate: locale.language }}</div>
+                    </div>
+                  </div>
+                } @empty {
+                  <div class="insp__access-none" l10nTranslate>Not shared yet</div>
+                }
+                <app-v2-btn class="insp__manage" kind="secondary" size="md" icon="settings" [block]="true" (click)="manageSharing()">{{
+                  'Manage sharing' | translate: locale.language
+                }}</app-v2-btn>
+              </section>
+            }
+          </div>
+        }
+        @case ('comments') {
+          <app-v2-comments-panel [filePath]="f.path" [fileId]="f.id" (statsChange)="commentStats.set($event)" />
+        }
+        @case ('versions') {
+          <app-v2-versions-panel
+            [filePath]="f.path"
+            [fileId]="f.id"
+            [mime]="f.mime"
+            [size]="f.size"
+            (statsChange)="versionStats.set($event)"
+            (restored)="onRestored()"
+          />
+        }
+        @case ('activity') {
+          <div class="insp__empty">
+            <app-v2-icon name="activity" [size]="20" />
+            <div class="insp__empty-title" l10nTranslate>Activity</div>
+            <div class="insp__empty-lede" l10nTranslate>File activity feed will populate once the backend exposes it.</div>
+          </div>
+        }
+      }
+    } @else {
+      <div class="insp__empty">
+        <app-v2-icon name="info" [size]="20" />
+        <div class="insp__empty-title" l10nTranslate>Select a file to see details</div>
+        <div class="insp__empty-lede" l10nTranslate>Click a row to inspect its properties.</div>
+      </div>
+    }
+  </div>
+</div>
