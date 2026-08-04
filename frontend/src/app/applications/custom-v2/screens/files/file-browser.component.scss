@@ -12,6 +12,10 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  // Positioning context for the floating bulk bar, which anchors to the bottom of
+  // the content area rather than the viewport — a viewport-fixed bar would sit
+  // over the mobile bottom tab bar.
+  position: relative;
 
   &__new-anchor {
     display: inline-flex;
@@ -113,53 +117,12 @@
     white-space: nowrap;
   }
 
+  // Width only. The <app-v2-input> primitive owns fill, border, focus ring, icon
+  // colour, placeholder and the kbd hint — this used to be ~55 lines duplicating
+  // all of it, and the duplicate is what drifted out of the palette.
   &__filter {
-    height: 32px;
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-4);
-    padding: 0 var(--si-space-6);
-    background: var(--si-bg3);
-    border: 1px solid var(--si-line);
-    border-radius: var(--si-r2);
     flex: 1 1 auto;
     max-width: 360px;
-
-    &:focus-within {
-      border-color: var(--si-accent-line);
-    }
-  }
-
-  &__filter-icon {
-    color: var(--si-fg-muted);
-    flex-shrink: 0;
-  }
-
-  &__filter-input {
-    flex: 1 1 auto;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--si-fg);
-    font-size: var(--si-text-10);
-    font-family: var(--si-sans);
-    letter-spacing: -0.05px;
-    min-width: 0;
-
-    &::placeholder {
-      color: var(--si-fg-muted);
-    }
-  }
-
-  &__filter-hint {
-    font-size: var(--si-text-2);
-    color: var(--si-fg-muted);
-    font-family: var(--si-mono);
-    padding: 1px var(--si-space-3);
-    background: var(--si-bg3);
-    border-radius: 3px;
-    border: 1px solid var(--si-line);
-    flex-shrink: 0;
   }
 
   &__mode {
@@ -266,9 +229,10 @@
 
   &__head {
     display: grid;
-    grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
-    padding: 0 var(--si-space-8);
-    height: 36px;
+    grid-template-columns: 34px minmax(260px, 1fr) 152px 96px 132px 36px;
+    gap: var(--si-space-7);
+    padding: 0 var(--si-space-6);
+    height: 34px;
     align-items: center;
     // De-emphasised header: no bottom rule, no all-caps/display-font shouting —
     // a quiet column label in the body sans. Separation now comes from the
@@ -284,45 +248,76 @@
     top: 0;
     z-index: var(--si-z-base);
 
-    // Size column (now 3rd) is centre-aligned to match the row cells.
-    > :nth-child(3) {
-      text-align: center;
+    // Size is the 4th column now that badges have their own, and it is
+    // right-aligned rather than centred: a column of byte counts only reads as a
+    // column when the digits line up on the right.
+    > :nth-child(4) {
+      text-align: right;
     }
   }
 }
 
 .file-row {
   display: grid;
-  grid-template-columns: 28px minmax(280px, 2fr) 120px 160px 100px 40px;
-  padding: 0 var(--si-space-8);
-  height: 56px;
+  grid-template-columns: 34px minmax(260px, 1fr) 152px 96px 132px 36px;
+  gap: var(--si-space-7);
+  padding: 0 var(--si-space-6);
   align-items: center;
-  // Borderless: no per-row divider. Rhythm comes from row height + the
-  // rounded hover/selection fill, not hairlines between every row.
+  // Height comes from the density setting, applied as an inline style from
+  // rowHeight(). 44px is the default; 36 and 56 are the other two steps.
   border: none;
-  border-radius: 12px;
+  // radius-sm, not the old 12px: the row is a control-sized shape, and a 12px
+  // radius on a 36px row in compact density reads as a pill.
+  border-radius: var(--si-r1);
   cursor: pointer;
-  background: transparent;
   text-align: left;
   color: inherit;
   width: 100%;
   font-family: inherit;
-  transition: background 120ms ease;
+  transition: background var(--si-dur-2) var(--si-ease-out);
+
+  // ─── Banding, not dividers ──────────────────────────────────────────────
+  // The design's reason: "No dividers at all — alternating surface-1/1.5 bands
+  // give the rhythm, and hover reads as a third value. Recommended: no lines to
+  // fight the badges." Which is the real point — a badge column plus a hairline
+  // per row gives the eye two competing horizontal signals.
+  //
+  // nth-child(ODD) bands the 2nd, 4th, 6th visible row — which is what the design
+  // draws — because `.file-table__head` is the first child of this container. So
+  // the rows are children 2…n+1, and odd children (3, 5, 7) are even ROWS.
+  // If the header ever moves out of .file-table, this flips to nth-child(even).
+  background: transparent;
+
+  &:nth-child(odd) {
+    background: var(--si-bg-band);
+  }
 
   &:hover {
     background: var(--si-bg3);
   }
 
-  // Clean cool selection: just a lighter navy fill, clearly distinct from the
-  // bg3 hover. The checked checkbox already carries the brand cue, so no
-  // accent edge-bar is needed (and a warm wash over navy would muddy).
-  &--selected {
-    background: var(--si-bg3);
+  // Selection is accent-tint plus a 2px cobalt marker on the INNER content's
+  // left edge — never a border, which would shift the row's contents by 2px.
+  &--selected,
+  &--selected:nth-child(odd) {
+    position: relative;
+    background: var(--si-accent-soft);
   }
 
-  &--selected:hover {
-    background: var(--si-bg3);
-    filter: brightness(1.05);
+  &--selected::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: var(--si-r1) 0 0 var(--si-r1);
+    background: var(--si-accent-hover);
+  }
+
+  &--selected:hover,
+  &--selected:hover:nth-child(odd) {
+    background: color-mix(in srgb, var(--si-accent) 16%, transparent);
   }
 
   // Drag-and-drop visuals. `--dragging` fades the source row(s) so the user
@@ -332,10 +327,10 @@
     opacity: 0.45;
   }
 
-  &--drop-hover {
+  &--drop-hover,
+  &--drop-hover:nth-child(odd) {
     background: var(--si-accent-soft);
-    outline: 2px solid var(--si-accent);
-    outline-offset: -2px;
+    box-shadow: inset 0 0 0 2px var(--si-accent);
   }
 
   &__select {
@@ -781,4 +776,177 @@
 .file-row__size-loading {
   opacity: 0.6;
   letter-spacing: 1px;
+}
+
+// ─── Badge column ───────────────────────────────────────────────────────────
+// Its own 152px column so the NAME column has one clean left edge. Everything
+// that used to trail the file name is here: favourite, lock, comments.
+.file-row__badges {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-3);
+  min-width: 0;
+  overflow: hidden;
+}
+
+// ─── List end ───────────────────────────────────────────────────────────────
+// "Bounded content: the folder ends in facts and a target, not in empty canvas."
+.file-table__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-7);
+  margin-top: var(--si-space-4);
+  padding: var(--si-space-6) var(--si-space-6) 0;
+  border-top: 1px solid var(--si-line-subtle);
+  font-family: var(--si-mono);
+  font-size: var(--si-text-5);
+  color: var(--si-fg-tertiary);
+
+  &-sort {
+    margin-left: auto;
+  }
+}
+
+.personal__drop-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--si-space-3);
+  margin: var(--si-space-7) var(--si-space-6) var(--si-space-8);
+  min-height: 96px;
+  border: 1px dashed var(--si-line-subtle);
+  border-radius: var(--si-r2);
+  color: var(--si-fg-ghost);
+  font-size: var(--si-text-7);
+  // Decorative: the whole body is already a drop zone, so this is a target
+  // affordance rather than the target itself, and it must not eat pointer events
+  // meant for the rows above it.
+  pointer-events: none;
+}
+
+// ─── Bulk action bar ────────────────────────────────────────────────────────
+// Floats 16px above the content edge and NEVER replaces the toolbar, so the
+// primary action stays where the pointer left it. The destructive action is
+// isolated at the far right, past a spacer, and stays text-on-tint until the
+// confirm dialog.
+.bulk-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--si-space-8);
+  z-index: calc(var(--si-z-overlay) + 1);
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-4);
+  max-width: calc(100% - var(--si-space-13));
+  padding: var(--si-space-5) var(--si-space-6);
+  background: var(--si-bg5);
+  border-radius: var(--si-r2);
+  box-shadow: var(--si-shadow3);
+
+  &__count {
+    font-family: var(--si-mono);
+    font-size: var(--si-text-6);
+    color: var(--si-fg);
+    padding: 0 var(--si-space-3);
+    white-space: nowrap;
+  }
+
+  &__select-all {
+    border: 0;
+    background: transparent;
+    color: var(--si-accent-ink);
+    font-family: var(--si-sans);
+    font-size: var(--si-text-6);
+    cursor: pointer;
+    padding: 0 var(--si-space-3);
+    white-space: nowrap;
+  }
+
+  &__divider {
+    width: 1px;
+    height: 22px;
+    background: var(--si-line-strong);
+    flex: none;
+  }
+
+  &__spacer {
+    flex: 1;
+    min-width: var(--si-space-4);
+  }
+}
+
+// ─── Empty state ────────────────────────────────────────────────────────────
+// The empty state IS the drop target: one bounded panel, LEFT-ALIGNED to the
+// content gutter and never vertically centred in the viewport, so the page still
+// reads top-down.
+.personal__empty {
+  width: 100%;
+  max-width: 560px;
+  margin: var(--si-space-13) var(--si-space-6) 0;
+  padding: var(--si-space-13) var(--si-space-13);
+  background: var(--si-bg1);
+  border-radius: var(--si-r3);
+  box-shadow: inset 0 0 0 1px var(--si-line-subtle);
+
+  &-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--si-r4);
+    background: var(--si-bg3);
+    color: var(--si-fg-tertiary);
+    margin-bottom: var(--si-space-9);
+  }
+
+  &-title {
+    font-size: var(--si-text-12);
+    font-weight: 500;
+    color: var(--si-fg);
+    margin-bottom: var(--si-space-4);
+  }
+
+  &-body {
+    max-width: 44ch;
+    font-size: var(--si-text-7);
+    line-height: 1.65;
+    color: var(--si-fg-tertiary);
+    margin-bottom: var(--si-space-10);
+  }
+
+  &-actions {
+    display: flex;
+    gap: var(--si-space-5);
+  }
+
+  &-keys {
+    display: flex;
+    gap: var(--si-space-10);
+    margin-top: var(--si-space-11);
+    padding-top: var(--si-space-10);
+    border-top: 1px solid var(--si-line-subtle);
+    font-family: var(--si-mono);
+    font-size: var(--si-text-4);
+    color: var(--si-fg-ghost);
+  }
+}
+
+.personal__skeleton {
+  display: block;
+  padding: var(--si-space-4) 0;
+}
+
+// ─── Control row additions ──────────────────────────────────────────────────
+.personal__control-label {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-5);
+  color: var(--si-fg-ghost);
+  white-space: nowrap;
+}
+
+.personal__control-spacer {
+  flex: 1;
 }

@@ -353,6 +353,50 @@ Also in this PR: retire `--si-fg-faint` and `--si-bg4`, and migrate `--si-ease` 
 
 ---
 
+### 3.1 What Phase 1 actually settled
+
+Shipped in **#433**. Six new primitives (segmented, input, tabs, tooltip, skeleton,
+pagination), button and pill rebuilt, and phase 0's two token aliases retired.
+
+**Two items from the table above did NOT ship and are deliberately deferred**, because
+both are additive and neither blocks phases 2–7: the **dialog geometry
+consolidation** (560px / `--si-r3` / `--si-shadow3` / `--si-scrim` across the eight
+dialog components) and the **select/menu extension** of `context-menu.component.ts`.
+Phase 5 is the first phase that actually needs either; fold them in there if they
+have not landed sooner.
+
+**The button size re-point is the change most likely to surprise you later.**
+81 of 89 call sites were `size="sm"` at 28px — the whole app sat below the design's
+smallest step. `sm` is now 32, `md` 36, `lg` 44, and `xs` stays 28 as an off-ladder
+escape hatch for dense rows. Every toolbar in v2 therefore grew 4px. When a later
+phase reads "the design's toolbar buttons are 36px", that means `size="md"`, which
+is NOT what the screens pass today.
+
+**One phase-0 defect surfaced here, and it is the same shape as the 24 the token
+PR found:** `.pill--amber` still resolved its ink through `--si-accent-ink`, from
+when the accent was the warm tone and `--si-amber` was its alias. Blue text on an
+amber fill. The grep in phase 0 looked for `color: var(--si-accent)` and this was
+`color: var(--si-accent-ink)` on an amber background — a pairing no single-token
+grep finds. **If you touch a semantic colour, check its `-ink` partner too.**
+
+**Three defects that only rendering caught**, none of which fails a build:
+
+- **A backtick inside a CSS comment inside a `styles: [\`…\`]` template literal
+  terminates the literal.** The compiler says "Failed to resolve styles at position
+  1 to a string" and names no file. Worse, the failure was masked: `grep '\[ERROR\]'`
+  over `ng build` output never matches, because ANSI colour codes split the
+  brackets — three builds read as clean when they were broken. **Check the exit
+  code, never grep the output.**
+- **`focus` does not bubble.** The tooltip directive sits on a component host
+  (`app-v2-icon-btn`), so the element that receives focus is the `<button>` inside
+  it: the tooltip worked on hover and was invisible to every keyboard user.
+  `focusin`/`focusout` bubble; `mouseenter` needs no equivalent fix because it
+  fires on ancestors too.
+- **Anything mounted outside `.v2-root` has no tokens.** The tooltip appends a node
+  to the DOM, and `document.body` resolves every `--si-*` to nothing.
+
+---
+
 ## 4. Phase 2 — the file browser (D1, D2)
 
 One PR, `feat/v2-file-browser-chrome`. Files: `screens/files/file-browser.{base.ts,component.html,component.scss}`, `file-browser-repository.ts`, `screens/files/testing/file-browser-contract.ts`.

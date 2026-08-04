@@ -90,9 +90,6 @@ export interface FileBrowserRepository {
   /** Default archive name offered when compressing at the repository root. */
   rootArchiveName(): string
 
-  /** i18n key for the filter input's placeholder. */
-  readonly filterPlaceholder: string
-
   /** Text of the keyboard hint badge inside the filter input. */
   filterHint(): string
 

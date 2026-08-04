@@ -21,6 +21,7 @@ describeFileBrowserContract({
   alias: ALIAS,
   routeParams: { alias: ALIAS },
   viewModeKey: 'ui.space.viewMode',
+  densityKey: 'ui.space.density',
   folderRoute: (segs, name) => ['/', 'v2', 'spaces', ALIAS, ...segs, name],
   // The Spaces index deliberately has NO targetPath: you cannot drop a file
   // onto "the list of spaces".
@@ -203,10 +204,10 @@ describe('space-files browser — space-only behaviour', () => {
     it('wires cmd/ctrl-F to the filter input and preempts the browser', () => {
       const { c } = start()
       const calls: string[] = []
-      c.filterInput = { nativeElement: { focus: () => calls.push('focus'), select: () => calls.push('select') } }
+      c.filterInput = { focus: () => calls.push('focus') }
       let prevented = 0
       c.onWindowKeydown({ key: 'f', metaKey: true, target: {}, preventDefault: () => prevented++ } as unknown as KeyboardEvent)
-      expect(calls).toEqual(['focus', 'select'])
+      expect(calls).toEqual(['focus'])
       expect(prevented).toBe(1)
     })
 
