@@ -1,0 +1,87 @@
+// Sync-In v2 touch sizing.
+//
+// The design's floor, and it is a floor rather than a size: **every tappable target is
+// at least 44×44 on a touch layout, even when the glyph inside it is 17px.** The way it
+// does that without making the chrome look inflated is the important part, and it is
+// why this is one global sheet rather than a rule per component:
+//
+//   the visual box stays where it was, and the TARGET grows around it.
+//
+// So an icon button still reads as a 30px glyph on a 16px gutter, while the thing your
+// thumb has to hit is 44px and overlaps its neighbours' whitespace. Negative margin
+// keeps the rhythm: without it, five 44px targets in a row would push a title bar 14px
+// wider than the design draws it.
+//
+// Loaded by v2.scss, so these rules land inside every component's template regardless
+// of that component's own encapsulation — the same mechanism `_type.scss` and
+// `_dialog.scss` use, and the only one that can reach a primitive's inner <button>
+// from outside.
+//
+// Scoped to `.layout-v2--mobile`: a pointer-driven layout does not want 44px targets
+// (they read as a tablet app on a desktop), and the class is already the switch every
+// other mobile rule keys on.
+
+.layout-v2--mobile {
+  // ─── Icon buttons ──────────────────────────────────────────────────────────
+  // The button's own width/height are set inline from its `size` input, so they cannot
+  // be overridden here without fighting the binding. The TARGET is grown with padding
+  // and pulled back with margin instead, which leaves the painted box exactly where
+  // the desktop layout puts it.
+  app-v2-icon-btn .icon-btn {
+    position: relative;
+  }
+
+  app-v2-icon-btn .icon-btn::after {
+    content: '';
+    position: absolute;
+    // Half the difference between 44 and the largest icon button in the chrome (32),
+    // expressed as a negative inset so the hit area grows symmetrically around whatever
+    // size the caller passed.
+    inset: -6px;
+    min-width: 44px;
+    min-height: 44px;
+    // Centres the grown area on the button when the button is smaller than 44.
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  // ─── Drawer items — 48px ───────────────────────────────────────────────────
+  // Larger than the 44 floor because a drawer is a list you scan and tap in sequence,
+  // and 48 is what the design draws.
+  .left-nav__item {
+    height: 48px;
+  }
+
+  // ─── Sheet actions — 52px ──────────────────────────────────────────────────
+  // The largest of the three, because a sheet action is a decision: it is the last
+  // thing you touch before something happens.
+  app-v2-action-sheet .as__item {
+    min-height: 52px;
+  }
+
+  // ─── Segmented controls ────────────────────────────────────────────────────
+  // Its segments are the only control that can legitimately sit below the floor: they
+  // are adjacent, so a missed tap lands on a neighbour rather than on nothing. They
+  // still grow to 40px, which is what fits three of them across a 390px viewport.
+  app-v2-segmented .seg__btn {
+    min-height: 40px;
+  }
+
+  // ─── Checkboxes ────────────────────────────────────────────────────────────
+  // A 16px box is the smallest thing in the product and it selects rows. Same
+  // technique: the box stays 16px, the target becomes 44.
+  app-v2-checkbox .v2-checkbox {
+    position: relative;
+  }
+
+  app-v2-checkbox .v2-checkbox::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}

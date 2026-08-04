@@ -244,9 +244,37 @@
   white-space: nowrap;
 }
 
+// ─── Responsive columns ─────────────────────────────────────────────────────
+// The design's four bands, and what each one gives up. The rule behind all of them:
+// a column is dropped only when what it held has somewhere else to go.
+//
+//   ≥1440      everything
+//   1180–1439  density moves into the ⋯ menu (the toolbar is the first thing to
+//              overflow, and density is the least-used control on it)
+//   768–1179   the size column goes; modified is already relative-only
+//   <768       both go, and their content moves UNDER the name — see .file-row__submeta
+@media (max-width: 1439px) {
+  .personal__density {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1179px) {
+  .file-table__head,
+  .file-row {
+    grid-template-columns: 34px minmax(200px, 1fr) 152px 132px 36px;
+  }
+
+  // Cell 4 of five in the head is Modified; Size (cell 4 of six) is what goes.
+  .file-table__head > :nth-child(4),
+  .file-row__size {
+    display: none;
+  }
+}
+
 // Mobile (<768px): drop the info / size / modified columns from the
-// list view so the row fits without horizontal scroll. Users get the
-// missing metadata via the file's inspector tab. The kebab actions
+// list view so the row fits without horizontal scroll. What they held moves under the
+// name instead (.file-row__submeta), so nothing is actually lost. The kebab actions
 // column is also force-shown — opacity:0 only-on-hover doesn't work
 // on touch.
 // `.personal__create-actions` wraps the "New / Download from URL / Upload"
@@ -263,15 +291,29 @@
     display: none;
   }
 
+  // Badges keep their column and size to their content: at 11px they already ARE the
+  // "12px glyphs beside the name" M1 asks for, and moving them into the name stack
+  // would need a second copy of the badge markup.
   .file-table__head,
   .file-row {
-    grid-template-columns: 28px minmax(0, 1fr) 40px;
+    grid-template-columns: 28px minmax(0, 1fr) auto 40px;
+    gap: var(--si-space-5);
     padding: 0 var(--si-space-6);
   }
 
-  // Header cells are positional spans (Name / Info / Size / Modified / blank);
-  // hide cells 3-5 so the visible head matches the new 3-column body.
-  .file-table__head > :nth-child(3),
+  // The second line of a two-line row.
+  .file-row__submeta {
+    display: block;
+    font-family: var(--si-mono);
+    font-size: var(--si-text-3);
+    color: var(--si-fg-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // Header cells are positional spans (Name / Badges / Size / Modified / blank). The
+  // badge column stays, so only Size and Modified go — cells 4 and 5.
   .file-table__head > :nth-child(4),
   .file-table__head > :nth-child(5),
   .file-row__info,

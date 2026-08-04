@@ -836,6 +836,61 @@ Nothing new is invented — only re-laid out. Same tokens, three fewer columns, 
 
 **Verification caveat.** Per the standing note, agent-browser's headless Chromium fires no `requestAnimationFrame`, no `ResizeObserver` and no native `resize`, and the viewport must be set **before** first load or breakpoint state stays stale. Sheet snapping must therefore be driven by `afterNextRender` and CSS, not by rAF, or it cannot be verified at all.
 
+### 9.1 Phase 7 is TWO PRs, and 7a is what shipped
+
+**Maintainer decision (2026-08-04):** phase 7 splits. Six mobile screens plus four
+breakpoint bands is more than one reviewable diff, and — the deciding reason — three of
+the six are gesture-driven (sheet drag-to-snap, long-press selection), which this
+harness cannot drive at all. Building them in the same PR as the frame would mean
+shipping measurable work and unverifiable work under one green tick.
+
+  • **7a — the responsive frame (#442).** The four breakpoint bands, the 5-tab bar, the
+    two-line mobile row, touch sizing. All of it verifiable by measurement at a fixed
+    viewport.
+  • **7b — the sheets.** M3 (info bottom sheet, 50%/92%), M5 (share sheet), M6
+    (long-press action sheet). **Verified on a real Android device via `agent-device`**,
+    per the same decision — measured CSS is not evidence that a drag works.
+
+### 9.2 What 7a actually settled
+
+The four bands, measured at 1440 / 1300 / 900 / 390:
+
+| viewport | nav | columns | density | second line |
+|---|---|---|---|---|
+| 1440 | 248px | 6 | shown | — |
+| 1300 | 248px | 6 | **hidden** | — |
+| 900 | **64px rail** | **5** (size dropped) | hidden | — |
+| 390 | 280px drawer | **4** | hidden | **shown** |
+
+**A forced layout must never write the user's preference.** Three signals now do this
+and all three follow the same shape: `railForced` does not touch `sidebarCollapsed`,
+`rowHeight()` returns 56 on mobile without touching `density`, and (from phase 3) the
+inspector's tab narrowing does not rewrite the stored tab. The test that matters is the
+third one in each case — widen the window and the user's own choice is still there.
+Pinned for density in the browser contract.
+
+**The rail is 64px, not 48.** The design's figure for the 768–1179 band, and the old 48
+could not hold the 44px target the same document demands of everything tappable — on a
+1024px tablet, that rail IS the navigation. Now `--si-rail-w`, because three
+stylesheets offset against it.
+
+**Touch sizing is one global partial, and the technique is the point.** `styles/_touch.scss`
+grows the TARGET without moving the painted box: a 16px checkbox keeps its 16px box and
+gets a 44px `::after`; an icon button keeps whatever size its caller passed and gets a
+44px minimum around it. Measured 44×44 for both. Doing it per-component would have
+meant editing every primitive and inflating the chrome by 14px a control.
+
+**Mobile drops the breadcrumb TRAIL and keeps going up.** `‹ Personal`, 44px tall, from
+the last routable segment before the current one — not `segments[0]`, which three folders
+deep would skip two levels. Also found: `page-breadcrumb` is mounted only on mobile
+(the top bar carries the desktop trail), so its full-trail branch had been unreachable
+for some time; the comment now says so instead of implying otherwise.
+
+**Trap §3.11 for the fourth time this programme** — injecting `LayoutV2Service` into the
+browser base broke 303 tests at once because the harness builds providers by hand. It is
+the single most reliable way to break this suite, and it is now the fourth entry in that
+row. Whatever a phase adds to `FileBrowserBase`, add the stub in the same commit.
+
 ---
 
 ## 10. Phase 8 — keyboard hints and the session error strip

@@ -460,6 +460,27 @@
 // ─── Badge column ───────────────────────────────────────────────────────────
 // Its own 152px column so the NAME column has one clean left edge. Everything
 // that used to trail the file name is here: favourite, lock, comments.
+// The name cell is one line on desktop and two on mobile. The stack is always in the
+// markup and the second line is hidden above 768px, because a mobile-only <span> that
+// only exists in one branch of the template is a second template.
+// The density pair. `display: contents` so the wrapper is invisible to the toolbar's
+// flex layout on desktop — the label and the segmented stay direct siblings — while
+// still giving the breakpoint one thing to hide.
+.personal__density {
+  display: contents;
+}
+
+.file-row__stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  justify-content: center;
+}
+
+.file-row__submeta {
+  display: none;
+}
+
 .file-row__badges {
   display: inline-flex;
   align-items: center;

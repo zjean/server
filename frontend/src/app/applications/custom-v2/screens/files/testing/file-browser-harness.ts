@@ -41,6 +41,7 @@ import { ToastService } from '../../../components/toast.service'
 import { TreePickerService } from '../../../components/tree-picker.service'
 import { V2BreadcrumbService } from '../../../layout/breadcrumb.service'
 import { InspectorService } from '../../../layout/inspector.service'
+import { LayoutV2Service } from '../../../layout/layout-v2.service'
 import { TransfersService } from '../../../services/transfers.service'
 import { FavoritesService } from '../../../services/favorites.service'
 import { FolderSizeService } from '../../../services/folder-size.service'
@@ -237,6 +238,8 @@ export class HarnessDeps {
   readonly favoriteIds = new Set<number>()
   readonly dockSelected = signal<unknown>(null)
   readonly inspectorContentReplaced = new Subject<void>()
+  /** Drives the base's mobile branches — today just the forced row height. */
+  readonly isMobile = signal(false)
   /** Active uploads the base should see as in-place tiles. Each needs a `path`. */
   readonly uploadsInFolder = signal<{ id: string; name: string; path: string; props?: { size?: number; totalSize?: number } }[]>([])
   readonly serverConfig = signal({ files: { editors: { onlyoffice: false, eurooffice: false, collabora: false } } })
@@ -435,6 +438,7 @@ export class HarnessDeps {
         }
       },
       { provide: StoreService, useValue: { filesOnEvent: this.filesOnEvent, user: this.user, server: this.serverConfig } },
+      { provide: LayoutV2Service, useValue: { isMobile: this.isMobile } },
       {
         // The base asks it which uploads are landing in the current folder, for the
         // gallery's in-place tiles. Backed by a signal so a case can push tiles in.

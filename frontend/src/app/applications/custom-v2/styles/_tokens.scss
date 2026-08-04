@@ -268,6 +268,13 @@
   // pure black, so it darkens the warm ground without cooling it.
   --si-scrim: rgba(11, 10, 9, 0.6);
 
+  // ─── Layout metrics ───────────────────────────────────────────────────
+  // The collapsed navigation rail. A metric rather than a colour, but it lives here
+  // for the same reason: three stylesheets position against it (the rail itself, the
+  // desktop overlay's left edge, and the scrim behind it), and a literal repeated
+  // three times is how the three drift apart.
+  --si-rail-w: 64px;
+
   // ─── Media surfaces — the gallery's two overlays ──────────────────────
   // D8's rule, and it is a rule rather than a decoration: "media placeholders are
   // striped, never coloured blocks — the stripe says image goes here." A flat

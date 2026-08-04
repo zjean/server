@@ -963,6 +963,40 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     })
 
     // -----------------------------------------------------------------------
+    // K1. Density and the mobile row height
+    // -----------------------------------------------------------------------
+    describe('row height', () => {
+      it('follows the density setting on a pointer layout', () => {
+        const { c } = start()
+        c.setDensity('compact')
+        expect(c.rowHeight()).toBe(36)
+        c.setDensity('relaxed')
+        expect(c.rowHeight()).toBe(56)
+      })
+
+      // A two-line row needs 56px and the density control is not offered on mobile, so
+      // the height is forced there.
+      it('is always 56 on mobile, whatever the density says', () => {
+        const { c, deps } = start()
+        c.setDensity('compact')
+        deps.isMobile.set(true)
+        expect(c.rowHeight()).toBe(56)
+      })
+
+      // ...and the forcing must not WRITE the preference: the stored value is the
+      // user's desktop choice and has to survive a visit from a phone.
+      it('leaves the stored density untouched while forcing', () => {
+        const { c, deps } = start()
+        c.setDensity('compact')
+        deps.isMobile.set(true)
+        expect(c.rowHeight()).toBe(56)
+        deps.isMobile.set(false)
+        expect(c.rowHeight()).toBe(36)
+        expect(c.density()).toBe('compact')
+      })
+    })
+
+    // -----------------------------------------------------------------------
     // K2. In-place upload tiles — the gallery's view of active transfers
     // -----------------------------------------------------------------------
     describe('uploads in this folder', () => {
