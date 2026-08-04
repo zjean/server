@@ -28,8 +28,12 @@
           </span>
           <app-v2-btn kind="ghost" size="sm" icon="download" (click)="bulkDownload()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
           <app-v2-btn kind="ghost" size="sm" icon="share" (click)="bulkShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{ 'Copy to…' | translate: locale.language }}</app-v2-btn>
-          <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{ 'Move to…' | translate: locale.language }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="copy" (click)="bulkCopyOrMove(FILE_OPERATION.COPY)">{{
+            'Copy to…' | translate: locale.language
+          }}</app-v2-btn>
+          <app-v2-btn kind="ghost" size="sm" icon="moveTo" (click)="bulkCopyOrMove(FILE_OPERATION.MOVE)">{{
+            'Move to…' | translate: locale.language
+          }}</app-v2-btn>
           <app-v2-btn kind="ghost" size="sm" icon="trash" (click)="bulkDelete()">{{ 'Delete' | translate: locale.language }}</app-v2-btn>
           <app-v2-btn kind="ghost" size="sm" (click)="clearSelection()">{{ 'Cancel' | translate: locale.language }}</app-v2-btn>
         </div>
@@ -41,7 +45,9 @@
             </app-v2-btn>
           </span>
           @if (repository.showDownloadFromUrlAction) {
-            <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{ 'Download from URL' | translate: locale.language }}</app-v2-btn>
+            <app-v2-btn kind="ghost" size="sm" icon="globe" (click)="downloadFromUrl()">{{
+              'Download from URL' | translate: locale.language
+            }}</app-v2-btn>
           }
           <app-v2-btn kind="ghost" size="sm" icon="upload" (click)="triggerFilePicker()">{{ 'Upload' | translate: locale.language }}</app-v2-btn>
         </span>
@@ -92,12 +98,7 @@
     </div>
 
     @if (!filter() || readmeBanner()?.isEditing()) {
-      <app-v2-folder-readme
-        [dirPath]="loadedDirPath()"
-        [files]="files()"
-        [permissions]="permissions()"
-        (changed)="refresh()"
-      />
+      <app-v2-folder-readme [dirPath]="loadedDirPath()" [files]="files()" [permissions]="permissions()" (changed)="refresh()" />
     }
 
     @if (loading()) {
@@ -140,7 +141,11 @@
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="file-row__select" (click)="$event.stopPropagation(); toggleSelection(f)">
-                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                  <app-v2-checkbox
+                    [state]="isSelected(f) ? 'checked' : 'unchecked'"
+                    (toggled)="toggleSelection(f)"
+                    [ariaLabel]="'Select' | translate: locale.language"
+                  />
                 </span>
                 <div class="file-row__name">
                   <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="28" [rounded]="6" />
@@ -165,7 +170,9 @@
                       class="file-row__lock-btn"
                       (click)="$event.stopPropagation(); openLockDialog(f)"
                       [attr.title]="lockLabel(f)"
-                      [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                      [attr.aria-label]="
+                        (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
+                      "
                     >
                       <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="11">
                         <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="10" />
@@ -248,7 +255,11 @@
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="file-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
-                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                  <app-v2-checkbox
+                    [state]="isSelected(f) ? 'checked' : 'unchecked'"
+                    (toggled)="toggleSelection(f)"
+                    [ariaLabel]="'Select' | translate: locale.language"
+                  />
                 </span>
                 <div class="file-card__header" [class.file-card__header--folder]="f.isDir">
                   <app-v2-file-thumb [file]="f" [serverPath]="thumbPath(f)" [glyphSize]="38" [rounded]="8" [imageRes]="256" />
@@ -273,7 +284,9 @@
                       class="file-card__lock"
                       (click)="$event.stopPropagation(); openLockDialog(f)"
                       [attr.title]="lockLabel(f)"
-                      [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                      [attr.aria-label]="
+                        (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
+                      "
                     >
                       <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
                         <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
@@ -317,7 +330,11 @@
                 (contextmenu)="openRowMenu($event, f)"
               >
                 <span class="gallery-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
-                  <app-v2-checkbox [state]="isSelected(f) ? 'checked' : 'unchecked'" (toggled)="toggleSelection(f)" [ariaLabel]="'Select' | translate: locale.language" />
+                  <app-v2-checkbox
+                    [state]="isSelected(f) ? 'checked' : 'unchecked'"
+                    (toggled)="toggleSelection(f)"
+                    [ariaLabel]="'Select' | translate: locale.language"
+                  />
                 </span>
                 <div
                   class="gallery-card__stage"
@@ -348,7 +365,9 @@
                         class="gallery-card__lock"
                         (click)="$event.stopPropagation(); openLockDialog(f)"
                         [attr.title]="lockLabel(f)"
-                        [attr.aria-label]="(f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }"
+                        [attr.aria-label]="
+                          (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
+                        "
                       >
                         <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
                           <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
@@ -377,19 +396,9 @@
     }
   </div>
 
-  <app-v2-context-menu
-    [items]="menuItems()"
-    [open]="menu() !== null"
-    [anchor]="menu()"
-    (closed)="closeMenu()"
-  />
+  <app-v2-context-menu [items]="menuItems()" [open]="menu() !== null" [anchor]="menu()" (closed)="closeMenu()" />
 
-  <app-v2-context-menu
-    [items]="newMenuItems()"
-    [open]="newMenuOpen()"
-    [anchor]="newMenuAnchor()"
-    (closed)="newMenuOpen.set(false)"
-  />
+  <app-v2-context-menu [items]="newMenuItems()" [open]="newMenuOpen()" [anchor]="newMenuAnchor()" (closed)="newMenuOpen.set(false)" />
 
   <app-v2-fab icon="plus" [ariaLabel]="'Create' | translate: locale.language" (action)="fabSheetOpen.set(true)" />
   <app-v2-action-sheet

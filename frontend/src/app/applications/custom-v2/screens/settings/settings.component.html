@@ -45,7 +45,12 @@
         </div>
         <div class="settings__storage-meta">
           @if (u.storageQuota && u.storageQuota > 0) {
-            {{ 'storage_used_of_total' | translate: locale.language : { used: (u.storageUsage | toBytes: 1 : true), total: (u.storageQuota | toBytes), pct: storagePercent() } }}
+            {{
+              'storage_used_of_total'
+                | translate
+                  : locale.language
+                  : { used: (u.storageUsage | toBytes: 1 : true), total: (u.storageQuota | toBytes), pct: storagePercent() }
+            }}
           } @else {
             {{ 'storage_used_unlimited' | translate: locale.language : { used: (u.storageUsage | toBytes: 1 : true) } }}
           }
@@ -168,15 +173,33 @@
     <div class="settings__form">
       <label class="settings__field">
         <span l10nTranslate>Current password</span>
-        <input type="password" class="settings__input" [value]="oldPassword()" (input)="oldPassword.set($any($event.target).value)" autocomplete="current-password" />
+        <input
+          type="password"
+          class="settings__input"
+          [value]="oldPassword()"
+          (input)="oldPassword.set($any($event.target).value)"
+          autocomplete="current-password"
+        />
       </label>
       <label class="settings__field">
         <span>{{ 'New password' | translate: locale.language }} ({{ passwordMinLength }}+)</span>
-        <input type="password" class="settings__input" [value]="newPassword()" (input)="newPassword.set($any($event.target).value)" autocomplete="new-password" />
+        <input
+          type="password"
+          class="settings__input"
+          [value]="newPassword()"
+          (input)="newPassword.set($any($event.target).value)"
+          autocomplete="new-password"
+        />
       </label>
       <label class="settings__field">
         <span l10nTranslate>Confirm new password</span>
-        <input type="password" class="settings__input" [value]="confirmPassword()" (input)="confirmPassword.set($any($event.target).value)" autocomplete="new-password" />
+        <input
+          type="password"
+          class="settings__input"
+          [value]="confirmPassword()"
+          (input)="confirmPassword.set($any($event.target).value)"
+          autocomplete="new-password"
+        />
       </label>
       @if (newPassword() && confirmPassword() && newPassword() !== confirmPassword()) {
         <div class="settings__field-error" l10nTranslate>Passwords do not match</div>

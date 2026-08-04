@@ -98,8 +98,8 @@ import { ToastService } from '../components/toast.service'
         cursor: pointer;
         padding: 0;
         transition:
-          background var(--si-dur-2) var(--si-ease),
-          color var(--si-dur-2) var(--si-ease);
+          background var(--si-dur-2) var(--si-ease-out),
+          color var(--si-dur-2) var(--si-ease-out);
 
         &:hover {
           background: var(--si-bg3);
@@ -193,7 +193,7 @@ import { ToastService } from '../components/toast.service'
         display: flex;
         align-items: stretch;
         border-left: 2px solid transparent;
-        transition: background var(--si-dur-2) var(--si-ease);
+        transition: background var(--si-dur-2) var(--si-ease-out);
 
         &:hover {
           background: var(--si-bg3);
@@ -238,7 +238,7 @@ import { ToastService } from '../components/toast.service'
       }
       .nb-item__time {
         font-size: var(--si-text-3);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
         flex-shrink: 0;
       }
@@ -265,13 +265,13 @@ import { ToastService } from '../components/toast.service'
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-size: var(--si-text-11);
         cursor: pointer;
         padding: 0;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
       }

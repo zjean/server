@@ -104,7 +104,7 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .tfa-dialog__input {

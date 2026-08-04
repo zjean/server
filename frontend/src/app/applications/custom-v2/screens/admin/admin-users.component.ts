@@ -307,7 +307,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
       }
       .au__count {
         font-size: var(--si-text-4);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
       }
       .au__actions {
@@ -338,7 +338,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.8px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         border-radius: var(--si-r1);
         cursor: pointer;
 
@@ -378,7 +378,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         font-size: var(--si-text-2);
       }
@@ -394,14 +394,14 @@ function emptyDraft(isGuest: boolean): UserDraft {
         border-radius: 50%;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-rose);
         }
       }
@@ -472,7 +472,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
           font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
           font-weight: 600;
           font-family: var(--si-display);
         }
@@ -513,8 +513,8 @@ function emptyDraft(isGuest: boolean): UserDraft {
           color: var(--si-green-ink);
         }
         &--inactive {
-          background: var(--si-bg4);
-          color: var(--si-fg-faint);
+          background: var(--si-bg3);
+          color: var(--si-fg-muted);
         }
       }
       .au-row__actions {
@@ -528,7 +528,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         padding: 0;
         display: inline-flex;
@@ -536,7 +536,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
         &--danger:hover {
@@ -590,7 +590,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .au-field input[type='text'],

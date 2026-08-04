@@ -341,7 +341,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .au__count {
         font-size: var(--si-text-4);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
       }
       .au__actions {
@@ -399,7 +399,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
           font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
           font-weight: 600;
           font-family: var(--si-display);
           cursor: default;
@@ -453,7 +453,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         margin-left: var(--si-space-2);
       }
       .as-muted {
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .as-col-storage {
         display: flex;
@@ -471,7 +471,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
       }
       .as-storage-bar {
         height: 4px;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         border-radius: 2px;
         overflow: hidden;
       }
@@ -492,8 +492,8 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         margin-left: var(--si-space-3);
 
         &--inactive {
-          background: var(--si-bg4);
-          color: var(--si-fg-faint);
+          background: var(--si-bg3);
+          color: var(--si-fg-muted);
         }
       }
       .au-row__action {
@@ -502,7 +502,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         padding: 0;
         display: inline-flex;
@@ -510,7 +510,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
       }
@@ -545,7 +545,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg-muted);
         font-size: var(--si-text-2);
       }
@@ -561,14 +561,14 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         border-radius: 50%;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         display: inline-flex;
         align-items: center;
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-rose);
         }
       }
@@ -576,7 +576,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         text-transform: none;
         letter-spacing: normal;
         font-size: var(--si-text-5);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         margin-top: var(--si-space-2);
       }
 
@@ -626,7 +626,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .au-field input[type='text'],

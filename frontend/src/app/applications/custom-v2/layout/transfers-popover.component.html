@@ -42,9 +42,7 @@
           </div>
           <div class="transfer-row__meta">
             @if (t.props.totalSize) {
-              <span class="transfer-row__bytes">
-                {{ (t.props.size ?? 0) | toBytes: 1 : true }} / {{ t.props.totalSize | toBytes: 1 : true }}
-              </span>
+              <span class="transfer-row__bytes"> {{ t.props.size ?? 0 | toBytes: 1 : true }} / {{ t.props.totalSize | toBytes: 1 : true }} </span>
             } @else {
               <span l10nTranslate>In progress…</span>
             }

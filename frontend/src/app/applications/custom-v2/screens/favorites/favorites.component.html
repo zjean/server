@@ -11,12 +11,7 @@
         <span class="favorites__count-pill">{{ favorites().length }}</span>
       </header>
       @for (f of favorites(); track f.id) {
-        <button
-          type="button"
-          class="favorite-row"
-          (click)="openFavorite(f)"
-          (auxclick)="onRowAuxClick($event, f)"
-        >
+        <button type="button" class="favorite-row" (click)="openFavorite(f)" (auxclick)="onRowAuxClick($event, f)">
           <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
           <div class="favorite-row__meta">
             <div class="favorite-row__name">{{ f.name }}</div>
@@ -31,10 +26,6 @@
       }
     </section>
   } @else {
-    <app-v2-empty-state
-      icon="star"
-      title="No favorites yet"
-      lede="Star a file or folder from the file browser and it will show up here."
-    />
+    <app-v2-empty-state icon="star" title="No favorites yet" lede="Star a file or folder from the file browser and it will show up here." />
   }
 </div>

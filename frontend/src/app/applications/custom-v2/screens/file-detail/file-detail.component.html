@@ -21,12 +21,16 @@
         </div>
       </div>
       <span class="detail__divider"></span>
-      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="!canShare()" (click)="openShare()">{{ 'Share' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="primary" size="sm" icon="share" [disabled]="!canShare()" (click)="openShare()">{{
+        'Share' | translate: locale.language
+      }}</app-v2-btn>
       <app-v2-btn kind="ghost" size="sm" icon="download" (click)="download()">{{ 'Download' | translate: locale.language }}</app-v2-btn>
       @if (isDiagram()) {
         <app-v2-btn kind="ghost" size="sm" icon="print" (click)="print()">{{ 'Print' | translate: locale.language }}</app-v2-btn>
       }
-      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{ 'Favorite' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="ghost" size="sm" icon="star" [disabled]="true" [title]="'Coming soon' | translate: locale.language">{{
+        'Favorite' | translate: locale.language
+      }}</app-v2-btn>
       <span class="detail__divider"></span>
       @if (isImage()) {
         <app-v2-icon-btn iconName="box" [title]="'Fullscreen' | translate: locale.language" (click)="fullscreen()" />
@@ -62,14 +66,7 @@
         } @else if (isText()) {
           <app-v2-preview-text-code-view [path]="currentPath()" [file]="f" [isWriteable]="fileWriteable()" />
         } @else if (isImage() && previewUrl()) {
-          <img
-            #imageEl
-            class="detail__image"
-            [src]="previewUrl()"
-            [alt]="f.name"
-            (load)="onImageLoad()"
-            (error)="onImageError()"
-          />
+          <img #imageEl class="detail__image" [src]="previewUrl()" [alt]="f.name" (load)="onImageLoad()" (error)="onImageError()" />
         } @else if (isPdf() && pdfSafeUrl(); as url) {
           <iframe class="detail__iframe" [src]="url" [title]="f.name"></iframe>
         } @else if (isVideo() && previewUrl()) {
@@ -173,20 +170,10 @@
               </section>
             }
             @case ('comment') {
-              <app-v2-comments-panel
-                [filePath]="currentPath()"
-                [fileId]="f.id"
-                (hasCommentsChange)="onHasCommentsChange($event)"
-              />
+              <app-v2-comments-panel [filePath]="currentPath()" [fileId]="f.id" (hasCommentsChange)="onHasCommentsChange($event)" />
             }
             @case ('versions') {
-              <app-v2-versions-panel
-                [filePath]="currentPath()"
-                [fileId]="f.id"
-                [mime]="f.mime"
-                [size]="f.size"
-                (restored)="onVersionRestored()"
-              />
+              <app-v2-versions-panel [filePath]="currentPath()" [fileId]="f.id" [mime]="f.mime" [size]="f.size" (restored)="onVersionRestored()" />
             }
             @case ('activity') {
               <div class="detail__placeholder">

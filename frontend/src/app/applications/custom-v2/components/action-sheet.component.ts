@@ -104,7 +104,7 @@ function isDivider(e: ActionSheetEntry): e is ActionSheetDivider {
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         padding: var(--si-space-4) var(--si-space-6) var(--si-space-2);
       }
       .as__list {

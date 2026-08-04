@@ -309,7 +309,7 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
         color: var(--si-fg);
       }
       .md-tool--active {
-        background: var(--si-bg4);
+        background: var(--si-bg3);
         color: var(--si-fg);
       }
       .md-tool--bold {

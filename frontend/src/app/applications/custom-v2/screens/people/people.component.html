@@ -19,17 +19,8 @@
     </header>
     <div class="people__list-body">
       @for (u of filteredUsers(); track u.id) {
-        <button
-          type="button"
-          class="people-row"
-          [class.people-row--active]="selected()?.id === u.id"
-          (click)="selectUser(u)"
-        >
-          <span
-            class="people-row__avatar"
-            [style.background]="toneVarFor(u)"
-            [style.color]="toneVarFor(u, '-fg')"
-          >
+        <button type="button" class="people-row" [class.people-row--active]="selected()?.id === u.id" (click)="selectUser(u)">
+          <span class="people-row__avatar" [style.background]="toneVarFor(u)" [style.color]="toneVarFor(u, '-fg')">
             @if (u.avatarUrl) {
               <img [src]="u.avatarUrl" alt="" />
             } @else {
@@ -58,11 +49,7 @@
     @if (selected(); as u) {
       <div class="people__detail-card">
         <div class="people__detail-head">
-          <span
-            class="people__detail-avatar"
-            [style.background]="toneVarFor(u)"
-            [style.color]="toneVarFor(u, '-fg')"
-          >
+          <span class="people__detail-avatar" [style.background]="toneVarFor(u)" [style.color]="toneVarFor(u, '-fg')">
             @if (u.avatarUrl) {
               <img [src]="u.avatarUrl" alt="" />
             } @else {

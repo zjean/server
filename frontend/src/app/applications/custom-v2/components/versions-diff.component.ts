@@ -79,7 +79,7 @@ interface DiffLine {
           color: var(--si-cyan);
         }
         &--header {
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
         }
       }
     `

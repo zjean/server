@@ -138,7 +138,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         margin-bottom: var(--si-space-1);
       }
       .dp__kv-row {
@@ -149,7 +149,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         font-size: var(--si-text-8);
 
         > span:first-child {
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
           font-size: var(--si-text-6);
         }
       }
@@ -162,7 +162,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
         font-size: var(--si-text-7);
       }
       .dp__kv-faint {
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
       }
       .dp__empty {
         flex: 1 1 auto;
@@ -184,7 +184,7 @@ type FolderSizeState = { kind: 'loading' } | { kind: 'loaded'; size: number } | 
       }
       .dp__empty-lede {
         font-size: var(--si-text-7);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         max-width: 220px;
         line-height: 1.45;
       }

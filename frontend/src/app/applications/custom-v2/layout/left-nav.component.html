@@ -120,11 +120,7 @@
 
     <div class="left-nav__section-label" l10nTranslate>Workspace</div>
     @for (it of workspace; track it.id) {
-      <a
-        [routerLink]="it.route"
-        routerLinkActive="left-nav__item--active"
-        class="left-nav__item"
-      >
+      <a [routerLink]="it.route" routerLinkActive="left-nav__item--active" class="left-nav__item">
         <app-v2-icon [name]="it.icon" [size]="15" />
         <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
       </a>
@@ -135,20 +131,11 @@
     <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleShared()">
       <app-v2-icon name="share" [size]="15" />
       <span class="left-nav__label" l10nTranslate>All shares</span>
-      <app-v2-icon
-        name="chevDown"
-        [size]="11"
-        class="left-nav__caret"
-        [class.left-nav__caret--collapsed]="!sharedOpen()"
-      />
+      <app-v2-icon name="chevDown" [size]="11" class="left-nav__caret" [class.left-nav__caret--collapsed]="!sharedOpen()" />
     </button>
     @if (sharedOpen()) {
       @for (it of sharedEntries; track it.id) {
-        <a
-          [routerLink]="it.route"
-          routerLinkActive="left-nav__item--active"
-          class="left-nav__item left-nav__item--sub"
-        >
+        <a [routerLink]="it.route" routerLinkActive="left-nav__item--active" class="left-nav__item left-nav__item--sub">
           <app-v2-icon [name]="it.icon" [size]="15" />
           <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
         </a>
@@ -161,20 +148,11 @@
       <button type="button" class="left-nav__item left-nav__item--toggle" (click)="toggleAdmin()">
         <app-v2-icon name="person" [size]="15" />
         <span class="left-nav__label" l10nTranslate>Administration</span>
-        <app-v2-icon
-          name="chevDown"
-          [size]="11"
-          class="left-nav__caret"
-          [class.left-nav__caret--collapsed]="!adminOpen()"
-        />
+        <app-v2-icon name="chevDown" [size]="11" class="left-nav__caret" [class.left-nav__caret--collapsed]="!adminOpen()" />
       </button>
       @if (adminOpen()) {
         @for (it of adminEntries; track it.id) {
-          <a
-            [routerLink]="it.route"
-            routerLinkActive="left-nav__item--active"
-            class="left-nav__item left-nav__item--sub"
-          >
+          <a [routerLink]="it.route" routerLinkActive="left-nav__item--active" class="left-nav__item left-nav__item--sub">
             <app-v2-icon [name]="it.icon" [size]="15" />
             <span class="left-nav__label">{{ it.label | translate: locale.language }}</span>
           </a>
@@ -203,7 +181,7 @@
         <div class="left-nav__user-meta">
           <div class="left-nav__user-name">{{ user()?.fullName || user()?.login }}</div>
           <div class="left-nav__user-usage">
-            {{ (user()?.storageUsage ?? 0) | toBytes: 1 : true }}
+            {{ user()?.storageUsage ?? 0 | toBytes: 1 : true }}
             @if ((user()?.storageQuota ?? 0) > 0) {
               / {{ user()?.storageQuota | toBytes }}
             } @else {
@@ -222,13 +200,7 @@
         </a>
       </div>
     }
-    <a
-      class="left-nav__source"
-      [href]="sourceUrl"
-      target="_blank"
-      rel="noopener noreferrer"
-      title="Source code — github.com/zjean/server (AGPL §13)"
-    >
+    <a class="left-nav__source" [href]="sourceUrl" target="_blank" rel="noopener noreferrer" title="Source code — github.com/zjean/server (AGPL §13)">
       zjean/server · source
     </a>
     <a class="left-nav__back" (click)="backToClassic()" l10nTranslate>← Back to classic UI</a>

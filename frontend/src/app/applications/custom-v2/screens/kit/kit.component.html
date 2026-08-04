@@ -15,7 +15,9 @@
   </section>
 
   <section class="kit__section">
-    <h2 class="kit__section-title">Icons <span class="kit__hint">{{ iconNames.length }}</span></h2>
+    <h2 class="kit__section-title">
+      Icons <span class="kit__hint">{{ iconNames.length }}</span>
+    </h2>
     <div class="kit__icons">
       @for (n of iconNames; track n) {
         <div class="kit__icon-cell" [title]="n">
@@ -97,6 +99,117 @@
     are exactly the two that drifted — 19 distinct font sizes and 54 off-grid
     spacing values by the time of the #398 audit. Rendering them here is the point.
   -->
+  <section class="kit__section">
+    <h2 class="kit__section-title">Badges — one shape per meaning</h2>
+    <div class="kit__row">
+      @for (b of badgeMeanings; track b.label) {
+        <app-v2-pill [color]="b.color">
+          @if (b.icon) {
+            <app-v2-icon [name]="b.icon" [size]="11" />
+          }
+          {{ b.label }}
+        </app-v2-pill>
+      }
+    </div>
+    <p class="kit__note">
+      Badges are 4px-radius rectangles reporting a state; chips are full-radius and removable. Favourite is the only icon-only badge.
+    </p>
+    <div class="kit__row">
+      <app-v2-pill shape="chip" color="accent">Anouk K.</app-v2-pill>
+      <app-v2-pill shape="chip" color="violet">
+        <app-v2-icon name="users" [size]="12" />
+        design-team
+      </app-v2-pill>
+      <app-v2-pill shape="chip" color="gray">Shared with me</app-v2-pill>
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Segmented</h2>
+    <div class="kit__row">
+      <app-v2-segmented [options]="densityOptions" [value]="density()" ariaLabel="Density" (changed)="density.set($event)" />
+      <app-v2-segmented [options]="viewOptions" [value]="viewMode()" ariaLabel="View" (changed)="viewMode.set($event)" />
+      <app-v2-segmented
+        [options]="scopeOptions"
+        [value]="scope()"
+        emphasis="accent"
+        size="sm"
+        ariaLabel="Search scope"
+        (changed)="scope.set($event)"
+      />
+    </div>
+    <p class="kit__note">
+      Active is a surface step up, not an accent fill — a segment says what you are looking at, not what to act on. The accent emphasis is for the one
+      case the design tints: search scope inside the search field.
+    </p>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Inputs</h2>
+    <div class="kit__stack">
+      <app-v2-input
+        icon="search"
+        placeholder="Filter in Personal…"
+        hint="⌘F"
+        [value]="filterValue()"
+        [clearable]="true"
+        ariaLabel="Filter"
+        (changed)="filterValue.set($event)"
+      />
+      <app-v2-input
+        size="lg"
+        icon="search"
+        placeholder="Search everything…"
+        [value]="searchValue()"
+        [clearable]="true"
+        ariaLabel="Search"
+        (changed)="searchValue.set($event)"
+      />
+      <app-v2-input [value]="errorValue()" error="A file with this name already exists" ariaLabel="Rename" (changed)="errorValue.set($event)" />
+      <app-v2-input value="Inherited from space" [disabled]="true" ariaLabel="Inherited" />
+    </div>
+    <p class="kit__note">
+      Filled, not outlined — but the fill is 1.10:1 against the content plane, so the resting hairline is what satisfies SC 1.4.11. Placeholders name
+      the scope, never the control. lg (48px) is for the search page only.
+    </p>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Tabs</h2>
+    <div class="kit__panel-demo">
+      <app-v2-tabs [tabs]="panelTabs" [value]="panelTab()" ariaLabel="Inspector" (changed)="panelTab.set($event)" />
+    </div>
+    <div class="kit__panel-demo kit__panel-demo--wide">
+      <app-v2-tabs layout="inline" [tabs]="panelTabs" [value]="panelTab()" ariaLabel="Inspector inline" (changed)="panelTab.set($event)" />
+    </div>
+    <p class="kit__note">
+      Always labelled — icon-only tabs are forbidden. Counts sit in the label so the strip stays one row. The active underline is an inset shadow, so
+      switching never shifts the row.
+    </p>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Tooltips</h2>
+    <div class="kit__row">
+      <app-v2-icon-btn iconName="pin" [size]="32" appV2Tooltip="Toggle right panel" tooltipShortcut="⌘I" />
+      <app-v2-icon-btn iconName="pencil" [size]="32" appV2Tooltip="Rename" tooltipShortcut="F2" />
+      <app-v2-icon-btn iconName="refresh" [size]="32" appV2Tooltip="Refresh" />
+      <span class="kit__note kit__note--inline">Hover for 400ms. Out is immediate.</span>
+    </div>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Skeleton</h2>
+    <app-v2-skeleton [rows]="3" />
+    <p class="kit__note">Mirrors the row geometry it replaces, capped at five rows however many the caller asks for. Never a spinner for a list.</p>
+  </section>
+
+  <section class="kit__section">
+    <h2 class="kit__section-title">Pagination</h2>
+    <app-v2-pagination [total]="214" [perPage]="50" [page]="pageNo()" (changed)="pageNo.set($event)" />
+    <p class="kit__note">The gaps collapse rather than the numbers, so the cluster never changes width as you page.</p>
+  </section>
+
   <section class="kit__section">
     <h2 class="kit__section-title">Type scale</h2>
     <div class="kit__scale">

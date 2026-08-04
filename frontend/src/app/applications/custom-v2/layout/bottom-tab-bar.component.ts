@@ -73,10 +73,10 @@ interface TabEntry {
         font-size: var(--si-text-3);
         font-weight: 500;
         letter-spacing: -0.05px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         text-decoration: none;
-        transition: color var(--si-dur-2) var(--si-ease);
+        transition: color var(--si-dur-2) var(--si-ease-out);
       }
       .bb__tab:hover {
         color: var(--si-fg-muted);

@@ -37,7 +37,7 @@
     font-weight: 600;
     letter-spacing: 1.4px;
     text-transform: uppercase;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__title {
@@ -119,7 +119,7 @@
   &__req {
     font-size: var(--si-text-2);
     font-weight: 500;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     letter-spacing: 0.3px;
     text-transform: uppercase;
   }
@@ -142,7 +142,7 @@
 
     &:focus {
       border-color: var(--si-accent-line);
-      background: var(--si-bg4);
+      background: var(--si-bg3);
     }
 
     &:disabled {
@@ -151,7 +151,7 @@
     }
 
     &::placeholder {
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
 
     &--narrow {
@@ -192,7 +192,7 @@
 
   &__hint {
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__chips {
@@ -223,7 +223,7 @@
     background: transparent;
     border: 0;
     padding: var(--si-space-1);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     cursor: pointer;
     display: inline-flex;
     border-radius: 50%;
@@ -233,7 +233,7 @@
 
     &:hover:not(:disabled) {
       color: var(--si-fg);
-      background: var(--si-bg4);
+      background: var(--si-bg3);
     }
 
     &:disabled {
@@ -251,7 +251,7 @@
     border: 1px solid var(--si-line);
     border-radius: var(--si-r2);
     height: 32px;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
 
     &:focus-within {
       border-color: var(--si-accent-line);
@@ -261,7 +261,7 @@
   &__search-status {
     font-family: var(--si-mono);
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__results {
@@ -277,7 +277,7 @@
     &--empty {
       padding: var(--si-space-5) var(--si-space-6);
       font-size: var(--si-text-6);
-      color: var(--si-fg-faint);
+      color: var(--si-fg-muted);
     }
   }
 
@@ -301,7 +301,7 @@
     }
 
     &:hover {
-      background: var(--si-bg4);
+      background: var(--si-bg3);
     }
   }
 
@@ -309,7 +309,7 @@
     margin-left: auto;
     font-family: var(--si-mono);
     font-size: var(--si-text-4);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 
   &__placeholder {
@@ -319,7 +319,7 @@
     justify-content: center;
     gap: var(--si-space-4);
     padding: 40px var(--si-space-11);
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
     text-align: center;
   }
 

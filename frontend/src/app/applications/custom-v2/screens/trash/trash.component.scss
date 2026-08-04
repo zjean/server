@@ -94,7 +94,7 @@
 .bin-table__head {
   height: 32px;
   font-size: var(--si-text-3);
-  color: var(--si-fg-faint);
+  color: var(--si-fg-muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1.1px;
@@ -175,6 +175,6 @@
   &__actions {
     display: flex;
     justify-content: flex-end;
-    color: var(--si-fg-faint);
+    color: var(--si-fg-muted);
   }
 }

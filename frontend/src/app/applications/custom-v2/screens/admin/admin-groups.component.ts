@@ -226,7 +226,7 @@ function emptyDraft(): GroupDraft {
       }
       .ag__count {
         font-size: var(--si-text-4);
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-family: var(--si-mono);
       }
       .ag__actions {
@@ -252,7 +252,7 @@ function emptyDraft(): GroupDraft {
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.8px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         border-radius: var(--si-r1);
         cursor: pointer;
 
@@ -311,7 +311,7 @@ function emptyDraft(): GroupDraft {
           font-size: var(--si-text-3);
           text-transform: uppercase;
           letter-spacing: 1.1px;
-          color: var(--si-fg-faint);
+          color: var(--si-fg-muted);
           font-weight: 600;
           font-family: var(--si-display);
         }
@@ -355,7 +355,7 @@ function emptyDraft(): GroupDraft {
         border-radius: 5px;
         background: transparent;
         border: none;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         cursor: pointer;
         padding: 0;
         display: inline-flex;
@@ -363,7 +363,7 @@ function emptyDraft(): GroupDraft {
         justify-content: center;
 
         &:hover {
-          background: var(--si-bg4);
+          background: var(--si-bg3);
           color: var(--si-fg);
         }
         &--danger:hover {
@@ -414,7 +414,7 @@ function emptyDraft(): GroupDraft {
         font-size: var(--si-text-3);
         text-transform: uppercase;
         letter-spacing: 1px;
-        color: var(--si-fg-faint);
+        color: var(--si-fg-muted);
         font-weight: 600;
       }
       .ag-field input[type='text'],

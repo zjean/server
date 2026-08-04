@@ -34,12 +34,7 @@
         {{ (results().length === 1 ? 'one_result' : 'nb_results') | translate: locale.language : { nb: results().length } }}
       </div>
       @for (r of results(); track r.id) {
-        <button
-          type="button"
-          class="search-row"
-          (click)="openResult(r)"
-          (auxclick)="onResultAuxClick($event, r)"
-        >
+        <button type="button" class="search-row" (click)="openResult(r)" (auxclick)="onResultAuxClick($event, r)">
           <app-v2-file-glyph [type]="mimeToGlyph(r.mime)" [size]="28" [rounded]="6" />
           <div class="search-row__meta">
             <div class="search-row__name">{{ r.name }}</div>
