@@ -1,5 +1,5 @@
-import { Directive, ElementRef, HostListener, inject, model, output } from '@angular/core'
-import { resolveSheetDrag, sheetDragHeight, SheetSnap } from '../utils/sheet-snap'
+import { Directive, ElementRef, HostListener, inject, input, model, output } from '@angular/core'
+import { resolveSheetDismissDrag, resolveSheetDrag, sheetDragHeight, SheetSnap } from '../utils/sheet-snap'
 
 /** How far a pointer may wander before a tap on the handle counts as a drag. */
 const TAP_SLOP_PX = 4
@@ -36,7 +36,15 @@ const TAP_SLOP_PX = 4
 export class SheetDragDirective {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef)
 
-  /** Two-way: the directive resolves the gesture, the host keeps the state. */
+  /**
+   * `snap` for a sheet with the design's two heights; `dismiss` for an auto-height one,
+   * where the only thing a downward drag can mean is "away". The second mode moves the
+   * sheet with `translateY` rather than resizing it — there is no height to interpolate
+   * towards, and translating is what makes the spring-back free.
+   */
+  readonly dragMode = input<'snap' | 'dismiss'>('snap')
+
+  /** Two-way: the directive resolves the gesture, the host keeps the state. Snap mode only. */
   readonly snap = model<SheetSnap>('half')
   /** The gesture asked for the sheet to go away. The host decides what that means. */
   readonly dismissed = output<void>()
@@ -76,6 +84,11 @@ export class SheetDragDirective {
     // Prevents the pull-to-refresh / overscroll the browser would otherwise start on
     // top of the drag.
     event.preventDefault()
+    if (this.dragMode() === 'dismiss') {
+      // Downward only: an auto-height sheet has nowhere to grow to.
+      this.host.nativeElement.style.transform = `translateY(${Math.max(0, deltaPx)}px)`
+      return
+    }
     this.host.nativeElement.style.height = `${sheetDragHeight({
       from: this.startedFrom,
       deltaPx,
@@ -90,14 +103,28 @@ export class SheetDragDirective {
     this.dragging = false
     const element = this.host.nativeElement
     element.classList.remove('v2-sheet--dragging')
-    // Hand the height back to the snap classes; leaving an inline px height would pin
-    // the sheet at whatever the gesture ended on and beat every later class change.
+    // Hand the geometry back to the classes; leaving an inline value would pin the sheet
+    // at whatever the gesture ended on and beat every later class change.
     element.style.removeProperty('height')
+    element.style.removeProperty('transform')
 
     // A tap on the handle is not a drag, and it must not resolve as one — with no
     // movement, `resolveSheetDrag` would report the nearest snap, which is the one it is
     // already at. Handled by the host's own click handler instead.
     if (!this.moved) return
+
+    if (this.dragMode() === 'dismiss') {
+      if (
+        resolveSheetDismissDrag({
+          deltaPx: event.clientY - this.startY,
+          sheetPx: element.getBoundingClientRect().height,
+          velocityPxPerMs: this.velocity(event)
+        })
+      ) {
+        this.dismissed.emit()
+      }
+      return
+    }
 
     const outcome = resolveSheetDrag({
       from: this.startedFrom,

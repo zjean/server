@@ -461,7 +461,36 @@
     }
   </div>
 
-  <app-v2-context-menu [items]="menuItems()" [open]="menu() !== null" [anchor]="menu()" (closed)="closeMenu()" />
+  <!-- `M6`: the ⋯ menu is a bottom sheet on a touch layout. Same items, same actions —
+       what changes is where they appear: a menu anchored to the tap point lands wherever
+       the finger happened to be, including against the top edge, while a sheet always
+       opens under the thumb. The file header is the design's, and it is what tells you
+       which row the sheet is about once the list behind it is dimmed. -->
+  @if (layoutV2.isMobile()) {
+    <app-v2-action-sheet [open]="menu() !== null" [items]="menuItems()" (selected)="onRowSheetPick($event)" (closed)="closeMenu()">
+      @if (menu()?.file; as f) {
+        <div actionSheetHead class="v2-sheet__head v2-sheet__head--ruled">
+          <app-v2-file-glyph [type]="f.isDir ? 'folder' : mimeToGlyph(f.mime)" [size]="34" [rounded]="8" />
+          <div class="v2-sheet__head-text">
+            <div class="v2-sheet__title">{{ f.name }}</div>
+            <div class="v2-sheet__subject">
+              @if (!f.isDir) {
+                {{ f.size | toBytes: 1 : true }} ·
+              }
+              {{ f.mtime | amTimeAgo }}
+            </div>
+          </div>
+          @if (favoritesService.isFavorite(f.id)) {
+            <app-v2-pill color="amber" [size]="11" [attr.title]="'Favorites' | translate: locale.language">
+              <app-v2-icon name="star" [size]="11" />
+            </app-v2-pill>
+          }
+        </div>
+      }
+    </app-v2-action-sheet>
+  } @else {
+    <app-v2-context-menu [items]="menuItems()" [open]="menu() !== null" [anchor]="menu()" (closed)="closeMenu()" />
+  }
 
   <app-v2-context-menu [items]="newMenuItems()" [open]="newMenuOpen()" [anchor]="newMenuAnchor()" (closed)="newMenuOpen.set(false)" />
 

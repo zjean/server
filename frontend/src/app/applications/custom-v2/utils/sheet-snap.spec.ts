@@ -7,7 +7,7 @@
 // that is too large makes it impossible to close.
 
 import { describe, expect, it } from 'vitest'
-import { resolveSheetDrag, sheetDragHeight, SHEET_SNAP_PERCENT } from './sheet-snap'
+import { resolveSheetDismissDrag, resolveSheetDrag, sheetDragHeight, SHEET_SNAP_PERCENT } from './sheet-snap'
 
 const VH = 800
 
@@ -80,5 +80,34 @@ describe('sheetDragHeight', () => {
 
   it('never paints a negative height', () => {
     expect(sheetDragHeight({ from: 'half', deltaPx: 5 * VH, viewportPx: VH })).toBe(0)
+  })
+})
+
+describe('resolveSheetDismissDrag', () => {
+  // An action sheet is short — 300px is typical — so the threshold is a fraction of its
+  // own height rather than of the viewport, and capped so a tall one does not demand a
+  // 300px drag.
+  const SHEET = 300
+
+  it('closes past a quarter of the sheet’s own height', () => {
+    expect(resolveSheetDismissDrag({ deltaPx: 74, sheetPx: SHEET })).toBe(false)
+    expect(resolveSheetDismissDrag({ deltaPx: 75, sheetPx: SHEET })).toBe(true)
+  })
+
+  it('caps what a tall sheet may ask for', () => {
+    // A quarter of 900 would be 225px of travel. The device found this the hard way: at a
+    // third capped at 160, a thumb-length pull on a sheet grown to 92vh did nothing.
+    expect(resolveSheetDismissDrag({ deltaPx: 101, sheetPx: 900 })).toBe(true)
+    expect(resolveSheetDismissDrag({ deltaPx: 99, sheetPx: 900 })).toBe(false)
+  })
+
+  it('closes on a downward flick, however short', () => {
+    expect(resolveSheetDismissDrag({ deltaPx: 8, sheetPx: SHEET, velocityPxPerMs: 1.1 })).toBe(true)
+  })
+
+  it('never closes on an upward drag or flick', () => {
+    // There is nowhere for this kind of sheet to grow to, so up is a mis-grab.
+    expect(resolveSheetDismissDrag({ deltaPx: -200, sheetPx: SHEET })).toBe(false)
+    expect(resolveSheetDismissDrag({ deltaPx: -8, sheetPx: SHEET, velocityPxPerMs: -2 })).toBe(false)
   })
 })
