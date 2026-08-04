@@ -16,6 +16,11 @@
     } @else {
       <app-v2-page-breadcrumb />
     }
+    <!-- The design's error level 3, and its position is the whole point: "a persistent
+         strip UNDER THE TOP BAR". Inside the content column rather than above the body, so
+         it pushes the screen down instead of overlaying it — a strip that covered content
+         would be a toast with no timeout. -->
+    <app-v2-session-strip />
     <router-outlet />
   </main>
   @if (!layoutV2.isMobile() && layoutV2.dockVisible() && layoutV2.dockOverlay()) {
@@ -91,3 +96,4 @@
 <app-v2-lock-dialog />
 <app-v2-share-dialog />
 <app-v2-2fa-dialog />
+<app-v2-shortcuts-dialog />

@@ -395,11 +395,34 @@ What 7a already put in place, so 7b does not re-derive it:
   states that rule twice. Only the share dialog has a `.v2-dialog__footer` today; the other
   seven still owe the migration, and they get the sheet geometry for free when they land.
 
-### Phase 8 — keyboard
+### Phase 8 — keyboard and the session strip (#446)
 
-- The empty state already **prints** `N new · U upload · ⌘F filter`. None of `N` or
-  `U` is **bound** yet. That is this phase's job, and the printed hints are
-  currently a promise the app does not keep.
+- The empty state's printed hints are **kept** now: `N` opens the New menu (the sheet on
+  mobile), `U` opens the file picker. Also bound: `F2` rename, `F` favourite, `⌘⇧S` share,
+  and `?` for the shortcut sheet. `⌘F` / `⌘A` / `⌫` / `Esc` / `⌘I` / `⌘B` / `⌘K` were
+  already there.
+- **`utils/shortcut-label.ts` is the one place a modifier is spelled**, and
+  `shortcutGroups()` is the list the `?` sheet renders. Only bound shortcuts belong in it —
+  the plan's hint set names a `⌘K` command palette, and `⌘K` exists but focuses the top
+  bar's search field, so it is listed as *Search files*. There is no palette.
+- **A bare-key shortcut needs two guards, not one**: no modifier (⌘N is the browser's), and
+  not while typing — and "typing" includes `isContentEditable`, because the markdown editor
+  and the comment composer are both contenteditable and would otherwise swallow a `?`.
+- **Escape belongs to whatever is on top.** Cancelling a rename also cleared the file
+  selection, because the dialog and the browser's key handler both act on one keypress. The
+  browser's handler now bails if `.v2-dialog, .v2-sheet, .ctx-menu` is in the DOM — cheaper
+  than making eight dialogs call `preventDefault`, and it fails in the safe direction.
+- **The session strip is the design's error level 3**, amber (offline is a condition, not a
+  failure), `role="status" aria-live="polite"`, measured at 7.9:1. Two of the design's three
+  clauses for that level are NOT implemented and the component says why in its own doc:
+  "disables write actions" would lie exactly when it matters (`navigator.onLine` is true
+  behind a captive portal), and "queues local edits with a count" has nothing queueing them.
+- **A frozen CSS animation is invisible, and that is how agent-browser renders one.** The
+  headless Chromium that fires no rAF also never advances an animation's clock, so every
+  sheet sat frozen at its FROM keyframe — `translateY(100%)`, i.e. exactly its own height
+  below the fold. Any geometry measured there was of an off-screen element. The keyframe now
+  starts at **12%**, which reads the same on a device and leaves the sheet measurable in the
+  harness. If you add an entrance animation, do not start it anywhere that hides the element.
 
 ---
 

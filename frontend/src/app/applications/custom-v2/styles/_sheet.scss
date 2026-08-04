@@ -176,9 +176,15 @@
   }
 }
 
+// 12% rather than 100%, and the reason is not taste: an environment that runs the animation
+// but never advances its clock — agent-browser's headless Chromium, the same one that fires
+// no rAF — freezes every sheet at the FROM keyframe. At 100% that is a sheet parked exactly
+// its own height below the fold, i.e. invisible, in the one tool available for inspecting it;
+// at 12% it is 90-odd px low and still measurable. On a real device the travel reads as a
+// slide-up either way, which is what this is for.
 @keyframes v2-sheet-in {
   from {
-    transform: translateY(100%);
+    transform: translateY(12%);
   }
   to {
     transform: translateY(0);

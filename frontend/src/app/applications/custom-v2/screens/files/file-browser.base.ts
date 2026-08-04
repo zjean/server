@@ -185,6 +185,10 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected readonly dropHoverId = signal<number | null>(null)
 
   @ViewChild('fileInput') protected fileInput?: ElementRef<HTMLInputElement>
+  // The `N` shortcut opens the same menu the New button does, and a menu needs an anchor.
+  // Read from the template rather than positioned at a guess: a menu that opens where the
+  // button is NOT reads as a different control.
+  @ViewChild('newBtnAnchor') protected newBtnAnchor?: ElementRef<HTMLElement>
   // The filter is an <app-v2-input> now, so ⌘F focuses THROUGH the component
   // rather than an ElementRef. `select()` is gone with it: the primitive owns its
   // <input> and exposing it just to select the text would give every caller write
@@ -599,6 +603,12 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     }
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
     if (event.key === 'Escape' && this.hasSelection()) {
+      // Escape belongs to whatever is on top. Found while verifying the F2 shortcut:
+      // cancelling a rename also cleared the selection, because the dialog and this handler
+      // both act on one keypress and neither knows about the other. Cheaper than making
+      // eight dialogs call preventDefault, and it fails in the safe direction — an overlay
+      // that forgot to close on Escape leaves the selection alone rather than eating it.
+      if (typeof document !== 'undefined' && document.querySelector('.v2-dialog, .v2-sheet, .ctx-menu')) return
       this.clearSelection()
       event.preventDefault()
       return
@@ -611,7 +621,76 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     if ((event.key === 'Delete' || event.key === 'Backspace') && this.hasSelection()) {
       this.bulkDelete()
       event.preventDefault()
+      return
     }
+
+    // Share is the only one of ours that keeps a modifier, because ⌘⇧S is what the design
+    // prints and because S alone would fire while someone is typing into a control this
+    // handler cannot see (a contenteditable, an iframe's document).
+    if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 's') {
+      const one = this.singleSelected()
+      if (one) {
+        this.shareEntry(one)
+        event.preventDefault()
+      }
+      return
+    }
+
+    // Everything below is a BARE key, so a modifier means it belongs to the browser or the
+    // OS — ⌘N opens a window, and eating it to make a folder would be indefensible.
+    if (event.metaKey || event.ctrlKey || event.altKey) return
+
+    switch (event.key) {
+      case 'n':
+      case 'N': {
+        // Mobile has no keyboard, but a Bluetooth one is possible; the sheet is the mobile
+        // form of this menu, so route to whichever is mounted.
+        if (this.layoutV2.isMobile()) {
+          this.fabSheetOpen.set(true)
+        } else if (this.newBtnAnchor) {
+          this.onNewMenuClick(this.newBtnAnchor.nativeElement)
+        }
+        event.preventDefault()
+        return
+      }
+      case 'u':
+      case 'U': {
+        this.triggerFilePicker()
+        event.preventDefault()
+        return
+      }
+      case 'F2': {
+        const one = this.singleSelected()
+        if (one) {
+          this.renameEntry(one)
+          event.preventDefault()
+        }
+        return
+      }
+      case 'f':
+      case 'F': {
+        const one = this.singleSelected()
+        if (one) {
+          this.toggleFavorite(one)
+          event.preventDefault()
+        }
+        return
+      }
+      default:
+        return
+    }
+  }
+
+  /**
+   * The selected row when there is exactly one.
+   *
+   * Four shortcuts act on "the" file and none of them has an answer for two, so they share
+   * one accessor rather than each deciding what a multi-selection means. Silence is the
+   * right answer here: a rename that quietly renamed the first of six would be worse.
+   */
+  private singleSelected(): FileProps | null {
+    const sel = this.selectedFiles()
+    return sel.length === 1 ? sel[0] : null
   }
 
   protected isSelected(file: FileProps): boolean {

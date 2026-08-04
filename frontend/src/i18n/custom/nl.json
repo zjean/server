@@ -343,5 +343,19 @@
   "v2_eta_minutes": "{{ n }} min resterend",
   "Expand": "Uitvouwen",
   "Collapse": "Invouwen",
-  "Retry": "Opnieuw"
+  "Retry": "Opnieuw",
+  "Keyboard shortcuts": "Sneltoetsen",
+  "v2_shortcuts_subject": "Alles wat deze app instelt. Druk opnieuw op ? om te sluiten.",
+  "Around the app": "In de app",
+  "In a folder": "In een map",
+  "With one file selected": "Met één bestand geselecteerd",
+  "Search files": "Bestanden zoeken",
+  "Toggle the sidebar": "Zijbalk in-/uitschakelen",
+  "Toggle the details panel": "Detailpaneel in-/uitschakelen",
+  "This list": "Deze lijst",
+  "Filter": "Filteren",
+  "Select all": "Alles selecteren",
+  "Clear the selection": "Selectie wissen",
+  "Favorite": "Favoriet",
+  "v2_offline_strip": "Je bent offline. Wijzigingen kunnen niet worden opgeslagen totdat de verbinding terug is."
 }
