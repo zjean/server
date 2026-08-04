@@ -5,6 +5,7 @@ import { CompressDialogComponent } from '../components/compress-dialog.component
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LockDialogComponent } from '../components/lock-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
+import { SheetDragDirective } from '../components/sheet-drag.directive'
 import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
@@ -32,6 +33,7 @@ import { UploadDockComponent } from './upload-dock.component'
   },
   imports: [
     RouterOutlet,
+    SheetDragDirective,
     TitleBarComponent,
     TopBarComponent,
     LeftNavComponent,
@@ -120,13 +122,9 @@ export class LayoutV2Component implements OnInit {
     ev.preventDefault()
   }
 
+  // The mobile scrim this handles is the drawer's alone since `M3` — the inspector
+  // sheet has its own, wired straight to closeDock().
   protected onBackdropClick(): void {
-    if (this.layoutV2.leftNavOpen()) {
-      this.layoutV2.closeLeftNav()
-      return
-    }
-    if (this.layoutV2.dockOpen()) {
-      this.layoutV2.closeDock()
-    }
+    this.layoutV2.closeLeftNav()
   }
 }

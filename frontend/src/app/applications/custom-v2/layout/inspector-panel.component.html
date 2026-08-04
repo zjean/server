@@ -24,7 +24,7 @@
 
   <app-v2-tabs
     class="insp__tabs"
-    layout="fill"
+    [layout]="layoutV2.isMobile() ? 'pills' : 'fill'"
     [tabs]="tabs()"
     [value]="tab()"
     [ariaLabel]="'Details' | translate: locale.language"
@@ -92,9 +92,13 @@
                 } @empty {
                   <div class="insp__access-none" l10nTranslate>Not shared yet</div>
                 }
-                <app-v2-btn class="insp__manage" kind="secondary" size="md" icon="settings" [block]="true" (click)="manageSharing()">{{
-                  'Manage sharing' | translate: locale.language
-                }}</app-v2-btn>
+                <!-- Mobile reaches the same dialog from the sheet's own Share button,
+                     and two identical actions inside one 50vh sheet is one too many. -->
+                @if (!layoutV2.isMobile()) {
+                  <app-v2-btn class="insp__manage" kind="secondary" size="md" icon="settings" [block]="true" (click)="manageSharing()">{{
+                    'Manage sharing' | translate: locale.language
+                  }}</app-v2-btn>
+                }
               </section>
             }
           </div>
@@ -128,4 +132,42 @@
       </div>
     }
   </div>
+
+  <!-- `M3`: "…put their primary action inside the sheet at full width — never in a
+       header." Mobile only, and not because the desktop panel could not hold it: on
+       desktop these three actions are already in the toolbar and the row menu, one
+       click away and always visible. In a sheet they are not, and a sheet that covers
+       the toolbar has to carry them. -->
+  @if (layoutV2.isMobile()) {
+    @if (file(); as f) {
+      <div class="v2-sheet__actions">
+        <app-v2-btn kind="primary" size="lg" icon="share" [block]="true" [disabled]="!canShare()" (click)="manageSharing()">
+          {{ 'Share' | translate: locale.language }}
+        </app-v2-btn>
+        @if (!f.isDir) {
+          <app-v2-btn
+            kind="secondary"
+            size="lg"
+            icon="download"
+            [title]="'Download' | translate: locale.language"
+            [attr.aria-label]="'Download' | translate: locale.language"
+            (click)="download()"
+          />
+        }
+        <!-- One glyph for both directions: there is no filled star in the icon set, and
+             adding one to say "on" would put the row's own amber badge in two places. The
+             title and aria-pressed carry the state; the badge beside the file name carries
+             the picture. -->
+        <app-v2-btn
+          kind="secondary"
+          size="lg"
+          icon="star"
+          [title]="(isFavorite() ? 'Remove from favorites' : 'Add to favorites') | translate: locale.language"
+          [attr.aria-label]="(isFavorite() ? 'Remove from favorites' : 'Add to favorites') | translate: locale.language"
+          [attr.aria-pressed]="isFavorite()"
+          (click)="toggleFavorite()"
+        />
+      </div>
+    }
+  }
 </div>

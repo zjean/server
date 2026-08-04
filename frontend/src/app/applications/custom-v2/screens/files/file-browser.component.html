@@ -139,6 +139,8 @@
                 (click)="onRowClick($event, f)"
                 (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
+                appV2LongPress
+                (longPress)="onRowLongPress(f)"
               >
                 <span class="file-row__select" (click)="$event.stopPropagation(); toggleSelection(f)">
                   <app-v2-checkbox
@@ -282,6 +284,8 @@
                 (click)="onRowClick($event, f)"
                 (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
+                appV2LongPress
+                (longPress)="onRowLongPress(f)"
               >
                 <span class="file-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
                   <app-v2-checkbox
@@ -387,6 +391,8 @@
                 (keydown.enter)="openEntry(f)"
                 (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
+                appV2LongPress
+                (longPress)="onRowLongPress(f)"
               >
                 <div
                   class="gallery-tile__media"

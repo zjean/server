@@ -28,9 +28,15 @@ export interface TabItem<T extends string = string> {
 //     exactly that reason. Callers may pass icons anyway; inline will use them.
 //   • `inline` — tabs sized to their content, left-aligned, on a hairline rule.
 //     For a page-level strip where the set may grow.
+//   • `pills` — the mobile form (`M3`): "tabs become pills". Content-sized, 36px,
+//     radius-full, the active one an accent FILL rather than an underline, and the
+//     strip scrolls horizontally instead of dividing a width that is not there. A
+//     4-tab `fill` strip at 390px renders as one unbroken run of words, which is the
+//     same failure the design rejected the icon rail for.
 //
 // The active tab carries a 2px cobalt underline drawn as an INSET box-shadow
 // rather than a border-bottom, so switching tabs never shifts the row by a pixel.
+// `pills` is the exception: it has a fill, so it needs no underline.
 @Component({
   selector: 'app-v2-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -49,7 +55,7 @@ export interface TabItem<T extends string = string> {
           [attr.title]="t.disabled ? (t.disabledReason ?? null) : null"
           (click)="pick(t)"
         >
-          @if (t.icon && layout() === 'inline') {
+          @if (t.icon && layout() !== 'fill') {
             <app-v2-icon [name]="t.icon" [size]="14" />
           }
           <span class="tabs__label">{{ t.label }}</span>
@@ -93,6 +99,36 @@ export interface TabItem<T extends string = string> {
         padding-left: 0;
         padding-right: 0;
       }
+      /* Pills scroll rather than wrap: a wrapped second row would change the sheet's
+         header height depending on how many tabs a file happens to have. */
+      .tabs--pills {
+        gap: var(--si-space-4);
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      .tabs--pills::-webkit-scrollbar {
+        display: none;
+      }
+      .tabs--pills .tabs__tab {
+        flex: none;
+        height: 36px;
+        padding: 0 var(--si-space-6);
+        border-radius: var(--si-r4);
+        background: var(--si-bg6);
+      }
+      .tabs--pills .tabs__tab--active {
+        background: var(--si-accent);
+        color: var(--si-accent-fg);
+        /* The fill IS the selected state; the underline would read as a second one. */
+        box-shadow: none;
+      }
+      .tabs--pills .tabs__tab--active .tabs__count {
+        color: var(--si-accent-fg);
+        opacity: 0.72;
+      }
+      .tabs--pills .tabs__tab--disabled {
+        background: transparent;
+      }
       .tabs__tab:hover:not(.tabs__tab--active):not(.tabs__tab--disabled) {
         color: var(--si-fg);
       }
@@ -122,7 +158,7 @@ export interface TabItem<T extends string = string> {
 export class TabsComponent<T extends string = string> {
   readonly tabs = input.required<readonly TabItem<T>[]>()
   readonly value = input.required<T>()
-  readonly layout = input<'fill' | 'inline'>('fill')
+  readonly layout = input<'fill' | 'inline' | 'pills'>('fill')
   readonly ariaLabel = input<string | null>(null)
 
   readonly changed = output<T>()

@@ -24,32 +24,61 @@
          click-outside, Esc. -->
     <div class="layout-v2__backdrop layout-v2__backdrop--dock" (click)="layoutV2.closeDock()" aria-hidden="true"></div>
   }
-  @if (layoutV2.dockVisible()) {
+  @if (layoutV2.isMobile() && layoutV2.dockVisible()) {
+    <!-- `M3`: on mobile the inspector is a bottom sheet, snapping 50% / 92%, dismissed
+         by drag or scrim tap. It brings its own full-inset scrim rather than reusing the
+         drawer's, because a sheet is modal over the tab bar as well — see _sheet.scss. -->
+    <div class="v2-sheet-scrim" (click)="layoutV2.closeDock()" aria-hidden="true"></div>
     <aside
-      class="layout-v2__dock-panel layout-v2__dock-panel--open"
-      [class.layout-v2__dock-panel--overlay]="!layoutV2.isMobile() && layoutV2.dockOverlay()"
-      [style.width.px]="layoutV2.isMobile() ? null : layoutV2.dockWidth()"
+      class="v2-sheet"
+      [class.v2-sheet--half]="layoutV2.sheetSnap() === 'half'"
+      [class.v2-sheet--full]="layoutV2.sheetSnap() === 'full'"
+      appV2SheetDrag
+      [(snap)]="layoutV2.sheetSnap"
+      (dismissed)="layoutV2.closeDock()"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="'Details' | translate: locale.language"
     >
-      @if (!layoutV2.isMobile()) {
-        <div
-          #dockGrip
-          class="layout-v2__dock-grip"
-          role="separator"
-          tabindex="0"
-          aria-orientation="vertical"
-          [attr.aria-label]="'Resize panel' | translate: locale.language"
-          [attr.aria-valuenow]="layoutV2.dockWidth()"
-          [attr.aria-valuemin]="dockWidthMin"
-          [attr.aria-valuemax]="dockWidthMax"
-          (pointerdown)="startDockResize($event)"
-          (keydown)="onDockGripKey($event)"
-        ></div>
-      }
+      <!-- A button, not a decoration: the drag is the primary gesture but a tap has to
+           work too, and a 40×4 pill with no keyboard route would leave the second height
+           reachable only by finger. -->
+      <button
+        type="button"
+        class="v2-sheet__handle"
+        [attr.aria-label]="(layoutV2.sheetSnap() === 'half' ? 'Expand' : 'Collapse') | translate: locale.language"
+        (click)="layoutV2.toggleSheetSnap()"
+      ></button>
       <app-v2-inspector-panel />
     </aside>
   }
-  @if (layoutV2.isMobile() && (layoutV2.leftNavOpen() || layoutV2.dockVisible())) {
-    <div class="layout-v2__backdrop" [class.layout-v2__backdrop--left]="layoutV2.leftNavOpen()" (click)="onBackdropClick()" aria-hidden="true"></div>
+  @if (!layoutV2.isMobile() && layoutV2.dockVisible()) {
+    <aside
+      class="layout-v2__dock-panel layout-v2__dock-panel--open"
+      [class.layout-v2__dock-panel--overlay]="layoutV2.dockOverlay()"
+      [style.width.px]="layoutV2.dockWidth()"
+    >
+      <div
+        #dockGrip
+        class="layout-v2__dock-grip"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        [attr.aria-label]="'Resize panel' | translate: locale.language"
+        [attr.aria-valuenow]="layoutV2.dockWidth()"
+        [attr.aria-valuemin]="dockWidthMin"
+        [attr.aria-valuemax]="dockWidthMax"
+        (pointerdown)="startDockResize($event)"
+        (keydown)="onDockGripKey($event)"
+      ></div>
+      <app-v2-inspector-panel />
+    </aside>
+  }
+  <!-- The drawer's scrim only. The inspector had one here too until `M3` gave it a
+       sheet, which owns a full-inset scrim of its own — this one stops below the tab
+       bar, and a modal sheet covers that as well. -->
+  @if (layoutV2.isMobile() && layoutV2.leftNavOpen()) {
+    <div class="layout-v2__backdrop" (click)="onBackdropClick()" aria-hidden="true"></div>
   }
 </div>
 <app-v2-bottom-tab-bar />
