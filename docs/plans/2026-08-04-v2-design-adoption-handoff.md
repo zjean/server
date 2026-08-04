@@ -332,8 +332,21 @@ Read the plan's **§8.1**. Three things phase 7 inherits:
 - **`TransfersService` is the one source for in-flight numbers** — active tasks with a
   250ms re-publish (progress is mutated in place), plus rate and ETA over a trailing
   window. Do not add a second timer.
-- **The dock and the bulk bar can collide at narrow widths.** The bar positions against
-  `.personal`; the dock is viewport-fixed bottom-right. Untested below ~600px.
+- **`store.filesEndedTasks` is a day of SERVER history, not this session's transfers.**
+  `loadAll` seeds it from `GET /files/tasks` at login and the cache holds finished tasks
+  for `CACHE_TASK_TTL` (86400s), so #441's dock rose out of the corner on a fresh load to
+  report last night's deletions — and closing it did not help, because it only emptied
+  the client's copy. Fixed in #443 by `services/transfer-ledger.ts`: announceable means
+  **watched running here and not since dismissed**, per task id. Two corollaries worth
+  keeping: `watch()` must be fed from a plain subscription (an `effect` coalesces and
+  would miss a fast task's active value), and `Clear done` deletes server-side through
+  `FilesTasksService.removeSelectedTasks` — the one upstream `mod` in that PR.
+- **The dock and the bulk bar collided at 1280px, not below 600.** Both are
+  bottom-anchored, and the dock's 360px covered the bar from x896 rightwards including
+  `Delete`; the earlier note here guessed narrow widths and was wrong. Fixed in #443 with
+  `--si-dock-lift`, set by `.v2-root:has(.bulk-bar)` in the layout's sheet and read by the
+  dock, which keeps its two resting positions. Anything else that grows a bottom bar
+  should set that variable rather than re-solving it.
 
 ### Phase 7 — mobile, SPLIT into 7a (shipped, #442) and 7b (next)
 
@@ -352,8 +365,9 @@ What 7a already put in place, so 7b does not re-derive it:
   box. A sheet action wants 52px; that rule is already there and keyed on `.as__item`.
 - **The bulk bar positions against `.personal`, not the viewport** — `.personal` gained
   `position: relative` in Phase 2 for this. A viewport-fixed bar would sit over the
-  bottom tab bar. The upload dock IS viewport-fixed, and the two are untested together
-  below ~600px.
+  bottom tab bar. The upload dock IS viewport-fixed; they no longer collide (`--si-dock-lift`,
+  #443), but the mobile case of both plus the tab bar is still unmeasured — M6 replaces the
+  bulk bar with an action sheet, so check which of the two you are actually looking at.
 - Sheet snapping must be CSS + `afterNextRender`, not rAF — see §4. On a real device
   that limitation does not apply, which is the other reason 7b goes to `agent-device`.
 

@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { FileTask, FileTaskStatus } from '@sync-in-server/backend/src/applications/files/models/file-task'
 import { StoreService } from '../../../store/store.service'
+import { TransferLedger } from './transfer-ledger'
 
 /** What the dock's header line and a tile's bar are drawn from. */
 export interface TransferAggregate {
@@ -43,13 +44,31 @@ const TICK_MS = 250
  *  • **Rate and ETA are not reported by anything.** The design's dock says
  *    "4.2 MB/s · 12 s left", so they are derived here from the byte counters over a
  *    trailing window — a single instantaneous delta reads as noise on a slow link.
+ *  • **The ended list is a day of server-side history, not this session's.** So
+ *    "finished" has to be narrowed to "finished while we were watching, and not since
+ *    dismissed" before anything announces it — `TransferLedger`, and the reason the
+ *    dock used to reappear over yesterday's tasks.
  */
 @Injectable({ providedIn: 'root' })
 export class TransfersService {
   private readonly store = inject(StoreService)
 
   private readonly activeRaw = toSignal(this.store.filesActiveTasks, { initialValue: [] as FileTask[] })
-  readonly ended = toSignal(this.store.filesEndedTasks, { initialValue: [] as FileTask[] })
+  private readonly endedRaw = toSignal(this.store.filesEndedTasks, { initialValue: [] as FileTask[] })
+
+  // Which finished tasks are still the dock's business. See TransferLedger — the store
+  // holds a day of server-side history, not a log of this session.
+  private readonly ledger = new TransferLedger()
+  // Bumped when the ledger is written by a user action. `endedRaw` supplies the
+  // reactivity for `watch()` (an active emission always precedes the ended one that
+  // follows it), but a dismissal changes nothing the store publishes.
+  private readonly ledgerRevision = signal(0)
+
+  /** Finished tasks this client watched run and the user has not dismissed. */
+  readonly ended = computed<FileTask[]>(() => {
+    this.ledgerRevision()
+    return this.ledger.announceable(this.endedRaw())
+  })
 
   private readonly tick = signal(0)
   private readonly hasActive = computed(() => this.activeRaw().length > 0)
@@ -66,6 +85,12 @@ export class TransfersService {
   private samples: { at: number; bytes: number }[] = []
 
   constructor() {
+    // Not `takeUntilDestroyed`: this is a root singleton with the lifetime of the tab,
+    // and the same subscription-without-teardown that upstream's FilesTasksService
+    // makes on `store.user`. A plain subscription rather than an effect on the signal
+    // for the reason TransferLedger.watch documents.
+    this.store.filesActiveTasks.subscribe((tasks: FileTask[]) => this.ledger.watch(tasks))
+
     effect((onCleanup) => {
       if (!this.hasActive()) {
         this.samples = []
@@ -77,6 +102,18 @@ export class TransfersService {
       }, TICK_MS)
       onCleanup(() => window.clearInterval(id))
     })
+  }
+
+  /**
+   * Close the finished batch the dock is showing.
+   *
+   * Records the ids rather than emptying `store.filesEndedTasks`, which is shared with
+   * the classic task sidebar — closing a v2 panel must not delete the other UI's
+   * history, and emptying it did not survive the next server poll anyway.
+   */
+  dismissEnded(): void {
+    this.ledger.dismiss(this.ended())
+    this.ledgerRevision.update((v) => v + 1)
   }
 
   /** Active UPLOAD tasks whose destination is exactly this folder. */
