@@ -441,6 +441,27 @@ The empty state **is** the drop target: one bounded panel, max 560px, on `--si-b
 
 ---
 
+### 4.7 What Phase 2 actually settled
+
+Shipped in **#434**. The header stack, table, selection model, list end and empty
+state all landed as specced. Three notes for later phases:
+
+- **The density default is a behavioural change, not just a token one.** v2 shipped
+  56px rows — the *relaxed* step — so `comfortable` moves every existing user up a
+  notch. The contract pins the default for that reason.
+- **`repository.filterPlaceholder` is gone.** It was a per-screen constant that
+  said "Filter in Personal…" three folders deep. The placeholder is now computed
+  from `folderLabel()`. Any repository added later does not need the field.
+- **The bulk bar is positioned against `.personal`, not the viewport.** A
+  viewport-fixed bar would sit over the mobile bottom tab bar, so `.personal`
+  gained `position: relative`. Phase 7 depends on that.
+
+Grid and gallery still use the pre-adoption geometry; gallery is phase 6, and grid
+is not in any phase's scope yet — worth a decision before phase 7, since mobile
+re-lays-out whatever grid ends up being.
+
+---
+
 ## 5. Phase 3 — the inspector (D4, D5)
 
 One PR, `feat/v2-inspector-tabs`. Files: `layout/dock-panel.component.ts`, `layout/dock-rail.component.*` (**deleted**), `layout/dock-rail.service.ts`, `layout/layout-v2.component.*`, `screens/file-detail/*`, `components/versions-panel.component.ts`, `components/comments-panel.component.ts`.
