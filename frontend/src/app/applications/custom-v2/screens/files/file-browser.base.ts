@@ -862,7 +862,24 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   protected openRowMenu(event: MouseEvent, file: FileProps): void {
     event.stopPropagation()
     event.preventDefault()
+    // On a touch layout the long-press belongs to selection (`M6`), so if a browser also
+    // synthesises `contextmenu` from that gesture — Chrome does for some elements — the
+    // press would both select the row and open its sheet. The ⋯ button is a `click` and
+    // still gets through.
+    if (this.layoutV2.isMobile() && event.type === 'contextmenu') return
     this.menu.set({ file, x: event.clientX, y: event.clientY })
+  }
+
+  /**
+   * The action sheet reports the id it was given; the entry carries the callback.
+   *
+   * Deliberately the SAME `menuItems()` the context menu renders — one list of actions
+   * with one set of gates (a folder has no comments, the trash has no share), so the two
+   * presentations cannot drift into offering different things.
+   */
+  protected onRowSheetPick(id: string): void {
+    const entry = this.menuItems().find((e) => e.id === id)
+    if (entry && 'action' in entry) entry.action()
   }
 
   protected closeMenu(): void {

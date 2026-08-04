@@ -348,7 +348,7 @@ Read the plan's **§8.1**. Three things phase 7 inherits:
   dock, which keeps its two resting positions. Anything else that grows a bottom bar
   should set that variable rather than re-solving it.
 
-### Phase 7 — mobile, SPLIT into 7a (shipped, #442) and 7b (next)
+### Phase 7 — mobile, in THREE PRs: 7a (#442), M3 + long-press (#444), M5 + M6 (#445)
 
 The split and the verification method are maintainer decisions (2026-08-04) — see the
 plan's §9.1. **7b is M3 (info bottom sheet, 50%/92%), M5 (share sheet) and M6
@@ -370,6 +370,30 @@ What 7a already put in place, so 7b does not re-derive it:
   bulk bar with an action sheet, so check which of the two you are actually looking at.
 - Sheet snapping must be CSS + `afterNextRender`, not rAF — see §4. On a real device
   that limitation does not apply, which is the other reason 7b goes to `agent-device`.
+
+**What 7b settled, and the four traps it found:**
+
+- **The sheet shell is `styles/_sheet.scss` + `components/sheet-drag.directive.ts` +
+  `utils/sheet-snap.ts`.** Three surfaces use it (inspector, action sheet, and — through
+  `_dialog.scss` — every dialog). The height travels as `--si-sheet-h` because a drag has
+  to paint values BETWEEN the snaps; swapping classes cannot. Two drag modes: `snap` for a
+  panel, `dismiss` for an auto-height list.
+- **A touchscreen has no hover, and the row checkbox AND the row `⋯` are `opacity: 0`
+  until `:hover`.** So mobile could not select a row at all, which put the inspector out of
+  reach — `M6`'s long-press had to ship with `M3` (#444) rather than after it. Anything else
+  gated on `:hover` is invisible on a phone; grep for it before assuming a control is
+  reachable.
+- **The dismissal threshold has to be measured on the device.** A third of the sheet's
+  height capped at 160px read as "broken" — an ordinary thumb pull did nothing on a sheet
+  that had grown to 92vh from eleven actions. It is a quarter capped at 100px, and it can
+  afford to be generous because a drag can only START on the handle.
+- **`agent-device open` opens a NEW TAB and returns before the page is up.** A press issued
+  immediately after it lands on nothing, which reads exactly like a broken handler. Sleep,
+  or screenshot first.
+- **Every dialog is a sheet on mobile** (`_dialog.scss`, `.v2-root.layout-v2--mobile`), and
+  the footer becomes a `column-reverse` stack so the primary is full width — the design
+  states that rule twice. Only the share dialog has a `.v2-dialog__footer` today; the other
+  seven still owe the migration, and they get the sheet geometry for free when they land.
 
 ### Phase 8 — keyboard
 

@@ -83,3 +83,38 @@ export function sheetDragHeight(gesture: Omit<SheetDragEnd, 'velocityPxPerMs'>):
   const maxPx = (SHEET_SNAP_PERCENT.full / 100) * viewportPx
   return Math.max(0, Math.min(maxPx, startPx - deltaPx))
 }
+
+/**
+ * The fraction of its own height an auto-height sheet must travel to be let go of.
+ *
+ * Generous, and it can afford to be: a drag can only START on the handle, so unlike the
+ * snapping sheet there is no scroll gesture it could be confused with — a downward pull on
+ * the handle has exactly one meaning. Measured on the device first at a third capped at
+ * 160px, which made an ordinary thumb-length pull do nothing at all on a sheet that had
+ * grown to 92vh from eleven actions.
+ */
+const DISMISS_TRAVEL_FRACTION = 1 / 4
+/** Never ask for more than this, however tall the sheet is. About two rows. */
+const DISMISS_TRAVEL_MAX_PX = 100
+
+export interface SheetDismissDragEnd {
+  /** Distance travelled, positive downward. */
+  deltaPx: number
+  /** The sheet's own height. */
+  sheetPx: number
+  /** Signed, positive downward. Omit when unmeasurable. */
+  velocityPxPerMs?: number
+}
+
+/**
+ * Whether an auto-height sheet (the action sheet, the share sheet) should close.
+ *
+ * Upward travel never closes anything: there is nowhere for this kind of sheet to grow to,
+ * so a drag up is a mis-grab and springs back.
+ */
+export function resolveSheetDismissDrag(gesture: SheetDismissDragEnd): boolean {
+  const { deltaPx, sheetPx, velocityPxPerMs } = gesture
+  if (deltaPx <= 0) return false
+  if (velocityPxPerMs !== undefined && velocityPxPerMs >= FLICK_PX_PER_MS) return true
+  return deltaPx >= Math.min(DISMISS_TRAVEL_MAX_PX, sheetPx * DISMISS_TRAVEL_FRACTION)
+}

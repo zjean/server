@@ -40,7 +40,10 @@
   border-radius: var(--si-r5) var(--si-r5) 0 0;
   box-shadow: var(--si-shadow3);
   animation: v2-sheet-in var(--si-dur-3) var(--si-ease-out);
-  transition: height var(--si-dur-3) var(--si-ease-out);
+  // Height for the snapping sheet, transform for the auto-height one's spring-back.
+  transition:
+    height var(--si-dur-3) var(--si-ease-out),
+    transform var(--si-dur-3) var(--si-ease-out);
   // Contain the vertical pan so a drag on the handle cannot also scroll the page
   // behind the sheet; the body below opts back in for its own scrolling.
   overscroll-behavior: contain;
@@ -52,6 +55,15 @@
 
 .v2-sheet--full {
   --si-sheet-h: 92vh;
+}
+
+// Content-sized, for the sheets that are a list rather than a panel: an action sheet with
+// seven rows has one correct height, and the two snap points exist for content that
+// scrolls. Still capped at the taller snap so a long list scrolls inside the sheet
+// instead of growing past the top of the screen.
+.v2-sheet--auto {
+  height: auto;
+  max-height: 92vh;
 }
 
 // Mid-gesture the height is written directly, so it must not be animated as well —
@@ -98,6 +110,13 @@
   align-items: center;
   gap: var(--si-space-6);
   padding: var(--si-space-5) var(--si-space-8) var(--si-space-7);
+}
+
+// A rule under the identity, for the sheets whose content is a LIST of actions: without
+// it the file's name reads as the list's first row. The share sheet deliberately has no
+// rule — its header flows into the form below it, which is about the same file.
+.v2-sheet__head--ruled {
+  border-bottom: 1px solid var(--si-line);
 }
 
 .v2-sheet__head-text {

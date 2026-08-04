@@ -116,6 +116,103 @@
     padding: 0 var(--si-space-10) var(--si-space-6);
   }
 
+  // ---------------------------------------------------------------------------
+  // Mobile (`M5`): a dialog IS a sheet.
+  //
+  // "What moves to a sheet: the right panel, share, the ⋯ menu, sort/filter, upload
+  // progress, and every destructive confirm." A centred 560px box on a 390px screen is
+  // already 24px from both edges, so what actually changes is where it is anchored and
+  // which corners are round — the head, body and footer bands are the same in both.
+  //
+  // Done here rather than in `_sheet.scss` because it is the same frame the eight
+  // dialogs already share: giving one of them a second set of classes would put the
+  // share dialog's markup out of step with the other seven for the sake of geometry
+  // that is four properties.
+  //
+  // Deliberately NOT draggable. The drag directive needs a handle to grab, and a form
+  // whose fields are one thumb-width from that handle would swallow half the drags; a
+  // sheet with a form in it is dismissed by its own footer button or the scrim, both of
+  // which are already there. The handle-shaped bar at the top is a `::before`, and it
+  // says "this came from the bottom", which is the affordance a form-sheet needs.
+  // ---------------------------------------------------------------------------
+  &.layout-v2--mobile .v2-dialog {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: auto;
+    max-height: 92vh;
+    border-radius: var(--si-r5) var(--si-r5) 0 0;
+    padding-top: var(--si-space-6);
+    animation: v2-sheet-in var(--si-dur-3) var(--si-ease-out);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: var(--si-space-5);
+      left: 50%;
+      transform: translateX(-50%);
+      width: 40px;
+      height: 4px;
+      border-radius: var(--si-r4);
+      background: var(--si-line-strong);
+    }
+  }
+
+  // The head's top padding made room for a title in a box; here the handle occupies
+  // that space.
+  &.layout-v2--mobile .v2-dialog__head {
+    padding-top: var(--si-space-7);
+  }
+
+  // "…put their primary action inside the sheet at full width — never in a header."
+  //
+  // So the footer stops being a row. `column-reverse` rather than `column` because the
+  // primary is LAST in the DOM — where a pointer layout wants it — and first under a
+  // thumb; reversing here keeps one markup order for both. It also lands the design's
+  // other footer rule for free: "revoke is left-aligned away from Done" becomes revoke
+  // at the far end of the stack from Done.
+  //
+  // Buttons are `sm` (32px) in a dialog, which is below the touch floor, so they grow to
+  // 44 here. The spacer that pushed Done right has nothing to push in a column.
+  &.layout-v2--mobile .v2-dialog__footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    padding: var(--si-space-6) var(--si-space-8) calc(var(--si-space-7) + env(safe-area-inset-bottom, 0px));
+  }
+
+  &.layout-v2--mobile .v2-dialog__spacer {
+    display: none;
+  }
+
+  &.layout-v2--mobile .v2-dialog__footer app-v2-btn {
+    display: flex;
+  }
+
+  &.layout-v2--mobile .v2-dialog__footer app-v2-btn .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  // A keystroke printed on a device with no keyboard. Same rule as the file browser's
+  // filter, which printed "Ctrl F" on a phone until #443.
+  &.layout-v2--mobile .v2-dialog__kbd {
+    display: none;
+  }
+
+  &.layout-v2--mobile .v2-dialog__body,
+  &.layout-v2--mobile .v2-dialog__error {
+    padding-left: var(--si-space-8);
+    padding-right: var(--si-space-8);
+  }
+
+  &.layout-v2--mobile .v2-dialog__head {
+    padding-left: var(--si-space-8);
+    padding-right: var(--si-space-8);
+  }
+
   // `esc` next to the Close label — the design prints the shortcut where the action
   // is, and mono because a keystroke is machine vocabulary.
   .v2-dialog__kbd {
