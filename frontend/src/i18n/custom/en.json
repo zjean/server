@@ -321,5 +321,20 @@
   "v2_search_min_chars": "{{ n }} characters minimum",
   "Shared": "Shared",
   "No results match these filters": "No results match these filters",
-  "v2_no_results_filters_body": "The search found matches, but none of them are in the selected type or time range."
+  "v2_no_results_filters_body": "The search found matches, but none of them are in the selected type or time range.",
+  "(you)": "(you)",
+  "Expires": "Expires",
+  "Invite": "Invite",
+  "Permission": "Permission",
+  "Public link": "Public link",
+  "Generate": "Generate",
+  "Done": "Done",
+  "Owner": "Owner",
+  "v2_share_title": "Share “{{ name }}”",
+  "v2_share_with_access": "WITH ACCESS · {{ nb }}",
+  "v2_share_revoke_link": "Revoke link",
+  "v2_share_link_off_lede": "Off — only the people above have access",
+  "v2_share_link_open_lede": "Anyone with the link",
+  "v2_share_link_password_lede": "Anyone with the link and password",
+  "v2_share_link_on_save": "The link is created when you press Done"
 }

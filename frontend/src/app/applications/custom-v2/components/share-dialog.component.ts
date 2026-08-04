@@ -1,319 +1,106 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, signal, untracked } from '@angular/core'
 import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
-import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
-import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
-import { userAvatarUrl } from '../../users/user.functions'
-import { SPACES_PERMISSIONS_TEXT } from '../../spaces/spaces.constants'
+import { USER_PASSWORD_MIN_LENGTH } from '@sync-in-server/backend/src/applications/users/constants/user'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { StoreService } from '../../../store/store.service'
+import { userAvatarUrl } from '../../users/user.functions'
+import { IconV2Component } from '../icons/icon-v2.component'
+import { buildPublicLinkUrl, createLinkShare, generateLinkPassword, genLinkUuid, getLinkOnShare, type LinkSettingsInput } from '../utils/link-share'
+import { mimeToGlyph } from '../utils/mime-to-glyph'
 import {
   createShare,
   deleteShare,
   getShare,
   permissionsToPreset,
-  permissionTokens,
   type PermissionPreset,
   presetToPermissions,
   type ShareLinkInput,
   type ShareMemberInput,
   updateShare
 } from '../utils/share-crud'
+import { AvatarComponent, avatarInitials, avatarTone, type AvatarUser } from './avatar.component'
 import { ButtonComponent } from './button.component'
+import { FileGlyphComponent, type FileGlyphType } from './file-glyph.component'
+import { IconButtonComponent } from './icon-button.component'
+import { PillComponent } from './pill.component'
+import { SelectComponent, type SelectOption } from './select.component'
 import { ShareDialogFileCtx, ShareDialogService } from './share-dialog.service'
 import { ToastService } from './toast.service'
-import { UserGroupPickerComponent, type PickedMember } from './user-group-picker.component'
+import { ToggleComponent } from './toggle.component'
+import { type PickedMember, UserGroupPickerComponent } from './user-group-picker.component'
 
-interface RowMember extends ShareMemberInput {
+interface PersonRow extends ShareMemberInput {
   name: string
   description?: string
-  avatarUrl?: string
+  avatar: AvatarUser
   preset: PermissionPreset
 }
 
+/** The link's editable state, whether or not it exists on the server yet. */
+interface LinkForm {
+  requireAuth: boolean
+  password: string
+  /** ISO yyyy-MM-dd for `<input type="date">`; '' means no expiry. */
+  expiresAt: string
+  preset: PermissionPreset
+}
+
+const EMPTY_FORM: LinkForm = { requireAuth: false, password: '', expiresAt: '', preset: 'viewer' }
+
+/**
+ * Sharing — ONE dialog with two zones (D7).
+ *
+ * People on top, the public link below a divider. It used to be two dialogs, so the
+ * two things you can do with a file lived in different places and neither showed the
+ * other: a file could carry both and no screen said so.
+ *
+ * ─── Everything commits on Done. ──────────────────────────────────────────────
+ * The design's two-tier destruction rule says a reversible act — revoking a link —
+ * should happen immediately with an Undo toast. This dialog deviates, and the reason
+ * is the wire: an update is ONE PUT that rebuilds the share's entire member set from
+ * the body (`shares-manager.service.ts:267`). An immediate link write followed by a
+ * member write is two writes to the same set, and the second reverts the first — the
+ * lost update that #439 was three-quarters of. So the link toggle, the link's options
+ * and the people rows are all local until Done, and `Revoke link` turns the link off
+ * locally with the same commit point.
+ *
+ * That one PUT expresses all three link outcomes, which is what makes the merge work
+ * at all: echo the link back to keep it, omit it to revoke it, or send it with a
+ * NEGATIVE id and `linkSettings` to create one. An existing link's settings ride along
+ * the same way (id >= 0 WITH settings = "modified").
+ *
+ * ─── Two rows the design draws that have nothing behind them. ─────────────────
+ *  • **Inherited rights** ("group · 5 members · inherited from space"). `ShareProps`
+ *    carries the share's OWN members and `Member` has no inherited marker, so nothing
+ *    tells this dialog who else reaches the file through its space. A disabled row
+ *    would be inventing an access grant.
+ *  • **Allow download.** `CreateOrUpdateLinkDto` has uuid, name, email, language,
+ *    limitAccess, expiresAt, requireAuth, isActive, permissions and password. There is
+ *    no download flag to toggle.
+ *
+ * The link's Permission row IS real — it is the link member's own permission string,
+ * through the same presets a person gets, minus `manage`: the share's re-share
+ * permission is about a member acting on the share, and there is nobody behind a URL.
+ */
 @Component({
   selector: 'app-v2-share-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ButtonComponent, L10nTranslatePipe, UserGroupPickerComponent],
-  template: `
-    @if (pending(); as p) {
-      <div class="sd__backdrop" (click)="cancel()"></div>
-      <div class="sd" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-        <div class="sd__title">
-          {{ (isEdit() ? 'v2_share_edit_title' : 'v2_share_create_title') | translate: locale.language }}
-        </div>
-        @if (isMulti()) {
-          <div class="sd__subject">{{ 'v2_share_n_items_subject' | translate: locale.language : { nb: multiCount() } }}</div>
-        } @else {
-          <div class="sd__subject" [attr.title]="subjectName()">{{ subjectName() }}</div>
-        }
-
-        @if (loadingExisting()) {
-          <div class="sd__state">{{ 'Loading…' | translate: locale.language }}</div>
-        } @else {
-          @if (members().length > 0) {
-            <div class="sd__list">
-              @for (m of members(); track memberKey(m)) {
-                <div class="sd__member">
-                  @if (m.avatarUrl) {
-                    <img class="sd__avatar" [src]="m.avatarUrl" alt="" />
-                  } @else {
-                    <span class="sd__glyph">{{ isGroupType(m.type) ? '⚑' : '@' }}</span>
-                  }
-                  <div class="sd__member-meta">
-                    <div class="sd__member-name">{{ m.name }}</div>
-                    @if (m.description) {
-                      <div class="sd__member-desc">{{ m.description }}</div>
-                    }
-                  </div>
-                  <span class="sd__perm">
-                    <select class="sd__preset" [value]="m.preset" (change)="onPresetChange(m, $event)">
-                      <option value="viewer">{{ 'v2_share_preset_viewer' | translate: locale.language }}</option>
-                      <option value="editor">{{ 'v2_share_preset_editor' | translate: locale.language }}</option>
-                      <option value="manager">{{ 'v2_share_preset_manager' | translate: locale.language }}</option>
-                    </select>
-                    <span class="sd__perm-tip" role="tooltip">
-                      @if (permTexts(m.permissions); as texts) {
-                        @if (texts.length) {
-                          @for (t of texts; track t) {
-                            <span class="sd__perm-row">{{ t | translate: locale.language }}</span>
-                          }
-                        } @else {
-                          <span class="sd__perm-row">{{ 'No permissions' | translate: locale.language }}</span>
-                        }
-                      }
-                    </span>
-                  </span>
-                  <button type="button" class="sd__remove" (click)="removeMember(m)" [attr.title]="'Remove' | translate: locale.language">×</button>
-                </div>
-              }
-            </div>
-          } @else {
-            <div class="sd__empty">{{ 'v2_share_no_recipients' | translate: locale.language }}</div>
-          }
-
-          <div class="sd__picker-row">
-            <app-v2-user-group-picker
-              class="sd__picker"
-              [adminScope]="isAdmin"
-              [ignoreUserIds]="ignoredUserIds()"
-              [ignoreGroupIds]="ignoredGroupIds()"
-              (pick)="onPick($event)"
-            />
-          </div>
-
-          @if (errorMessage(); as err) {
-            <div class="sd__error">{{ err }}</div>
-          }
-
-          <div class="sd__actions">
-            @if (isEdit()) {
-              <app-v2-btn kind="danger" size="sm" icon="trash" [disabled]="busy()" (click)="revoke()">
-                {{ 'v2_share_revoke' | translate: locale.language }}
-              </app-v2-btn>
-            }
-            <span class="sd__spacer"></span>
-            <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
-              {{ 'Cancel' | translate: locale.language }}
-            </app-v2-btn>
-            <app-v2-btn kind="primary" size="sm" [disabled]="!canSave()" (click)="save()">
-              {{ (isEdit() ? 'v2_share_save' : 'v2_share_create') | translate: locale.language }}
-            </app-v2-btn>
-          </div>
-        }
-      </div>
-    }
-  `,
-  styles: [
-    `
-      :host {
-        display: contents;
-      }
-      .sd__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
-      .sd {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        width: min(500px, calc(100vw - 24px));
-        padding: var(--si-space-9) var(--si-space-10) var(--si-space-8);
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
-      }
-      .sd__title {
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
-        margin-bottom: var(--si-space-1);
-      }
-      .sd__subject {
-        font-size: var(--si-text-7);
-        color: var(--si-fg-muted);
-        margin-bottom: var(--si-space-7);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .sd__state,
-      .sd__empty {
-        padding: var(--si-space-10) 0;
-        text-align: center;
-        color: var(--si-fg-muted);
-        font-size: var(--si-text-8);
-      }
-      .sd__empty {
-        padding: var(--si-space-5) 0 var(--si-space-7);
-      }
-      .sd__list {
-        display: flex;
-        flex-direction: column;
-        gap: var(--si-space-3);
-        margin-bottom: var(--si-space-6);
-        max-height: 240px;
-        overflow-y: auto;
-      }
-      .sd__member {
-        display: flex;
-        align-items: center;
-        gap: var(--si-space-4);
-        padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg2);
-        border: 1px solid var(--si-border);
-        border-radius: 6px;
-      }
-      .sd__avatar {
-        width: 26px;
-        height: 26px;
-        border-radius: 50%;
-        object-fit: cover;
-      }
-      .sd__glyph {
-        width: 26px;
-        height: 26px;
-        border-radius: 50%;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--si-bg3);
-        color: var(--si-fg-muted);
-        font-size: var(--si-text-6);
-      }
-      .sd__member-meta {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      .sd__member-name {
-        font-size: var(--si-text-8);
-        font-weight: 500;
-        color: var(--si-fg);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .sd__member-desc {
-        font-size: var(--si-text-5);
-        color: var(--si-fg-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .sd__perm {
-        position: relative;
-        display: inline-flex;
-      }
-      .sd__preset {
-        font: inherit;
-        font-size: var(--si-text-7);
-        padding: var(--si-space-3) var(--si-space-4);
-        background: var(--si-bg1);
-        color: var(--si-fg);
-        border: 1px solid var(--si-border);
-        border-radius: 5px;
-      }
-      .sd__perm-tip {
-        position: absolute;
-        bottom: calc(100% + 8px);
-        right: 0;
-        z-index: var(--si-z-popover);
-        display: flex;
-        flex-direction: column;
-        gap: var(--si-space-1);
-        min-width: max-content;
-        max-width: 220px;
-        padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg0);
-        color: var(--si-fg);
-        border: 1px solid var(--si-border);
-        border-radius: var(--si-r1);
-        box-shadow: var(--si-shadow2);
-        font-size: var(--si-text-6);
-        line-height: 1.35;
-        text-align: left;
-        white-space: nowrap;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(2px);
-        transition:
-          opacity 0.12s ease,
-          transform 0.12s ease,
-          visibility 0.12s;
-        pointer-events: none;
-      }
-      .sd__perm:hover .sd__perm-tip {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
-      }
-      .sd__perm-row {
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .sd__remove {
-        width: 26px;
-        height: 26px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        color: var(--si-fg-muted);
-        border: none;
-        border-radius: 5px;
-        font-size: var(--si-text-12);
-        line-height: 1;
-        cursor: pointer;
-      }
-      .sd__remove:hover {
-        background: var(--si-bg3);
-        color: var(--si-fg);
-      }
-      .sd__picker-row {
-        margin-bottom: var(--si-space-5);
-      }
-      .sd__error {
-        font-size: var(--si-text-5);
-        color: var(--si-rose-ink);
-        margin-bottom: var(--si-space-5);
-      }
-      .sd__actions {
-        display: flex;
-        gap: var(--si-space-4);
-        align-items: center;
-        margin-top: var(--si-space-4);
-      }
-      .sd__spacer {
-        flex: 1;
-      }
-    `
+  templateUrl: './share-dialog.component.html',
+  styleUrl: './share-dialog.component.scss',
+  imports: [
+    AvatarComponent,
+    ButtonComponent,
+    FileGlyphComponent,
+    IconButtonComponent,
+    IconV2Component,
+    PillComponent,
+    SelectComponent,
+    ToggleComponent,
+    UserGroupPickerComponent,
+    L10nTranslateDirective,
+    L10nTranslatePipe
   ]
 })
 export class ShareDialogComponent {
@@ -323,164 +110,334 @@ export class ShareDialogComponent {
   private readonly store = inject(StoreService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly isAdmin: boolean = this.store.user.getValue()?.isAdmin ?? false
+  protected readonly passwordMinLength = USER_PASSWORD_MIN_LENGTH
 
   protected readonly pending = this.service.pending
-
   protected readonly isEdit = computed(() => !!this.pending()?.existingShareId)
 
-  protected readonly members = signal<RowMember[]>([])
-  protected readonly loadingExisting = signal(false)
+  protected readonly people = signal<PersonRow[]>([])
+  protected readonly staged = signal<PickedMember[]>([])
+  protected readonly invitePreset = signal<PermissionPreset>('viewer')
+  protected readonly loading = signal(false)
   protected readonly busy = signal(false)
   protected readonly errorMessage = signal<string | null>(null)
 
-  // Create flow: N file contexts (single entry for single-file shares).
-  // Edit flow: the loaded share.
   private readonly createCtxs = signal<ShareDialogFileCtx[]>([])
   private readonly editShare = signal<ShareProps | null>(null)
-  // The share's links, kept so `save()` can echo them back. An update rebuilds the
-  // member set from members + links and deletes whatever is missing, so a dialog
-  // that only knows about people would revoke the link on every save — see
-  // UpdateShareParams.links.
-  private readonly editLinks = signal<ShareLinkInput[]>([])
+
+  // `linkOn` is the user's intent; `existingLink` is what the server has. The two
+  // differ exactly between a toggle and a save, which is what lets one save decide
+  // between create, update and delete.
+  protected readonly linkOn = signal(false)
+  protected readonly form = signal<LinkForm>({ ...EMPTY_FORM })
+  private readonly existingLink = signal<{ memberId: number; linkId: number; uuid: string } | null>(null)
+  private readonly reservedUuid = signal<string | null>(null)
+
+  protected readonly minExpiryDate: string = toDateInputValue(new Date(Date.now() + 86_400_000))
 
   protected readonly subjectName = computed(() => {
     const share = this.editShare()
     if (share) return share.name
     const ctxs = this.createCtxs()
-    if (ctxs.length === 0) return ''
-    if (ctxs.length === 1) return ctxs[0].file.name
-    return ''
+    return ctxs.length === 1 ? ctxs[0].file.name : ''
   })
+
+  protected readonly subjectPath = computed(() => {
+    const ctxs = this.createCtxs()
+    if (ctxs.length !== 1) return null
+    return ctxs[0].relativePath.split('/').slice(0, -1).join('/') || null
+  })
+
   protected readonly isMulti = computed(() => !this.isEdit() && this.createCtxs().length > 1)
   protected readonly multiCount = computed(() => this.createCtxs().length)
 
+  protected readonly glyphType = computed<FileGlyphType>(() => {
+    const file = this.editShare()?.file ?? this.createCtxs()[0]?.file
+    if (!file) return 'default'
+    return file.isDir ? 'folder' : mimeToGlyph(file.mime)
+  })
+
+  // The owner, as text — not a control, because the owner cannot be demoted here and a
+  // disabled select would imply it could be somewhere. Always the current user: the
+  // update endpoint is gated on ownership, so whoever can open this on an existing
+  // share owns it, and on a create they are about to.
+  protected readonly ownerRow = computed<{ name: string; description?: string; avatar: AvatarUser } | null>(() => {
+    const u = this.store.user.getValue()
+    if (!u) return null
+    const login = u.login ?? ''
+    return {
+      name: u.fullName || login,
+      description: u.email,
+      avatar: { initials: avatarInitials(u.fullName || login), tone: avatarTone(login), imageUrl: userAvatarUrl(login) }
+    }
+  })
+
+  // Counts the ROWS under the heading, which is what the heading is counting. The link
+  // is access too, but it is not one of these rows — including it made the count say 2
+  // above a list of one.
+  protected readonly accessCount = computed(() => this.people().length + (this.ownerRow() ? 1 : 0))
+
+  protected readonly roleOptions = computed<SelectOption<PermissionPreset>[]>(() => [
+    { id: 'viewer', label: 'v2_share_preset_viewer' },
+    { id: 'editor', label: 'v2_share_preset_editor' },
+    { id: 'manager', label: 'v2_share_preset_manager' }
+  ])
+
+  protected readonly linkRoleOptions = computed<SelectOption<PermissionPreset>[]>(() => [
+    { id: 'viewer', label: 'v2_share_preset_viewer' },
+    { id: 'editor', label: 'v2_share_preset_editor' }
+  ])
+
+  // Only a link that EXISTS has a URL. A reserved uuid is not a link — showing its URL
+  // before the save would hand out an address that 404s.
+  protected readonly linkUrl = computed(() => {
+    const existing = this.existingLink()
+    return existing?.uuid ? buildPublicLinkUrl(existing.uuid) : null
+  })
+
+  protected readonly linkLede = computed(() => {
+    if (!this.linkOn()) return 'v2_share_link_off_lede'
+    return this.form().requireAuth ? 'v2_share_link_password_lede' : 'v2_share_link_open_lede'
+  })
+
+  protected readonly canRevokeLink = computed(() => this.linkOn() && !!this.existingLink())
+
   protected readonly ignoredUserIds = computed(() =>
-    this.members()
-      .filter((m) => m.type === MEMBER_TYPE.USER || m.type === MEMBER_TYPE.GUEST)
-      .map((m) => m.id)
+    [...this.people(), ...this.staged()].filter((m) => m.type === MEMBER_TYPE.USER || m.type === MEMBER_TYPE.GUEST).map((m) => m.id)
   )
-  protected readonly ignoredGroupIds = computed(() =>
-    this.members()
-      .filter((m) => this.isGroupType(m.type))
-      .map((m) => m.id)
-  )
+
+  protected readonly ignoredGroupIds = computed(() => [...this.people(), ...this.staged()].filter((m) => this.isGroupType(m.type)).map((m) => m.id))
 
   constructor() {
     effect(() => {
       const p = this.pending()
       untracked(() => {
-        if (!p) {
-          this.resetState()
-          return
-        }
+        this.reset()
+        if (!p) return
         if (p.existingShareId) {
-          this.loadExisting(p.existingShareId)
+          this.load(p.existingShareId, p.focusLink === true)
           return
         }
-        // Create flow: accept either `files[]` (multi) or the legacy single `file`.
-        const ctxs: ShareDialogFileCtx[] = p.files?.length
-          ? p.files
-          : p.file
-            ? [{ file: p.file, relativePath: p.relativePath ?? p.file.name, ownerId: p.ownerId ?? null }]
-            : []
-        this.createCtxs.set(ctxs)
-        this.members.set([])
+        this.createCtxs.set(
+          p.files?.length ? p.files : p.file ? [{ file: p.file, relativePath: p.relativePath ?? p.file.name, ownerId: p.ownerId ?? null }] : []
+        )
+        // "Get link" is this dialog with the link on, not a dialog of its own.
+        if (p.focusLink) this.toggleLink(true)
       })
     })
   }
 
-  private loadExisting(shareId: number): void {
-    this.loadingExisting.set(true)
+  private load(shareId: number, focusLink = false): void {
+    this.loading.set(true)
     this.errorMessage.set(null)
     getShare(this.http, shareId).subscribe({
       next: (share) => {
         this.editShare.set(share)
-        // Link members are not people and have no row here — the link UX lives in
-        // link-dialog — but they must still be carried through the save.
-        this.editLinks.set(
-          (share.members ?? []).filter((m) => !!m.linkId).map((m) => ({ id: m.id, linkId: m.linkId as number, permissions: m.permissions ?? '' }))
+        const members = share.members ?? []
+        this.people.set(
+          members
+            .filter((m) => !m.linkId)
+            .map((m) => ({
+              id: m.id,
+              type: m.type,
+              permissions: m.permissions ?? '',
+              name: m.name,
+              description: m.description,
+              avatar: {
+                initials: avatarInitials(m.name),
+                tone: avatarTone(m.login ?? m.name),
+                imageUrl: m.login ? userAvatarUrl(m.login) : null
+              },
+              preset: permissionsToPreset(m.permissions)
+            }))
         )
-        const rows: RowMember[] = (share.members ?? [])
-          .filter((m) => !m.linkId)
-          .map((m) => ({
-            id: m.id,
-            type: m.type,
-            permissions: m.permissions ?? '',
-            name: m.name,
-            description: m.description,
-            avatarUrl: m.login ? userAvatarUrl(m.login) : undefined,
-            preset: permissionsToPreset(m.permissions)
-          }))
-        this.members.set(rows)
-        this.loadingExisting.set(false)
+        // At most one link per share here. The data model allows several; the design
+        // draws one ("the public link"), and a second would need a row list rather than
+        // a toggle.
+        const link = members.find((m) => !!m.linkId)
+        if (link?.linkId) {
+          this.existingLink.set({ memberId: link.id, linkId: link.linkId, uuid: '' })
+          this.linkOn.set(true)
+          this.form.set({ ...EMPTY_FORM, preset: permissionsToPreset(link.permissions) })
+          // `GET /shares/:id` gives a link member its `linkId` and NOTHING else about
+          // the link — no uuid, no expiry, no requireAuth. So the settings need their
+          // own request, which is what classic does from the same place
+          // (`links.service.ts:174`). Without it the dialog showed an existing link as
+          // if it were about to be created.
+          this.loadLinkSettings(shareId, link.linkId)
+        }
+        // Asked for the link on a share that has none: switch it on, so the dialog
+        // opens showing what the caller wanted rather than making them find the toggle.
+        if (focusLink && !this.linkOn()) this.toggleLink(true)
+        this.loading.set(false)
       },
       error: (e: HttpErrorResponse) => {
         this.errorMessage.set(e.error?.message ?? 'Failed to load share')
-        this.loadingExisting.set(false)
+        this.loading.set(false)
       }
     })
   }
 
-  protected memberKey(m: RowMember): string {
-    return `${m.type}:${m.id}`
+  private loadLinkSettings(shareId: number, linkId: number): void {
+    getLinkOnShare(this.http, shareId, linkId).subscribe({
+      next: (l) => {
+        this.existingLink.update((cur) => (cur ? { ...cur, uuid: l.uuid ?? '' } : cur))
+        this.form.update((f) => ({
+          ...f,
+          requireAuth: l.requireAuth ?? false,
+          expiresAt: l.expiresAt ? toDateInputValue(l.expiresAt) : ''
+        }))
+      },
+      // The link is real either way; without its settings the dialog just cannot show
+      // the URL, which is better than refusing to open.
+      error: () => undefined
+    })
   }
+
+  /* ------------------------------------------------------------------ people */
 
   protected isGroupType(t: MEMBER_TYPE): boolean {
     return t === MEMBER_TYPE.GROUP || t === MEMBER_TYPE.PGROUP
   }
 
-  // Groups the granular operations a member's permission string grants into a
-  // single hover tooltip on the preset selector — parity with the classic
-  // badge-permissions tooltip (upstream dd8647ef). The stored permission string
-  // is a `:`-separated list of SPACE_OPERATION tokens (see share-crud.ts),
-  // already reflecting the file-vs-dir preset expansion; an empty string means
-  // read-only, rendered as "No permissions" like classic. Parsed by token, not
-  // by substring — the same way classic's setTextIconPermissions does
-  // (spaces/spaces.functions.ts:35).
-  private readonly permOrder: SPACE_OPERATION[] = [
-    SPACE_OPERATION.ADD,
-    SPACE_OPERATION.MODIFY,
-    SPACE_OPERATION.DELETE,
-    SPACE_OPERATION.SHARE_INSIDE,
-    SPACE_OPERATION.SHARE_OUTSIDE
-  ]
-  protected permTexts(permissions: string): string[] {
-    const ops = permissionTokens(permissions)
-    return this.permOrder.filter((op) => ops.has(op)).map((op) => SPACES_PERMISSIONS_TEXT[op].text)
+  protected stage(picked: PickedMember): void {
+    this.staged.update((list) => (list.some((s) => s.id === picked.id && s.type === picked.type) ? list : [...list, picked]))
   }
 
-  protected onPick(picked: PickedMember): void {
-    const isDir = this.pendingFileIsDir()
-    const preset: PermissionPreset = 'viewer'
-    const row: RowMember = {
-      id: picked.id,
-      type: picked.type,
+  protected unstage(picked: PickedMember): void {
+    this.staged.update((list) => list.filter((s) => !(s.id === picked.id && s.type === picked.type)))
+  }
+
+  // Staged chips become access rows at the chosen role. One role for the batch, which
+  // is what the select beside the input means; a row's role is editable afterwards.
+  protected invite(): void {
+    const preset = this.invitePreset()
+    const isDir = this.subjectIsDir()
+    const rows = this.staged().map<PersonRow>((s) => ({
+      id: s.id,
+      type: s.type,
       permissions: presetToPermissions(preset, isDir),
-      name: picked.name,
-      description: picked.description,
-      avatarUrl: picked.avatarUrl,
+      name: s.name,
+      description: s.description,
+      avatar: { initials: avatarInitials(s.name), tone: avatarTone(s.name), imageUrl: s.avatarUrl ?? null },
       preset
-    }
-    this.members.update((list) => [...list, row])
+    }))
+    this.people.update((list) => [...list, ...rows])
+    this.staged.set([])
   }
 
-  protected onPresetChange(m: RowMember, ev: Event): void {
-    const v = (ev.target as HTMLSelectElement).value as PermissionPreset
-    const isDir = this.pendingFileIsDir()
-    this.members.update((list) =>
-      list.map((x) => (this.memberKey(x) === this.memberKey(m) ? { ...x, preset: v, permissions: presetToPermissions(v, isDir) } : x))
+  protected setPreset(m: PersonRow, preset: PermissionPreset): void {
+    const isDir = this.subjectIsDir()
+    this.people.update((list) =>
+      list.map((x) => (x.id === m.id && x.type === m.type ? { ...x, preset, permissions: presetToPermissions(preset, isDir) } : x))
     )
   }
 
-  protected removeMember(m: RowMember): void {
-    this.members.update((list) => list.filter((x) => this.memberKey(x) !== this.memberKey(m)))
+  protected removePerson(m: PersonRow): void {
+    this.people.update((list) => list.filter((x) => !(x.id === m.id && x.type === m.type)))
   }
 
+  /* -------------------------------------------------------------------- link */
+
+  protected toggleLink(on: boolean): void {
+    this.linkOn.set(on)
+    if (!on) return
+    // A uuid must be RESERVED by the server before it can be used, so fetch one the
+    // moment the user asks for a link; the save then has nothing left to wait for.
+    if (!this.existingLink() && !this.reservedUuid()) {
+      genLinkUuid(this.http).subscribe({
+        next: (uuid) => this.reservedUuid.set(uuid),
+        error: (e: HttpErrorResponse) => this.errorMessage.set(e.error?.message ?? 'Failed to prepare link')
+      })
+    }
+  }
+
+  protected toggleRequireAuth(on: boolean): void {
+    this.form.update((f) => ({ ...f, requireAuth: on, password: on ? f.password : '' }))
+  }
+
+  protected onPasswordInput(ev: Event): void {
+    const v = (ev.target as HTMLInputElement).value
+    this.form.update((f) => ({ ...f, password: v }))
+  }
+
+  protected generatePassword(): void {
+    this.form.update((f) => ({ ...f, password: generateLinkPassword() }))
+  }
+
+  protected onExpiryInput(ev: Event): void {
+    const v = (ev.target as HTMLInputElement).value
+    this.form.update((f) => ({ ...f, expiresAt: v }))
+  }
+
+  protected clearExpiry(): void {
+    this.form.update((f) => ({ ...f, expiresAt: '' }))
+  }
+
+  protected setLinkPreset(preset: PermissionPreset): void {
+    this.form.update((f) => ({ ...f, preset }))
+  }
+
+  protected passwordPlaceholder(): string {
+    // An existing link's password never comes back to the client, so an empty field
+    // means "keep it" rather than "there is none".
+    return this.existingLink() ? '••••••••••' : 'Password'
+  }
+
+  protected passwordError(): string | null {
+    const f = this.form()
+    if (!this.linkOn() || !f.requireAuth) return null
+    if (this.existingLink() && f.password === '') return null
+    if (f.password.length < this.passwordMinLength) return 'v2_link_password_too_short'
+    return null
+  }
+
+  // Local, with the same commit point as everything else — see the class comment.
+  protected revokeLink(): void {
+    this.linkOn.set(false)
+    this.form.set({ ...EMPTY_FORM })
+  }
+
+  protected selectAll(ev: Event): void {
+    ;(ev.target as HTMLInputElement).select()
+  }
+
+  protected async copy(url: string): Promise<void> {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        await navigator.clipboard.writeText(url)
+        this.toast.success('v2_link_copied')
+        return
+      }
+    } catch {
+      /* fall through to the textarea path */
+    }
+    if (typeof document === 'undefined') return
+    const ta = document.createElement('textarea')
+    ta.value = url
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    try {
+      document.execCommand('copy')
+      this.toast.success('v2_link_copied')
+    } catch {
+      this.toast.error('v2_link_copy_failed')
+    } finally {
+      document.body.removeChild(ta)
+    }
+  }
+
+  /* -------------------------------------------------------------------- save */
+
   protected canSave(): boolean {
-    if (this.busy()) return false
-    if (this.loadingExisting()) return false
-    if (this.members().length === 0) return false
-    return true
+    if (this.busy() || this.loading()) return false
+    if (this.passwordError()) return false
+    if (this.linkOn() && !this.existingLink() && !this.reservedUuid()) return false
+    // A share with no people and no link is reachable — remove everyone, turn the link
+    // off — and it is not a share.
+    return this.people().length > 0 || this.linkOn()
   }
 
   protected save(): void {
@@ -488,84 +445,104 @@ export class ShareDialogComponent {
     if (!p) return
     this.busy.set(true)
     this.errorMessage.set(null)
-    const members: ShareMemberInput[] = this.members().map((m) => ({
-      id: m.id,
-      type: m.type,
-      permissions: m.permissions
-    }))
+    const members: ShareMemberInput[] = this.people().map((m) => ({ id: m.id, type: m.type, permissions: m.permissions }))
+    if (this.isEdit() && p.existingShareId) this.saveEdit(p.existingShareId, members)
+    else this.saveCreate(members)
+  }
 
-    if (this.isEdit() && p.existingShareId) {
-      const shareId = p.existingShareId
-      // The share's own name, not a placeholder: sending one renames the share and
-      // regenerates its alias. See UpdateShareParams.name.
-      const name = this.editShare()?.name ?? ''
-      updateShare(this.http, { shareId, name, members, links: this.editLinks() }).subscribe({
-        next: () => {
-          this.busy.set(false)
-          this.toast.success('v2_share_updated')
-          this.service.latch({ shareId })
-          this.service.close()
-        },
-        error: (e: HttpErrorResponse) => {
-          this.errorMessage.set(e.error?.message ?? 'Failed to save share')
-          this.busy.set(false)
-        }
-      })
-      return
+  /**
+   * One PUT for people and link together.
+   *
+   * The three link states the body can express, all of them read by the server from
+   * the same array:
+   *   keep    — id >= 0, no settings   (unchanged; survives the member rebuild)
+   *   change  — id >= 0, with settings (the server updates it)
+   *   create  — id < 0,  with settings (the server creates it on this share)
+   *   revoke  — absent entirely        (the member rebuild deletes it)
+   */
+  private saveEdit(shareId: number, members: ShareMemberInput[]): void {
+    const existing = this.existingLink()
+    const permissions = presetToPermissions(this.form().preset, this.subjectIsDir())
+    const links: ShareLinkInput[] = []
+    if (this.linkOn()) {
+      if (existing) {
+        links.push({ id: existing.memberId, linkId: existing.linkId, permissions, settings: this.toLinkSettings(existing.uuid) })
+      } else {
+        const uuid = this.reservedUuid()
+        if (uuid) links.push({ id: -1, linkId: -1, permissions, settings: this.toLinkSettings(uuid) })
+      }
     }
 
+    updateShare(this.http, { shareId, name: this.editShare()?.name ?? '', members, links }).subscribe({
+      next: () => {
+        this.busy.set(false)
+        this.toast.success('v2_share_updated')
+        this.service.latch({ shareId })
+        this.service.close()
+      },
+      error: (e: HttpErrorResponse) => this.fail(e, 'Failed to save share')
+    })
+  }
+
+  private saveCreate(members: ShareMemberInput[]): void {
     const ctxs = this.createCtxs()
-    if (ctxs.length === 0) return
-    if (ctxs.length === 1) {
-      const ctx = ctxs[0]
-      createShare(this.http, {
-        file: ctx.file,
-        relativePath: ctx.relativePath,
-        ownerId: ctx.ownerId,
-        members
+    if (ctxs.length === 0) {
+      this.busy.set(false)
+      return
+    }
+    const uuid = this.reservedUuid()
+    // One file with a link is one POST carrying both — the create endpoint takes
+    // members and links together. Multi-select never carries a link: one reserved uuid
+    // cannot serve N shares, and reserving N of them is a different feature.
+    if (ctxs.length === 1 && this.linkOn() && uuid) {
+      createLinkShare(this.http, {
+        file: ctxs[0].file,
+        relativePath: ctxs[0].relativePath,
+        ownerId: ctxs[0].ownerId,
+        settings: this.toLinkSettings(uuid),
+        members,
+        linkPermissions: presetToPermissions(this.form().preset, this.subjectIsDir())
       }).subscribe({
-        next: (share) => {
-          this.busy.set(false)
-          this.toast.success('v2_share_created')
-          this.service.latch({ shareId: share.id })
-          this.service.close()
-        },
-        error: (e: HttpErrorResponse) => {
-          this.errorMessage.set(e.error?.message ?? 'Failed to create share')
-          this.busy.set(false)
-        }
+        next: (share) => this.finishCreate(share.id),
+        error: (e: HttpErrorResponse) => this.fail(e, 'Failed to create share')
       })
       return
     }
 
-    // Multi-file: fire one createShare per file in parallel. Collect
-    // successes + failures for a summary toast; latch the first success so
-    // callers that care about "a share was created" still get a shareId.
+    if (ctxs.length === 1) {
+      createShare(this.http, { file: ctxs[0].file, relativePath: ctxs[0].relativePath, ownerId: ctxs[0].ownerId, members }).subscribe({
+        next: (share) => this.finishCreate(share.id),
+        error: (e: HttpErrorResponse) => this.fail(e, 'Failed to create share')
+      })
+      return
+    }
+
     let firstShareId: number | null = null
     let created = 0
     let failed = 0
     let completed = 0
-    const total = ctxs.length
     for (const ctx of ctxs) {
-      createShare(this.http, {
-        file: ctx.file,
-        relativePath: ctx.relativePath,
-        ownerId: ctx.ownerId,
-        members
-      }).subscribe({
+      createShare(this.http, { file: ctx.file, relativePath: ctx.relativePath, ownerId: ctx.ownerId, members }).subscribe({
         next: (share) => {
           if (firstShareId === null) firstShareId = share.id
           created += 1
           completed += 1
-          if (completed === total) this.finishMulti(firstShareId, created, failed)
+          if (completed === ctxs.length) this.finishMulti(firstShareId, created, failed)
         },
         error: () => {
           failed += 1
           completed += 1
-          if (completed === total) this.finishMulti(firstShareId, created, failed)
+          if (completed === ctxs.length) this.finishMulti(firstShareId, created, failed)
         }
       })
     }
+  }
+
+  private finishCreate(shareId: number): void {
+    this.busy.set(false)
+    this.toast.success('v2_share_created')
+    this.service.latch({ shareId })
+    this.service.close()
   }
 
   private finishMulti(firstShareId: number | null, created: number, failed: number): void {
@@ -574,18 +551,14 @@ export class ShareDialogComponent {
       this.errorMessage.set('Failed to create any share')
       return
     }
-    if (failed > 0) {
-      this.toast.error('v2_share_n_partial_fail', { created, failed })
-    } else if (created === 1) {
-      this.toast.success('v2_share_created')
-    } else {
-      this.toast.success('v2_share_n_created', { nb: created })
-    }
+    if (failed > 0) this.toast.error('v2_share_n_partial_fail', { created, failed })
+    else if (created === 1) this.toast.success('v2_share_created')
+    else this.toast.success('v2_share_n_created', { nb: created })
     this.service.latch({ shareId: firstShareId ?? 0, multi: { created, failed } })
     this.service.close()
   }
 
-  protected revoke(): void {
+  protected revokeShare(): void {
     const p = this.pending()
     if (!p?.existingShareId) return
     const shareId = p.existingShareId
@@ -598,40 +571,62 @@ export class ShareDialogComponent {
         this.service.latch({ shareId, revoked: true })
         this.service.close()
       },
-      error: (e: HttpErrorResponse) => {
-        this.errorMessage.set(e.error?.message ?? 'Failed to revoke share')
-        this.busy.set(false)
-      }
+      error: (e: HttpErrorResponse) => this.fail(e, 'Failed to revoke share')
     })
   }
 
-  protected cancel(): void {
+  protected close(): void {
     this.service.close()
   }
 
   @HostListener('window:keydown.escape')
   onEscape(): void {
-    if (this.pending()) this.cancel()
+    if (this.pending()) this.close()
   }
 
-  private pendingFileIsDir(): boolean {
+  /* ------------------------------------------------------------------- utils */
+
+  private toLinkSettings(uuid: string): LinkSettingsInput {
+    const f = this.form()
+    return {
+      uuid,
+      requireAuth: f.requireAuth,
+      password: f.requireAuth && f.password ? f.password : null,
+      expiresAt: f.expiresAt ? new Date(`${f.expiresAt}T00:00:00`) : null,
+      isActive: true,
+      name: this.subjectName()
+    }
+  }
+
+  private subjectIsDir(): boolean {
     const ctxs = this.createCtxs()
-    // Presets hinge on isDir (editor/manager permission strings differ for files vs
-    // folders). For a heterogeneous multi-select, we pick the first; classic's
-    // share-dialog makes the same choice. Callers can exclude folders if they
-    // want file-only permissions.
     if (ctxs.length > 0) return !!ctxs[0].file.isDir
-    const existing = this.editShare()
-    return !!existing?.file?.isDir
+    return !!this.editShare()?.file?.isDir
   }
 
-  private resetState(): void {
-    this.members.set([])
+  private fail(e: HttpErrorResponse, fallback: string): void {
+    this.errorMessage.set(e.error?.message ?? fallback)
+    this.busy.set(false)
+  }
+
+  private reset(): void {
+    this.people.set([])
+    this.staged.set([])
+    this.invitePreset.set('viewer')
     this.createCtxs.set([])
     this.editShare.set(null)
-    this.editLinks.set([])
-    this.loadingExisting.set(false)
+    this.linkOn.set(false)
+    this.form.set({ ...EMPTY_FORM })
+    this.existingLink.set(null)
+    this.reservedUuid.set(null)
+    this.loading.set(false)
     this.busy.set(false)
     this.errorMessage.set(null)
   }
+}
+
+function toDateInputValue(d: Date | string): string {
+  const dt = typeof d === 'string' ? new Date(d) : d
+  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`)
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
 }

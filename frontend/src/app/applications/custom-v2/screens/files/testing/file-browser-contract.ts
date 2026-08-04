@@ -966,13 +966,16 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     // L. Links and shares — the per-screen DTO seam
     // -----------------------------------------------------------------------
     describe('links and shares', () => {
-      it('opens the link dialog with a path relative to the repository root', async () => {
+      // "Get link" is the share dialog with its link zone switched on — sharing is one
+      // dialog since D7. Same DTO as Share, plus the flag.
+      it('opens the share dialog with the link zone on, and a path relative to the repository root', async () => {
         const { c, deps } = start(['sub'])
         await c.getLink(FIXTURE_FILES[0])
-        expect(deps.log.only('linkDialog.open').args[0]).toEqual({
+        expect(deps.log.only('shareDialog.open').args[0]).toEqual({
           file: { id: 1, name: 'alpha.txt', isDir: false, mime: 'text/plain', space: p.dialogSpace },
           relativePath: 'sub/alpha.txt',
-          ownerId: p.dialogOwnerId
+          ownerId: p.dialogOwnerId,
+          focusLink: true
         })
       })
 

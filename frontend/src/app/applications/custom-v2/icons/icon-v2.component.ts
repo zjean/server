@@ -65,6 +65,7 @@ export type IconV2Name =
   | 'print'
   | 'sidebar'
   | 'panelRight'
+  | 'unlink'
 
 @Component({
   selector: 'app-v2-icon',

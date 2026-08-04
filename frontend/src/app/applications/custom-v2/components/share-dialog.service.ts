@@ -19,6 +19,15 @@ export interface ShareDialogInput {
   files?: ShareDialogFileCtx[]
   // Edit flow: existing share id (we'll fetch the full share inside the dialog).
   existingShareId?: number
+  /**
+   * Open with the public-link zone already on.
+   *
+   * This is what "Get link" means now that sharing is one dialog: the same surface,
+   * scrolled to the same place, with the thing the user asked for switched on. It only
+   * SETS the toggle — the link is still created by the save, like every other change
+   * in the dialog.
+   */
+  focusLink?: boolean
 }
 
 export interface ShareDialogResult {

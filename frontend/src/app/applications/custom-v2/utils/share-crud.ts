@@ -6,6 +6,7 @@ import type { ShareProps } from '@sync-in-server/backend/src/applications/shares
 import { SPACE_OPERATION, SPACE_PERMS_SEP } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { MEMBER_TYPE } from '@sync-in-server/backend/src/applications/users/constants/member'
 import { Observable } from 'rxjs'
+import { type LinkSettingsInput, toLinkDto } from './link-share'
 
 export type PermissionPreset = 'viewer' | 'editor' | 'manager'
 
@@ -99,11 +100,24 @@ export function createShare(http: HttpClient, p: CreateShareParams): Observable<
 
 /** A link already on the share, echoed back on update so it survives. See `links`. */
 export interface ShareLinkInput {
-  /** The link MEMBER's user id — `>= 0` means "already exists, leave it alone". */
+  /**
+   * The link MEMBER's user id. `>= 0` is an existing link; **negative means create
+   * one** — that is the branch the server takes (`link.id < 0`), and it is why a link
+   * can be added to an existing share by the same PUT that edits its members.
+   */
   id: number
-  /** The link's own id, which is what identifies it for deletion. */
+  /** The link's own id, which is what identifies it for update and deletion. */
   linkId: number
   permissions: string
+  /**
+   * The link's own settings — uuid, expiry, password, active flag.
+   *
+   * Presence is significant, not cosmetic: the server treats a link WITH
+   * `linkSettings` as modified and writes them, and one without as untouched
+   * (`shares-manager.service.ts:591`). So omit it to preserve a link as-is, and
+   * include it to create or change one.
+   */
+  settings?: LinkSettingsInput
 }
 
 export interface UpdateShareParams {
@@ -158,9 +172,10 @@ export function updateShare(http: HttpClient, p: UpdateShareParams): Observable<
       id: l.id,
       linkId: l.linkId,
       type: MEMBER_TYPE.LINK as never,
-      permissions: l.permissions
-      // No `linkSettings`: that is what marks a link as MODIFIED. Without it the
-      // server treats the row as unchanged and simply keeps it.
+      permissions: l.permissions,
+      // Present only when the caller means to create or change the link — see
+      // ShareLinkInput.settings. Absent is "keep this one exactly as it is".
+      ...(l.settings ? { linkSettings: toLinkDto(l.settings) } : {})
     }))
   }
   return http.put<ShareProps>(`${SHARES_ROUTE.BASE}/${p.shareId}`, dto)

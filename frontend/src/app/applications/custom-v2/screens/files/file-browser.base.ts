@@ -37,7 +37,6 @@ import type { ActionSheetEntry } from '../../components/action-sheet.component'
 import { CompressDialogService } from '../../components/compress-dialog.service'
 import { ConfirmDialogService } from '../../components/confirm-dialog.service'
 import type { ContextMenuAnchor, ContextMenuEntry, ContextMenuItem } from '../../components/context-menu.component'
-import { LinkDialogService } from '../../components/link-dialog.service'
 import { LockDialogService } from '../../components/lock-dialog.service'
 import { PromptDialogService } from '../../components/prompt-dialog.service'
 import { ShareDialogService } from '../../components/share-dialog.service'
@@ -164,7 +163,6 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   private readonly treePicker = inject(TreePickerService)
   private readonly promptDialog = inject(PromptDialogService)
   private readonly compressDialog = inject(CompressDialogService)
-  private readonly linkDialog = inject(LinkDialogService)
   private readonly lockDialog = inject(LockDialogService)
   private readonly shareDialog = inject(ShareDialogService)
   private readonly toast = inject(ToastService)
@@ -890,12 +888,15 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     }
   }
 
+  // "Get link" and "Share" are the same dialog since D7 — one surface holds people and
+  // the public link — so this differs only in which zone is switched on at open.
   protected async getLink(file: FileProps): Promise<void> {
     const segs = this.pathSegments().map((s) => s.path)
-    await this.linkDialog.open({
+    await this.shareDialog.open({
       file: { id: file.id, name: file.name, isDir: file.isDir, mime: file.mime, space: this.repository.dialogSpace() as never },
       relativePath: [...segs, file.name].join('/'),
-      ownerId: this.repository.dialogOwnerId()
+      ownerId: this.repository.dialogOwnerId(),
+      focusLink: true
     })
   }
 

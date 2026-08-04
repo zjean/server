@@ -3,7 +3,6 @@ import { RouterOutlet } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { CompressDialogComponent } from '../components/compress-dialog.component'
 import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
-import { LinkDialogComponent } from '../components/link-dialog.component'
 import { LockDialogComponent } from '../components/lock-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
 import { ShareDialogComponent } from '../components/share-dialog.component'
@@ -44,7 +43,6 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     TreePickerComponent,
     PromptDialogComponent,
     CompressDialogComponent,
-    LinkDialogComponent,
     LockDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
