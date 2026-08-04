@@ -41,6 +41,7 @@ import { ToastService } from '../../../components/toast.service'
 import { TreePickerService } from '../../../components/tree-picker.service'
 import { V2BreadcrumbService } from '../../../layout/breadcrumb.service'
 import { InspectorService } from '../../../layout/inspector.service'
+import { TransfersService } from '../../../services/transfers.service'
 import { FavoritesService } from '../../../services/favorites.service'
 import { FolderSizeService } from '../../../services/folder-size.service'
 import { V2DragService } from '../../../services/drag.service'
@@ -236,6 +237,8 @@ export class HarnessDeps {
   readonly favoriteIds = new Set<number>()
   readonly dockSelected = signal<unknown>(null)
   readonly inspectorContentReplaced = new Subject<void>()
+  /** Active uploads the base should see as in-place tiles. Each needs a `path`. */
+  readonly uploadsInFolder = signal<{ id: string; name: string; path: string; props?: { size?: number; totalSize?: number } }[]>([])
   readonly serverConfig = signal({ files: { editors: { onlyoffice: false, eurooffice: false, collabora: false } } })
   dragPayload: { files: FileProps[]; sourceDir: string; draggedIds: Set<number> } | null = null
   dragCanDropOnFile = true
@@ -432,6 +435,18 @@ export class HarnessDeps {
         }
       },
       { provide: StoreService, useValue: { filesOnEvent: this.filesOnEvent, user: this.user, server: this.serverConfig } },
+      {
+        // The base asks it which uploads are landing in the current folder, for the
+        // gallery's in-place tiles. Backed by a signal so a case can push tiles in.
+        provide: TransfersService,
+        useValue: {
+          uploadsIn: (path: string) => this.uploadsInFolder().filter((t: { path: string }) => t.path === path),
+          percentOf: (t: { props?: { size?: number; totalSize?: number } }) => {
+            const total = t.props?.totalSize ?? 0
+            return total > 0 ? Math.min(100, Math.round(((t.props?.size ?? 0) / total) * 100)) : 0
+          }
+        }
+      },
       {
         provide: InspectorService,
         useValue: {

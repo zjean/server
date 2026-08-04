@@ -17,7 +17,7 @@ import { LeftNavComponent } from './left-nav.component'
 import { PageBreadcrumbComponent } from './page-breadcrumb.component'
 import { TitleBarComponent } from './title-bar.component'
 import { TopBarComponent } from './top-bar.component'
-import { TransfersPopoverComponent } from './transfers-popover.component'
+import { UploadDockComponent } from './upload-dock.component'
 
 @Component({
   selector: 'app-layout-v2',
@@ -37,7 +37,7 @@ import { TransfersPopoverComponent } from './transfers-popover.component'
     LeftNavComponent,
     PageBreadcrumbComponent,
     InspectorPanelComponent,
-    TransfersPopoverComponent,
+    UploadDockComponent,
     ToastHostComponent,
     ConfirmDialogComponent,
     TreePickerComponent,

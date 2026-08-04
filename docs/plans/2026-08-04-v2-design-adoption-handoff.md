@@ -32,9 +32,9 @@ Only then open the design project.
 | 2b | Grid view | #435 | merged |
 | 3 | Inspector (D4, D5) | #437 | merged |
 | 4 | Search (D6) | #438 | merged |
-| 5 | Share dialog (D7) | #440 | open |
-| **6** | **Gallery + upload dock (D8)** | — | **next** |
-| 7 | Mobile (M1–M6) | — | not started |
+| 5 | Share dialog (D7) | #440 | merged |
+| 6 | Gallery + upload dock (D8) | #441 | open |
+| **7** | **Mobile (M1–M6)** | — | **next** |
 | 8 | Keyboard hints + session error strip | — | not started |
 
 Everything merged is on `develop` as of `13d30cda`.
@@ -321,10 +321,18 @@ on every link creation. Two more things later phases will hit:
   a field you leave out is a thing you delete. `UpdateShareParams.links` is required
   for exactly this reason.
 
-### Phase 6 — gallery
+### Phase 6 — gallery and the dock (shipped in #441)
 
-- `file-browser-gallery.scss` is already split out and carries a header comment
-  saying phase 6 rebuilds it to D8.
+Read the plan's **§8.1**. Three things phase 7 inherits:
+
+- **The transfers pill is gone from both bars.** The aggregate is
+  `layout/upload-dock.component.*`, bottom-right, and on mobile it already offsets
+  itself above the bottom tab bar. M1–M6 decides whether that is where it belongs.
+- **`TransfersService` is the one source for in-flight numbers** — active tasks with a
+  250ms re-publish (progress is mutated in place), plus rate and ETA over a trailing
+  window. Do not add a second timer.
+- **The dock and the bulk bar can collide at narrow widths.** The bar positions against
+  `.personal`; the dock is viewport-fixed bottom-right. Untested below ~600px.
 
 ### Phase 7 — mobile
 

@@ -1,149 +1,252 @@
-// Gallery view — the media tile layout. Split out of file-browser.component.scss;
-// see file-browser-grid.scss for why.
+// Gallery view — D8. Split out of file-browser.component.scss; see
+// file-browser-grid.scss for why.
 //
-// Phase 6 of the design adoption rebuilds this to D8 (4:3 tiles, striped media
-// placeholders, in-place upload progress). Until then it is the pre-adoption
-// geometry with the new tokens.
+// Three things here are the design's rules rather than taste:
+//
+//  • **Five columns of 4:3 tiles.** A fixed count, not `auto-fill minmax()`: the
+//    gallery is for looking at pictures, and a column count that changes with the
+//    window changes the size of every thumbnail as you resize. It steps down to
+//    4/3/2 at the widths where five stops fitting.
+//  • **The name lives OUTSIDE the tile**, on one line, with mono meta under it. A
+//    caption inside the frame competes with the image for the frame.
+//  • **Media placeholders are striped, never coloured blocks.** The stripe says
+//    "image goes here"; a flat tint says "this is a colour swatch".
 
 .file-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--si-space-7);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--si-space-8);
   padding: var(--si-space-9) var(--si-space-12) var(--si-space-12);
-}
 
-.gallery-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--si-r3);
-  overflow: hidden;
-  background: var(--si-bg2);
-  border: none;
-  box-shadow: var(--si-shadow1);
-  cursor: pointer;
-  padding: 0;
-  text-align: left;
-  color: inherit;
-  font-family: inherit;
-  transition:
-    box-shadow 120ms ease,
-    background 120ms ease;
-
-  &:hover {
-    // Subtle tonal hover like a list row — no dramatic lift shadow.
-    background: var(--si-bg3);
+  @media (max-width: 1280px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  &--selected {
-    box-shadow:
-      inset 0 0 0 2px var(--si-nav),
-      var(--si-shadow1);
+  @media (max-width: 1024px) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 720px) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--si-space-6);
+  }
+}
+
+.gallery-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  cursor: pointer;
+  text-align: left;
+
+  &:focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 3px;
+    border-radius: var(--si-r2);
   }
 
   &--dragging {
     opacity: 0.45;
   }
+}
 
-  &--drop-hover {
-    border-color: var(--si-accent);
-    box-shadow:
-      inset 0 0 0 2px var(--si-accent),
-      var(--si-shadow1);
+// The frame. Everything absolute below is positioned against it.
+.gallery-tile__media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--si-r2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  // The file-type tint at the design's 14%. `--fc-bg` is bound per tile from the
+  // file's type (see the [style.--fc-bg] binding in the template) and resolves
+  // against the --fc-<type>-bg ramp in _tokens.scss; the literal is the
+  // unmapped-type floor.
+  background: var(--fc-bg, var(--si-bg3));
+  color: var(--fc-fg, var(--si-fg-muted));
+  transition: box-shadow var(--si-dur-2) var(--si-ease-out);
+}
+
+// The stripe. A pseudo-element rather than a real one so it cannot be mistaken for
+// content, and it sits UNDER the thumbnail: a photo covers it, a placeholder does
+// not, which is exactly the distinction it exists to draw.
+.gallery-tile__media::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(135deg, var(--si-media-stripe) 0 8px, transparent 8px 16px);
+  pointer-events: none;
+}
+
+// Selection is an inset ring, as in grid: a tile has no row rhythm to preserve, and
+// a 2px stripe down one side of one reads as a defect (phase 2b).
+.gallery-tile--selected .gallery-tile__media {
+  box-shadow:
+    inset 0 0 0 2px var(--si-accent),
+    var(--si-shadow1);
+}
+
+.gallery-tile--drop-hover .gallery-tile__media {
+  box-shadow: inset 0 0 0 2px var(--si-accent);
+}
+
+.gallery-tile:hover .gallery-tile__media {
+  box-shadow: var(--si-shadow1);
+}
+
+// The checkbox chip. Top-left, which is the selection corner in every view.
+.gallery-tile__select {
+  position: absolute;
+  top: var(--si-space-4);
+  left: var(--si-space-4);
+  z-index: calc(var(--si-z-base) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--si-space-2);
+  border-radius: var(--si-r1);
+  background: var(--si-bg1);
+  box-shadow: var(--si-shadow1);
+  opacity: 0;
+  transition: opacity var(--si-dur-2) var(--si-ease-out);
+}
+
+.gallery-tile:hover .gallery-tile__select,
+.gallery-tile--selected .gallery-tile__select {
+  opacity: 1;
+}
+
+// Badges over media need their own ground: a tint that is legible on a dark tile is
+// invisible on a bright photo. One veiled chip, top-RIGHT so it never shares a
+// corner with the selection target.
+.gallery-tile__badges {
+  position: absolute;
+  top: var(--si-space-4);
+  right: var(--si-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-3);
+  height: 20px;
+  padding: 0 var(--si-space-4);
+  border-radius: var(--si-r0);
+  background: var(--si-scrim);
+  color: var(--si-fg);
+  font-size: var(--si-text-3);
+  font-weight: 500;
+}
+
+.gallery-tile__badge {
+  display: inline-flex;
+  line-height: 0;
+
+  &--fav {
+    color: var(--si-amber-ink);
   }
 
-  &__select {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    z-index: calc(var(--si-z-base) + 1);
-    opacity: 0;
-    transition: opacity 120ms ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--si-space-2);
-    border-radius: 7px;
-    // Clean opaque chip (was a muddy translucent color-mix over the stage).
-    background: var(--si-bg1);
-    box-shadow: var(--si-shadow1);
+  &--comment {
+    color: var(--si-green-ink);
   }
 
-  &:hover &__select,
-  &--selected &__select {
-    opacity: 1;
-  }
-
-  &__stage {
-    aspect-ratio: 4 / 3;
-    // --fc-bg / --fc-fg ARE wired, contrary to what #403 assumed when it
-    // replaced this pair with its own fallbacks: the template sets them per row
-    // from the file's type (see the [style.--fc-bg] binding on this element),
-    // and they resolve against the --fc-<type>-bg / -fg ramp in _tokens.scss.
-    // Measured in-browser — a gallery of ten file types yields ten distinct
-    // tints, e.g. a .docx row resolves --fc-bg to oklch(.8 .13 240 / .2).
-    // The literal fallbacks are kept as the unmapped-type floor.
-    background: linear-gradient(135deg, var(--fc-bg, var(--si-bg3)), var(--si-bg3));
-    color: var(--fc-fg, var(--si-fg-muted));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-  }
-
-  &__tags {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    display: flex;
-    gap: var(--si-space-3);
-  }
-
-  // The one interactive pill in the tag strip; everything else there is a label.
-  &__lock {
+  // The one interactive badge — it opens the unlock dialog, which is why the lock
+  // has to stay reachable in every view (phase 2's note).
+  &--lock {
+    color: var(--si-rose-ink);
     background: transparent;
-    border: none;
+    border: 0;
     padding: 0;
-    margin: 0;
     cursor: pointer;
-    display: inline-flex;
-    color: inherit;
-    font: inherit;
-    line-height: 0;
   }
+}
 
-  &__footer {
-    padding: var(--si-space-5) var(--si-space-6);
-  }
+/* ─── In flight ─────────────────────────────────────────────────────────────── */
 
-  &__name {
-    font-size: var(--si-text-7);
-    color: var(--si-fg);
-    font-weight: 500;
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+// An upload appears as a tile IN PLACE, so the folder shows what it is about to
+// contain rather than what it contained a moment ago.
+.gallery-tile__veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--si-media-veil);
+}
 
-  &__meta {
-    font-size: var(--si-text-3);
-    color: var(--si-fg-muted);
-    margin-top: var(--si-space-2);
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-3);
-    font-family: var(--si-mono);
-  }
+.gallery-tile__spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--si-line);
+  // accent-500, not accent-400: an -ink tone is a TYPE colour and this is a stroke.
+  // It is also the value the design gives every determinate progress fill, so the
+  // spinner and the bar under it agree.
+  border-top-color: var(--si-accent-hover);
+  animation: gallery-spin 700ms linear infinite;
+}
 
-  &__sep {
-    opacity: 0.5;
+// A determinate bar on the tile's bottom edge — determinate because the upload
+// service knows the byte count, and a spinner alone would throw that away.
+.gallery-tile__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--si-scrim);
+}
+
+.gallery-tile__bar-fill {
+  height: 100%;
+  background: var(--si-accent-hover);
+  transition: width var(--si-dur-3) var(--si-ease-out);
+}
+
+@keyframes gallery-spin {
+  to {
+    transform: rotate(360deg);
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-tile__spinner {
+    animation: none;
+  }
+  .gallery-tile__bar-fill {
+    transition: none;
+  }
+}
+
+/* ─── Caption ───────────────────────────────────────────────────────────────── */
+
+.gallery-tile__name {
+  margin-top: var(--si-space-5);
+  font-family: var(--si-sans);
+  font-size: var(--si-text-7);
+  font-weight: 500;
+  color: var(--si-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// An in-flight tile's name is accent-INK, not the accent fill: it is type, and the
+// fill measures 3.48:1 on this plane.
+.gallery-tile--uploading .gallery-tile__name {
+  color: var(--si-accent-ink);
+}
+
+.gallery-tile__meta {
+  font-family: var(--si-mono);
+  font-size: var(--si-text-3);
+  color: var(--si-fg-ghost);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 // Mobile (<768px): drop the info / size / modified columns from the
 // list view so the row fits without horizontal scroll. Users get the
-// missing metadata via the file's info dock-tab. The kebab actions
+// missing metadata via the file's inspector tab. The kebab actions
 // column is also force-shown — opacity:0 only-on-hover doesn't work
 // on touch.
 // `.personal__create-actions` wraps the "New / Download from URL / Upload"

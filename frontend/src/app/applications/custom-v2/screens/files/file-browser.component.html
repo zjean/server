@@ -322,14 +322,36 @@
           </div>
         }
         @case ('gallery') {
-          <div class="file-gallery" [class.file-gallery--selecting]="hasSelection()">
+          <div class="file-gallery">
+            <!-- Uploads to THIS folder appear as tiles in place, before the listing
+                 knows about them: the folder shows what it is about to contain rather
+                 than what it contained a moment ago. -->
+            @for (u of uploadingHere(); track u.id) {
+              <div class="gallery-tile gallery-tile--uploading">
+                <div class="gallery-tile__media">
+                  <app-v2-icon name="upload" [size]="24" />
+                  <div class="gallery-tile__veil">
+                    <span class="gallery-tile__spinner" role="progressbar" [attr.aria-valuenow]="u.percent"></span>
+                  </div>
+                  <div class="gallery-tile__bar">
+                    <div class="gallery-tile__bar-fill" [style.width.%]="u.percent"></div>
+                  </div>
+                </div>
+                <div class="gallery-tile__name">{{ u.name }}</div>
+                <div class="gallery-tile__meta">
+                  {{ 'v2_uploading_pct' | translate: locale.language : { pct: u.percent } }}
+                </div>
+              </div>
+            }
+
             @for (f of filteredFiles(); track f.id) {
-              <button
-                type="button"
-                class="gallery-card"
-                [class.gallery-card--selected]="isSelected(f)"
-                [class.gallery-card--drop-hover]="dropHoverId() === f.id"
-                [class.gallery-card--dragging]="drag.active() && drag.payload()?.draggedIds?.has(f.id)"
+              <div
+                class="gallery-tile"
+                role="button"
+                tabindex="0"
+                [class.gallery-tile--selected]="isSelected(f)"
+                [class.gallery-tile--drop-hover]="dropHoverId() === f.id"
+                [class.gallery-tile--dragging]="drag.active() && drag.payload()?.draggedIds?.has(f.id)"
                 draggable="true"
                 (dragstart)="onRowDragStart($event, f)"
                 (dragend)="onRowDragEnd()"
@@ -337,69 +359,70 @@
                 (dragleave)="onRowDragLeave(f)"
                 (drop)="onRowDrop($event, f)"
                 (click)="onRowClick($event, f)"
+                (keydown.enter)="openEntry(f)"
                 (auxclick)="onRowAuxClick($event, f)"
                 (contextmenu)="openRowMenu($event, f)"
               >
-                <span class="gallery-card__select" (click)="$event.stopPropagation(); toggleSelection(f)">
-                  <app-v2-checkbox
-                    [state]="isSelected(f) ? 'checked' : 'unchecked'"
-                    (toggled)="toggleSelection(f)"
-                    [ariaLabel]="'Select' | translate: locale.language"
-                  />
-                </span>
                 <div
-                  class="gallery-card__stage"
+                  class="gallery-tile__media"
                   [style.--fc-bg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-bg)'"
                   [style.--fc-fg]="'var(--fc-' + (f.isDir ? 'folder' : mimeToGlyph(f.mime)) + '-fg)'"
                 >
-                  <app-v2-file-thumb [file]="f" [serverPath]="thumbPath(f)" [glyphSize]="48" [rounded]="10" [imageRes]="512" />
-                  <div class="gallery-card__tags">
-                    <app-v2-pill color="gray" [size]="10">
-                      {{ f.isDir ? 'FOLDER' : mimeToGlyph(f.mime).toUpperCase() }}
-                    </app-v2-pill>
-                    @if (f.hasComments) {
-                      <app-v2-pill color="green" [size]="10">
-                        <app-v2-icon name="comment" [size]="9" />
-                      </app-v2-pill>
-                    }
-                    @if (favoritesService.isFavorite(f.id)) {
-                      <app-v2-pill color="gray" [size]="10">
-                        <app-v2-icon name="star" [size]="9" />
-                      </app-v2-pill>
-                    }
-                    <!-- Gallery mode is classic's own badge row
-                         (spaces-browser.component.html:427); the lock pill joins
-                         the existing tag strip rather than getting its own corner. -->
-                    @if (f.lock) {
-                      <button
-                        type="button"
-                        class="gallery-card__lock"
-                        (click)="$event.stopPropagation(); openLockDialog(f)"
-                        [attr.title]="lockLabel(f)"
-                        [attr.aria-label]="
-                          (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
-                        "
-                      >
-                        <app-v2-pill [color]="f.lock.isExclusive ? 'rose' : 'amber'" [size]="10">
-                          <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="9" />
-                        </app-v2-pill>
-                      </button>
-                    }
-                  </div>
+                  <app-v2-file-thumb [file]="f" [serverPath]="thumbPath(f)" [glyphSize]="40" [rounded]="8" [imageRes]="512" />
+
+                  <span class="gallery-tile__select" (click)="$event.stopPropagation(); toggleSelection(f)">
+                    <app-v2-checkbox
+                      [state]="isSelected(f) ? 'checked' : 'unchecked'"
+                      (toggled)="toggleSelection(f)"
+                      [ariaLabel]="'Select' | translate: locale.language"
+                    />
+                  </span>
+
+                  <!-- One veiled chip rather than four scattered pills: a badge that is
+                       legible on a dark tile disappears on a bright photo, so they share
+                       a ground. Top-right, away from the selection target. -->
+                  @if (favoritesService.isFavorite(f.id) || f.hasComments || f.lock) {
+                    <div class="gallery-tile__badges">
+                      @if (favoritesService.isFavorite(f.id)) {
+                        <span class="gallery-tile__badge gallery-tile__badge--fav" [attr.title]="'Favorites' | translate: locale.language">
+                          <app-v2-icon name="star" [size]="11" />
+                        </span>
+                      }
+                      @if (f.hasComments) {
+                        <span class="gallery-tile__badge gallery-tile__badge--comment" [attr.title]="'Comments' | translate: locale.language">
+                          <app-v2-icon name="comment" [size]="11" />
+                        </span>
+                      }
+                      @if (f.lock) {
+                        <button
+                          type="button"
+                          class="gallery-tile__badge gallery-tile__badge--lock"
+                          (click)="$event.stopPropagation(); openLockDialog(f)"
+                          [attr.title]="lockLabel(f)"
+                          [attr.aria-label]="
+                            (f.lock.isExclusive ? 'v2_locked_by' : 'v2_edited_by') | translate: locale.language : { owner: lockLabel(f) }
+                          "
+                        >
+                          <app-v2-icon [name]="f.lock.isExclusive ? 'lock' : 'unlock'" [size]="11" />
+                        </button>
+                      }
+                    </div>
+                  }
                 </div>
-                <div class="gallery-card__footer">
-                  <div class="gallery-card__name">{{ f.name }}</div>
-                  <div class="gallery-card__meta">
-                    @if (!f.isDir) {
-                      <span>{{ f.size | toBytes: 1 : true }}</span>
-                    }
-                    @if (f.mtime) {
-                      <span class="gallery-card__sep">·</span>
-                      <span>{{ f.mtime | amTimeAgo }}</span>
-                    }
-                  </div>
+
+                <!-- Caption outside the frame, one line, mono meta under it. -->
+                <div class="gallery-tile__name" [attr.title]="f.name">{{ f.name }}</div>
+                <div class="gallery-tile__meta">
+                  @if (!f.isDir) {
+                    {{ f.size | toBytes: 1 : true }}
+                  } @else {
+                    {{ 'Folder' | translate: locale.language }}
+                  }
+                  @if (f.mtime) {
+                    · {{ f.mtime | amTimeAgo }}
+                  }
                 </div>
-              </button>
+              </div>
             }
           </div>
         }

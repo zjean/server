@@ -2,9 +2,7 @@
      href would overwrite the current route instead of moving focus. -->
 <button type="button" class="layout-v2__skip" (click)="focusMainContent()" l10nTranslate>Skip to content</button>
 @if (layoutV2.isMobile()) {
-  <app-v2-title-bar>
-    <app-v2-transfers-popover titleBarRight />
-  </app-v2-title-bar>
+  <app-v2-title-bar />
 }
 <div class="layout-v2__body">
   <app-v2-left-nav />
@@ -55,6 +53,7 @@
   }
 </div>
 <app-v2-bottom-tab-bar />
+<app-v2-upload-dock />
 <app-v2-toast-host />
 <app-v2-confirm-dialog />
 <app-v2-tree-picker />

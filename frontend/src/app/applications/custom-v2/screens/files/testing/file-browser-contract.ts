@@ -963,6 +963,39 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
     })
 
     // -----------------------------------------------------------------------
+    // K2. In-place upload tiles — the gallery's view of active transfers
+    // -----------------------------------------------------------------------
+    describe('uploads in this folder', () => {
+      const upload = (over: Partial<{ id: string; name: string; path: string; props: { size: number; totalSize: number } }> = {}) => ({
+        id: 'u1',
+        name: 'photo.jpg',
+        path: '',
+        props: { size: 50, totalSize: 100 },
+        ...over
+      })
+
+      it('shows an upload whose destination is exactly this folder', () => {
+        const { c, deps } = start(['sub'])
+        deps.uploadsInFolder.set([upload({ path: dirPath(['sub']) })])
+        expect(c.uploadingHere()).toEqual([{ id: 'u1', name: 'photo.jpg', percent: 50 }])
+      })
+
+      // Compared by exact path, not prefix: an upload into a SUBFOLDER of this one is
+      // not arriving here, and a tile for it would promise a row that never appears.
+      it('ignores an upload aimed at a subfolder or another folder', () => {
+        const { c, deps } = start(['sub'])
+        deps.uploadsInFolder.set([upload({ id: 'deep', path: `${dirPath(['sub'])}/deeper` }), upload({ id: 'other', path: dirPath(['elsewhere']) })])
+        expect(c.uploadingHere()).toEqual([])
+      })
+
+      it('reports 0% for an upload that has no total size yet', () => {
+        const { c, deps } = start()
+        deps.uploadsInFolder.set([upload({ path: dirPath([]), props: { size: 0, totalSize: 0 } })])
+        expect(c.uploadingHere()[0].percent).toBe(0)
+      })
+    })
+
+    // -----------------------------------------------------------------------
     // L. Links and shares — the per-screen DTO seam
     // -----------------------------------------------------------------------
     describe('links and shares', () => {
