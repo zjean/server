@@ -9,24 +9,29 @@ import { PromptDialogService } from './prompt-dialog.service'
   imports: [ButtonComponent, L10nTranslatePipe],
   template: `
     @if (pending(); as p) {
-      <div class="prompt-dialog__backdrop" (click)="cancel()"></div>
-      <form class="prompt-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
-        <div class="prompt-dialog__title">{{ p.title | translate: locale.language }}</div>
-        @if (p.message) {
-          <div class="prompt-dialog__message">{{ p.message | translate: locale.language }}</div>
-        }
-        <input
-          #input
-          type="text"
-          class="prompt-dialog__input"
-          [value]="value()"
-          (input)="onInput($event)"
-          [placeholder]="p.placeholder ?? '' | translate: locale.language"
-        />
+      <div class="v2-dialog-backdrop" (click)="cancel()"></div>
+      <form class="v2-dialog prompt-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
+        <div class="v2-dialog__head">
+          <div class="v2-dialog__title">{{ p.title | translate: locale.language }}</div>
+        </div>
+        <div class="v2-dialog__body">
+          @if (p.message) {
+            <div class="prompt-dialog__message">{{ p.message | translate: locale.language }}</div>
+          }
+          <input
+            #input
+            type="text"
+            class="prompt-dialog__input"
+            [value]="value()"
+            (input)="onInput($event)"
+            [placeholder]="p.placeholder ?? '' | translate: locale.language"
+          />
+        </div>
         @if (errorMsg(); as err) {
-          <div class="prompt-dialog__error">{{ err | translate: locale.language }}</div>
+          <div class="v2-dialog__error">{{ err | translate: locale.language }}</div>
         }
-        <div class="prompt-dialog__actions">
+        <div class="v2-dialog__footer">
+          <div class="v2-dialog__spacer"></div>
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
             {{ p.cancelLabel ?? 'Cancel' | translate: locale.language }}
           </app-v2-btn>
@@ -40,34 +45,9 @@ import { PromptDialogService } from './prompt-dialog.service'
   `,
   styles: [
     `
+      /* Frame, scrim, head, body, error and footer come from styles/_dialog.scss. */
       :host {
         display: contents;
-      }
-      .prompt-dialog__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
-      .prompt-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        min-width: 320px;
-        max-width: 420px;
-        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
-      }
-      .prompt-dialog__title {
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
-        margin-bottom: var(--si-space-4);
       }
       .prompt-dialog__message {
         font-size: var(--si-text-8);
@@ -81,28 +61,17 @@ import { PromptDialogService } from './prompt-dialog.service'
         font: inherit;
         font-size: var(--si-text-8);
         padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg2);
+        /* bg3 is the input fill. It was bg2, which was one step down from the old
+           bg1 frame; on the bg5 frame that reads as a hole rather than a field. */
+        background: var(--si-bg3);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
-        border-radius: 6px;
-        margin-bottom: var(--si-space-2);
+        border-radius: var(--si-r1);
         outline: none;
         transition: border-color 120ms ease;
       }
       .prompt-dialog__input:focus {
         border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
-      }
-      .prompt-dialog__error {
-        font-size: var(--si-text-4);
-        color: var(--si-rose-ink);
-        margin-bottom: var(--si-space-5);
-        margin-top: var(--si-space-2);
-      }
-      .prompt-dialog__actions {
-        display: flex;
-        gap: var(--si-space-4);
-        justify-content: flex-end;
-        margin-top: var(--si-space-7);
       }
     `
   ]

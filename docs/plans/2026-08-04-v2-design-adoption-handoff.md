@@ -59,16 +59,24 @@ shipped with the sheet that needed it and the remaining two sheets followed.
 Three follow-ups, each recorded when it was found and each still true. Counts are from a
 grep at close-out, not from memory:
 
-1. **Six dialogs still own their own frame.** `_dialog.scss` exists and only
-   `share-dialog` and `shortcuts-dialog` use it; `confirm`, `compress`, `lock`, `prompt`,
-   `tree-picker` and `two-fa` still declare their own centring block. This got MORE
-   valuable in #445: the mobile sheet geometry is a rule on `.v2-dialog`, so those six are
-   the only surfaces on the phone that still open as a centred box — the design says every
-   one of them should be a sheet, including "every destructive confirm".
-2. **26 `color: var(--si-rose)` declarations across 15 files.** `--si-rose` is a FILL and
+1. ~~**Six dialogs still own their own frame.**~~ **DONE 2026-08-05.** All eight now use
+   `_dialog.scss`. Two things the migration found that this entry did not predict, both
+   recorded in that file's header: the divergence was never only the 10px-vs-12px radius —
+   the six were also on `--si-bg1`, two elevation steps below the `--si-bg5` a dialog is
+   supposed to occupy — and because `--si-rose` measures 3.78 on bg1 but **2.95** on bg5, a
+   faithful frame swap would have made the compress dialog's error text WORSE. Ordering
+   mattered: the error moved to the shared `.v2-dialog__error` (rose-ink, 6.15) in the same
+   change. All six were browser-verified, including `two-fa` (reachable via admin →
+   impersonate) and `lock` (reachable by taking a real lock over WebDAV).
+2. **25 `color: var(--si-rose)` declarations across 15 files.** `--si-rose` is a FILL and
    measures ~3.6:1 as type; `--si-rose-ink` is the type tone. It was 31 when first counted
-   in phase 3; the ones fixed since were fixed because a phase happened to touch them, which
-   is not a strategy. Wants its own PR and a `tokens.spec.ts` rule so it cannot come back.
+   in phase 3 and 26 at close-out; compress-dialog's went with the dialog migration. The
+   ones fixed so far were fixed because a phase happened to touch them, which is not a
+   strategy. Wants its own PR and a `tokens.spec.ts` rule so it cannot come back.
+   **The worst instance is not on the content plane**: `.ctx-menu__item--danger` — the
+   Delete item — measures 3.78 resting and ~3.35 on its `rose-soft` hover, and the context
+   menu is the other surface still on `bg1` where the token table says `bg5`. Moving it to
+   the documented surface without fixing the tone first would take Delete to 2.95.
 3. **No command palette.** `⌘K` focuses the top bar's search field. The plan's hint set
    calls it a palette; the shortcut sheet deliberately labels it *Search files*. If a palette
    is ever built, `utils/shortcut-label.ts` is the one place the label has to change.

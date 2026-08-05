@@ -147,9 +147,11 @@ method: the base's `mode` signal initialises before the subclass field holding t
 
 `custom-v2` was rebuilt against a Claude Design project (*Sync-In Design System v1.0*,
 `4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP). **All nine phases are merged** (#432–#446).
-The handoff's §2.1 lists the three follow-ups that are left; none of them is a phase, and the biggest is that **six of
-the eight dialogs still declare their own frame instead of using `_dialog.scss`** — which now also means they are the
-only surfaces that still open as a centred box on a phone.
+The handoff's §2.1 lists the follow-ups that are left; none of them is a phase. The dialog-frame one is **done** — all
+eight now use `_dialog.scss` — and what it taught is worth carrying: the six that diverged were also on the wrong
+SURFACE (`--si-bg1`, not `--si-bg5`), and since `--si-rose` measures 3.78 on bg1 but 2.95 on bg5, moving a surface to
+where the design says it belongs can silently make its text worse. **Check the tone against the destination surface
+before moving anything onto bg5** — the context menu is the remaining surface in that position.
 
 **If you are touching anything under `custom-v2/`, start with
 [`docs/plans/2026-08-04-v2-design-adoption-handoff.md`](docs/plans/2026-08-04-v2-design-adoption-handoff.md).** It is

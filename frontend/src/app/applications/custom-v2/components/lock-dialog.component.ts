@@ -33,25 +33,28 @@ import { LockDialogService } from './lock-dialog.service'
   imports: [AvatarComponent, ButtonComponent, IconV2Component, L10nTranslatePipe],
   template: `
     @if (pending(); as p) {
-      <div class="lock-dialog__backdrop" (click)="cancel()" (contextmenu)="$event.preventDefault()"></div>
-      <div class="lock-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-        <div class="lock-dialog__title">
-          <app-v2-icon [name]="p.lock.isExclusive ? 'lock' : 'unlock'" [size]="15" />
-          <span class="lock-dialog__file">{{ p.fileName }}</span>
+      <div class="v2-dialog-backdrop" (click)="cancel()" (contextmenu)="$event.preventDefault()"></div>
+      <div class="v2-dialog lock-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <div class="v2-dialog__head">
+          <app-v2-icon [name]="p.lock.isExclusive ? 'lock' : 'unlock'" [size]="15" class="lock-dialog__glyph" />
+          <div class="v2-dialog__title lock-dialog__file">{{ p.fileName }}</div>
         </div>
-        <div class="lock-dialog__owner">
-          <span class="lock-dialog__owner-label">
-            {{ (p.lock.isExclusive ? 'The file is locked by' : 'The file is edited by') | translate: locale.language }}
-          </span>
-          <app-v2-avatar [user]="avatar()!" [size]="48" />
-          <span class="lock-dialog__owner-name">{{ ownerLabel() }}</span>
-        </div>
-        @if (p.lock.isExclusive && !isLockOwner() && p.isFileOwner) {
-          <div class="lock-dialog__hint">
-            {{ 'As the file owner, you can unlock the file or request the current lock owner to release it.' | translate: locale.language }}
+        <div class="v2-dialog__body">
+          <div class="lock-dialog__owner">
+            <span class="lock-dialog__owner-label">
+              {{ (p.lock.isExclusive ? 'The file is locked by' : 'The file is edited by') | translate: locale.language }}
+            </span>
+            <app-v2-avatar [user]="avatar()!" [size]="48" />
+            <span class="lock-dialog__owner-name">{{ ownerLabel() }}</span>
           </div>
-        }
-        <div class="lock-dialog__actions">
+          @if (p.lock.isExclusive && !isLockOwner() && p.isFileOwner) {
+            <div class="lock-dialog__hint">
+              {{ 'As the file owner, you can unlock the file or request the current lock owner to release it.' | translate: locale.language }}
+            </div>
+          }
+        </div>
+        <div class="v2-dialog__footer">
+          <div class="v2-dialog__spacer"></div>
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
             {{ (p.lock.isExclusive ? 'Cancel' : 'Close') | translate: locale.language }}
           </app-v2-btn>
@@ -73,39 +76,19 @@ import { LockDialogService } from './lock-dialog.service'
   `,
   styles: [
     `
+      /* Frame, scrim, head, body and footer come from styles/_dialog.scss. */
       :host {
         display: contents;
       }
-      .lock-dialog__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
-      .lock-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        min-width: 320px;
-        max-width: 420px;
-        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
-      }
-      .lock-dialog__title {
-        display: flex;
-        align-items: center;
-        gap: var(--si-space-4);
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
-        margin-bottom: var(--si-space-7);
+      /* The shared head aligns its children to flex-start, so the glyph needs
+         nudging onto the title's baseline rather than the line box's top. */
+      .lock-dialog__glyph {
+        display: inline-flex;
+        margin-top: 3px;
+        color: var(--si-fg-muted);
       }
       .lock-dialog__file {
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -134,12 +117,9 @@ import { LockDialogService } from './lock-dialog.service'
         line-height: 1.45;
         text-align: center;
       }
-      .lock-dialog__actions {
-        display: flex;
+      /* Three buttons plus a spacer can outgrow one row in a narrow viewport. */
+      .lock-dialog .v2-dialog__footer {
         flex-wrap: wrap;
-        gap: var(--si-space-4);
-        justify-content: flex-end;
-        margin-top: var(--si-space-8);
       }
     `
   ]
