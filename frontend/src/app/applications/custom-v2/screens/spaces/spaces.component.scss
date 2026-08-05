@@ -69,7 +69,7 @@
     text-align: center;
 
     &--error {
-      color: var(--si-rose);
+      color: var(--si-rose-ink);
     }
   }
 }
@@ -124,7 +124,7 @@
     // Periwinkle, not cobalt: this is a Space identity mark, and the design
     // reserves the accent for the action next to it (Create space).
     background: var(--si-violet-soft);
-    color: var(--si-violet);
+    color: var(--si-violet-ink);
     display: flex;
     align-items: center;
     justify-content: center;

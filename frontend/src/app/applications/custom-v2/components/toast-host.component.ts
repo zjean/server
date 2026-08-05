@@ -54,7 +54,7 @@ import { ToastService } from './toast.service'
         border-color: color-mix(in srgb, var(--si-green) 35%, var(--si-border));
       }
       .toast--success app-v2-icon {
-        color: var(--si-green);
+        color: var(--si-green-ink);
       }
       .toast--error {
         border-color: color-mix(in srgb, var(--si-rose) 35%, var(--si-border));

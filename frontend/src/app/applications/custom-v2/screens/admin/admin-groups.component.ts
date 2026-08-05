@@ -282,7 +282,7 @@ function emptyDraft(): GroupDraft {
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .ag-table {
@@ -367,7 +367,7 @@ function emptyDraft(): GroupDraft {
           color: var(--si-fg);
         }
         &--danger:hover {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
 
@@ -433,7 +433,7 @@ function emptyDraft(): GroupDraft {
         }
       }
       .ag-dialog__error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-6);
       }
       .ag-dialog__actions {

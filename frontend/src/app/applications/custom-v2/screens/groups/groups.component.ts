@@ -379,7 +379,7 @@ interface GroupDraft {
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .mg-table {
@@ -458,7 +458,7 @@ interface GroupDraft {
           color: var(--si-accent-ink);
         }
         &--personal {
-          color: var(--si-violet);
+          color: var(--si-violet-ink);
         }
       }
       .mg-row__label {
@@ -503,7 +503,7 @@ interface GroupDraft {
           color: var(--si-fg);
         }
         &--danger:hover {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
 
@@ -547,7 +547,7 @@ interface GroupDraft {
         color: var(--si-fg-muted);
       }
       .mg-dialog__error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-6);
       }
       .mg-dialog__actions {
@@ -625,7 +625,7 @@ interface GroupDraft {
 
         &:hover {
           background: var(--si-bg3);
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
     `

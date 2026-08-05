@@ -98,6 +98,7 @@ describe('custom-v2 colour discipline', () => {
 // accent and silently wrong under cobalt, in three distinct ways. Each is worth a
 // test, because none of them fails a build and two of them look deliberate.
 describe('custom-v2 accent discipline', () => {
+  const tokensSrc = readFileSync(join(V2, TOKENS), 'utf8')
   const declarations = sources
     .filter((f) => /\.(scss|ts)$/.test(f))
     .flatMap((f) =>
@@ -111,9 +112,34 @@ describe('custom-v2 accent discipline', () => {
   // exactly why 21 of these existed. Brand-as-type is accent-400
   // (--si-accent-ink, 7.13:1 on the tint); brand-as-ink-on-the-fill is
   // --si-accent-fg. The bare token is a FILL and nothing else.
-  it('never uses the accent fill as a text colour', () => {
-    const offenders = declarations.filter((d) => /^(?!.*-color:)color:\s*var\(--si-(accent|nav)\)\s*;/.test(d.text)).map((d) => `${d.file}:${d.line}`)
-    expect(offenders, 'use --si-accent-ink for brand-as-type, or --si-accent-fg on the fill').toEqual([])
+  //
+  // This is not a fact about the accent. EVERY token with an `-ink` partner is a
+  // fill, and the partner exists precisely because the fill does not clear 4.5:1 as
+  // type — that is what the pair is FOR. So the rule is derived from _tokens.scss
+  // rather than hand-listed: any `--si-X` for which `--si-X-ink` is declared is
+  // caught. A new semantic colour is covered the moment its pair is defined, and a
+  // hand-maintained list cannot silently fall behind.
+  //
+  // Measured before the sweep that made this pass (2026-08-05), worst surface first:
+  //   rose   2.55 on bg6 · 2.95 on bg5 · 3.64 on bg2   — 25 declarations, 14 files
+  //   cyan   3.55 on bg5 · 3.99 on bg3 · 4.37 on bg2   — the diff hunk header
+  //   green  4.56 on its own soft fill over bg5        — marginal, not failing
+  //   violet identical to its own ink; a no-op, swept for uniformity
+  // The rose set is the one that mattered: it was the `Delete` item in the context
+  // menu and the error text in six dialogs — the two places a user is least able to
+  // afford unreadable copy. See the handoff's §2.1 follow-up 2.
+  const INK_PAIRED = [...tokensSrc.matchAll(/^\s*--si-([a-z]+)-ink:/gm)].map((m) => m[1])
+
+  it('finds the ink-paired families (guards against the regex matching nothing)', () => {
+    expect(INK_PAIRED).toEqual(expect.arrayContaining(['accent', 'rose', 'amber', 'green', 'cyan']))
+  })
+
+  it('never uses a fill token as a text colour — the -ink partner is the type tone', () => {
+    // `nav` has no -ink of its own; it resolves to the accent and fails identically.
+    const families = [...INK_PAIRED, 'nav'].join('|')
+    const re = new RegExp(`^(?!.*-color:)color:\\s*var\\(--si-(${families})\\)\\s*;`)
+    const offenders = declarations.filter((d) => re.test(d.text)).map((d) => `${d.file}:${d.line}`)
+    expect(offenders, 'use the --si-<name>-ink partner as type; the bare token is a fill').toEqual([])
   })
 
   // The mirror image: a semantic or brand `-ink` tone is sized to be read as
