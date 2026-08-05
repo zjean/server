@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v2 app chrome — background palette options</title>
+<style>/* Page shell. Deliberately neutral: a tinted shell would bias the judgement of
+   a tinted ground, which is the one thing this page exists to make possible. */
+* { box-sizing: border-box; }
+.page {
+  --sh: #0b0b0b; --sh-fg: #e8e8e8; --sh-dim: #8b8b8b; --sh-line: #262626; --sh-card: #141414;
+  min-height: 100vh; margin: 0; padding: 32px 28px 80px;
+  background: var(--sh); color: var(--sh-fg);
+  font: 400 14px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.page[data-shell='mid'] { --sh: #4a4a4a; --sh-fg: #f4f4f4; --sh-dim: #d0d0d0; --sh-line: #5f5f5f; --sh-card: #3f3f3f; }
+.page[data-shell='light'] { --sh: #f2f2f2; --sh-fg: #16181c; --sh-dim: #5c6067; --sh-line: #dcdcdc; --sh-card: #fff; }
+
+.head { max-width: 900px; margin: 0 auto 34px; }
+h1 { font-size: 25px; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 10px; }
+.lede { color: var(--sh-dim); margin: 0 0 18px; font-size: 14.5px; }
+.finding {
+  background: var(--sh-card); border: 1px solid var(--sh-line); border-left: 3px solid #4c7ef3;
+  border-radius: 8px; padding: 16px 18px; font-size: 13.5px; color: var(--sh-fg);
+}
+.finding code { font: 500 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--sh-dim); }
+.ctl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 20px; }
+.ctl__l { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--sh-dim); margin-right: 4px; }
+.ctl__l--2 { margin-left: 18px; }
+.ctl button {
+  font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--sh-dim); border: 1px solid var(--sh-line);
+}
+.ctl button.on { background: #4c7ef3; border-color: #4c7ef3; color: #fff; }
+
+/* The large viewer, sticky-ish at the top of the reading order. */
+.viewer { max-width: 1180px; margin: 0 auto 46px; }
+.viewer__h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.viewer__h h2 { font-size: 16px; font-weight: 600; margin: 0; }
+.dim { color: var(--sh-dim); font-size: 12.5px; }
+
+.grp { max-width: 900px; margin: 54px auto 20px; }
+.grph { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--sh-dim); margin: 0 0 6px; font-weight: 600; }
+.grpb { margin: 0; font-size: 13.5px; color: var(--sh-dim); }
+
+/* One option. */
+.opt { max-width: 1180px; margin: 0 auto 30px; padding: 20px; background: var(--sh-card); border: 1px solid var(--sh-line); border-radius: 12px; }
+.opt__h { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.opt__h h2 { font-size: 17px; font-weight: 600; margin: 0; display: inline; }
+.tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; padding: 3px 7px; border-radius: 4px; margin-left: 10px; vertical-align: 2px; background: var(--sh-line); color: var(--sh-dim); }
+.tag--rec { background: rgba(76, 126, 243, 0.16); color: #8fadfa; }
+.page[data-shell='light'] .tag--rec { color: #2b4eb8; }
+.pick { font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; background: transparent; color: var(--sh-fg); border: 1px solid var(--sh-line); }
+.pick:hover { border-color: #4c7ef3; color: #8fadfa; }
+.opt__b { margin: 0 0 14px; font-size: 13.5px; color: var(--sh-dim); max-width: 74ch; }
+.opt__b code, .notes code { font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Hairline outline, or the near-black surface swatches vanish into the card and
+   the row reads as four tones instead of eleven. */
+.sw { display: flex; align-items: center; gap: 3px; margin-bottom: 16px; }
+.sw span { width: 34px; height: 22px; border-radius: 3px; display: block; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35); }
+.sw .swt { width: 22px; }
+.swgap { width: 14px !important; background: none !important; box-shadow: none !important; }
+
+.notes { margin: 14px 0 12px; padding-left: 18px; font-size: 12.5px; color: var(--sh-dim); }
+.notes li { margin-bottom: 3px; }
+.n-move { color: #e6bc63; }
+.n-bad { color: #f0908a; }
+.n-ok { color: #7ed39f; }
+
+/* Measured grid. */
+.grid { border-collapse: collapse; font: 400 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
+.grid th, .grid td { padding: 5px 9px; text-align: right; border-bottom: 1px solid var(--sh-line); }
+.grid thead th { color: var(--sh-dim); font-weight: 500; text-transform: none; }
+.grid tbody th { text-align: left; font-weight: 400; color: var(--sh-dim); }
+.grid tr.rule th, .grid tr.rule td { border-top: 1px solid var(--sh-line); }
+.grid .ok { color: #7ed39f; }
+.grid .sub { color: #e6bc63; }
+.grid .bad { color: #f0908a; font-weight: 600; }
+.grid .na { color: var(--sh-dim); opacity: 0.55; }
+
+details { margin-top: 14px; }
+summary { cursor: pointer; font-size: 12.5px; color: var(--sh-dim); }
+pre { font: 400 11.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127, 127, 127, 0.12); padding: 14px; border-radius: 8px; overflow-x: auto; margin: 10px 0 0; }
+
+.foot { max-width: 900px; margin: 50px auto 0; padding-top: 20px; border-top: 1px solid var(--sh-line); color: var(--sh-dim); font-size: 13px; }
+.foot code { font: 500 12.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--sh-fg); }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   The chrome mockup. Every rule below names ONLY --si-* custom properties, so
+   the palette on the wrapper is the single thing that differs between mockups —
+   the same discipline `tokens.spec.ts` enforces in the real components.
+   ───────────────────────────────────────────────────────────────────────── */
+.chrome {
+  --si-accent: #3a66e0; --si-accent-hover: #4c7ef3; --si-accent-ink: #8fadfa;
+  --si-accent-soft: rgba(76, 126, 243, 0.1); --si-accent-fg: #fff;
+  --si-rose: #c4483f; --si-rose-ink: #f0908a; --si-rose-fg: #fff;
+  --fc-doc: rgba(124, 156, 196, 0.16); --fc-doc-fg: #7c9cc4;
+  --fc-sheet: rgba(127, 174, 142, 0.16); --fc-sheet-fg: #7fae8e;
+  --fc-image: rgba(177, 146, 184, 0.16); --fc-image-fg: #b192b8;
+  position: relative; display: flex; overflow: hidden;
+  height: 372px; border-radius: 10px;
+  background: var(--si-bg0); color: var(--si-fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.45);
+}
+.chrome--big { height: 560px; }
+
+.chrome__nav { width: 158px; flex: none; background: var(--si-bg1); padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; }
+.chrome--big .chrome__nav { width: 210px; padding: 14px 10px; }
+.brand { display: flex; align-items: center; gap: 7px; padding: 3px 6px 14px; }
+.brand__dot { width: 15px; height: 15px; border-radius: 50%; background: var(--si-accent); flex: none; }
+.brand__t { font-size: 12.5px; font-weight: 600; line-height: 1.1; }
+.brand__t em { display: block; font-style: normal; font-size: 8.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--si-fg-tertiary); font-weight: 500; }
+.navsec { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--si-fg-ghost); padding: 12px 6px 4px; font-weight: 600; }
+.navitem { display: flex; align-items: center; gap: 8px; padding: 5px 7px; border-radius: 6px; font-size: 12px; color: var(--si-fg-muted); }
+.navitem i { width: 11px; height: 11px; border-radius: 3px; border: 1.4px solid currentColor; opacity: 0.75; flex: none; }
+.navitem.is-active { background: var(--si-accent-soft); color: var(--si-accent-ink); font-weight: 500; }
+
+.chrome__main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--si-bg2); position: relative; }
+.chrome__top { height: 40px; flex: none; background: var(--si-bg1); display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+.chrome--big .chrome__top { height: 48px; padding: 0 16px; }
+.crumb { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; }
+.crumb i { width: 11px; height: 11px; border-radius: 50%; border: 1.4px solid var(--si-fg-tertiary); flex: none; }
+.search { margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--si-bg3); border: 1px solid var(--si-border); border-radius: 6px; padding: 4px 8px; font-size: 11.5px; color: var(--si-fg-tertiary); min-width: 150px; }
+.search kbd { margin-left: auto; font: 500 9.5px/1 ui-monospace, Menlo, monospace; color: var(--si-fg-ghost); border: 1px solid var(--si-line); border-radius: 3px; padding: 2px 4px; }
+.av { width: 24px; height: 24px; border-radius: 50%; background: var(--si-accent); color: var(--si-accent-fg); font-size: 10px; font-weight: 600; display: grid; place-items: center; flex: none; }
+
+.chrome__content { flex: 1; overflow: hidden; padding: 16px 16px 0; }
+.chrome--big .chrome__content { padding: 22px 24px 0; }
+.chrome__content h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 4px; }
+.chrome--big .chrome__content h3 { font-size: 25px; }
+.sub { font-size: 12px; color: var(--si-fg-muted); margin: 0 0 16px; }
+.eyebrow { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--si-fg-ghost); font-weight: 600; display: flex; align-items: center; gap: 7px; margin: 0 0 8px; }
+.eyebrow::after { content: ''; flex: 1; height: 1px; background: var(--si-line-subtle); }
+.pill { font-size: 9.5px; letter-spacing: 0; background: var(--si-bg3); color: var(--si-fg-tertiary); border-radius: 4px; padding: 1px 5px; }
+
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 18px; }
+.card { background: var(--si-bg3); border: 1px solid var(--si-line); border-radius: 8px; padding: 9px; }
+.card.is-hover { background: var(--si-bg5); border-color: var(--si-line-strong); }
+.tile { height: 34px; border-radius: 6px; margin-bottom: 8px; background: var(--fc-doc); }
+.tile--sheet { background: var(--fc-sheet); } .tile--image { background: var(--fc-image); }
+.cname { font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmeta { font-size: 10px; color: var(--si-fg-tertiary); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.tbl { border-radius: 8px; overflow: hidden; }
+.thead { display: grid; grid-template-columns: 2fr 1.3fr 0.9fr; padding: 5px 9px; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--si-fg-ghost); font-weight: 600; border-bottom: 1px solid var(--si-line-subtle); }
+.trow { display: grid; grid-template-columns: 2fr 1.3fr 0.9fr; align-items: center; padding: 7px 9px; font-size: 11.5px; }
+.trow.is-band { background: var(--si-bg-band); }
+.trow.is-sel { background: var(--si-accent-soft); box-shadow: inset 2px 0 0 var(--si-accent); }
+.tn { display: flex; align-items: center; gap: 8px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tn .dot { width: 14px; height: 14px; border-radius: 4px; background: var(--fc-doc); flex: none; }
+.tm { font: 400 10.5px/1 ui-monospace, Menlo, monospace; color: var(--si-fg-tertiary); white-space: nowrap; overflow: hidden; }
+
+.ctlrow { display: flex; align-items: center; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+.btn { font: 500 12px/1 inherit; padding: 7px 13px; border-radius: 6px; border: 1px solid var(--si-border); background: var(--si-bg3); color: var(--si-fg); cursor: pointer; }
+.btn--primary { background: var(--si-accent); border-color: var(--si-accent); color: var(--si-accent-fg); }
+.btn--danger { background: var(--si-rose); border-color: var(--si-rose); color: var(--si-rose-fg); }
+.btn--focus { outline: 2px solid var(--si-focus-ring); outline-offset: 2px; }
+.chip { font-size: 10px; background: var(--si-bg3); color: var(--si-fg-muted); border-radius: 4px; padding: 3px 7px; }
+.input { font-size: 11.5px; background: var(--si-bg3); border: 1px solid var(--si-border); border-radius: 6px; padding: 6px 9px; color: var(--si-fg); min-width: 130px; }
+
+/* Overlays — bg5 and bg6, the two surfaces with no headroom. */
+.menu {
+  position: absolute; right: 14px; bottom: 14px; width: 148px; padding: 5px;
+  background: var(--si-bg5); border: 1px solid var(--si-line); border-radius: 10px;
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.6); font-size: 11.5px;
+  --si-fg-tertiary: var(--si-fg-muted); /* the re-point the real overlays carry */
+}
+.mi { display: flex; align-items: center; padding: 5px 8px; border-radius: 5px; color: var(--si-fg-muted); }
+.mi + .mi { margin-top: 1px; }
+.mi:first-child { background: var(--si-bg6); color: var(--si-fg); }
+.mi .k { margin-left: auto; font: 500 9.5px/1 ui-monospace, Menlo, monospace; color: var(--si-fg-tertiary); }
+.mi--d { color: var(--si-rose-ink); }
+.msep { height: 1px; background: var(--si-line); margin: 4px 6px; }
+/* Bottom-LEFT, not centred: the context menu owns the bottom-right corner, and
+   at the small mockup size a centred tooltip lands on top of it. */
+.tip { position: absolute; left: 16px; bottom: 16px; background: var(--si-bg6); color: var(--si-fg); font-size: 10.5px; padding: 5px 9px; border-radius: 6px; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.55); }
+.chrome--big .tip { left: 50%; transform: translateX(-50%); bottom: 20px; }
+
+.scrim { position: absolute; inset: 0; background: var(--si-scrim); }
+.dialog {
+  position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: 330px;
+  background: var(--si-bg5); border: 1px solid var(--si-line); border-radius: 12px; padding: 18px;
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.65);
+  --si-fg-tertiary: var(--si-fg-muted);
+}
+.dlg__h { font-size: 15.5px; font-weight: 600; margin-bottom: 7px; }
+.dlg__b { font-size: 12.5px; color: var(--si-fg-muted); margin-bottom: 16px; }
+.dlg__b .q { color: var(--si-fg-tertiary); }
+.dlg__f { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 720px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .chrome { height: 300px; }
+}
+</style>
+</head>
+<body>
+<div class="page" data-shell="dark">
+<header class="head">
+  <h1>v2 app chrome — background options</h1>
+  <p class="lede">The chrome rendered under each candidate ground. Every contrast figure on this page is computed from the hex values shown, by WCAG 2.x relative luminance — nothing here is typed by hand.</p>
+  <div class="finding">
+    <strong>One measurement worth reading first.</strong> The surfaces shipping today are <em>not</em> brown — all seven measure
+    0.003–0.008 chroma in OKLab, i.e. effectively neutral. The warmth lives in the <em>type and line</em> tokens, which are two to
+    four times more chromatic (<code>--si-fg-muted</code> 0.014 · <code>--si-fg-tertiary</code> 0.013 · <code>--si-fg</code> is a
+    cream, not a white). So rotating only the seven <code>bg</code> tokens is a nearly invisible change. Every option below moves
+    the type ramp with the ground.
+    <br><br>
+    <strong>And one constraint.</strong> The top of the ramp has 0.02 of lightness headroom: the focus ring clears SC 1.4.11's 3:1
+    only up to a surface at L=0.348, and <code>bg6</code> is L=0.328 today. Lightening the overlay surfaces breaks the focus ring
+    and every tertiary glyph on menus, dialogs and tooltips — silently, with no build failure. That is the whole reason options 2
+    and 3 differ.
+  </div>
+  <div class="ctl">
+    <span class="ctl__l">Page behind the mockups</span>
+    <button data-shell="dark" class="on">near-black</button><button data-shell="mid">mid grey</button><button data-shell="light">light</button>
+    <span class="ctl__l ctl__l--2">Type ramp</span>
+    <button data-type="cool" class="on">cooled with the ground</button><button data-type="warm">keep today's warm type</button>
+  </div>
+</header>
+
+<div class="viewer">
+  <div class="viewer__h"><h2 id="vname">Option 2 · Cool + lift the floor</h2><span class="dim" id="vhint">click “Preview large” on any option below</span></div>
+  <div id="vmount"></div>
+</div>
+
+<div class="grp"><h2 class="grph">How far the lightness moves</h2><p class="grpb">The hue swap is cheap and identical in all three. The <em>lightening</em> is what cascades — that is the real choice.</p></div>
+<section class="opt" id="opt-current" data-id="current">
+  <header class="opt__h">
+    <div><h2>Current</h2><span class="tag tag--x">shipping today</span></div>
+    <button class="pick" data-pick="current">Preview large ↑</button>
+  </header>
+  <p class="opt__b">The warm neutral ramp as shipped. Here as the baseline only — every figure below is measured against it.</p>
+  <div class="sw"><span style="background:#100f0e" title="bg0 #100f0e"></span><span style="background:#161513" title="bg1 #161513"></span><span style="background:#1a1917" title="bg2 #1a1917"></span><span style="background:#1e1c1a" title="band #1e1c1a"></span><span style="background:#232120" title="bg3 #232120"></span><span style="background:#2d2a28" title="bg5 #2d2a28"></span><span style="background:#383431" title="bg6 #383431"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f5f2ee" title="fg #f5f2ee"></span><span class="swt" style="background:#b8b2a9" title="muted #b8b2a9"></span><span class="swt" style="background:#8a857d" title="tertiary #8a857d"></span><span class="swt" style="background:#635e58" title="quiet #635e58"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#100f0e;--si-bg1:#161513;--si-bg2:#1a1917;--si-bg-band:#1e1c1a;--si-bg3:#232120;--si-bg5:#2d2a28;--si-bg6:#383431;--si-line-subtle:#2a2725;--si-line:#35312e;--si-line-strong:#4a453f;--si-border:#8a857d;--si-fg:#f5f2ee;--si-fg-muted:#b8b2a9;--si-fg-tertiary:#8a857d;--si-fg-ghost:#635e58;--si-focus-ring:#4c7ef3;--si-scrim:rgba(11,10,9,0.6);--si-chrome-bg:#100f0e">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-ok">nothing had to be retuned — every rule the shipped system states still holds</li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">17.16</td><td class="ok">16.35</td><td class="ok">15.74</td><td class="ok">15.22</td><td class="ok">14.37</td><td class="ok">12.77</td><td class="ok">11.05</td></tr><tr><th>muted</th><td class="ok">9.10</td><td class="ok">8.67</td><td class="ok">8.35</td><td class="ok">8.07</td><td class="ok">7.62</td><td class="ok">6.77</td><td class="ok">5.86</td></tr><tr><th>tertiary</th><td class="ok">5.23</td><td class="ok">4.98</td><td class="ok">4.80</td><td class="ok">4.64</td><td class="sub">4.38</td><td class="sub">3.89</td><td class="sub">3.36</td></tr><tr><th>quiet</th><td class="na">2.98</td><td class="na">2.84</td><td class="na">2.74</td><td class="na">2.65</td><td class="na">2.50</td><td class="na">2.22</td><td class="na">1.92</td></tr><tr class="rule"><th>focus ring</th><td class="ok">5.09</td><td class="ok">4.85</td><td class="ok">4.67</td><td class="ok">4.52</td><td class="ok">4.26</td><td class="ok">3.79</td><td class="ok">3.28</td></tr><tr><th>tertiary glyph</th><td class="ok">5.23</td><td class="ok">4.98</td><td class="ok">4.80</td><td class="ok">4.64</td><td class="ok">4.38</td><td class="ok">3.89</td><td class="ok">3.36</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #100f0e;
+  --si-bg1: #161513;
+  --si-bg2: #1a1917;
+  --si-bg-band: #1e1c1a;
+  --si-bg3: #232120;
+  --si-bg5: #2d2a28;
+  --si-bg6: #383431;
+
+  --si-line-subtle: #2a2725;
+  --si-line: #35312e;
+  --si-line-strong: #4a453f;
+  --si-border: #8a857d;
+
+  --si-fg: #f5f2ee;
+  --si-fg-muted: #b8b2a9;
+  --si-fg-tertiary: #8a857d;
+  --si-fg-ghost: #635e58;
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(11,10,9,0.6);
+  --si-chrome-bg: #100f0e;
+  --si-chrome-bg-dark: #100f0e;</pre></details>
+</section><section class="opt" id="opt-cool-hold" data-id="cool-hold">
+  <header class="opt__h">
+    <div><h2>Option 1 · Cool, same darkness</h2><span class="tag tag--x">zero risk</span></div>
+    <button class="pick" data-pick="cool-hold">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Surfaces, type and lines rotated to a cool slate at <em>identical luminance</em>. Every contrast ratio in the token header stays valid to within 0.05, so nothing needs re-auditing. Kills the brown; the app stays as dark as it is now.</p>
+  <div class="sw"><span style="background:#0c1014" title="bg0 #0c1014"></span><span style="background:#12151b" title="bg1 #12151b"></span><span style="background:#151a1f" title="bg2 #151a1f"></span><span style="background:#191d22" title="band #191d22"></span><span style="background:#1e2227" title="bg3 #1e2227"></span><span style="background:#272b31" title="bg5 #272b31"></span><span style="background:#31353b" title="bg6 #31353b"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f0f3f6" title="fg #f0f3f6"></span><span class="swt" style="background:#adb4bc" title="muted #adb4bc"></span><span class="swt" style="background:#81868e" title="tertiary #81868e"></span><span class="swt" style="background:#5b5f65" title="quiet #5b5f65"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#0c1014;--si-bg1:#12151b;--si-bg2:#151a1f;--si-bg-band:#191d22;--si-bg3:#1e2227;--si-bg5:#272b31;--si-bg6:#31353b;--si-line-subtle:#26282a;--si-line:#2f3236;--si-line-strong:#42464c;--si-border:#81868e;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#81868e;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#0c1014">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li>lightness steps <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">17.14</td><td class="ok">16.41</td><td class="ok">15.72</td><td class="ok">15.20</td><td class="ok">14.36</td><td class="ok">12.77</td><td class="ok">11.07</td></tr><tr><th>muted</th><td class="ok">9.12</td><td class="ok">8.73</td><td class="ok">8.36</td><td class="ok">8.09</td><td class="ok">7.64</td><td class="ok">6.80</td><td class="ok">5.89</td></tr><tr><th>tertiary</th><td class="ok">5.21</td><td class="ok">4.99</td><td class="ok">4.78</td><td class="ok">4.62</td><td class="sub">4.37</td><td class="sub">3.88</td><td class="sub">3.37</td></tr><tr><th>quiet</th><td class="na">2.97</td><td class="na">2.85</td><td class="na">2.73</td><td class="na">2.64</td><td class="na">2.49</td><td class="na">2.21</td><td class="na">1.92</td></tr><tr class="rule"><th>focus ring</th><td class="ok">5.08</td><td class="ok">4.86</td><td class="ok">4.66</td><td class="ok">4.50</td><td class="ok">4.25</td><td class="ok">3.78</td><td class="ok">3.28</td></tr><tr><th>tertiary glyph</th><td class="ok">5.21</td><td class="ok">4.99</td><td class="ok">4.78</td><td class="ok">4.62</td><td class="ok">4.37</td><td class="ok">3.88</td><td class="ok">3.37</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #0c1014; // was #100f0e
+  --si-bg1: #12151b; // was #161513
+  --si-bg2: #151a1f; // was #1a1917
+  --si-bg-band: #191d22; // was #1e1c1a
+  --si-bg3: #1e2227; // was #232120
+  --si-bg5: #272b31; // was #2d2a28
+  --si-bg6: #31353b; // was #383431
+
+  --si-line-subtle: #26282a; // was #2a2725
+  --si-line: #2f3236; // was #35312e
+  --si-line-strong: #42464c; // was #4a453f
+  --si-border: #81868e; // was #8a857d
+
+  --si-fg: #f0f3f6; // was #f5f2ee
+  --si-fg-muted: #adb4bc; // was #b8b2a9
+  --si-fg-tertiary: #81868e; // was #8a857d
+  --si-fg-ghost: #5b5f65; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(7,11,15,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #0c1014;
+  --si-chrome-bg-dark: #0c1014;</pre></details>
+</section><section class="opt" id="opt-cool-lift" data-id="cool-lift">
+  <header class="opt__h">
+    <div><h2>Option 2 · Cool + lift the floor</h2><span class="tag tag--rec">recommended</span></div>
+    <button class="pick" data-pick="cool-lift">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Lifts the five surfaces that cover almost every pixel off near-black, while holding <code>bg5</code>/<code>bg6</code> near where they are so the focus ring never has to move. The ladder compresses a little, so dialogs and menus lean more on shadow and less on value.</p>
+  <div class="sw"><span style="background:#181c21" title="bg0 #181c21"></span><span style="background:#1d2126" title="bg1 #1d2126"></span><span style="background:#20242a" title="bg2 #20242a"></span><span style="background:#23272d" title="band #23272d"></span><span style="background:#272c31" title="bg3 #272c31"></span><span style="background:#2d3137" title="bg5 #2d3137"></span><span style="background:#34383e" title="bg6 #34383e"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f0f3f6" title="fg #f0f3f6"></span><span class="swt" style="background:#adb4bc" title="muted #adb4bc"></span><span class="swt" style="background:#8a9097" title="tertiary #8a9097"></span><span class="swt" style="background:#5b5f65" title="quiet #5b5f65"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#181c21;--si-bg1:#1d2126;--si-bg2:#20242a;--si-bg-band:#23272d;--si-bg3:#272c31;--si-bg5:#2d3137;--si-bg6:#34383e;--si-line-subtle:#303235;--si-line:#35383c;--si-line-strong:#454950;--si-border:#8a9097;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#8a9097;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#181c21">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">tertiary lifted L 0.619→0.650 so it stays legal as text on bg0–band</li><li>lightness steps <code>0.020 · 0.015 · 0.012 · 0.018 · 0.022 · 0.028</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">15.37</td><td class="ok">14.53</td><td class="ok">14.00</td><td class="ok">13.47</td><td class="ok">12.65</td><td class="ok">11.74</td><td class="ok">10.59</td></tr><tr><th>muted</th><td class="ok">8.18</td><td class="ok">7.73</td><td class="ok">7.45</td><td class="ok">7.17</td><td class="ok">6.73</td><td class="ok">6.25</td><td class="ok">5.63</td></tr><tr><th>tertiary</th><td class="ok">5.31</td><td class="ok">5.02</td><td class="ok">4.84</td><td class="ok">4.66</td><td class="sub">4.37</td><td class="sub">4.06</td><td class="sub">3.66</td></tr><tr><th>quiet</th><td class="na">2.66</td><td class="na">2.52</td><td class="na">2.43</td><td class="na">2.34</td><td class="na">2.19</td><td class="na">2.04</td><td class="na">1.84</td></tr><tr class="rule"><th>focus ring</th><td class="ok">4.55</td><td class="ok">4.30</td><td class="ok">4.15</td><td class="ok">3.99</td><td class="ok">3.75</td><td class="ok">3.48</td><td class="ok">3.14</td></tr><tr><th>tertiary glyph</th><td class="ok">5.31</td><td class="ok">5.02</td><td class="ok">4.84</td><td class="ok">4.66</td><td class="ok">4.37</td><td class="ok">4.06</td><td class="ok">3.66</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #181c21; // was #100f0e
+  --si-bg1: #1d2126; // was #161513
+  --si-bg2: #20242a; // was #1a1917
+  --si-bg-band: #23272d; // was #1e1c1a
+  --si-bg3: #272c31; // was #232120
+  --si-bg5: #2d3137; // was #2d2a28
+  --si-bg6: #34383e; // was #383431
+
+  --si-line-subtle: #303235; // was #2a2725
+  --si-line: #35383c; // was #35312e
+  --si-line-strong: #454950; // was #4a453f
+  --si-border: #8a9097; // was #8a857d
+
+  --si-fg: #f0f3f6; // was #f5f2ee
+  --si-fg-muted: #adb4bc; // was #b8b2a9
+  --si-fg-tertiary: #8a9097; // was #8a857d
+  --si-fg-ghost: #5b5f65; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(7,11,15,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #181c21;
+  --si-chrome-bg-dark: #181c21;</pre></details>
+</section><section class="opt" id="opt-cool-lift-all" data-id="cool-lift-all">
+  <header class="opt__h">
+    <div><h2>Option 3 · Cool + lift everything</h2><span class="tag tag--x">biggest change</span></div>
+    <button class="pick" data-pick="cool-lift-all">Preview large ↑</button>
+  </header>
+  <p class="opt__b">A genuinely mid-slate app. This is the option that spends the headroom at the top of the ramp, so the focus ring and two text tones have to be retuned with it, and the rendered-tree audit has to be re-run per state (hover, dialog, sheet, mobile).</p>
+  <div class="sw"><span style="background:#1d2228" title="bg0 #1d2228"></span><span style="background:#23282f" title="bg1 #23282f"></span><span style="background:#282d33" title="bg2 #282d33"></span><span style="background:#2b3037" title="band #2b3037"></span><span style="background:#31363c" title="bg3 #31363c"></span><span style="background:#3a4046" title="bg5 #3a4046"></span><span style="background:#454a51" title="bg6 #454a51"></span>
+  <span class="swgap"></span><span class="swt" style="background:#eff3f7" title="fg #eff3f7"></span><span class="swt" style="background:#b3bac4" title="muted #b3bac4"></span><span class="swt" style="background:#939aa3" title="tertiary #939aa3"></span><span class="swt" style="background:#5a5f66" title="quiet #5a5f66"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#1d2228;--si-bg1:#23282f;--si-bg2:#282d33;--si-bg-band:#2b3037;--si-bg3:#31363c;--si-bg5:#3a4046;--si-bg6:#454a51;--si-line-subtle:#393c3f;--si-line:#43474c;--si-line-strong:#575c64;--si-border:#939aa3;--si-fg:#eff3f7;--si-fg-muted:#b3bac4;--si-fg-tertiary:#939aa3;--si-fg-ghost:#5a5f66;--si-focus-ring:#8fadfa;--si-scrim:rgba(7,11,16,0.6);--si-chrome-bg:#1d2228">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">muted lifted L 0.766→0.786 so it still clears 4.5 on every surface</li><li class="n-move">tertiary lifted L 0.619→0.684 so it stays legal as text on bg0–band</li><li class="n-move">focus ring moved #4c7ef3 → #8fadfa (accent-500 measures 2.38 on the lifted bg6, below 3:1)</li><li>lightness steps <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">14.36</td><td class="ok">13.30</td><td class="ok">12.44</td><td class="ok">11.91</td><td class="ok">10.93</td><td class="ok">9.41</td><td class="ok">8.01</td></tr><tr><th>muted</th><td class="ok">8.19</td><td class="ok">7.58</td><td class="ok">7.09</td><td class="ok">6.79</td><td class="ok">6.23</td><td class="ok">5.36</td><td class="ok">4.57</td></tr><tr><th>tertiary</th><td class="ok">5.64</td><td class="ok">5.22</td><td class="ok">4.88</td><td class="ok">4.68</td><td class="sub">4.29</td><td class="sub">3.69</td><td class="sub">3.14</td></tr><tr><th>quiet</th><td class="na">2.49</td><td class="na">2.30</td><td class="na">2.16</td><td class="na">2.06</td><td class="na">1.89</td><td class="na">1.63</td><td class="na">1.39</td></tr><tr class="rule"><th>focus ring</th><td class="ok">7.26</td><td class="ok">6.73</td><td class="ok">6.29</td><td class="ok">6.03</td><td class="ok">5.53</td><td class="ok">4.76</td><td class="ok">4.05</td></tr><tr><th>tertiary glyph</th><td class="ok">5.64</td><td class="ok">5.22</td><td class="ok">4.88</td><td class="ok">4.68</td><td class="ok">4.29</td><td class="ok">3.69</td><td class="ok">3.14</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #1d2228; // was #100f0e
+  --si-bg1: #23282f; // was #161513
+  --si-bg2: #282d33; // was #1a1917
+  --si-bg-band: #2b3037; // was #1e1c1a
+  --si-bg3: #31363c; // was #232120
+  --si-bg5: #3a4046; // was #2d2a28
+  --si-bg6: #454a51; // was #383431
+
+  --si-line-subtle: #393c3f; // was #2a2725
+  --si-line: #43474c; // was #35312e
+  --si-line-strong: #575c64; // was #4a453f
+  --si-border: #939aa3; // was #8a857d
+
+  --si-fg: #eff3f7; // was #f5f2ee
+  --si-fg-muted: #b3bac4; // was #b8b2a9
+  --si-fg-tertiary: #939aa3; // was #8a857d
+  --si-fg-ghost: #5a5f66; // was #635e58
+
+  --si-focus-ring: #8fadfa; // was #4c7ef3
+  --si-scrim: rgba(7,11,16,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #1d2228;
+  --si-chrome-bg-dark: #1d2228;</pre></details>
+</section>
+
+<div class="grp"><h2 class="grph">Which hue family</h2><p class="grpb">All four at Option 2's lightness, so only the hue differs. The cobalt accent is held fixed in every one — we are comparing grounds, not accents.</p></div>
+<section class="opt" id="opt-hue-graphite" data-id="hue-graphite">
+  <header class="opt__h">
+    <div><h2>Graphite</h2><span class="tag tag--x">hue · 0° chroma</span></div>
+    <button class="pick" data-pick="hue-graphite">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Option 2's lightness with all chroma removed — a true neutral. The most literal reading of "no brown": nothing tints anything.</p>
+  <div class="sw"><span style="background:#1c1c1c" title="bg0 #1c1c1c"></span><span style="background:#202020" title="bg1 #202020"></span><span style="background:#242424" title="bg2 #242424"></span><span style="background:#272727" title="band #272727"></span><span style="background:#2b2b2b" title="bg3 #2b2b2b"></span><span style="background:#313131" title="bg5 #313131"></span><span style="background:#383838" title="bg6 #383838"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f2f2f2" title="fg #f2f2f2"></span><span class="swt" style="background:#b3b3b3" title="muted #b3b3b3"></span><span class="swt" style="background:#8f8f8f" title="tertiary #8f8f8f"></span><span class="swt" style="background:#5f5f5f" title="quiet #5f5f5f"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#1c1c1c;--si-bg1:#202020;--si-bg2:#242424;--si-bg-band:#272727;--si-bg3:#2b2b2b;--si-bg5:#313131;--si-bg6:#383838;--si-line-subtle:#313131;--si-line:#383838;--si-line-strong:#494949;--si-border:#8f8f8f;--si-fg:#f2f2f2;--si-fg-muted:#b3b3b3;--si-fg-tertiary:#8f8f8f;--si-fg-ghost:#5f5f5f;--si-focus-ring:#4c7ef3;--si-scrim:rgba(10,10,10,0.6);--si-chrome-bg:#1c1c1c">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">tertiary lifted L 0.619→0.650 so it stays legal as text on bg0–band</li><li>lightness steps <code>0.020 · 0.015 · 0.012 · 0.018 · 0.022 · 0.028</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">15.22</td><td class="ok">14.55</td><td class="ok">13.87</td><td class="ok">13.34</td><td class="ok">12.65</td><td class="ok">11.62</td><td class="ok">10.47</td></tr><tr><th>muted</th><td class="ok">8.13</td><td class="ok">7.77</td><td class="ok">7.40</td><td class="ok">7.12</td><td class="ok">6.75</td><td class="ok">6.20</td><td class="ok">5.59</td></tr><tr><th>tertiary</th><td class="ok">5.27</td><td class="ok">5.04</td><td class="ok">4.80</td><td class="ok">4.62</td><td class="sub">4.38</td><td class="sub">4.02</td><td class="sub">3.63</td></tr><tr><th>quiet</th><td class="na">2.67</td><td class="na">2.55</td><td class="na">2.43</td><td class="na">2.34</td><td class="na">2.22</td><td class="na">2.04</td><td class="na">1.84</td></tr><tr class="rule"><th>focus ring</th><td class="ok">4.53</td><td class="ok">4.33</td><td class="ok">4.13</td><td class="ok">3.97</td><td class="ok">3.77</td><td class="ok">3.46</td><td class="ok">3.12</td></tr><tr><th>tertiary glyph</th><td class="ok">5.27</td><td class="ok">5.04</td><td class="ok">4.80</td><td class="ok">4.62</td><td class="ok">4.38</td><td class="ok">4.02</td><td class="ok">3.63</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #1c1c1c; // was #100f0e
+  --si-bg1: #202020; // was #161513
+  --si-bg2: #242424; // was #1a1917
+  --si-bg-band: #272727; // was #1e1c1a
+  --si-bg3: #2b2b2b; // was #232120
+  --si-bg5: #313131; // was #2d2a28
+  --si-bg6: #383838; // was #383431
+
+  --si-line-subtle: #313131; // was #2a2725
+  --si-line: #383838; // was #35312e
+  --si-line-strong: #494949; // was #4a453f
+  --si-border: #8f8f8f; // was #8a857d
+
+  --si-fg: #f2f2f2; // was #f5f2ee
+  --si-fg-muted: #b3b3b3; // was #b8b2a9
+  --si-fg-tertiary: #8f8f8f; // was #8a857d
+  --si-fg-ghost: #5f5f5f; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(10,10,10,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #1c1c1c;
+  --si-chrome-bg-dark: #1c1c1c;</pre></details>
+</section><section class="opt" id="opt-hue-slate" data-id="hue-slate">
+  <header class="opt__h">
+    <div><h2>Cool slate · 255°</h2><span class="tag tag--rec">hue · recommended</span></div>
+    <button class="pick" data-pick="hue-slate">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Option 2 as proposed. Shares its hue family with the cobalt accent, so the accent reads as native to the ground rather than applied on top of it.</p>
+  <div class="sw"><span style="background:#181c21" title="bg0 #181c21"></span><span style="background:#1d2126" title="bg1 #1d2126"></span><span style="background:#20242a" title="bg2 #20242a"></span><span style="background:#23272d" title="band #23272d"></span><span style="background:#272c31" title="bg3 #272c31"></span><span style="background:#2d3137" title="bg5 #2d3137"></span><span style="background:#34383e" title="bg6 #34383e"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f0f3f6" title="fg #f0f3f6"></span><span class="swt" style="background:#adb4bc" title="muted #adb4bc"></span><span class="swt" style="background:#8a9097" title="tertiary #8a9097"></span><span class="swt" style="background:#5b5f65" title="quiet #5b5f65"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#181c21;--si-bg1:#1d2126;--si-bg2:#20242a;--si-bg-band:#23272d;--si-bg3:#272c31;--si-bg5:#2d3137;--si-bg6:#34383e;--si-line-subtle:#303235;--si-line:#35383c;--si-line-strong:#454950;--si-border:#8a9097;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#8a9097;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#181c21">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">tertiary lifted L 0.619→0.650 so it stays legal as text on bg0–band</li><li>lightness steps <code>0.020 · 0.015 · 0.012 · 0.018 · 0.022 · 0.028</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">15.37</td><td class="ok">14.53</td><td class="ok">14.00</td><td class="ok">13.47</td><td class="ok">12.65</td><td class="ok">11.74</td><td class="ok">10.59</td></tr><tr><th>muted</th><td class="ok">8.18</td><td class="ok">7.73</td><td class="ok">7.45</td><td class="ok">7.17</td><td class="ok">6.73</td><td class="ok">6.25</td><td class="ok">5.63</td></tr><tr><th>tertiary</th><td class="ok">5.31</td><td class="ok">5.02</td><td class="ok">4.84</td><td class="ok">4.66</td><td class="sub">4.37</td><td class="sub">4.06</td><td class="sub">3.66</td></tr><tr><th>quiet</th><td class="na">2.66</td><td class="na">2.52</td><td class="na">2.43</td><td class="na">2.34</td><td class="na">2.19</td><td class="na">2.04</td><td class="na">1.84</td></tr><tr class="rule"><th>focus ring</th><td class="ok">4.55</td><td class="ok">4.30</td><td class="ok">4.15</td><td class="ok">3.99</td><td class="ok">3.75</td><td class="ok">3.48</td><td class="ok">3.14</td></tr><tr><th>tertiary glyph</th><td class="ok">5.31</td><td class="ok">5.02</td><td class="ok">4.84</td><td class="ok">4.66</td><td class="ok">4.37</td><td class="ok">4.06</td><td class="ok">3.66</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #181c21; // was #100f0e
+  --si-bg1: #1d2126; // was #161513
+  --si-bg2: #20242a; // was #1a1917
+  --si-bg-band: #23272d; // was #1e1c1a
+  --si-bg3: #272c31; // was #232120
+  --si-bg5: #2d3137; // was #2d2a28
+  --si-bg6: #34383e; // was #383431
+
+  --si-line-subtle: #303235; // was #2a2725
+  --si-line: #35383c; // was #35312e
+  --si-line-strong: #454950; // was #4a453f
+  --si-border: #8a9097; // was #8a857d
+
+  --si-fg: #f0f3f6; // was #f5f2ee
+  --si-fg-muted: #adb4bc; // was #b8b2a9
+  --si-fg-tertiary: #8a9097; // was #8a857d
+  --si-fg-ghost: #5b5f65; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(7,11,15,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #181c21;
+  --si-chrome-bg-dark: #181c21;</pre></details>
+</section><section class="opt" id="opt-hue-teal" data-id="hue-teal">
+  <header class="opt__h">
+    <div><h2>Teal slate · 195°</h2><span class="tag tag--x">hue</span></div>
+    <button class="pick" data-pick="hue-teal">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Cooler and greener. Sits further from cobalt on the wheel, so the accent pops harder — which is either the point or too much, depending on how loud you want the one primary action to be.</p>
+  <div class="sw"><span style="background:#151e1d" title="bg0 #151e1d"></span><span style="background:#1a2222" title="bg1 #1a2222"></span><span style="background:#1d2626" title="bg2 #1d2626"></span><span style="background:#202929" title="band #202929"></span><span style="background:#252d2d" title="bg3 #252d2d"></span><span style="background:#2a3333" title="bg5 #2a3333"></span><span style="background:#313a3a" title="bg6 #313a3a"></span>
+  <span class="swgap"></span><span class="swt" style="background:#eef4f4" title="fg #eef4f4"></span><span class="swt" style="background:#a9b6b6" title="muted #a9b6b6"></span><span class="swt" style="background:#879291" title="tertiary #879291"></span><span class="swt" style="background:#586161" title="quiet #586161"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#151e1d;--si-bg1:#1a2222;--si-bg2:#1d2626;--si-bg-band:#202929;--si-bg3:#252d2d;--si-bg5:#2a3333;--si-bg6:#313a3a;--si-line-subtle:#2e3332;--si-line:#343a39;--si-line-strong:#424b4b;--si-border:#879291;--si-fg:#eef4f4;--si-fg-muted:#a9b6b6;--si-fg-tertiary:#879291;--si-fg-ghost:#586161;--si-focus-ring:#4c7ef3;--si-scrim:rgba(5,12,12,0.6);--si-chrome-bg:#151e1d">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">tertiary lifted L 0.619→0.650 so it stays legal as text on bg0–band</li><li>lightness steps <code>0.020 · 0.015 · 0.012 · 0.018 · 0.022 · 0.028</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">15.28</td><td class="ok">14.57</td><td class="ok">13.91</td><td class="ok">13.39</td><td class="ok">12.66</td><td class="ok">11.66</td><td class="ok">10.51</td></tr><tr><th>muted</th><td class="ok">8.14</td><td class="ok">7.76</td><td class="ok">7.41</td><td class="ok">7.13</td><td class="ok">6.74</td><td class="ok">6.21</td><td class="ok">5.59</td></tr><tr><th>tertiary</th><td class="ok">5.30</td><td class="ok">5.06</td><td class="ok">4.83</td><td class="ok">4.64</td><td class="sub">4.39</td><td class="sub">4.04</td><td class="sub">3.65</td></tr><tr><th>quiet</th><td class="na">2.67</td><td class="na">2.54</td><td class="na">2.43</td><td class="na">2.34</td><td class="na">2.21</td><td class="na">2.04</td><td class="na">1.84</td></tr><tr class="rule"><th>focus ring</th><td class="ok">4.52</td><td class="ok">4.31</td><td class="ok">4.11</td><td class="ok">3.96</td><td class="ok">3.74</td><td class="ok">3.45</td><td class="ok">3.11</td></tr><tr><th>tertiary glyph</th><td class="ok">5.30</td><td class="ok">5.06</td><td class="ok">4.83</td><td class="ok">4.64</td><td class="ok">4.39</td><td class="ok">4.04</td><td class="ok">3.65</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #151e1d; // was #100f0e
+  --si-bg1: #1a2222; // was #161513
+  --si-bg2: #1d2626; // was #1a1917
+  --si-bg-band: #202929; // was #1e1c1a
+  --si-bg3: #252d2d; // was #232120
+  --si-bg5: #2a3333; // was #2d2a28
+  --si-bg6: #313a3a; // was #383431
+
+  --si-line-subtle: #2e3332; // was #2a2725
+  --si-line: #343a39; // was #35312e
+  --si-line-strong: #424b4b; // was #4a453f
+  --si-border: #879291; // was #8a857d
+
+  --si-fg: #eef4f4; // was #f5f2ee
+  --si-fg-muted: #a9b6b6; // was #b8b2a9
+  --si-fg-tertiary: #879291; // was #8a857d
+  --si-fg-ghost: #586161; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(5,12,12,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #151e1d;
+  --si-chrome-bg-dark: #151e1d;</pre></details>
+</section><section class="opt" id="opt-hue-indigo" data-id="hue-indigo">
+  <header class="opt__h">
+    <div><h2>Indigo · 290°</h2><span class="tag tag--x">hue</span></div>
+    <button class="pick" data-pick="hue-indigo">Preview large ↑</button>
+  </header>
+  <p class="opt__b">Violet-leaning. Careful here: it is the same family as <code>--si-violet</code>, the secondary reserved for Space marks and public links, so a ground this hue makes that signal harder to read as a signal.</p>
+  <div class="sw"><span style="background:#1b1b21" title="bg0 #1b1b21"></span><span style="background:#202026" title="bg1 #202026"></span><span style="background:#24232a" title="bg2 #24232a"></span><span style="background:#27262d" title="band #27262d"></span><span style="background:#2b2a31" title="bg3 #2b2a31"></span><span style="background:#313037" title="bg5 #313037"></span><span style="background:#38373e" title="bg6 #38373e"></span>
+  <span class="swgap"></span><span class="swt" style="background:#f2f2f6" title="fg #f2f2f6"></span><span class="swt" style="background:#b2b2bc" title="muted #b2b2bc"></span><span class="swt" style="background:#8f8e97" title="tertiary #8f8e97"></span><span class="swt" style="background:#5f5e65" title="quiet #5f5e65"></span></div>
+  <div class="opt__mock"><div class="chrome " style="--si-bg0:#1b1b21;--si-bg1:#202026;--si-bg2:#24232a;--si-bg-band:#27262d;--si-bg3:#2b2a31;--si-bg5:#313037;--si-bg6:#38373e;--si-line-subtle:#313134;--si-line:#38383c;--si-line-strong:#49484f;--si-border:#8f8e97;--si-fg:#f2f2f6;--si-fg-muted:#b2b2bc;--si-fg-tertiary:#8f8e97;--si-fg-ghost:#5f5e65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(10,10,15,0.6);--si-chrome-bg:#1b1b21">
+  <div class="chrome__nav">
+    <div class="brand"><span class="brand__dot"></span><span class="brand__t">Sync-In<em>FILES</em></span></div>
+    <div class="navsec">Workspace</div>
+    <div class="navitem"><i></i>Search</div>
+    <div class="navitem is-active"><i></i>Recents</div>
+    <div class="navitem"><i></i>Favorites</div>
+    <div class="navitem"><i></i>Personal</div>
+    <div class="navitem"><i></i>Spaces</div>
+    <div class="navsec">Shared</div>
+    <div class="navitem"><i></i>With me</div>
+    <div class="navitem"><i></i>Via links</div>
+  </div>
+  <div class="chrome__main">
+    <div class="chrome__top"><div class="crumb"><i></i>Recents</div><div class="search">Search files…<kbd>⌘K</kbd></div><div class="av">Sy</div></div>
+    <div class="chrome__content">
+      <h3>Recents</h3>
+      <p class="sub">Files you and your collaborators have touched recently.</p>
+      <div class="eyebrow">Pick up where you left off <span class="pill">4</span></div>
+      <div class="cards">
+        <div class="card is-hover">
+          <div class="tile tile--doc"></div><div class="cname">Sync engine notes.md</div>
+          <div class="cmeta">/ · 2 days ago</div></div><div class="card">
+          <div class="tile tile--sheet"></div><div class="cname">query-timings.csv</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--doc"></div><div class="cname">Retention job.md</div>
+          <div class="cmeta">benchmarks · 2 days ago</div></div><div class="card">
+          <div class="tile tile--image"></div><div class="cname">diagram.png</div>
+          <div class="cmeta">Documents · 2 days ago</div></div>
+      </div>
+      <div class="eyebrow">Earlier <span class="pill">16</span></div>
+      <div class="tbl">
+        <div class="thead"><span>Name</span><span>Location</span><span>Modified</span></div>
+        <div class="trow"><span class="tn"><i class="dot"></i>Security policy.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Remote work.md</span><span class="tm">company-handbook/Policies</span><span class="tm">2 days ago</span></div><div class="trow is-sel"><span class="tn"><i class="dot"></i>query-timings.csv</span><span class="tm">benchmarks</span><span class="tm">3 days ago</span></div><div class="trow is-band"><span class="tn"><i class="dot"></i>Retention job benchmark.md</span><span class="tm">benchmarks</span><span class="tm">4 days ago</span></div>
+      </div>
+      
+    </div>
+    
+    <div class="menu"><div class="mi">Open</div><div class="mi">Rename<span class="k">F2</span></div><div class="msep"></div><div class="mi mi--d">Delete</div></div>
+    <div class="tip">Tooltip · bg6</div>
+  </div>
+</div></div>
+  <ul class="notes"><li class="n-move">tertiary lifted L 0.619→0.650 so it stays legal as text on bg0–band</li><li>lightness steps <code>0.020 · 0.015 · 0.012 · 0.018 · 0.022 · 0.028</code> <span class="dim">(today <code>0.027 · 0.018 · 0.014 · 0.022 · 0.038 · 0.041</code>)</span></li></ul>
+  <table class="grid"><thead><tr><th></th><th>bg0</th><th>bg1</th><th>bg2</th><th>band</th><th>bg3</th><th>bg5</th><th>bg6</th></tr></thead><tbody><tr><th>fg</th><td class="ok">15.35</td><td class="ok">14.51</td><td class="ok">13.94</td><td class="ok">13.42</td><td class="ok">12.72</td><td class="ok">11.69</td><td class="ok">10.54</td></tr><tr><th>muted</th><td class="ok">8.15</td><td class="ok">7.71</td><td class="ok">7.40</td><td class="ok">7.13</td><td class="ok">6.76</td><td class="ok">6.21</td><td class="ok">5.60</td></tr><tr><th>tertiary</th><td class="ok">5.29</td><td class="ok">5.00</td><td class="ok">4.81</td><td class="ok">4.63</td><td class="sub">4.39</td><td class="sub">4.03</td><td class="sub">3.63</td></tr><tr><th>quiet</th><td class="na">2.67</td><td class="na">2.53</td><td class="na">2.43</td><td class="na">2.34</td><td class="na">2.22</td><td class="na">2.04</td><td class="na">1.84</td></tr><tr class="rule"><th>focus ring</th><td class="ok">4.56</td><td class="ok">4.31</td><td class="ok">4.14</td><td class="ok">3.99</td><td class="ok">3.78</td><td class="ok">3.47</td><td class="ok">3.13</td></tr><tr><th>tertiary glyph</th><td class="ok">5.29</td><td class="ok">5.00</td><td class="ok">4.81</td><td class="ok">4.63</td><td class="ok">4.39</td><td class="ok">4.03</td><td class="ok">3.63</td></tr></tbody></table>
+  <details><summary>_tokens.scss values</summary><pre>  --si-bg0: #1b1b21; // was #100f0e
+  --si-bg1: #202026; // was #161513
+  --si-bg2: #24232a; // was #1a1917
+  --si-bg-band: #27262d; // was #1e1c1a
+  --si-bg3: #2b2a31; // was #232120
+  --si-bg5: #313037; // was #2d2a28
+  --si-bg6: #38373e; // was #383431
+
+  --si-line-subtle: #313134; // was #2a2725
+  --si-line: #38383c; // was #35312e
+  --si-line-strong: #49484f; // was #4a453f
+  --si-border: #8f8e97; // was #8a857d
+
+  --si-fg: #f2f2f6; // was #f5f2ee
+  --si-fg-muted: #b2b2bc; // was #b8b2a9
+  --si-fg-tertiary: #8f8e97; // was #8a857d
+  --si-fg-ghost: #5f5e65; // was #635e58
+
+  --si-focus-ring: #4c7ef3;
+  --si-scrim: rgba(10,10,15,0.6); // was rgba(11,10,9,0.6)
+  --si-chrome-bg: #1b1b21;
+  --si-chrome-bg-dark: #1b1b21;</pre></details>
+</section>
+
+<footer class="foot">Tell me the option id you want — e.g. <code>option 2, teal</code> — and I'll write the design doc and the token diff.</footer>
+</div>
+<script>
+const MOCKS = {"current":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#100f0e;--si-bg1:#161513;--si-bg2:#1a1917;--si-bg-band:#1e1c1a;--si-bg3:#232120;--si-bg5:#2d2a28;--si-bg6:#383431;--si-line-subtle:#2a2725;--si-line:#35312e;--si-line-strong:#4a453f;--si-border:#8a857d;--si-fg:#f5f2ee;--si-fg-muted:#b8b2a9;--si-fg-tertiary:#8a857d;--si-fg-ghost:#635e58;--si-focus-ring:#4c7ef3;--si-scrim:rgba(11,10,9,0.6);--si-chrome-bg:#100f0e\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","cool-hold":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#0c1014;--si-bg1:#12151b;--si-bg2:#151a1f;--si-bg-band:#191d22;--si-bg3:#1e2227;--si-bg5:#272b31;--si-bg6:#31353b;--si-line-subtle:#26282a;--si-line:#2f3236;--si-line-strong:#42464c;--si-border:#81868e;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#81868e;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#0c1014\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","cool-lift":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#181c21;--si-bg1:#1d2126;--si-bg2:#20242a;--si-bg-band:#23272d;--si-bg3:#272c31;--si-bg5:#2d3137;--si-bg6:#34383e;--si-line-subtle:#303235;--si-line:#35383c;--si-line-strong:#454950;--si-border:#8a9097;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#8a9097;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#181c21\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","cool-lift-all":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#1d2228;--si-bg1:#23282f;--si-bg2:#282d33;--si-bg-band:#2b3037;--si-bg3:#31363c;--si-bg5:#3a4046;--si-bg6:#454a51;--si-line-subtle:#393c3f;--si-line:#43474c;--si-line-strong:#575c64;--si-border:#939aa3;--si-fg:#eff3f7;--si-fg-muted:#b3bac4;--si-fg-tertiary:#939aa3;--si-fg-ghost:#5a5f66;--si-focus-ring:#8fadfa;--si-scrim:rgba(7,11,16,0.6);--si-chrome-bg:#1d2228\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","hue-graphite":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#1c1c1c;--si-bg1:#202020;--si-bg2:#242424;--si-bg-band:#272727;--si-bg3:#2b2b2b;--si-bg5:#313131;--si-bg6:#383838;--si-line-subtle:#313131;--si-line:#383838;--si-line-strong:#494949;--si-border:#8f8f8f;--si-fg:#f2f2f2;--si-fg-muted:#b3b3b3;--si-fg-tertiary:#8f8f8f;--si-fg-ghost:#5f5f5f;--si-focus-ring:#4c7ef3;--si-scrim:rgba(10,10,10,0.6);--si-chrome-bg:#1c1c1c\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","hue-slate":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#181c21;--si-bg1:#1d2126;--si-bg2:#20242a;--si-bg-band:#23272d;--si-bg3:#272c31;--si-bg5:#2d3137;--si-bg6:#34383e;--si-line-subtle:#303235;--si-line:#35383c;--si-line-strong:#454950;--si-border:#8a9097;--si-fg:#f0f3f6;--si-fg-muted:#adb4bc;--si-fg-tertiary:#8a9097;--si-fg-ghost:#5b5f65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(7,11,15,0.6);--si-chrome-bg:#181c21\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","hue-teal":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#151e1d;--si-bg1:#1a2222;--si-bg2:#1d2626;--si-bg-band:#202929;--si-bg3:#252d2d;--si-bg5:#2a3333;--si-bg6:#313a3a;--si-line-subtle:#2e3332;--si-line:#343a39;--si-line-strong:#424b4b;--si-border:#879291;--si-fg:#eef4f4;--si-fg-muted:#a9b6b6;--si-fg-tertiary:#879291;--si-fg-ghost:#586161;--si-focus-ring:#4c7ef3;--si-scrim:rgba(5,12,12,0.6);--si-chrome-bg:#151e1d\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>","hue-indigo":"<div class=\"chrome chrome--big\" style=\"--si-bg0:#1b1b21;--si-bg1:#202026;--si-bg2:#24232a;--si-bg-band:#27262d;--si-bg3:#2b2a31;--si-bg5:#313037;--si-bg6:#38373e;--si-line-subtle:#313134;--si-line:#38383c;--si-line-strong:#49484f;--si-border:#8f8e97;--si-fg:#f2f2f6;--si-fg-muted:#b2b2bc;--si-fg-tertiary:#8f8e97;--si-fg-ghost:#5f5e65;--si-focus-ring:#4c7ef3;--si-scrim:rgba(10,10,15,0.6);--si-chrome-bg:#1b1b21\">\n  <div class=\"chrome__nav\">\n    <div class=\"brand\"><span class=\"brand__dot\"></span><span class=\"brand__t\">Sync-In<em>FILES</em></span></div>\n    <div class=\"navsec\">Workspace</div>\n    <div class=\"navitem\"><i></i>Search</div>\n    <div class=\"navitem is-active\"><i></i>Recents</div>\n    <div class=\"navitem\"><i></i>Favorites</div>\n    <div class=\"navitem\"><i></i>Personal</div>\n    <div class=\"navitem\"><i></i>Spaces</div>\n    <div class=\"navsec\">Shared</div>\n    <div class=\"navitem\"><i></i>With me</div>\n    <div class=\"navitem\"><i></i>Via links</div>\n  </div>\n  <div class=\"chrome__main\">\n    <div class=\"chrome__top\"><div class=\"crumb\"><i></i>Recents</div><div class=\"search\">Search files…<kbd>⌘K</kbd></div><div class=\"av\">Sy</div></div>\n    <div class=\"chrome__content\">\n      <h3>Recents</h3>\n      <p class=\"sub\">Files you and your collaborators have touched recently.</p>\n      <div class=\"eyebrow\">Pick up where you left off <span class=\"pill\">4</span></div>\n      <div class=\"cards\">\n        <div class=\"card is-hover\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Sync engine notes.md</div>\n          <div class=\"cmeta\">/ · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--sheet\"></div><div class=\"cname\">query-timings.csv</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--doc\"></div><div class=\"cname\">Retention job.md</div>\n          <div class=\"cmeta\">benchmarks · 2 days ago</div></div><div class=\"card\">\n          <div class=\"tile tile--image\"></div><div class=\"cname\">diagram.png</div>\n          <div class=\"cmeta\">Documents · 2 days ago</div></div>\n      </div>\n      <div class=\"eyebrow\">Earlier <span class=\"pill\">16</span></div>\n      <div class=\"tbl\">\n        <div class=\"thead\"><span>Name</span><span>Location</span><span>Modified</span></div>\n        <div class=\"trow\"><span class=\"tn\"><i class=\"dot\"></i>Security policy.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Remote work.md</span><span class=\"tm\">company-handbook/Policies</span><span class=\"tm\">2 days ago</span></div><div class=\"trow is-sel\"><span class=\"tn\"><i class=\"dot\"></i>query-timings.csv</span><span class=\"tm\">benchmarks</span><span class=\"tm\">3 days ago</span></div><div class=\"trow is-band\"><span class=\"tn\"><i class=\"dot\"></i>Retention job benchmark.md</span><span class=\"tm\">benchmarks</span><span class=\"tm\">4 days ago</span></div>\n      </div>\n      <div class=\"ctlrow\">\n        <button class=\"btn btn--primary\">Share</button>\n        <button class=\"btn\">Rename</button>\n        <button class=\"btn btn--focus\">Focused control</button>\n        <span class=\"chip\">read-only</span>\n        <span class=\"input\">filename.md</span>\n      </div>\n    </div>\n    <div class=\"scrim\"></div>\n    <div class=\"dialog\">\n      <div class=\"dlg__h\">Delete 3 items?</div>\n      <div class=\"dlg__b\">They move to the trash and are removed after 30 days. <span class=\"q\">This cannot be undone.</span></div>\n      <div class=\"dlg__f\"><button class=\"btn\">Cancel</button><button class=\"btn btn--danger\">Delete</button></div>\n    </div>\n    <div class=\"menu\"><div class=\"mi\">Open</div><div class=\"mi\">Rename<span class=\"k\">F2</span></div><div class=\"msep\"></div><div class=\"mi mi--d\">Delete</div></div>\n    <div class=\"tip\">Tooltip · bg6</div>\n  </div>\n</div>"};
+const NAMES = {"current":"Current","cool-hold":"Option 1 · Cool, same darkness","cool-lift":"Option 2 · Cool + lift the floor","cool-lift-all":"Option 3 · Cool + lift everything","hue-graphite":"Graphite","hue-slate":"Cool slate · 255°","hue-teal":"Teal slate · 195°","hue-indigo":"Indigo · 290°"};
+const WARM = {"fg":"#f5f2ee","muted":"#b8b2a9","tertiary":"#8a857d","quiet":"#635e58"};
+const page = document.querySelector('.page');
+let current = 'cool-lift';
+function paint() {
+  document.getElementById('vmount').innerHTML = MOCKS[current];
+  document.getElementById('vname').textContent = NAMES[current];
+  applyType();
+}
+function applyType() {
+  const warm = page.dataset.type === 'warm';
+  document.querySelectorAll('.chrome').forEach((c) => {
+    if (warm) {
+      c.style.setProperty('--si-fg', WARM.fg); c.style.setProperty('--si-fg-muted', WARM.muted);
+      c.style.setProperty('--si-fg-tertiary', WARM.tertiary); c.style.setProperty('--si-fg-ghost', WARM.quiet);
+    } else { ['--si-fg','--si-fg-muted','--si-fg-tertiary','--si-fg-ghost'].forEach((v) => c.style.removeProperty(v)); }
+  });
+}
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-pick]');
+  if (pick) { current = pick.dataset.pick; paint(); document.querySelector('.viewer').scrollIntoView({behavior:'smooth', block:'start'}); return; }
+  const shell = e.target.closest('[data-shell]');
+  if (shell && shell.tagName === 'BUTTON') {
+    page.dataset.shell = shell.dataset.shell;
+    document.querySelectorAll('[data-shell]').forEach((b) => b.tagName === 'BUTTON' && b.classList.toggle('on', b === shell));
+    return;
+  }
+  const ty = e.target.closest('[data-type]');
+  if (ty && ty.tagName === 'BUTTON') {
+    page.dataset.type = ty.dataset.type;
+    document.querySelectorAll('[data-type]').forEach((b) => b.tagName === 'BUTTON' && b.classList.toggle('on', b === ty));
+    applyType();
+  }
+});
+paint();
+</script>
+</body>
+</html>
