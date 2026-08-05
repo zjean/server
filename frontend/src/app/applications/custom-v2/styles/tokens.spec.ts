@@ -180,8 +180,8 @@ describe('custom-v2 token file', () => {
     expect(tokens).toMatch(/--si-focus-ring:\s*#4c7ef3;/i)
   })
 
-  it('keeps --si-border independent of --si-line-strong, which measures 1.69 on the input fill', () => {
-    expect(tokens).toMatch(/--si-border:\s*#8a857d;/i)
+  it('keeps --si-border independent of --si-line-strong, which measures 1.56 on the input fill', () => {
+    expect(tokens).toMatch(/--si-border:\s*#8a9097;/i)
     expect(tokens).not.toMatch(/--si-border:\s*var\(--si-line-strong\)/)
   })
 

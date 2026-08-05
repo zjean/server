@@ -66,10 +66,10 @@
 // table current: if you move a surface or a tier, recompute the whole grid.
 //
 //                bg0    bg1    bg2   band    bg3    bg5    bg6
-//   fg          17.16  16.35  15.74  15.22  14.37  12.77  11.05
-//   muted        9.10   8.67   8.35   8.07   7.62   6.77   5.86
-//   tertiary     5.23   4.98   4.80   4.64  [4.38] [3.89] [3.36]
-//   quiet       [2.98] [2.84] [2.74] [2.65] [2.50] [2.22] [1.92]
+//   fg        15.37  14.53  14.00  13.47  12.65  11.74  10.59
+//   muted      8.18   7.73   7.45   7.17   6.73   6.25   5.63
+//   tertiary   5.31   5.02   4.84   4.66  [4.37] [4.06] [3.66]
+//   quiet     [2.66] [2.52] [2.43] [2.34] [2.19] [2.04] [1.84]
 //
 //   [n] = below 4.5:1, i.e. not usable for normal-size text.
 //
@@ -166,13 +166,13 @@
   // Panels flanking the content plane step DOWN, never up (bg1 < bg2). There is
   // no border between a panel and the body; the value change IS the edge. Which
   // is the whole reason the design bans vertical rules: they would be redundant.
-  --si-bg0: #100f0e; // surface-0   · app canvas, sidebar, page gutters
-  --si-bg1: #161513; // surface-0.5 · top bar, right panel, empty-state panel
-  --si-bg2: #1a1917; // surface-1   · content plane: file table, detail body
-  --si-bg-band: #1e1c1a; // surface-1.5 · the alternating table band (see below)
-  --si-bg3: #232120; // surface-2   · cards, row hover, input fill, chips, code
-  --si-bg5: #2d2a28; // surface-3   · dialogs, context menus, sheets, popovers
-  --si-bg6: #383431; // surface-4   · tooltips, pressed, drag-over, segmented-on
+  --si-bg0: #181c21; // surface-0   · app canvas, sidebar, page gutters
+  --si-bg1: #1d2126; // surface-0.5 · top bar, right panel, empty-state panel
+  --si-bg2: #20242a; // surface-1   · content plane: file table, detail body
+  --si-bg-band: #23272d; // surface-1.5 · the alternating table band (see below)
+  --si-bg3: #272c31; // surface-2   · cards, row hover, input fill, chips, code
+  --si-bg5: #2d3137; // surface-3   · dialogs, context menus, sheets, popovers
+  --si-bg6: #34383e; // surface-4   · tooltips, pressed, drag-over, segmented-on
 
   // `bg4` is GONE, not renumbered. It was documented as "selected row", and in
   // this system a selected row is --si-accent-soft plus a 2px cobalt marker — not
@@ -184,13 +184,19 @@
   // Note what these are NOT for: there is no `border-left` or `border-right`
   // anywhere in this product, and table rows carry no dividers at all (they band
   // instead — see --si-bg-band). Horizontal dividers are hairline and rare.
-  --si-line-subtle: #2a2725; // table + section rules; the default and commonest
-  --si-line: #35312e; // card outlines, menu separators
-  --si-line-strong: #4a453f; // hovered input outline, dashed drop targets, frames
+  // These are positioned RELATIVE to the ramp: each holds a fixed lightness offset
+  // above the surface it is drawn against (subtle→bg3 +0.025 L, line→bg5 +0.029,
+  // strong→bg6 +0.065). Held at an absolute value instead, a ramp change inverts
+  // them — the same declaration that lifts off a card starts denting into it, which
+  // fails no build and is invisible in a screenshot at these step sizes.
+  // `palette-contrast.spec.ts` asserts each one is lighter than its anchor.
+  --si-line-subtle: #303235; // table + section rules; the default and commonest
+  --si-line: #35383c; // card outlines, menu separators
+  --si-line-strong: #454950; // hovered input outline, dashed drop targets, frames
 
   // NOT an alias of line-strong — see deviation 2 in the header. This is the
   // resting boundary of anything interactive whose fill cannot identify it.
-  --si-border: #8a857d;
+  --si-border: #8a9097;
 
   // Kept as an alias so existing consumers compile; it has no distinct role in
   // this system and should be migrated to one of the three above.
@@ -199,10 +205,16 @@
   // ─── Text — four values, and that is the whole hierarchy budget ───────
   // New emphasis comes from size and weight, never from a new colour. See the
   // measured table in the header for where each tier may and may not be used.
-  --si-fg: #f5f2ee; // primary   · file names, titles, values
-  --si-fg-muted: #b8b2a9; // secondary · body copy, nav labels, descriptions
-  --si-fg-tertiary: #8a857d; // tertiary  · metadata, sizes, timestamps (bg0–bg3)
-  --si-fg-ghost: #635e58; // quiet     · disabled labels, column heads. Decorative.
+  --si-fg: #f0f3f6; // primary   · file names, titles, values
+  --si-fg-muted: #adb4bc; // secondary · body copy, nav labels, descriptions
+  // Lifted 0.031 L above a straight rotation, and deliberately no further. At the
+  // ground's own lightness it cleared `band` by 0.04 — a rounding-level margin on
+  // the one tier whose licence a 50-call-site sweep settled. This gives band 4.66.
+  // One further step would take bg3 to 4.54: safe in itself, but it would widen the
+  // rule from bg0–band to bg0–bg3 and silently re-permit the call sites the sweep
+  // moved to muted. `palette-contrast.spec.ts` asserts BOTH directions.
+  --si-fg-tertiary: #8a9097; // tertiary  · metadata, sizes, timestamps (bg0–bg3)
+  --si-fg-ghost: #5b5f65; // quiet     · disabled labels, column heads. Decorative.
 
   // There is no fifth tier. `faint` sat between primary and secondary with no
   // counterpart in the design's four-value budget; its 31 files now say

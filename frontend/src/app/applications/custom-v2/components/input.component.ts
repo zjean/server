@@ -12,7 +12,7 @@ export type InputSize = 'sm' | 'md' | 'lg'
 // It does NOT mean borderless, though the mockups draw it that way, and the
 // difference is measured: bg3 is 1.10:1 against the content plane, so on a dark
 // ground the fill alone does not identify the control — WCAG 2.2 SC 1.4.11 wants
-// 3:1 for that. So the resting state carries a hairline in --si-border (#8A857D,
+// 3:1 for that. So the resting state carries a hairline in --si-border (#8A9097,
 // 3.51:1 on this fill), which is the deviation recorded in _tokens.scss.
 //
 // Placeholders describe SCOPE, never the control: "Filter in Personal…", not
