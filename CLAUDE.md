@@ -143,16 +143,25 @@ the repository, not to the base with an `if`.** `viewModeStorageKey()` is the on
 method: the base's `mode` signal initialises before the subclass field holding the repository exists.
 `densityStorageKey()` is the second, added by #434, for exactly the same reason.
 
-## v2 is mid-way through a design-system adoption — read the handoff before touching it
+## v2 has been rebuilt against a design system — read the handoff before touching it
 
-`custom-v2` is being rebuilt against a Claude Design project (*Sync-In Design System v1.0*,
-`4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP). **Nine phases; four have shipped.**
+`custom-v2` was rebuilt against a Claude Design project (*Sync-In Design System v1.0*,
+`4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP). **All nine phases are merged** (#432–#446).
+The handoff's §2.1 lists the three follow-ups that are left; none of them is a phase, and the biggest is that **six of
+the eight dialogs still declare their own frame instead of using `_dialog.scss`** — which now also means they are the
+only surfaces that still open as a centred box on a phone.
 
 **If you are touching anything under `custom-v2/`, start with
 [`docs/plans/2026-08-04-v2-design-adoption-handoff.md`](docs/plans/2026-08-04-v2-design-adoption-handoff.md).** It is
 the traps, not the design: how to check a build (never grep for `[ERROR]` — ANSI codes split the brackets and three
 builds read as clean while failing), the `agent-browser` recipe that actually works, and the defect class that has now
 appeared twice — a hue change breaking declarations that were correct before it, none of which fails a build.
+
+**Two harness limits it records are load-bearing, because both make broken things look fine.** `agent-browser`'s
+headless Chromium fires no `requestAnimationFrame` AND never advances a CSS animation's clock — which parked every
+bottom sheet exactly its own height below the fold, so geometry measured there was of an off-screen element. And a
+gesture cannot be verified by measurement at all: the mobile sheets went to a real Android device via `agent-device`,
+which found four defects in work that measured clean.
 
 | Document | Status |
 |---|---|

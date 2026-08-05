@@ -1,6 +1,8 @@
 # Handoff — v2 design-system adoption, phases 3–8
 
-**Date:** 2026-08-04
+**Date:** 2026-08-04, closed out 2026-08-05
+**Status:** **all nine phases are merged.** What is left is the follow-up list in §2.1 —
+none of it is a phase, and none of it blocks anything.
 **For:** a fresh agent session picking this up
 **Authority on design:** [`2026-08-03-v2-design-system-adoption-plan.md`](2026-08-03-v2-design-system-adoption-plan.md)
 **Authority on the design itself:** Claude Design project `4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP (`DesignSync`)
@@ -34,11 +36,54 @@ Only then open the design project.
 | 4 | Search (D6) | #438 | merged |
 | 5 | Share dialog (D7) | #440 | merged |
 | 6 | Gallery + upload dock (D8) | #441 | merged |
-| 7a | Mobile frame (bands, tabs, rows, touch) | #442 | open |
-| **7b** | **Mobile sheets (M3, M5, M6)** | — | **next — verify on a real device** |
-| 8 | Keyboard hints + session error strip | — | not started |
+| 7a | Mobile frame (bands, tabs, rows, touch) | #442 | merged |
+| 7b(i) | Inspector as a bottom sheet (M3) + long-press | #444 | merged |
+| 7b(ii) | Action sheet + share sheet (M6, M5) | #445 | merged |
+| 8 | Keyboard shortcuts + session error strip | #446 | merged |
 
-Everything merged is on `develop` as of `13d30cda`.
+Two fixes belong in the same history, both found by verification rather than by review:
+
+| — | What | PR |
+|---|---|---|
+| fix | Three sharing wire bugs, one a 500 on every link creation | #439 |
+| fix | The upload dock announced a day of server history, and covered the bulk bar | #443 |
+
+Everything is on `develop` as of `eb927966`.
+
+**7b became two PRs, not one.** Not a maintainer decision — `M3` turned out to be
+unreachable on a phone until `M6`'s long-press existed (§6, phase 7b), so the gesture
+shipped with the sheet that needed it and the remaining two sheets followed.
+
+### 2.1 What is left — measured 2026-08-05, none of it a phase
+
+Three follow-ups, each recorded when it was found and each still true. Counts are from a
+grep at close-out, not from memory:
+
+1. **Six dialogs still own their own frame.** `_dialog.scss` exists and only
+   `share-dialog` and `shortcuts-dialog` use it; `confirm`, `compress`, `lock`, `prompt`,
+   `tree-picker` and `two-fa` still declare their own centring block. This got MORE
+   valuable in #445: the mobile sheet geometry is a rule on `.v2-dialog`, so those six are
+   the only surfaces on the phone that still open as a centred box — the design says every
+   one of them should be a sheet, including "every destructive confirm".
+2. **26 `color: var(--si-rose)` declarations across 15 files.** `--si-rose` is a FILL and
+   measures ~3.6:1 as type; `--si-rose-ink` is the type tone. It was 31 when first counted
+   in phase 3; the ones fixed since were fixed because a phase happened to touch them, which
+   is not a strategy. Wants its own PR and a `tokens.spec.ts` rule so it cannot come back.
+3. **No command palette.** `⌘K` focuses the top bar's search field. The plan's hint set
+   calls it a palette; the shortcut sheet deliberately labels it *Search files*. If a palette
+   is ever built, `utils/shortcut-label.ts` is the one place the label has to change.
+
+Two things that are NOT owed, so nobody re-derives them:
+
+- **The ten design instructions with no API behind them** are listed per phase in §6 and in
+  the plan's outcome sections — inherited rights, Allow-download, immediate-revoke-with-Undo,
+  comment threading, edit/preview segmented, `by you`, Current/Original tags, upload Pause,
+  upload Retry, and the session strip's write-lockdown + edit queue. Each is unmade on
+  purpose, with the reason at the call site. Do not "finish" one without checking the backend
+  first.
+- **The two design values that fail the design's own floors** (the 60%-alpha focus ring,
+  `--si-border` as an alias of `--si-line-strong`) are documented with measurements in
+  `_tokens.scss`'s header. They are deviations, not oversights.
 
 ### Decisions the maintainer has made — do not re-open these
 
@@ -426,19 +471,26 @@ What 7a already put in place, so 7b does not re-derive it:
 
 ---
 
-## 7. State of the machine right now
+## 7. State of the machine at close-out (2026-08-05)
 
-- A dev backend is running on `:8080` (PID at time of writing: `68924`). Kill it
-  when done, or reuse it.
-- `dist/static` holds a current build of `develop`.
-- Local phase branches are deleted; `develop` is `13d30cda`.
-- No stray test fixtures — the `Q3 handover` folder created for the empty-state
-  screenshot was deleted via the API.
-- Several `agent-browser` sessions may be open. `agent-browser --session <n> close`.
+- `develop` is `eb927966`. Every phase branch is merged and deleted; nothing is in flight.
+- A dev backend may still be running on `:8080` — it is the single-origin rig §4 describes,
+  and reusing it is cheaper than standing one up. `lsof -nP -iTCP:8080 -sTCP:LISTEN` will
+  say. `dist/static` holds a build of `develop` that the backend serves.
+- **No stray fixtures on the dev instance.** The probe files created for the dock work were
+  permanently deleted (trash emptied), and the server-side task cache — which holds finished
+  tasks for 24h and was the whole subject of #443 — was emptied via
+  `DELETE /api/app/spaces/tasks`. The seeded demo content (`Draft agenda (old).md`,
+  `Q3 handover`, the screenshot) is original and was left alone.
+- **The Android emulator** (`NC_Test_4k`) reaches the host at `10.0.2.2:8080` and is the only
+  way to verify a gesture. `agent-device close --session default` releases it; a stale lease
+  reports `DEVICE_IN_USE` and the session key is derived from the CWD, so close it from the
+  same directory you opened it in.
+- `agent-browser` sessions were closed. If one is left open: `agent-browser --session <n> close`.
 
 ---
 
-## 8. One honest summary of the run so far
+## 8. One honest summary of the run
 
 The design is internally consistent and mostly transcribable. What was *not*
 transcribable, and what took the time, was the collision between it and a codebase
@@ -448,5 +500,18 @@ deliberate in a diff.
 
 The pattern that found them was always the same — render it, then measure it. Two
 of the design's own values fail its own stated floors when measured, and the
-grep-based approaches missed a quarter of the accent bugs. Assume the same is true
-of the phases ahead.
+grep-based approaches missed a quarter of the accent bugs.
+
+That held for all nine phases, and the last three sharpened it. **Measurement is not
+verification when the thing being measured is a gesture**: `M3`'s snapping, `M6`'s long-press
+and every sheet's drag were all correct-looking CSS that could only be settled on real
+hardware, and the device found four defects in work that measured clean — the dismissal
+threshold no thumb could reach, `esc` printed on a keyboard-less device, a selection mode with
+no way in, and a menu whose ⋯ was invisible because a phone has no hover. In the other
+direction, the harness itself lied twice: it fires no rAF, and it never advances an
+animation's clock, which parked every sheet its own height below the fold and made a whole
+category of geometry measurement quietly meaningless.
+
+Two of the ten PRs in this run fixed bugs the *previous* PRs shipped, and both were found by
+driving the product rather than by reading the diff. That ratio is the argument for the
+pattern, not against it.
