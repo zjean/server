@@ -147,11 +147,12 @@ method: the base's `mode` signal initialises before the subclass field holding t
 
 `custom-v2` was rebuilt against a Claude Design project (*Sync-In Design System v1.0*,
 `4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP). **All nine phases are merged** (#432–#446).
-The handoff's §2.1 lists the follow-ups that are left; none of them is a phase. The dialog-frame one is **done** — all
-eight now use `_dialog.scss` — and what it taught is worth carrying: the six that diverged were also on the wrong
-SURFACE (`--si-bg1`, not `--si-bg5`), and since `--si-rose` measures 3.78 on bg1 but 2.95 on bg5, moving a surface to
-where the design says it belongs can silently make its text worse. **Check the tone against the destination surface
-before moving anything onto bg5** — the context menu is the remaining surface in that position.
+The handoff's §2.1 follow-ups are **done** except the command palette, which is a maintainer decision not to build.
+What they taught is worth carrying: the six diverging dialogs were also on the wrong SURFACE (`--si-bg1`, not
+`--si-bg5`), and since `--si-rose` measured 3.78 on bg1 but 2.95 on bg5, moving a surface to where the design says it
+belongs can silently make its text WORSE. Fix the tone first, then the surface — that order took the context menu's
+`Delete` from 3.78 to 6.15 instead of to 2.95. A surface move also has to re-point its hover: bg3 is darker than bg5,
+so a hover that lifts on a bg1 menu dents on a bg5 one.
 
 **If you are touching anything under `custom-v2/`, start with
 [`docs/plans/2026-08-04-v2-design-adoption-handoff.md`](docs/plans/2026-08-04-v2-design-adoption-handoff.md).** It is
@@ -176,8 +177,17 @@ the **focus ring is opaque accent-500** (the design's 60%-alpha version fails SC
 **not** an alias of `--si-accent` (it was, while the brand was warm).
 
 And one rule now enforced by a test rather than convention: **no component under `custom-v2/` may name a colour**.
-`styles/tokens.spec.ts` fails on any raw hex/rgb/oklch outside `_tokens.scss`, on the accent fill used as type, and on
-an `-ink` tone used as a fill. Two files are exempt *with an expected count*, so an exemption cannot quietly grow.
+`styles/tokens.spec.ts` fails on any raw hex/rgb/oklch outside `_tokens.scss`, on **any fill token used as type**
+(derived from `_tokens.scss` — every token with an `-ink` partner is a fill, so a colour added later is covered the
+moment its pair is declared), and on an `-ink` tone used as a fill. Two files are exempt *with an expected count*, so
+an exemption cannot quietly grow.
+
+**That test has one blind spot, and it has already cost a defect: it can only see colours named in `custom-v2` source.**
+Bootstrap is loaded globally for the classic UI, and it styles bare ELEMENTS — `code { color: var(--bs-code-color) }`
+put an off-palette #d63384 magenta on every inline code span in v2 prose at 3.56:1, uncaught, because `_prose.scss`
+simply never set `color` and there was no raw colour anywhere to find. This is the `.row` collision through an element
+selector instead of a class name. **When you style a bare element in v2, set its colour explicitly even when that looks
+redundant** — inheriting is not the default there.
 
 ## NC mobile compat: always read upstream NC source first
 

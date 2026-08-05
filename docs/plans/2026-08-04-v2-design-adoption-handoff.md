@@ -68,15 +68,19 @@ grep at close-out, not from memory:
    mattered: the error moved to the shared `.v2-dialog__error` (rose-ink, 6.15) in the same
    change. All six were browser-verified, including `two-fa` (reachable via admin →
    impersonate) and `lock` (reachable by taking a real lock over WebDAV).
-2. **25 `color: var(--si-rose)` declarations across 15 files.** `--si-rose` is a FILL and
-   measures ~3.6:1 as type; `--si-rose-ink` is the type tone. It was 31 when first counted
-   in phase 3 and 26 at close-out; compress-dialog's went with the dialog migration. The
-   ones fixed so far were fixed because a phase happened to touch them, which is not a
-   strategy. Wants its own PR and a `tokens.spec.ts` rule so it cannot come back.
-   **The worst instance is not on the content plane**: `.ctx-menu__item--danger` — the
-   Delete item — measures 3.78 resting and ~3.35 on its `rose-soft` hover, and the context
-   menu is the other surface still on `bg1` where the token table says `bg5`. Moving it to
-   the documented surface without fixing the tone first would take Delete to 2.95.
+2. ~~**25 `color: var(--si-rose)` declarations across 15 files.**~~ **DONE 2026-08-05**, and
+   it was never only rose. Counting one hue hid the shape of the defect: `cyan` was failing
+   harder than any surviving rose case (3.55 bg5 · 3.99 bg3 · 4.37 bg2, the diff hunk
+   header), `green` was marginal at 4.56, and `violet` is literally identical to its own ink.
+   So the `tokens.spec.ts` rule is NOT a list of hue names — it derives the family list from
+   `_tokens.scss`, on the principle that **any token with an `-ink` partner is a fill, and
+   the partner exists because the fill does not clear 4.5:1 as type**. A colour added later
+   is covered the moment its pair is declared. The rule was checked against a deliberately
+   reintroduced violation rather than assumed to work.
+   With the tone fixed, the context menu moved to `bg5` — the surface the token file always
+   assigned it. `Delete` went 3.78 → **6.15**. In the other order it would have gone to 2.95.
+   That move also had to flip the item hover from `bg3` to `bg6`: bg3 is DARKER than bg5, so
+   a hover that read as a lift on the old bg1 menu would have read as a dent.
 3. **No command palette.** `⌘K` focuses the top bar's search field. The plan's hint set
    calls it a palette; the shortcut sheet deliberately labels it *Search files*. If a palette
    is ever built, `utils/shortcut-label.ts` is the one place the label has to change.
