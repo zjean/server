@@ -301,7 +301,7 @@ function formatDate(ts: number | null | undefined): string {
         max-width: 460px;
       }
       .at-card__error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-6);
       }
 

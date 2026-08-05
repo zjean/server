@@ -204,6 +204,8 @@
 .result__when {
   font-family: var(--si-mono);
   font-size: var(--si-text-5);
-  color: var(--si-fg-tertiary);
+  // muted, not tertiary: the result row goes to bg3 on hover/selection, where
+  // tertiary measures 4.38.
+  color: var(--si-fg-muted);
   white-space: nowrap;
 }

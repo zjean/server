@@ -69,14 +69,14 @@ interface DiffLine {
 
         &--add {
           background: var(--si-green-soft);
-          color: var(--si-green);
+          color: var(--si-green-ink);
         }
         &--remove {
           background: var(--si-rose-soft);
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
         &--hunk {
-          color: var(--si-cyan);
+          color: var(--si-cyan-ink);
         }
         &--header {
           color: var(--si-fg-muted);

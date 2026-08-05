@@ -82,9 +82,12 @@ const VIEWPORT_GUTTER = 8
         z-index: var(--si-z-popover);
         min-width: ${MENU_WIDTH}px;
         padding: var(--si-space-2);
-        background: var(--si-bg1);
+        /* bg5 is the overlay surface _tokens.scss names for "dialogs, context
+           menus, sheets, popovers". This was bg1 — below the content plane it
+           opens over — which is the same divergence the six dialogs had. */
+        background: var(--si-bg5);
         border: 1px solid var(--si-border);
-        border-radius: 8px;
+        border-radius: var(--si-r2);
         box-shadow: var(--si-shadow2);
         display: flex;
         flex-direction: column;
@@ -99,7 +102,7 @@ const VIEWPORT_GUTTER = 8
         padding: 0 var(--si-space-5);
         background: transparent;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--si-r1);
         color: var(--si-fg);
         font: inherit;
         font-size: var(--si-text-11);
@@ -109,15 +112,18 @@ const VIEWPORT_GUTTER = 8
           background 100ms ease,
           color 100ms ease;
       }
+      /* bg6, not bg3. Hover has to step UP from the menu's own surface, and bg3 is
+         darker than bg5 — on the old bg1 menu it read as a lift, here it would be a
+         dent. bg6 is the token for "pressed, drag-over, segmented-on". */
       .ctx-menu__item:hover:not(:disabled) {
-        background: var(--si-bg3);
+        background: var(--si-bg6);
       }
       .ctx-menu__item:disabled {
         opacity: 0.45;
         cursor: not-allowed;
       }
       .ctx-menu__item--danger {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
       }
       .ctx-menu__item--danger:hover:not(:disabled) {
         background: var(--si-rose-soft);

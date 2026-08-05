@@ -12,45 +12,50 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
   imports: [ButtonComponent, FormsModule, L10nTranslateDirective, L10nTranslatePipe],
   template: `
     @if (pending(); as p) {
-      <div class="tfa-dialog__backdrop" (click)="cancel()"></div>
-      <form class="tfa-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
-        <div class="tfa-dialog__title">
+      <div class="v2-dialog-backdrop" (click)="cancel()"></div>
+      <form class="v2-dialog tfa-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
+        <div class="v2-dialog__head">
+          <div class="v2-dialog__title">
+            @if (p.withTotp) {
+              <span l10nTranslate>Two-Factor Authentication</span>
+            } @else {
+              <span l10nTranslate>Password Authentication</span>
+            }
+          </div>
+        </div>
+        <div class="v2-dialog__body tfa-dialog__body">
+          @if (p.withPassword) {
+            <label class="tfa-dialog__field">
+              <span l10nTranslate>Enter your password</span>
+              <input
+                #passwordInput
+                type="password"
+                class="tfa-dialog__input"
+                autocomplete="current-password"
+                [(ngModel)]="password"
+                [ngModelOptions]="{ standalone: true }"
+              />
+            </label>
+          }
           @if (p.withTotp) {
-            <span l10nTranslate>Two-Factor Authentication</span>
-          } @else {
-            <span l10nTranslate>Password Authentication</span>
+            <label class="tfa-dialog__field">
+              <span l10nTranslate>Valid with your TOTP code</span>
+              <input
+                #totpInput
+                type="text"
+                class="tfa-dialog__input tfa-dialog__input--totp"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                [maxlength]="TWO_FA_CODE_LENGTH"
+                [placeholder]="'••••••'"
+                [(ngModel)]="totpCode"
+                [ngModelOptions]="{ standalone: true }"
+              />
+            </label>
           }
         </div>
-        @if (p.withPassword) {
-          <label class="tfa-dialog__field">
-            <span l10nTranslate>Enter your password</span>
-            <input
-              #passwordInput
-              type="password"
-              class="tfa-dialog__input"
-              autocomplete="current-password"
-              [(ngModel)]="password"
-              [ngModelOptions]="{ standalone: true }"
-            />
-          </label>
-        }
-        @if (p.withTotp) {
-          <label class="tfa-dialog__field">
-            <span l10nTranslate>Valid with your TOTP code</span>
-            <input
-              #totpInput
-              type="text"
-              class="tfa-dialog__input tfa-dialog__input--totp"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              [maxlength]="TWO_FA_CODE_LENGTH"
-              [placeholder]="'••••••'"
-              [(ngModel)]="totpCode"
-              [ngModelOptions]="{ standalone: true }"
-            />
-          </label>
-        }
-        <div class="tfa-dialog__actions">
+        <div class="v2-dialog__footer">
+          <div class="v2-dialog__spacer"></div>
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
             {{ 'Cancel' | translate: locale.language }}
           </app-v2-btn>
@@ -64,36 +69,14 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
   `,
   styles: [
     `
+      /* Frame, scrim, head, body and footer come from styles/_dialog.scss. */
       :host {
         display: contents;
       }
-      .tfa-dialog__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
-      .tfa-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        min-width: 320px;
-        max-width: 380px;
-        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
+      .tfa-dialog__body {
         display: flex;
         flex-direction: column;
         gap: var(--si-space-6);
-      }
-      .tfa-dialog__title {
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
       }
       .tfa-dialog__field {
         display: flex;
@@ -113,10 +96,10 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         font: inherit;
         font-size: var(--si-text-8);
         padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg2);
+        background: var(--si-bg3);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
-        border-radius: 6px;
+        border-radius: var(--si-r1);
         outline: none;
         transition: border-color 120ms ease;
       }
@@ -127,12 +110,6 @@ import { TwoFaDialogService } from './two-fa-dialog.service'
         text-align: center;
         letter-spacing: 4px;
         font-family: var(--si-mono);
-      }
-      .tfa-dialog__actions {
-        display: flex;
-        gap: var(--si-space-4);
-        justify-content: flex-end;
-        margin-top: var(--si-space-2);
       }
     `
   ]

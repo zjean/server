@@ -15,48 +15,54 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
   imports: [ButtonComponent, CheckboxComponent, L10nTranslatePipe],
   template: `
     @if (pending(); as p) {
-      <div class="compress-dialog__backdrop" (click)="cancel()"></div>
-      <form class="compress-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
-        <div class="compress-dialog__head">
-          <div class="compress-dialog__title">
-            {{ (inDirectory() ? 'Compress and Save' : 'Compress and Download') | translate: locale.language }}
+      <div class="v2-dialog-backdrop" (click)="cancel()"></div>
+      <form class="v2-dialog compress-dialog" role="dialog" aria-modal="true" (click)="$event.stopPropagation()" (submit)="onSubmit($event)">
+        <div class="v2-dialog__head">
+          <div class="compress-dialog__head-text">
+            <div class="v2-dialog__title">
+              {{ (inDirectory() ? 'Compress and Save' : 'Compress and Download') | translate: locale.language }}
+            </div>
           </div>
+          <div class="v2-dialog__spacer"></div>
           <div class="compress-dialog__count">{{ p.fileCount }} {{ (p.fileCount > 1 ? 'items' : 'item') | translate: locale.language }}</div>
         </div>
-        <div class="compress-dialog__row">
-          <input
-            #input
-            type="text"
-            class="compress-dialog__input"
-            [value]="name()"
-            (input)="onInput($event)"
-            [placeholder]="'Archive name' | translate: locale.language"
-          />
-          <select class="compress-dialog__select" [value]="extension()" (change)="onExtensionChange($event)">
-            @for (ext of extensions; track ext) {
-              <option [value]="ext">.{{ extensionLabel(ext) }}</option>
-            }
-          </select>
+        <div class="v2-dialog__body">
+          <div class="compress-dialog__row">
+            <input
+              #input
+              type="text"
+              class="compress-dialog__input"
+              [value]="name()"
+              (input)="onInput($event)"
+              [placeholder]="'Archive name' | translate: locale.language"
+            />
+            <select class="compress-dialog__select" [value]="extension()" (change)="onExtensionChange($event)">
+              @for (ext of extensions; track ext) {
+                <option [value]="ext">.{{ extensionLabel(ext) }}</option>
+              }
+            </select>
+          </div>
+          <div class="compress-dialog__check" (click)="toggleCompression()">
+            <app-v2-checkbox [state]="compression() ? 'checked' : 'unchecked'" ariaLabel="Enable compression" (toggled)="toggleCompression()" />
+            <span>{{ 'Enable compression' | translate: locale.language }}</span>
+            <small>{{ '(this may take longer)' | translate: locale.language }}</small>
+          </div>
+          @if (p.allowSaveInPlace !== false) {
+            <div class="compress-dialog__check" (click)="toggleInDirectory()">
+              <app-v2-checkbox
+                [state]="inDirectory() ? 'checked' : 'unchecked'"
+                ariaLabel="Save in the current directory"
+                (toggled)="toggleInDirectory()"
+              />
+              <span>{{ 'Save in the current directory' | translate: locale.language }}</span>
+            </div>
+          }
         </div>
         @if (errorMsg(); as err) {
-          <div class="compress-dialog__error">{{ err | translate: locale.language }}</div>
+          <div class="v2-dialog__error">{{ err | translate: locale.language }}</div>
         }
-        <div class="compress-dialog__check" (click)="toggleCompression()">
-          <app-v2-checkbox [state]="compression() ? 'checked' : 'unchecked'" ariaLabel="Enable compression" (toggled)="toggleCompression()" />
-          <span>{{ 'Enable compression' | translate: locale.language }}</span>
-          <small>{{ '(this may take longer)' | translate: locale.language }}</small>
-        </div>
-        @if (p.allowSaveInPlace !== false) {
-          <div class="compress-dialog__check" (click)="toggleInDirectory()">
-            <app-v2-checkbox
-              [state]="inDirectory() ? 'checked' : 'unchecked'"
-              ariaLabel="Save in the current directory"
-              (toggled)="toggleInDirectory()"
-            />
-            <span>{{ 'Save in the current directory' | translate: locale.language }}</span>
-          </div>
-        }
-        <div class="compress-dialog__actions">
+        <div class="v2-dialog__footer">
+          <div class="v2-dialog__spacer"></div>
           <app-v2-btn kind="ghost" size="sm" (click)="cancel()">
             {{ 'Cancel' | translate: locale.language }}
           </app-v2-btn>
@@ -70,40 +76,9 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
   `,
   styles: [
     `
+      /* Frame, scrim, head, body, error and footer come from styles/_dialog.scss. */
       :host {
         display: contents;
-      }
-      .compress-dialog__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
-      .compress-dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        min-width: 340px;
-        max-width: 440px;
-        padding: var(--si-space-9) var(--si-space-10) var(--si-space-7);
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
-      }
-      .compress-dialog__head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: var(--si-space-6);
-        margin-bottom: var(--si-space-5);
-      }
-      .compress-dialog__title {
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
       }
       .compress-dialog__count {
         font-size: var(--si-text-6);
@@ -121,10 +96,10 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         font: inherit;
         font-size: var(--si-text-8);
         padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg2);
+        background: var(--si-bg3);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
-        border-radius: 6px;
+        border-radius: var(--si-r1);
         outline: none;
         transition: border-color 120ms ease;
       }
@@ -135,10 +110,10 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
         font: inherit;
         font-size: var(--si-text-8);
         padding: var(--si-space-4) var(--si-space-5);
-        background: var(--si-bg2);
+        background: var(--si-bg3);
         color: var(--si-fg);
         border: 1px solid var(--si-border);
-        border-radius: 6px;
+        border-radius: var(--si-r1);
         outline: none;
         cursor: pointer;
         transition: border-color 120ms ease;
@@ -146,11 +121,6 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       .compress-dialog__input:focus,
       .compress-dialog__select:focus {
         border-color: color-mix(in srgb, var(--si-accent) 60%, var(--si-border));
-      }
-      .compress-dialog__error {
-        font-size: var(--si-text-4);
-        color: var(--si-rose);
-        margin-top: var(--si-space-2);
       }
       .compress-dialog__check {
         display: flex;
@@ -165,12 +135,6 @@ import { CompressDialogService, CompressExtension } from './compress-dialog.serv
       .compress-dialog__check small {
         color: var(--si-fg-muted);
         font-size: var(--si-text-4);
-      }
-      .compress-dialog__actions {
-        display: flex;
-        gap: var(--si-space-4);
-        justify-content: flex-end;
-        margin-top: var(--si-space-8);
       }
     `
   ]

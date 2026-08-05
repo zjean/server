@@ -202,7 +202,7 @@ export interface GroupRef {
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .gmd__counts {
@@ -303,7 +303,7 @@ export interface GroupRef {
 
         &:hover {
           background: var(--si-bg3);
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
         &:disabled {
           opacity: 0.4;

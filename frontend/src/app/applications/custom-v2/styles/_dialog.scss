@@ -7,6 +7,15 @@
 // `_type.scss` solved for type roles, and it gets the same solution: classes, loaded
 // globally, so there is one spelling instead of eight that drift.
 //
+// ALL EIGHT now use it. The last six migrated together, because the divergence was
+// never only the radius: they were also on `--si-bg1`, two elevation steps below the
+// `--si-bg5` a dialog is supposed to occupy, which is why they read as part of the
+// page rather than over it. That surface move is also why the migration could not be
+// mechanical — `--si-rose` measures 3.78 on bg1 but 2.95 on bg5, so the compress
+// dialog's error text would have been made WORSE by a faithful frame swap. It moved
+// to the shared `.v2-dialog__error` (rose-ink) in the same change, and the inputs
+// moved from bg2 to the bg3 input fill for the same reason.
+//
 // Emitted as CLASSES rather than a mixin because most of these dialogs declare their
 // styles as inline `styles: [...]` strings in a `.ts` file, which cannot `@use` a
 // partial. Loaded by v2.scss, which LayoutV2Component pulls in with
@@ -65,10 +74,14 @@
     color: var(--si-fg);
   }
 
+  // muted, not tertiary. The dialog surface is bg5, where tertiary measures 3.89
+  // — see the tier table in _tokens.scss, which is explicit that tertiary fails on
+  // exactly this surface. The subject names the object being acted on, so it is
+  // never decorative.
   .v2-dialog__subject {
     font-family: var(--si-mono);
     font-size: var(--si-text-5);
-    color: var(--si-fg-tertiary);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     overflow: hidden;
     text-overflow: ellipsis;

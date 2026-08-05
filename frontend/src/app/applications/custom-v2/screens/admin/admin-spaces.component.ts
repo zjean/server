@@ -370,7 +370,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .au-table {
@@ -569,7 +569,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
 
         &:hover {
           background: var(--si-bg3);
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .au-field__hint {
@@ -664,7 +664,7 @@ type SortColumn = 'name' | 'storage' | 'members' | 'modified'
         align-items: flex-end;
       }
       .au-dialog__error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-6);
       }
       .au-dialog__actions {

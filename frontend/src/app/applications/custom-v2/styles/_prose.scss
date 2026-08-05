@@ -64,8 +64,16 @@
     color: var(--si-fg-muted);
   }
 
+  // `color` is not optional here, however redundant it looks. Bootstrap is loaded
+  // globally for the classic UI and ships `code { color: var(--bs-code-color) }` —
+  // an ELEMENT selector, so no class name of ours avoids it. Leaving colour unset
+  // does not inherit the prose colour; it hands every inline code span to
+  // Bootstrap's #d63384 magenta, which is off-palette and measures 3.56:1 on bg3.
+  // `tokens.spec.ts` cannot catch this: the raw colour is not in custom-v2 source.
+  // (Same root cause as the `.row` collision, via an element selector instead.)
   code {
     background: var(--si-bg3);
+    color: var(--si-fg);
     padding: 1px var(--si-space-2);
     border-radius: 4px;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

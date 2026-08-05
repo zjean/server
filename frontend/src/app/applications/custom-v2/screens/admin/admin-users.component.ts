@@ -402,7 +402,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
 
         &:hover {
           background: var(--si-bg3);
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .au__search {
@@ -430,7 +430,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         font-size: var(--si-text-8);
         color: var(--si-fg-muted);
         &--error {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
       .au-table {
@@ -540,7 +540,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
           color: var(--si-fg);
         }
         &--danger:hover {
-          color: var(--si-rose);
+          color: var(--si-rose-ink);
         }
       }
 
@@ -632,7 +632,7 @@ function emptyDraft(isGuest: boolean): UserDraft {
         gap: var(--si-space-5);
       }
       .au-dialog__error {
-        color: var(--si-rose);
+        color: var(--si-rose-ink);
         font-size: var(--si-text-6);
       }
       .au-dialog__actions {

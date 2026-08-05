@@ -59,16 +59,28 @@ shipped with the sheet that needed it and the remaining two sheets followed.
 Three follow-ups, each recorded when it was found and each still true. Counts are from a
 grep at close-out, not from memory:
 
-1. **Six dialogs still own their own frame.** `_dialog.scss` exists and only
-   `share-dialog` and `shortcuts-dialog` use it; `confirm`, `compress`, `lock`, `prompt`,
-   `tree-picker` and `two-fa` still declare their own centring block. This got MORE
-   valuable in #445: the mobile sheet geometry is a rule on `.v2-dialog`, so those six are
-   the only surfaces on the phone that still open as a centred box — the design says every
-   one of them should be a sheet, including "every destructive confirm".
-2. **26 `color: var(--si-rose)` declarations across 15 files.** `--si-rose` is a FILL and
-   measures ~3.6:1 as type; `--si-rose-ink` is the type tone. It was 31 when first counted
-   in phase 3; the ones fixed since were fixed because a phase happened to touch them, which
-   is not a strategy. Wants its own PR and a `tokens.spec.ts` rule so it cannot come back.
+1. ~~**Six dialogs still own their own frame.**~~ **DONE 2026-08-05.** All eight now use
+   `_dialog.scss`. Two things the migration found that this entry did not predict, both
+   recorded in that file's header: the divergence was never only the 10px-vs-12px radius —
+   the six were also on `--si-bg1`, two elevation steps below the `--si-bg5` a dialog is
+   supposed to occupy — and because `--si-rose` measures 3.78 on bg1 but **2.95** on bg5, a
+   faithful frame swap would have made the compress dialog's error text WORSE. Ordering
+   mattered: the error moved to the shared `.v2-dialog__error` (rose-ink, 6.15) in the same
+   change. All six were browser-verified, including `two-fa` (reachable via admin →
+   impersonate) and `lock` (reachable by taking a real lock over WebDAV).
+2. ~~**25 `color: var(--si-rose)` declarations across 15 files.**~~ **DONE 2026-08-05**, and
+   it was never only rose. Counting one hue hid the shape of the defect: `cyan` was failing
+   harder than any surviving rose case (3.55 bg5 · 3.99 bg3 · 4.37 bg2, the diff hunk
+   header), `green` was marginal at 4.56, and `violet` is literally identical to its own ink.
+   So the `tokens.spec.ts` rule is NOT a list of hue names — it derives the family list from
+   `_tokens.scss`, on the principle that **any token with an `-ink` partner is a fill, and
+   the partner exists because the fill does not clear 4.5:1 as type**. A colour added later
+   is covered the moment its pair is declared. The rule was checked against a deliberately
+   reintroduced violation rather than assumed to work.
+   With the tone fixed, the context menu moved to `bg5` — the surface the token file always
+   assigned it. `Delete` went 3.78 → **6.15**. In the other order it would have gone to 2.95.
+   That move also had to flip the item hover from `bg3` to `bg6`: bg3 is DARKER than bg5, so
+   a hover that read as a lift on the old bg1 menu would have read as a dent.
 3. **No command palette.** `⌘K` focuses the top bar's search field. The plan's hint set
    calls it a palette; the shortcut sheet deliberately labels it *Search files*. If a palette
    is ever built, `utils/shortcut-label.ts` is the one place the label has to change.

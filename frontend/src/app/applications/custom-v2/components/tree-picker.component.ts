@@ -65,15 +65,16 @@ const ROOT_SHARES: FileTree = {
   imports: [IconV2Component, ButtonComponent, L10nTranslatePipe],
   template: `
     @if (pending(); as p) {
-      <div class="tree-picker__backdrop" (click)="cancel()"></div>
-      <div class="tree-picker" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-        <header class="tree-picker__head">
-          <div class="tree-picker__title">{{ p.title | translate: locale.language }}</div>
+      <div class="v2-dialog-backdrop" (click)="cancel()"></div>
+      <div class="v2-dialog tree-picker" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <header class="v2-dialog__head">
+          <div class="v2-dialog__title">{{ p.title | translate: locale.language }}</div>
+          <div class="v2-dialog__spacer"></div>
           <button type="button" class="tree-picker__close" (click)="cancel()" [attr.aria-label]="'Close' | translate: locale.language">
             <app-v2-icon name="x" [size]="14" />
           </button>
         </header>
-        <div class="tree-picker__body">
+        <div class="v2-dialog__body tree-picker__body">
           @for (n of flatNodes(); track n.tree.id + ':' + n.tree.path) {
             <div
               class="tp-node"
@@ -104,7 +105,7 @@ const ROOT_SHARES: FileTree = {
             </div>
           }
         </div>
-        <footer class="tree-picker__foot">
+        <footer class="v2-dialog__footer tree-picker__foot">
           <div class="tree-picker__hint">
             @if (selected(); as sel) {
               <span class="tree-picker__path">/{{ sel.tree.path }}</span>
@@ -127,40 +128,16 @@ const ROOT_SHARES: FileTree = {
   `,
   styles: [
     `
+      /* Frame, scrim, head, body and footer come from styles/_dialog.scss. This is
+         the one dialog that overrides the shared width, for the reason that file
+         names it: it is a file browser in a box rather than a form, so it wants to
+         be tall and narrow instead of the 560px the forms share. */
       :host {
         display: contents;
       }
-      .tree-picker__backdrop {
-        position: fixed;
-        inset: 0;
-        background: var(--si-scrim);
-        z-index: var(--si-z-dialog);
-      }
       .tree-picker {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: calc(var(--si-z-dialog) + 1);
-        width: 420px;
-        max-height: 560px;
-        display: flex;
-        flex-direction: column;
-        background: var(--si-bg1);
-        border: 1px solid var(--si-border);
-        border-radius: 10px;
-        box-shadow: var(--si-shadow3);
-      }
-      .tree-picker__head {
-        display: flex;
-        align-items: center;
-        padding: var(--si-space-7) var(--si-space-7) var(--si-space-4);
-      }
-      .tree-picker__title {
-        flex: 1 1 auto;
-        font-size: var(--si-text-11);
-        font-weight: 600;
-        color: var(--si-fg);
+        max-width: 420px;
+        max-height: min(560px, calc(100vh - 48px));
       }
       .tree-picker__close {
         background: transparent;
@@ -175,10 +152,9 @@ const ROOT_SHARES: FileTree = {
         background: var(--si-bg3);
         color: var(--si-fg);
       }
+      /* The shared body insets its content by space-10; a tree wants full-bleed
+         rows so the hover band reaches both edges, and it supplies its own rules. */
       .tree-picker__body {
-        flex: 1 1 auto;
-        min-height: 0;
-        overflow: auto;
         padding: var(--si-space-2) 0;
         border-top: 1px solid var(--si-line);
         border-bottom: 1px solid var(--si-line);
@@ -231,13 +207,6 @@ const ROOT_SHARES: FileTree = {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-      }
-      .tree-picker__foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--si-space-6);
-        padding: var(--si-space-5) var(--si-space-7) var(--si-space-7);
       }
       .tree-picker__hint {
         flex: 1 1 auto;
