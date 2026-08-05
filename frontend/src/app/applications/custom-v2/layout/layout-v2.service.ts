@@ -23,6 +23,18 @@ const DOCK_WIDTH_KEY = 'ui.inspector.width'
 
 const hasStorage = (): boolean => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
 
+/**
+ * Whether a bare-key shortcut should be ignored because the user is writing.
+ *
+ * `isContentEditable` matters as much as the two element types: the markdown editor and the
+ * comment composer are both contenteditable, and a `?` swallowed there would be a character
+ * the user typed and did not get.
+ */
+function isTypingInto(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target.isContentEditable
+}
+
 function readStoredTab(): InspectorTabId {
   if (!hasStorage()) return 'properties'
   const raw = window.localStorage.getItem(DOCK_TAB_KEY) ?? ''
@@ -74,6 +86,9 @@ export class LayoutV2Service {
    */
   readonly sheetSnap = signal<SheetSnap>('half')
 
+  /** The `?` shortcut sheet. Session state; nothing about it is worth persisting. */
+  readonly shortcutsOpen = signal(false)
+
   /**
    * The sidebar is a rail because the viewport says so, not because the user asked.
    *
@@ -115,6 +130,14 @@ export class LayoutV2Service {
       if ((e.key === 'i' || e.key === 'I') && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
         if (!this.inspector.available()) return
         this.toggleDock()
+        e.preventDefault()
+        return
+      }
+      // `?` — Shift+/ on most layouts, its own key on some, so the character is what to
+      // test rather than the code. Guarded on the event target the way the file browser's
+      // bare-key shortcuts are: a question mark typed into a filter is a question mark.
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingInto(e.target)) {
+        this.shortcutsOpen.update((v) => !v)
         e.preventDefault()
         return
       }

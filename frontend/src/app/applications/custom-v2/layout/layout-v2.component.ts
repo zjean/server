@@ -6,6 +6,7 @@ import { ConfirmDialogComponent } from '../components/confirm-dialog.component'
 import { LockDialogComponent } from '../components/lock-dialog.component'
 import { PromptDialogComponent } from '../components/prompt-dialog.component'
 import { SheetDragDirective } from '../components/sheet-drag.directive'
+import { ShortcutsDialogComponent } from '../components/shortcuts-dialog.component'
 import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
@@ -16,6 +17,7 @@ import { InspectorPanelComponent } from './inspector-panel.component'
 import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
 import { PageBreadcrumbComponent } from './page-breadcrumb.component'
+import { SessionStripComponent } from './session-strip.component'
 import { TitleBarComponent } from './title-bar.component'
 import { TopBarComponent } from './top-bar.component'
 import { UploadDockComponent } from './upload-dock.component'
@@ -38,6 +40,7 @@ import { UploadDockComponent } from './upload-dock.component'
     TopBarComponent,
     LeftNavComponent,
     PageBreadcrumbComponent,
+    SessionStripComponent,
     InspectorPanelComponent,
     UploadDockComponent,
     ToastHostComponent,
@@ -48,6 +51,7 @@ import { UploadDockComponent } from './upload-dock.component'
     LockDialogComponent,
     ShareDialogComponent,
     TwoFaDialogComponent,
+    ShortcutsDialogComponent,
     BottomTabBarComponent,
     L10nTranslateDirective,
     L10nTranslatePipe

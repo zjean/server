@@ -348,5 +348,19 @@
   "Transfers": "Transfers",
   "Expand": "Expand",
   "Collapse": "Collapse",
-  "Retry": "Retry"
+  "Retry": "Retry",
+  "Keyboard shortcuts": "Keyboard shortcuts",
+  "v2_shortcuts_subject": "Everything this app binds. Press ? again to close.",
+  "Around the app": "Around the app",
+  "In a folder": "In a folder",
+  "With one file selected": "With one file selected",
+  "Search files": "Search files",
+  "Toggle the sidebar": "Toggle the sidebar",
+  "Toggle the details panel": "Toggle the details panel",
+  "This list": "This list",
+  "Filter": "Filter",
+  "Select all": "Select all",
+  "Clear the selection": "Clear the selection",
+  "Favorite": "Favorite",
+  "v2_offline_strip": "You’re offline. Changes can’t be saved until the connection is back."
 }
