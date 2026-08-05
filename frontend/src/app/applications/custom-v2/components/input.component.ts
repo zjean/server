@@ -143,7 +143,9 @@ export type InputSize = 'sm' | 'md' | 'lg'
         flex: none;
         font-family: var(--si-mono);
         font-size: var(--si-text-3);
-        color: var(--si-fg-tertiary);
+        /* muted, not tertiary: the hint sits on the input fill, where tertiary
+           measured 3.89 in a dialog and 4.38 on the content plane. */
+        color: var(--si-fg-muted);
         background: var(--si-bg5);
         border-radius: var(--si-r0);
         padding: 2px var(--si-space-3);

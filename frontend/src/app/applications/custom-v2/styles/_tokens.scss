@@ -68,7 +68,7 @@
 //                bg0    bg1    bg2   band    bg3    bg5    bg6
 //   fg          17.16  16.35  15.74  15.22  14.37  12.77  11.05
 //   muted        9.10   8.67   8.35   8.07   7.62   6.77   5.86
-//   tertiary     5.23   4.98   4.80   4.64   4.38  [3.89] [3.36]
+//   tertiary     5.23   4.98   4.80   4.64  [4.38] [3.89] [3.36]
 //   quiet       [2.98] [2.84] [2.74] [2.65] [2.50] [2.22] [1.92]
 //
 //   [n] = below 4.5:1, i.e. not usable for normal-size text.
@@ -76,10 +76,21 @@
 // The rules this implies, which the design states independently and which the
 // numbers confirm:
 //   • fg and muted are usable on every surface.
-//   • tertiary is a bg0–bg3 tier. It FAILS on bg5 (dialogs, context menus,
-//     sheets, popovers) and bg6 (tooltips, pressed, drag-over). The pre-adoption
-//     ramp allowed it up to the old bg4, so every tertiary string on an overlay
-//     needs lifting to muted.
+//   • tertiary is a bg0–BAND tier, NOT bg0–bg3. bg3 measures 4.38, which is below
+//     4.5 — it was printed here unbracketed while every other sub-floor cell was
+//     bracketed, and the rule was then derived from the typo rather than from the
+//     number. That licensed tertiary on every bg3 surface (cards, row hover, input
+//     fill, chips), and three shipped call sites took it up: the segmented control's
+//     inactive labels, the input shortcut hint, and search-result timestamps. All
+//     three are now muted. bg3 is the LAST band before tertiary fails, so it is the
+//     easiest one to get wrong; check the number, not this sentence.
+//     It also FAILS on bg5 (dialogs, context menus, sheets, popovers) and bg6
+//     (tooltips, pressed, drag-over). The pre-adoption ramp allowed it up to the
+//     old bg4, so every tertiary string on an overlay needs lifting to muted.
+//     NOT swept exhaustively: 51 tertiary declarations exist and only the screens
+//     driven during the 2026-08-05 review were measured. Grep cannot settle this —
+//     a declaration's surface depends on where its element is mounted, not on
+//     what its own file says. Measure, then fix.
 //   • quiet clears nothing. It is decorative only — disabled labels, column
 //     heads, hint text that repeats something already visible. It may never be
 //     the sole carrier of meaning. This is a real narrowing versus the old ramp,

@@ -341,7 +341,12 @@
                       <span>{{ f.size | toBytes: 1 : true }}</span>
                     }
                     @if (f.mtime) {
-                      <span class="file-card__sep">·</span>
+                      <!-- The separator belongs to the PAIR, not to the date. A directory
+                           has no size, so gating the `·` on mtime alone rendered a leading
+                           orphan dot on every folder card ("· 19 hours ago"). -->
+                      @if (!f.isDir) {
+                        <span class="file-card__sep">·</span>
+                      }
                       <span>{{ f.mtime | amTimeAgo }}</span>
                     }
                   </div>

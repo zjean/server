@@ -289,12 +289,19 @@
     }
   }
 
+  // Both footer links are `tertiary`, not `ghost`. _tokens.scss states the rule
+  // these were breaking: quiet "clears nothing … may never be the sole carrier of
+  // meaning". Each of these is exactly that — this link is the AGPL §13 source
+  // attribution, which has to be user-visible to satisfy the licence, and `__back`
+  // is the only route back to the classic UI. At ghost they measured 2.84:1; at
+  // tertiary they measure 4.98 on the nav's bg1. They stay quieter than every nav
+  // item (fg, 16.35) so the hierarchy the ghost tone was chosen for is preserved.
   &__source {
     display: block;
     margin: var(--si-space-5) var(--si-space-5) var(--si-space-1);
     font-family: var(--si-mono);
     font-size: var(--si-text-1);
-    color: var(--si-fg-ghost);
+    color: var(--si-fg-tertiary);
     text-decoration: none;
     letter-spacing: 0.02em;
     overflow: hidden;
@@ -313,7 +320,7 @@
     font-family: var(--si-mono);
     font-size: var(--si-text-1);
     letter-spacing: 0.02em;
-    color: var(--si-fg-ghost);
+    color: var(--si-fg-tertiary);
     text-decoration: none;
     cursor: pointer;
     transition: color var(--si-dur-2) var(--si-ease-out);
