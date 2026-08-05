@@ -161,10 +161,14 @@
   // Mono for the WHOLE line, not just the byte count. A size and a timestamp are
   // both machine output, and mixing families inside one metadata line was the
   // clearest remaining violation of the sans/mono split in this component.
+  // muted, not tertiary: the card's own surface is bg3, where tertiary measures
+  // 4.38, and its hover step is bg5, where it measures 3.89. A card is the one
+  // place in this product where the metadata line's surface is TWO steps deeper
+  // than the table's, so the tone that is correct in the table is wrong here.
   &__meta {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-tertiary);
+    color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     display: flex;
     align-items: center;

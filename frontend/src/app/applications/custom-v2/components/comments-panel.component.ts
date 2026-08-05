@@ -236,8 +236,11 @@ interface CommentRow extends Comment {
           outline: 2px solid var(--si-focus-ring);
           outline-offset: 1px;
         }
+        /* muted, not tertiary: the field's fill is bg3, where tertiary measures
+           4.38, and this placeholder is the composer's only label. Matches
+           app-v2-input, which the fill above already mirrors. */
         &::placeholder {
-          color: var(--si-fg-tertiary);
+          color: var(--si-fg-muted);
         }
       }
       .cp-comment__editor {

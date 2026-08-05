@@ -56,8 +56,9 @@ shipped with the sheet that needed it and the remaining two sheets followed.
 
 ### 2.1 What is left — measured 2026-08-05, none of it a phase
 
-Three follow-ups, each recorded when it was found and each still true. Counts are from a
-grep at close-out, not from memory:
+Four follow-ups, each recorded when it was found. Three are now done — the strikethroughs
+are kept because in every case the entry was wrong about something, and the correction is
+the useful part. Counts are from a grep at the time, not from memory:
 
 1. ~~**Six dialogs still own their own frame.**~~ **DONE 2026-08-05.** All eight now use
    `_dialog.scss`. Two things the migration found that this entry did not predict, both
@@ -84,6 +85,49 @@ grep at close-out, not from memory:
 3. **No command palette.** `⌘K` focuses the top bar's search field. The plan's hint set
    calls it a palette; the shortcut sheet deliberately labels it *Search files*. If a palette
    is ever built, `utils/shortcut-label.ts` is the one place the label has to change.
+4. ~~**The tertiary sweep covered only the seven screens driven at close-out**, and 51
+   declarations exist.~~ **DONE 2026-08-05**, and the entry was wrong about the method as
+   much as the coverage. It said grep could not settle it because a declaration's surface
+   depends on where its element mounts — true of the search it described, and the fix was to
+   run the search the other way: not *what surface is this string on* (needs the whole render
+   tree) but *what strings are inside this surface* (needs only the ~140 bg3/bg5/bg6
+   `background` declarations, most of which are hover states on controls that set their own
+   `color`). The reasoning, the numbers and the two exemptions are in `_tokens.scss` with the
+   tier; the reading is mechanised in `docs/tools/v2-contrast-audit.js`. Three things it
+   found that the type-outward reading could not:
+   - **The 51 count overstated the exposure.** Two of the three global tertiary type roles
+     in `_type.scss` (`.v2-meta`, `.v2-mono-data`) have **zero** call sites.
+   - **Half the sites were legal** — glyphs (3:1, not 4.5) and disabled controls (SC 1.4.3
+     exempts an inactive component). A mechanical sweep would have made a disabled field
+     read exactly as brightly as a live one.
+   - **The real failures were CONDITIONAL**, so no edit to the declaration could be right:
+     the grid card's meta line is on bg3 at rest and bg5 hovered; the inspector's six
+     tertiary strings are correct on the panel's bg1 (4.98) and wrong in the mobile sheet
+     (3.89). Overlays therefore **re-point the tier** — `--si-fg-tertiary:
+     var(--si-fg-muted)` beside the `background: var(--si-bg5)` in `.v2-dialog`,
+     `.v2-sheet`, `.ctx-menu`, `.dock` and `.bulk-bar`. Add the re-point whenever you add a
+     bg5/bg6 container; the adjacency is what stops the two drifting.
+
+   Verified with the audit across nine desktop routes, list/grid/gallery at rest **and**
+   hovered, the desktop inspector, the context menu, the share dialog, mobile list and the
+   mobile inspector sheet: **zero tertiary failures**, and tertiary no longer appears on bg5
+   or bg6 anywhere while still reading 4.98 on the desktop panel — which is the case that
+   proves the re-point rather than a lift.
+
+   **It also found that the `quiet`/ghost tier has the same problem, one tier down, and
+   that one is NOT done.** Ghost measures 1.92–2.98 on every surface, so it is never legal
+   for text — the token file already says so ("clears nothing … may never be the sole
+   carrier of meaning"), and three shipped call sites were breaking it: the search empty
+   panel's *N characters minimum* (2.84 — the only statement of why the panel is empty), the
+   gallery tile's size + timestamp (2.74 — and in gallery mode those columns are gone, so
+   the line is the only place either figure appears), and the share dialog's member email
+   (2.50). All three are fixed. Five survivors were checked and left, because each is
+   genuinely decorative under the rule as written — the left-nav `·` usage separator (2.50),
+   the `density` toolbar label (2.74, redundant with the visible Compact/Comfortable/Relaxed
+   options), the drop-target hint and glyph (2.74, and the whole body is already the drop
+   zone), the share row's `(you)` marker (2.50) and a dialog's `esc` kbd hint (2.50). A
+   deliberate audit of that tier is the honest follow-up; run the same script and read the
+   `#635e58` pairs.
 
 Two things that are NOT owed, so nobody re-derives them:
 
@@ -217,8 +261,33 @@ merged = {**old, **{k: v for k, v in new.items() if k not in old}}
 
 Two component sheets have already crossed it. The fix is **more `styleUrls`
 entries**, not a bigger budget — Angular measures per sheet, and the split has
-been the honest shape both times (`fonts.scss` out of `v2.scss`;
-`file-browser-{grid,gallery}.scss` out of the browser sheet).
+been the honest shape every time (`fonts.scss` out of `v2.scss`;
+`file-browser-{grid,gallery}.scss` out of the browser sheet; and `v2-tokens.scss`
++ `v2-overlays.scss` out of `v2.scss` again, below).
+
+**`v2.scss` reached 13.85 kB of the 14 and was split 2026-08-05.** At 0.15 kB of
+headroom, the next line added to any of the six partials it pulled in broke the
+build — in a file that had nothing to do with the change, which is the part that
+wastes an hour. `LayoutV2Component` now loads five entries, split along growth
+axes so a change lands in one sheet and cannot crowd the others:
+
+| entry | kB | grows when |
+|---|---|---|
+| `fonts.scss` | 0.9 | a face is added |
+| `v2-tokens.scss` | 4.2 | a token is added |
+| `v2.scss` | 4.0 | the root element / type roles / prose change |
+| `v2-overlays.scss` | 5.7 | a dialog, sheet or touch rule changes |
+
+**To measure any sheet, temporarily set `anyComponentStyle`'s `maximumWarning` to
+`1kb` in `frontend/angular.json` and build** — Angular then prints a size for
+every sheet over the limit, which is the only way to see a number for a sheet that
+is currently passing. Revert with `git checkout frontend/angular.json`. Sass gets
+you the same figure per partial without a full build, and agreed with Angular to
+within 50 bytes:
+
+```bash
+npx sass --no-source-map --style=compressed src/app/.../styles/v2.scss | wc -c
+```
 
 ### 3.10 Run the ROOT `npm run test`, not the workspace one
 
@@ -302,6 +371,31 @@ A canvas-composited contrast readback caught things eyeballing did not, and it
 **agreed with the computed table exactly** where comparable. There is a working
 readback script pattern in the Phase 0 record; for pure-hex tokens a direct WCAG
 computation in node is exact and simpler.
+
+**`docs/tools/v2-contrast-audit.js` is the finished form of that**, and it is the
+tool to reach for on any tone-vs-surface question:
+
+```bash
+agent-browser --session x eval -b "$(base64 -i docs/tools/v2-contrast-audit.js | tr -d '\n')"
+```
+
+It walks the rendered tree, resolves each string's real background by ancestor
+walk, and returns `{ fails[], tones{} }`. Three things about using it:
+
+- **Read `tones` even when `fails` is empty.** It is every fg-on-bg pair with a
+  count, and it is what shows a tone surviving where it should not — the proof
+  that the overlay token re-point works is that `#8a857d` appears **zero** times
+  on `#2d2a28` with the sheet open, not that nothing failed.
+- **Run it per STATE, not per route.** Hover, view mode, dialog-open and mobile
+  each change the answer. Every real failure the sweep found was conditional.
+- **Check the `url` it returns.** Two routes in the first sweep silently
+  redirected to `#/v2/recents`, so two screens read as clean without being
+  looked at. The v2 paths are `#/v2/personal` and `#/v2/_kit` — *not*
+  `files/personal` or `kit`; see `v2.constants.ts`.
+
+It is also immune to the rAF trap in §4: computed styles are correct for an
+element parked off-screen, so a bottom sheet can be audited even though its
+geometry there is meaningless.
 
 ---
 

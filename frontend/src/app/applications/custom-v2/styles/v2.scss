@@ -18,13 +18,23 @@
 //
 // The @font-face declarations live in ./fonts.scss, loaded as a sibling entry in
 // LayoutV2Component's styleUrls — see that file for why they are not here.
+//
+// So do the tokens (./v2-tokens.scss) and the overlay chrome
+// (./v2-overlays.scss), and for a harder reason than tidiness: Angular's
+// `anyComponentStyle` budget is 14 kB, it is an ERROR, and it is measured PER
+// SHEET. With all six partials here this file compiled to 13.85 kB, so the next
+// line added to any of them broke the build — in a file that had nothing to do
+// with the change. Do NOT re-merge them, and do NOT raise the budget; the fix
+// for a sheet approaching 14 kB is another styleUrls entry. Trap 3.9 in the
+// design-adoption handoff, and the header of ./v2-tokens.scss for the split and
+// how to re-measure.
+//
+// What is left here is the root element and the type system: the `.v2-root`
+// declarations below, plus type roles and prose, which are the two partials
+// whose rules describe the same running text.
 
-@use './tokens';
 @use './type';
 @use './prose';
-@use './dialog';
-@use './sheet';
-@use './touch';
 
 .v2-root {
   display: flex;
