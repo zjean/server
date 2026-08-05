@@ -319,7 +319,7 @@
   //
   // Ink is paired per tone rather than shared, because cobalt is the only tone
   // dark enough for white: measured against the dark ink, tones 2–6 read
-  // 6.26–8.76, and white on cobalt reads 5.05. The opposite pairings fail
+  // 6.28–8.78, and white on cobalt reads 5.05. The opposite pairings fail
   // (white on periwinkle is 2.19).
   //
   // The five dark inks are NOT --si-bg0. They held bg0's value while bg0 was a
