@@ -213,7 +213,7 @@
   // One further step would take bg3 to 4.54: safe in itself, but it would widen the
   // rule from bg0–band to bg0–bg3 and silently re-permit the call sites the sweep
   // moved to muted. `palette-contrast.spec.ts` asserts BOTH directions.
-  --si-fg-tertiary: #8a9097; // tertiary  · metadata, sizes, timestamps (bg0–bg3)
+  --si-fg-tertiary: #8a9097; // tertiary  · metadata, sizes, timestamps (bg0–band)
   --si-fg-ghost: #5b5f65; // quiet     · disabled labels, column heads. Decorative.
 
   // There is no fifth tier. `faint` sat between primary and secondary with no
