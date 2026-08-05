@@ -364,8 +364,10 @@ interface VersionRow extends VersionModel {
           outline: 2px solid var(--si-focus-ring);
           outline-offset: 1px;
         }
+        /* muted, not tertiary: bg3 fill, where tertiary is 4.38. Same call as
+           app-v2-input and the comments composer. */
         &::placeholder {
-          color: var(--si-fg-tertiary);
+          color: var(--si-fg-muted);
         }
       }
       .vp-row__editor-actions {

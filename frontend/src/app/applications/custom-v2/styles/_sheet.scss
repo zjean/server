@@ -36,6 +36,12 @@
   height: var(--si-sheet-h, 50vh);
   // surface-3 — the token's own list of uses names sheets.
   background: var(--si-bg5);
+  // Same re-point as `.v2-dialog`, and this is the scope that needed it most: the
+  // ENTIRE inspector mounts in here on mobile (layout-v2.component.html), so six
+  // declarations that measure 4.98 on the panel's bg1 measure 3.89 here, and the
+  // tab strip switches to `pills` whose bg6 fill takes its count down to 3.36.
+  // See `_dialog.scss` for why this is a token re-point rather than 15 edits.
+  --si-fg-tertiary: var(--si-fg-muted);
   // radius-xl, whose token comment is literally "mobile bottom-sheet top corners".
   border-radius: var(--si-r5) var(--si-r5) 0 0;
   box-shadow: var(--si-shadow3);

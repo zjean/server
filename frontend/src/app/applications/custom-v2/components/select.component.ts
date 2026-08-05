@@ -80,6 +80,10 @@ export interface SelectOption<T extends string = string> {
       .sel:hover:not(:disabled) {
         background: var(--si-bg5);
       }
+      /* tertiary on the bg3 fill is 4.38, below the 4.5 floor — legal here because
+         SC 1.4.3 exempts an inactive control, and a disabled select that reads as
+         brightly as a live one is the defect. One of the two exemptions listed with
+         the tier in _tokens.scss; do not sweep it to muted. */
       .sel:disabled {
         cursor: not-allowed;
         color: var(--si-fg-tertiary);
@@ -88,6 +92,9 @@ export interface SelectOption<T extends string = string> {
         outline: 2px solid var(--si-focus-ring);
         outline-offset: 1px;
       }
+      /* A glyph, so the floor is SC 1.4.11's 3:1, not 4.5: tertiary measures 4.38 on
+         the bg3 fill and 3.89 on the bg5 hover step, and clears it on both. The other
+         exemption in _tokens.scss. */
       .sel__chev {
         color: var(--si-fg-tertiary);
         flex: none;

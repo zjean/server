@@ -98,10 +98,14 @@
   font-size: var(--si-text-7);
 }
 
+// muted, not ghost. This line is the member's email — the only thing in the row that
+// distinguishes two people with the same display name, so it is the "sole carrier of
+// meaning" _tokens.scss forbids the quiet tier from being. On the row's bg3 fill it
+// measured 2.50. Found by the contrast audit described with the tertiary tier there.
 .sd__row-desc {
   font-family: var(--si-mono);
   font-size: var(--si-text-3);
-  color: var(--si-fg-ghost);
+  color: var(--si-fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -235,10 +235,15 @@
   color: var(--si-accent-ink);
 }
 
+// muted, not ghost. In gallery mode the size and modified COLUMNS are gone, so this
+// line is the only place either figure appears — which is the "sole carrier of
+// meaning" _tokens.scss forbids the quiet tier from being, and it measured 2.74 on
+// the content plane. It is also the same role `.file-card__meta` fills in grid mode,
+// and the two view modes should not disagree about how loudly metadata reads.
 .gallery-tile__meta {
   font-family: var(--si-mono);
   font-size: var(--si-text-3);
-  color: var(--si-fg-ghost);
+  color: var(--si-fg-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -301,12 +306,14 @@
     padding: 0 var(--si-space-6);
   }
 
-  // The second line of a two-line row.
+  // The second line of a two-line row. muted, not tertiary: at rest the row is on
+  // the alternating band (4.64, legal), but hover and selection take it to bg3
+  // (4.38) — so a tertiary submeta would fail on exactly the row the pointer is on.
   .file-row__submeta {
     display: block;
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-tertiary);
+    color: var(--si-fg-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

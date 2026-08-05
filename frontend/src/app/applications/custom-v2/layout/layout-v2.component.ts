@@ -25,7 +25,10 @@ import { UploadDockComponent } from './upload-dock.component'
 @Component({
   selector: 'app-layout-v2',
   templateUrl: './layout-v2.component.html',
-  styleUrls: ['../styles/fonts.scss', '../styles/v2.scss', './layout-v2.component.scss'],
+  // Five entries rather than one bundle on purpose: Angular's anyComponentStyle
+  // budget is 14 kB, it is an ERROR, and it is measured PER SHEET — so an entry
+  // is the unit of headroom. See ../styles/v2-tokens.scss for the split.
+  styleUrls: ['../styles/fonts.scss', '../styles/v2-tokens.scss', '../styles/v2.scss', '../styles/v2-overlays.scss', './layout-v2.component.scss'],
   encapsulation: ViewEncapsulation.None,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {

@@ -86,6 +86,11 @@ const VIEWPORT_GUTTER = 8
            menus, sheets, popovers". This was bg1 — below the content plane it
            opens over — which is the same divergence the six dialogs had. */
         background: var(--si-bg5);
+        /* The third text tier does not exist on bg5 (3.89 against a 4.5 floor), so
+           it is re-pointed for the subtree — see _dialog.scss for the reasoning. No
+           item uses it today; the declaration is here so the next one cannot ship
+           at 3.89 by inheriting a tone that is legal on the plane this opens over. */
+        --si-fg-tertiary: var(--si-fg-muted);
         border: 1px solid var(--si-border);
         border-radius: var(--si-r2);
         box-shadow: var(--si-shadow2);

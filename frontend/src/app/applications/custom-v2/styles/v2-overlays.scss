@@ -1,0 +1,21 @@
+// Sync-In v2 overlay chrome — a styleUrls ENTRY, not a partial.
+//
+// Three partials that all emit GLOBAL classes reaching into other components'
+// templates, and that all grow on the same axis (a new overlay, or a new mobile
+// affordance):
+//
+//   _dialog.scss  the one dialog frame — 560px, --si-r3, --si-shadow3, bg5
+//   _sheet.scss   its mobile counterpart, in that file's own words
+//   _touch.scss   the 44px target floor, scoped to `.layout-v2--mobile` — the
+//                 same switch `_sheet.scss` keys on, so it belongs beside it
+//
+// Split out of `v2.scss` for the budget reason spelled out in `v2-tokens.scss`:
+// `anyComponentStyle` is 14 kB, it is an ERROR, and Angular measures it per
+// sheet. Nothing about these rules changed in the move — they are still loaded
+// by LayoutV2Component with `encapsulation: None`, which is the only mechanism
+// that can reach a primitive's inner <button> from outside, and the reason all
+// three were written as classes rather than mixins.
+
+@use './dialog';
+@use './sheet';
+@use './touch';

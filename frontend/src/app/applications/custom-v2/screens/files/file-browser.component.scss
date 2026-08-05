@@ -542,6 +542,9 @@
   max-width: calc(100% - var(--si-space-13));
   padding: var(--si-space-5) var(--si-space-6);
   background: var(--si-bg5);
+  // bg5 carries no third text tier (tertiary is 3.89 there) — re-pointed for the
+  // subtree, as every other bg5 container does. Nothing in the bar uses it today.
+  --si-fg-tertiary: var(--si-fg-muted);
   border-radius: var(--si-r2);
   box-shadow: var(--si-shadow3);
 

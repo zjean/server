@@ -117,14 +117,24 @@ export type InputSize = 'sm' | 'md' | 'lg'
       .inp__field::-webkit-search-cancel-button {
         display: none;
       }
+      /* muted, not tertiary, for the same reason .inp__hint below is: a placeholder
+         sits on the bg3 fill, where tertiary measures 4.38. And a placeholder is not
+         decorative in this product — several fields carry no visible label, so it is
+         the only statement of what the field wants. */
       .inp__field::placeholder {
-        color: var(--si-fg-tertiary);
+        color: var(--si-fg-muted);
       }
+      /* Stays tertiary, and legitimately: a disabled field swaps its fill to
+         bg-band (4.64), and SC 1.4.3 exempts an inactive control besides. Do not
+         "fix" this one to muted — a disabled field that reads as brightly as an
+         enabled one is the defect. */
       .inp__field:disabled {
         color: var(--si-fg-tertiary);
         cursor: not-allowed;
       }
 
+      /* A glyph, not type: SC 1.4.11 asks 3:1 of it, and tertiary on the bg3 fill is
+         4.38. Legal — see the exemptions listed with the tier in _tokens.scss. */
       .inp__icon {
         color: var(--si-fg-tertiary);
         flex: none;
@@ -150,6 +160,7 @@ export type InputSize = 'sm' | 'md' | 'lg'
         border-radius: var(--si-r0);
         padding: 2px var(--si-space-3);
       }
+      /* Also a glyph, so also 3:1 rather than 4.5 — see .inp__icon above. */
       .inp__clear {
         flex: none;
         display: inline-flex;

@@ -87,10 +87,59 @@
 //     It also FAILS on bg5 (dialogs, context menus, sheets, popovers) and bg6
 //     (tooltips, pressed, drag-over). The pre-adoption ramp allowed it up to the
 //     old bg4, so every tertiary string on an overlay needs lifting to muted.
-//     NOT swept exhaustively: 51 tertiary declarations exist and only the screens
-//     driven during the 2026-08-05 review were measured. Grep cannot settle this —
-//     a declaration's surface depends on where its element is mounted, not on
-//     what its own file says. Measure, then fix.
+//
+//     ─── The sweep, and how it was settled ───────────────────────────────
+//     All 50 call sites are now resolved. The earlier note here said grep could
+//     not settle them, because a declaration's surface depends on where its
+//     element mounts rather than on what its own file says. That is true of the
+//     search it was describing, and the fix was to run the search the OTHER WAY:
+//     not "what surface is this string on", which needs the whole render tree,
+//     but "what strings are inside this surface", which needs only the ~140
+//     `background: var(--si-bg3|bg5|bg6)` declarations — and most of those turn
+//     out to be hover states on controls that set their own `color`, not
+//     containers of anyone's text. Read from the surface outward it is a
+//     one-afternoon audit. Read from the type outward it is unbounded.
+//
+//     The reading is mechanised: `docs/tools/v2-contrast-audit.js` walks the
+//     RENDERED tree, resolves each string's real background by ancestor walk, and
+//     returns every failure PLUS every fg-on-bg pair it saw — read the pairs even
+//     on a clean run, since that is what shows a tone surviving where it should
+//     not. Run it per STATE, not per route: hover, view mode, dialog-open and the
+//     mobile sheet each change the answer, and a route that silently redirects
+//     audits the wrong screen.
+//
+//     Three things that search found, none of which the type-outward reading
+//     could have:
+//
+//       1. Two of the three global tertiary type roles in `_type.scss`
+//          (`.v2-meta`, `.v2-mono-data`) have ZERO call sites. The count of 51
+//          declarations badly overstated the exposure; `.v2-label` has five.
+//       2. Half the remaining sites are GLYPHS or DISABLED controls, and both are
+//          legal at tertiary — see the exemptions below. Sweeping by grep would
+//          have "fixed" them and made a disabled field read like a live one.
+//       3. The sites that failed mostly failed CONDITIONALLY — the same
+//          declaration correct at rest and wrong on hover (the grid card's meta
+//          line: bg3 at rest, bg5 hovered), or correct on desktop and wrong on
+//          mobile (the inspector's six strings: bg1 in the panel, bg5 in the
+//          sheet). No edit to those declarations can be right in both states,
+//          which is why the fix is not an edit.
+//
+//     So overlays RE-POINT THE TIER for their subtree instead:
+//     `--si-fg-tertiary: var(--si-fg-muted)` sits beside the `background:
+//     var(--si-bg5)` in `.v2-dialog`, `.v2-sheet`, `.ctx-menu`, `.dock` and
+//     `.bulk-bar`. Consumers keep saying `--si-fg-tertiary` and get the legal
+//     value for wherever they landed. **When you add a bg5/bg6 container, add the
+//     re-point next to its background** — that adjacency is what stops the two
+//     from drifting, and it is the only form of the fix that a component mounting
+//     on two surfaces can be correct under.
+//
+//     Two exemptions, both real, and both places where a mechanical sweep does
+//     damage. Do not "fix" these to muted:
+//       • GLYPHS. SC 1.4.11 asks 3:1 of a meaningful non-text element, so
+//         tertiary is legal down to bg6 (3.36). Icons, chevrons, the toggle knob.
+//       • DISABLED controls. SC 1.4.3 exempts an inactive component, and a
+//         disabled field that reads as brightly as a live one is itself a defect.
+//     Both are annotated at their call sites so the next sweep leaves them alone.
 //   • quiet clears nothing. It is decorative only — disabled labels, column
 //     heads, hint text that repeats something already visible. It may never be
 //     the sole carrier of meaning. This is a real narrowing versus the old ramp,

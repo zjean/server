@@ -77,14 +77,17 @@
     max-width: 520px;
   }
 
-  // Explanatory prose under a specimen. Deliberately tertiary and narrow: it is
-  // the "why", read once, not part of the specimen.
+  // Explanatory prose under a specimen. Narrow on purpose: it is the "why", read
+  // once, not part of the specimen. It was tertiary for the same reason — but this
+  // note sits inside `&__section`, which is a bg3 card, and tertiary measures 4.38
+  // there. Muted is the quietest legal tone on this surface, and the narrow measure
+  // plus text-7 still keeps it out of the specimen's way.
   &__note {
     margin: var(--si-space-7) 0 0;
     max-width: 68ch;
     font-size: var(--si-text-7);
     line-height: 1.6;
-    color: var(--si-fg-tertiary);
+    color: var(--si-fg-muted);
 
     &--inline {
       margin: 0;

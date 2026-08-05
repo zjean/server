@@ -82,7 +82,10 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
         height: 14px;
       }
       /* Off: the knob is a tone ON the surface track, not white — white on both
-         values would make off and on differ only by track colour. */
+         values would make off and on differ only by track colour. tertiary against
+         the bg6 track is 3.36, which is below the 4.5 a string would need but above
+         SC 1.4.11's 3:1 for a non-text element that carries state. One of the two
+         tertiary exemptions in _tokens.scss. */
       .tg:not(.tg--on) .tg__knob {
         background: var(--si-fg-tertiary);
       }

@@ -49,6 +49,15 @@
     width: min(560px, calc(100vw - 24px));
     max-height: calc(100vh - 48px);
     background: var(--si-bg5);
+    // The third text tier does not exist on this surface: tertiary measures 3.89 on
+    // bg5 against a 4.5 floor, and 4.38 on the bg3 input fill inside it. So the tier
+    // is RE-POINTED for the subtree rather than lifted at ~15 call sites, which is
+    // the only form of the fix that survives a component mounting on two surfaces —
+    // the inspector's six tertiary strings are correct on the panel's bg1 and wrong
+    // in the mobile sheet, and no edit to those declarations can be right in both
+    // places. Consumers keep saying `--si-fg-tertiary` and get the legal value here.
+    // Ships beside the background on purpose: the two cannot then drift.
+    --si-fg-tertiary: var(--si-fg-muted);
     border-radius: var(--si-r3);
     box-shadow: var(--si-shadow3);
     // No border. The shadow and the surface step are the edge; a 1px line on top of

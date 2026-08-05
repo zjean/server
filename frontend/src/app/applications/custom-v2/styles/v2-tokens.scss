@@ -1,0 +1,27 @@
+// Sync-In v2 token scope — a styleUrls ENTRY, not a partial.
+//
+// This file exists only so `_tokens.scss` is measured on its own against
+// Angular's `anyComponentStyle` budget. That budget is 14 kB and it is an ERROR,
+// not a warning (frontend/angular.json), and Angular measures it PER SHEET —
+// so the way to buy headroom is another entry in `styleUrls`, never a bigger
+// budget. `v2.scss` had grown to 13.85 kB of the 14, which meant the next line
+// added to any partial it pulled in broke the build, in a file that had nothing
+// to do with the change. See trap 3.9 in the design-adoption handoff.
+//
+// The split is along growth axes, so a change lands in one sheet and cannot
+// crowd the others:
+//
+//   v2-tokens.scss    4.2 kB   this file — declarations only, selects nothing
+//   v2.scss           4.0 kB   the root element, type roles, prose
+//   v2-overlays.scss  5.7 kB   dialog, sheet, touch sizing
+//
+// (compressed, as Angular measures; re-measure by temporarily setting
+// `anyComponentStyle`'s maximumWarning to 1kb and reading the build's budget
+// lines — it prints a size for every sheet over the limit.)
+//
+// Loaded FIRST among the v2 entries in LayoutV2Component's styleUrls: the order
+// is not load-bearing for cascade (these are custom-property declarations on
+// `.v2-root`, and every consumer reads them through `var()` at use time, not at
+// parse time), but reading it first matches the order a person would.
+
+@use './tokens';
