@@ -146,7 +146,7 @@
 //     Two exemptions, both real, and both places where a mechanical sweep does
 //     damage. Do not "fix" these to muted:
 //       • GLYPHS. SC 1.4.11 asks 3:1 of a meaningful non-text element, so
-//         tertiary is legal down to bg6 (3.36). Icons, chevrons, the toggle knob.
+//         tertiary is legal down to bg6 (3.66). Icons, chevrons, the toggle knob.
 //       • DISABLED controls. SC 1.4.3 exempts an inactive component, and a
 //         disabled field that reads as brightly as a live one is itself a defect.
 //     Both are annotated at their call sites so the next sweep leaves them alone.
