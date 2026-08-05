@@ -1,4 +1,4 @@
-// Sync-In v2 design tokens — warm neutral + cobalt.
+// Sync-In v2 design tokens — cool slate + cobalt.
 //
 // ─── Authority ───────────────────────────────────────────────────────────
 // These values come from the Claude Design project "Sync-In Design System v1.0"
@@ -10,10 +10,20 @@
 // calls (the 6→7px control radius, and the numeric motion durations). Those were
 // good decisions against the old system; they are simply not this system.
 //
-// The design's premise, in one line: a warm neutral base — five deliberate
-// elevations, no vertical rules — with a single cobalt accent that only ever
-// means "this is the thing you act on". Type does the hierarchy work: one weight
-// for names, monospace for anything a machine produced.
+// ─── The ramp is cool as of 2026-08-05 ───────────────────────────────────
+// The chrome read as dark brown and near-black. Measuring it first showed the
+// premise was false about the BACKGROUND: all seven surfaces sat at 0.003–0.008
+// OKLab chroma, i.e. effectively neutral. The warmth was in the TYPE and LINE
+// tokens, two to four times more chromatic, and --si-fg was a cream rather than a
+// white. Rotating only the seven `bg` tokens would have been a nearly invisible
+// change. If you are ever asked to recolour the ground again: the type ramp moves
+// with it, or nothing moves.
+//
+// The floor also lifted (bg0 L 0.169 → 0.225) while bg5/bg6 were held, because the
+// top of the ramp has ~0.02 of lightness headroom: the focus ring clears 3:1 only
+// up to a surface at L≈0.348. Lightening the overlay surfaces breaks the ring and
+// every tertiary glyph on menus, dialogs and tooltips, and no build notices.
+// Design: docs/superpowers/specs/2026-08-05-v2-background-palette-design.md
 //
 // ─── Plain hex, on purpose ───────────────────────────────────────────────
 // The previous revision declared every colour twice (hex fallback, then oklch)
@@ -30,10 +40,10 @@
 // 1. FOCUS RING is opaque accent-500 (#4C7EF3), not `rgba(76,126,243,0.6)`.
 //    The design specifies a two-layer ring — `0 0 0 2px {surface},
 //    0 0 0 4px rgba(76,126,243,0.6)` — whose visible edge is a 60%-alpha cobalt
-//    against the surface. Composited, that measures 2.55 (bg0) down to 2.03
-//    (bg6): it fails WCAG 2.2 SC 1.4.11's 3:1 on EVERY surface in the system.
+//    against the surface. Composited over bg2, that measures 2.35: it fails
+//    WCAG 2.2 SC 1.4.11's 3:1 on EVERY surface in the system.
 //    Opaque accent-500 — which the design itself names as the focus colour —
-//    measures 5.09 · 4.85 · 4.67 · 4.52 · 4.26 · 3.79 · 3.28. Only the alpha
+//    measures 4.55 · 4.30 · 4.15 · 3.99 · 3.75 · 3.48 · 3.14. Only the alpha
 //    was the problem.
 //    We also keep v2's `outline` + `outline-offset` implementation rather than
 //    the design's two-layer box-shadow, because that inner layer has to name the
@@ -41,15 +51,15 @@
 //    moment a control moves. One outline rule gets the same two-band result,
 //    follows border-radius for free, and needs no per-site knowledge (#396).
 //
-// 2. --si-border is #8A857D, NOT an alias of --si-line-strong.
+// 2. --si-border is #8A9097, NOT an alias of --si-line-strong.
 //    The design's inputs are filled rather than outlined ("the fill is what makes
-//    an input findable on a dark plane"), and it uses line-strong (#4A453F) only
+//    an input findable on a dark plane"), and it uses line-strong (#454950) only
 //    for hovered inputs and dashed drop targets. But the input fill (bg3) is
-//    1.10:1 against the content plane and 1.12:1 inside a dialog — so on its own
+//    1.11:1 against the content plane and 1.15:1 inside a dialog — so on its own
 //    it identifies nothing, and SC 1.4.11 wants 3:1 for the boundary of an
-//    interactive control. line-strong measures 1.69 on that fill. #8A857D — the
+//    interactive control. line-strong measures 1.56 on that fill. #8A9097 — the
 //    design's own text-tertiary tone, so not an invented colour — measures
-//    5.23 · 4.98 · 4.80 · 4.64 · 4.38 · 3.89 · 3.36 and clears the floor
+//    5.31 · 5.02 · 4.84 · 4.66 · 4.37 · 4.06 · 3.66 and clears the floor
 //    everywhere. Inputs therefore keep a resting boundary that the mockups draw
 //    without; that is deliberate.
 //
@@ -76,7 +86,7 @@
 // The rules this implies, which the design states independently and which the
 // numbers confirm:
 //   • fg and muted are usable on every surface.
-//   • tertiary is a bg0–BAND tier, NOT bg0–bg3. bg3 measures 4.38, which is below
+//   • tertiary is a bg0–BAND tier, NOT bg0–bg3. bg3 measures 4.37, which is below
 //     4.5 — it was printed here unbracketed while every other sub-floor cell was
 //     bracketed, and the rule was then derived from the typo rather than from the
 //     number. That licensed tertiary on every bg3 surface (cards, row hover, input
@@ -146,8 +156,8 @@
 //     where the equivalent tier measured 5.05 on bg0.
 //
 // Ink on its own soft fill (the fill composited over each bed first), worst bed
-// being bg6: accent 5.04 · success 5.49 · warning 5.57 · danger 4.77 ·
-// info 5.82 · neutral 4.81 · secondary 4.72. All clear 4.5.
+// being bg6: accent 4.80 · success 5.22 · warning 5.34 · danger 4.65 ·
+// info 5.55 · neutral 4.67 · secondary 4.56. All clear 4.5.
 //
 // Fill inks: white on accent-600 = 5.05, on accent-700 = 7.28, on danger-fill
 // = 4.83. White on accent-500 is 3.76, which is why accent-500 is hover and
@@ -242,7 +252,7 @@
   // Opaque, and its own token rather than a reference to --si-accent-hover, so
   // the ring can be retuned without moving the button hover fill. See deviation
   // 1: the design's 60%-alpha version fails 3:1 on all seven surfaces.
-  // Measured opaque: 5.09 · 4.85 · 4.67 · 4.52 · 4.26 · 3.79 · 3.28.
+  // Measured opaque: 4.55 · 4.30 · 4.15 · 3.99 · 3.75 · 3.48 · 3.14.
   --si-focus-ring: #4c7ef3;
 
   // ─── Nav — alias of accent (one accent everywhere) ───────────────────
