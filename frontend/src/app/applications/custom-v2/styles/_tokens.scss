@@ -166,7 +166,7 @@
 // Scoped under .v2-root so nothing leaks into the classic layout.
 
 .v2-root {
-  // ─── Surfaces — warm neutral, elevation always toward the user ────────
+  // ─── Surfaces — cool slate, elevation always toward the user ──────────
   // The design names five steps plus two halves; v2's seven `bg` slots hold
   // them without renaming a single consumer. Two hard rules come with them:
   // never skip two steps between adjacent planes, and never place surface-1
@@ -352,8 +352,8 @@
 
   // ─── Scrim — dialogs and sheets, 60% ─────────────────────────────────
   // One token for what was eleven hand-written rgba(0,0,0,0.35) declarations at
-  // four different alphas. The design's value is a warm near-black rather than
-  // pure black, so it darkens the warm ground without cooling it.
+  // four different alphas. It is a near-black at the ramp's own hue rather than
+  // pure black, so it darkens the ground without shifting its hue.
   //
   // Cooled to the ramp's hue at its EXISTING lightness. rgba(11,10,9) is OKLab
   // L=0.146; deriving the cooled value from a round number instead of from that
@@ -475,10 +475,10 @@
   --si-r4: 999px; // radius-full · avatars, pills, toggles
 
   // ─── Shadows — pure black at low alpha ───────────────────────────────
-  // The design is explicit that a warm base plus a warm shadow turns muddy, so
-  // these stay neutral. The `inset 0 1px 0 rgba(255,255,255,.0x)` top-edge
-  // highlight the previous revision carried has no counterpart in this system
-  // and is gone; it read as a bevel against flat warm surfaces.
+  // The design is explicit that a tinted base plus a same-tinted shadow turns
+  // muddy, so these stay neutral. The `inset 0 1px 0 rgba(255,255,255,.0x)`
+  // top-edge highlight the previous revision carried has no counterpart in
+  // this system and is gone; it read as a bevel against flat warm surfaces.
   //
   // Elevation never substitutes for a surface step. Overlays get both.
   --si-shadow0: none; // rows, sidebar, anything in the flow

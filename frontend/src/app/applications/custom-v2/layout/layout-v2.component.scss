@@ -35,7 +35,7 @@
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  // Stack pattern: content area is the deepest warm-dark (bg-0); sidebar
+  // Stack pattern: content area is the deepest cool-dark (bg-0); sidebar
   // is one shade lighter (bg-1). Previously the content used bg-2, which
   // made the sidebar read darker than the content — inverted from Stack.
   background: var(--si-bg0);
