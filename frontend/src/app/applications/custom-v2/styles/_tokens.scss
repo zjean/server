@@ -252,8 +252,8 @@
 
   // ─── Chrome — the mobile title bar, transfers popover, logo tile ─────
   // Narrower in scope than the name suggests: the desktop top bar paints bg1.
-  --si-chrome-bg: #100f0e;
-  --si-chrome-bg-dark: #100f0e;
+  --si-chrome-bg: #181c21;
+  --si-chrome-bg-dark: #181c21;
 
   // ─── Secondary — periwinkle, and deliberately restrained ─────────────
   // Used for exactly three things: Space identity marks, public-link
@@ -302,8 +302,8 @@
   --si-cyan-ink: #8cc7e8;
   --si-cyan-soft: rgba(62, 134, 174, 0.14);
 
-  --si-neutral: #4a453f; // Neutral · counts, offline, "no change". Default badge.
-  --si-neutral-ink: #b8b2a9;
+  --si-neutral: #454950; // Neutral · counts, offline, "no change". Default badge.
+  --si-neutral-ink: #adb4bc;
   --si-neutral-soft: rgba(184, 178, 169, 0.1);
 
   // ─── Avatar tones — six, all drawn from the system ───────────────────
@@ -321,24 +321,35 @@
   // dark enough for white: measured against the dark ink, tones 2–6 read
   // 6.26–8.76, and white on cobalt reads 5.05. The opposite pairings fail
   // (white on periwinkle is 2.19).
+  //
+  // The five dark inks are NOT --si-bg0. They held bg0's value while bg0 was a
+  // near-black, which was incidental — a surface and a type tone that happened to
+  // coincide. bg0 is now L 0.225 and no longer dark enough to be an ink: pointing
+  // these back at it drops tones 2–6 to 5.60–7.83. Their own value holds
+  // 7.63 · 8.78 · 6.28 · 7.13 · 7.01.
   --si-avatar-1: #3a66e0; // cobalt
   --si-avatar-1-fg: #ffffff;
   --si-avatar-2: #7fae8e; // green
-  --si-avatar-2-fg: #100f0e;
+  --si-avatar-2-fg: #0c0f14;
   --si-avatar-3: #b3a6ee; // periwinkle
-  --si-avatar-3-fg: #100f0e;
+  --si-avatar-3-fg: #0c0f14;
   --si-avatar-4: #c08578; // clay
-  --si-avatar-4-fg: #100f0e;
+  --si-avatar-4-fg: #0c0f14;
   --si-avatar-5: #b79a5f; // ochre
-  --si-avatar-5-fg: #100f0e;
+  --si-avatar-5-fg: #0c0f14;
   --si-avatar-6: #b192b8; // mauve
-  --si-avatar-6-fg: #100f0e;
+  --si-avatar-6-fg: #0c0f14;
 
   // ─── Scrim — dialogs and sheets, 60% ─────────────────────────────────
   // One token for what was eleven hand-written rgba(0,0,0,0.35) declarations at
   // four different alphas. The design's value is a warm near-black rather than
   // pure black, so it darkens the warm ground without cooling it.
-  --si-scrim: rgba(11, 10, 9, 0.6);
+  //
+  // Cooled to the ramp's hue at its EXISTING lightness. rgba(11,10,9) is OKLab
+  // L=0.146; deriving the cooled value from a round number instead of from that
+  // measurement yields rgba(2,3,6) — a near-pure black, i.e. a lightness change
+  // nobody asked for.
+  --si-scrim: rgba(7, 11, 15, 0.6);
 
   // ─── Layout metrics ───────────────────────────────────────────────────
   // The collapsed navigation rail. A metric rather than a colour, but it lives here
@@ -357,7 +368,7 @@
   // The veil over a tile whose file is still uploading. Lighter than --si-scrim
   // (45% vs 60%): a dialog scrim must make the page unreadable, this one must leave
   // the thumbnail recognisable while saying "not yet".
-  --si-media-veil: rgba(11, 10, 9, 0.45);
+  --si-media-veil: rgba(7, 11, 15, 0.45);
 
   // ─── Type system — IBM Plex ──────────────────────────────────────────
   // The division that governs everything: IBM Plex Sans for anything a PERSON

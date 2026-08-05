@@ -207,3 +207,26 @@ describe('palette — the header’s contrast grid must not lie', () => {
     })
   }
 })
+
+describe('palette — avatar inks, which are NOT the canvas', () => {
+  // The five dark inks equalled --si-bg0 before the ramp lifted, which was
+  // incidental rather than meaningful: bg0 is a surface and these are type. Once bg0
+  // rises they must stop tracking it, and this is what makes that visible — pointing
+  // them back at bg0 drops the worst pair from 6.28 to 5.60 without failing anything
+  // else in the suite.
+  const DARK_INK_TONES = ['avatar-2', 'avatar-3', 'avatar-4', 'avatar-5', 'avatar-6'] as const
+
+  for (const tone of DARK_INK_TONES) {
+    it(`keeps --si-${tone}-fg readable on --si-${tone}`, () => {
+      expect(contrast(token(`${tone}-fg`), token(tone)), `--si-${tone}-fg on --si-${tone}`).toBeGreaterThanOrEqual(AA_TEXT)
+    })
+  }
+
+  it('keeps the dark avatar ink darker than the app canvas, so it cannot silently become a surface alias', () => {
+    expect(luminance(token('avatar-2-fg')), 'the dark avatar ink must not track --si-bg0').toBeLessThan(luminance(token('bg0')))
+  })
+
+  it('keeps white on the one avatar tone dark enough for it', () => {
+    expect(contrast(token('avatar-1-fg'), token('avatar-1'))).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+})
