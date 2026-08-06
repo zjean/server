@@ -315,9 +315,7 @@ describe('palette — ink on its own soft fill, composited over every bed', () =
       const ink = token(`${family}-ink`)
       for (const s of SURFACES) {
         const bed = compositeOverBed(wash, token(s))
-        expect(contrast(ink, bed), `--si-${family}-ink on --si-${family}-soft over --si-${s} (composited to ${bed})`).toBeGreaterThanOrEqual(
-          AA_TEXT
-        )
+        expect(contrast(ink, bed), `--si-${family}-ink on --si-${family}-soft over --si-${s} (composited to ${bed})`).toBeGreaterThanOrEqual(AA_TEXT)
       }
     })
   }
