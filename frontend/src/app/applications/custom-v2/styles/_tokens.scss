@@ -220,12 +220,17 @@
   // measured table in the header for where each tier may and may not be used.
   --si-fg: #f0f3f6; // primary   · file names, titles, values
   --si-fg-muted: #adb4bc; // secondary · body copy, nav labels, descriptions
-  // Lifted 0.031 L above a straight rotation, and deliberately no further. At the
-  // ground's own lightness it cleared `band` by 0.04 — a rounding-level margin on
-  // the one tier whose licence a 50-call-site sweep settled. This gives band 4.66.
-  // One further step would take bg3 to 4.54: safe in itself, but it would widen the
-  // rule from bg0–band to bg0–bg3 and silently re-permit the call sites the sweep
-  // moved to muted. `palette-contrast.spec.ts` asserts BOTH directions.
+  // Lifted 0.031 L above a straight rotation, and deliberately no further. The
+  // un-lifted tone (OKLab L 0.619) measures 4.12 on `band` — it clears nothing, so
+  // there was no margin to preserve by stopping earlier. Lifted to the shipped
+  // L 0.650, it clears band at 4.66 — the one tier whose licence a 50-call-site
+  // sweep settled. The margin either side of that stop is thin: one search step
+  // BELOW the shipped value (L 0.644) already brings band down to 4.54, and one
+  // step ABOVE it (L 0.660) brings `bg3` up to 4.54 too — a different tone on a
+  // different surface, despite the matching number. The second one is what stopped
+  // the lift: crossing it on bg3 would widen tertiary's rule from bg0–band to
+  // bg0–bg3 and silently re-permit the call sites the sweep moved to muted.
+  // `palette-contrast.spec.ts` asserts BOTH directions.
   --si-fg-tertiary: #8a9097; // tertiary  · metadata, sizes, timestamps (bg0–band)
   --si-fg-ghost: #5b5f65; // quiet     · disabled labels, column heads. Decorative.
 
