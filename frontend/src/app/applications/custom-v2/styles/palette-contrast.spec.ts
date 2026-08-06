@@ -28,13 +28,25 @@ const src = readFileSync(TOKENS, 'utf8')
 
 /* ── reading the token file ───────────────────────────────────────────────── */
 
+// `token()`/`tokenRgba()` must not search `src` directly: this file is majority
+// prose, and that prose quotes hexes constantly (every deviation and every worked
+// example in the header). A comment like `// --si-bg5: #2d3137;` would match the
+// declaration regex just as well as the real one three lines below it — matching
+// whichever comes first in the file is not "safe today", it is untested. Stripped
+// once, here, and used only for token lookups — `src` itself stays intact for the
+// header-grid test below, which deliberately reads `//` comment lines as data.
+// `(^|[^:])` guards a literal "//" that isn't a comment marker (there are none in
+// this file today, but the guard costs nothing and matches the same idiom
+// `tokens.spec.ts` already uses for the same job).
+const declarationsOnly = src.replace(/(^|[^:])\/\/.*$/gm, '$1')
+
 // The design ships final sRGB hex and _tokens.scss declares it once per token, so
 // this needs no colour-space conversion and no CSS engine — which is the whole
 // reason the file is plain hex (see its header). A token declared as anything but
 // a literal hex is not resolved here; it is reported, so a future `var()` or
 // `oklch()` cannot silently drop a rule from this suite.
 const token = (name: string): string => {
-  const m = new RegExp(`--si-${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(src)
+  const m = new RegExp(`--si-${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`).exec(declarationsOnly)
   if (!m) throw new Error(`--si-${name} is not declared as a literal 6-digit hex in _tokens.scss; this suite cannot measure it`)
   return m[1].toLowerCase()
 }
@@ -50,6 +62,28 @@ const contrast = (a: string, b: string): number => {
   return (hi + 0.05) / (lo + 0.05)
 }
 const round2 = (n: number): number => Math.round(n * 100) / 100
+
+// A separate reader from `token()` on purpose, not a relaxation of it. `token()`
+// deliberately throws on anything but a literal 6-digit hex, which is what stops a
+// future `var()` or `oklch()` from silently dropping a rule from this suite — the
+// `*-soft` washes are legitimately `rgba(...)`, so they need their own parser rather
+// than a weakened one shared with every opaque token.
+const tokenRgba = (name: string): { r: number; g: number; b: number; a: number } => {
+  const m = new RegExp(`--si-${name}:\\s*rgba\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*([0-9.]+)\\s*\\)\\s*;`).exec(declarationsOnly)
+  if (!m) throw new Error(`--si-${name} is not declared as a literal rgba(...) in _tokens.scss; this suite cannot measure it`)
+  return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]), a: Number(m[4]) }
+}
+
+// Composites a translucent wash over an opaque bed, rounding each channel to an
+// 8-bit integer the way a browser's own compositor does — this file does no alpha
+// math anywhere else, so it is not enough to blend in floating point and truncate
+// once at the end.
+const compositeOverBed = (wash: { r: number; g: number; b: number; a: number }, bedHex: string): string => {
+  const [br, bg, bb] = channels(bedHex)
+  const mix = (fg: number, bed: number): number => Math.round(fg * wash.a + bed * (1 - wash.a))
+  const toHex = (c: number): string => c.toString(16).padStart(2, '0')
+  return `#${toHex(mix(wash.r, br))}${toHex(mix(wash.g, bg))}${toHex(mix(wash.b, bb))}`
+}
 
 /* ── the system's own vocabulary ──────────────────────────────────────────── */
 
@@ -116,9 +150,15 @@ describe('palette — the focus ring, which has the least headroom in the system
 })
 
 describe('palette — the input boundary, i.e. why --si-border is its own value', () => {
-  it('gives --si-border 3:1 on the input fill and inside a dialog', () => {
-    expect(contrast(token('border'), token('bg3')), '--si-border on the bg3 input fill').toBeGreaterThanOrEqual(NON_TEXT)
-    expect(contrast(token('border'), token('bg5')), '--si-border on a bg5 dialog').toBeGreaterThanOrEqual(NON_TEXT)
+  // The header claims --si-border clears 3:1 "everywhere", not just on the input
+  // fill and inside a dialog — it doubles as --si-fg-tertiary, so its own tightest
+  // surface is bg6 (3.66), not bg5. Testing only bg3/bg5 would miss a regression on
+  // any of the other five surfaces this token is also asked to identify a boundary
+  // on.
+  it('gives --si-border 3:1 on all seven surfaces', () => {
+    for (const s of SURFACES) {
+      expect(contrast(token('border'), token(s)), `--si-border on --si-${s}`).toBeGreaterThanOrEqual(NON_TEXT)
+    }
   })
 
   // The measurement that makes deviation 2 necessary rather than stylistic. If this
@@ -162,12 +202,31 @@ describe('palette — the surface ladder', () => {
     }
   })
 
+  // Both bounds are measured, not guessed: the six steps in this ramp run from
+  // 1.038 (bg1→bg2) to 1.109 (bg5→bg6), so 1.15/1.02 gives real headroom on each
+  // side without being loose enough to let either failure mode back in.
   it('has no step large enough to read as skipping a plane', () => {
     // The design bans skipping two steps between adjacent planes. Expressed as a
-    // contrast ceiling between neighbours, which is the measurable form of it.
+    // contrast ceiling between neighbours, which is the measurable form of it. The
+    // old ceiling here (1.6) had 44% of slack over the measured maximum (1.109) —
+    // loose enough that it could never fire, which is worse than no test.
     for (let i = 1; i < SURFACES.length; i++) {
       const step = contrast(token(SURFACES[i]), token(SURFACES[i - 1]))
-      expect(step, `the step from --si-${SURFACES[i - 1]} to --si-${SURFACES[i]}`).toBeLessThan(1.6)
+      expect(step, `the step from --si-${SURFACES[i - 1]} to --si-${SURFACES[i]}`).toBeLessThan(1.15)
+    }
+  })
+
+  // The floor matters more than the ceiling for THIS ramp: its one recorded defect
+  // is compression, not skipping — bg3→bg5 already measures 1.077, the second-
+  // smallest step (spec §3) — so a future edit is far more likely to collapse two
+  // adjacent planes into one indistinguishable step than to skip one. A step this
+  // small still passes the ceiling above, which is exactly why it needs its own
+  // lower bound: two planes are no longer separated once their own step disappears
+  // into rounding, and nothing else in this file would notice that happening.
+  it('has no step small enough to read as the same plane twice', () => {
+    for (let i = 1; i < SURFACES.length; i++) {
+      const step = contrast(token(SURFACES[i]), token(SURFACES[i - 1]))
+      expect(step, `the step from --si-${SURFACES[i - 1]} to --si-${SURFACES[i]}`).toBeGreaterThan(1.02)
     }
   })
 })
@@ -228,4 +287,38 @@ describe('palette — avatar inks, which are NOT the canvas', () => {
   it('keeps white on the one avatar tone dark enough for it', () => {
     expect(contrast(token('avatar-1-fg'), token('avatar-1'))).toBeGreaterThanOrEqual(AA_TEXT)
   })
+})
+
+describe('palette — ink on its own soft fill, composited over every bed', () => {
+  // _tokens.scss's header states a rule this file could not previously check: "Ink
+  // on its own soft fill … worst bed being bg6 … All clear 4.5." That line is not a
+  // token-value assertion — the soft fill is a translucent `rgba()` wash, and its
+  // apparent colour (and therefore its ink's contrast) depends on whichever surface
+  // it sits over, which is exactly the composited-alpha case `token()` refuses to
+  // read and this suite otherwise never computes. The margin is thin: secondary
+  // measures 4.56 on bg6 now, down from 4.72 before this branch's ramp lightened —
+  // 0.06 of headroom. Nothing enforced that, so a future `bg6` lift could take it
+  // under 4.5 without failing anything else in this file.
+  const SEMANTIC_PAIRS = [
+    ['accent', 'accent'], // brand
+    ['green', 'success'],
+    ['amber', 'warning'],
+    ['rose', 'danger'],
+    ['cyan', 'info'],
+    ['neutral', 'neutral'],
+    ['violet', 'secondary']
+  ] as const
+
+  for (const [family, role] of SEMANTIC_PAIRS) {
+    it(`keeps --si-${family}-ink readable on --si-${family}-soft over all seven surfaces (${role})`, () => {
+      const wash = tokenRgba(`${family}-soft`)
+      const ink = token(`${family}-ink`)
+      for (const s of SURFACES) {
+        const bed = compositeOverBed(wash, token(s))
+        expect(contrast(ink, bed), `--si-${family}-ink on --si-${family}-soft over --si-${s} (composited to ${bed})`).toBeGreaterThanOrEqual(
+          AA_TEXT
+        )
+      }
+    })
+  }
 })
