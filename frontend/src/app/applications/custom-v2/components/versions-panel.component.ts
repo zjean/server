@@ -349,7 +349,7 @@ interface VersionRow extends VersionModel {
         gap: var(--si-space-4);
       }
       /* Mirrors app-v2-input: filled, with a resting hairline because the fill
-         alone measures 1.10:1 against the plane. */
+         alone measures 1.11:1 against the plane. */
       .vp-row__input {
         background: var(--si-bg3);
         border: 1px solid var(--si-border);
@@ -364,7 +364,7 @@ interface VersionRow extends VersionModel {
           outline: 2px solid var(--si-focus-ring);
           outline-offset: 1px;
         }
-        /* muted, not tertiary: bg3 fill, where tertiary is 4.38. Same call as
+        /* muted, not tertiary: bg3 fill, where tertiary is 4.37. Same call as
            app-v2-input and the comments composer. */
         &::placeholder {
           color: var(--si-fg-muted);

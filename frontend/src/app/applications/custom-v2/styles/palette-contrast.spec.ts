@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 // lightness change and wrong after it, with nothing failing in between.
 //
 //   · A surface moved to where the design said it belonged and made its own text
-//     WORSE (--si-rose measured 3.78 on bg1 but 2.95 on bg5).
+//     WORSE (--si-rose measured 3.35 on bg1 but 2.71 on bg5).
 //   · A surface moved and its hover kept pointing at a value that used to be
 //     lighter than it and now was darker — so the hover dented instead of lifting.
 //   · The header's own contrast grid printed one sub-floor cell UNBRACKETED, and

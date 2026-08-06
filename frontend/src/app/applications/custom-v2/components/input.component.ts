@@ -118,14 +118,14 @@ export type InputSize = 'sm' | 'md' | 'lg'
         display: none;
       }
       /* muted, not tertiary, for the same reason .inp__hint below is: a placeholder
-         sits on the bg3 fill, where tertiary measures 4.38. And a placeholder is not
+         sits on the bg3 fill, where tertiary measures 4.37. And a placeholder is not
          decorative in this product — several fields carry no visible label, so it is
          the only statement of what the field wants. */
       .inp__field::placeholder {
         color: var(--si-fg-muted);
       }
       /* Stays tertiary, and legitimately: a disabled field swaps its fill to
-         bg-band (4.64), and SC 1.4.3 exempts an inactive control besides. Do not
+         bg-band (4.66), and SC 1.4.3 exempts an inactive control besides. Do not
          "fix" this one to muted — a disabled field that reads as brightly as an
          enabled one is the defect. */
       .inp__field:disabled {
@@ -134,7 +134,7 @@ export type InputSize = 'sm' | 'md' | 'lg'
       }
 
       /* A glyph, not type: SC 1.4.11 asks 3:1 of it, and tertiary on the bg3 fill is
-         4.38. Legal — see the exemptions listed with the tier in _tokens.scss. */
+         4.37. Legal — see the exemptions listed with the tier in _tokens.scss. */
       .inp__icon {
         color: var(--si-fg-tertiary);
         flex: none;
@@ -154,7 +154,7 @@ export type InputSize = 'sm' | 'md' | 'lg'
         font-family: var(--si-mono);
         font-size: var(--si-text-3);
         /* muted, not tertiary: the hint sits on the input fill, where tertiary
-           measured 3.89 in a dialog and 4.38 on the content plane. */
+           measured 4.06 in a dialog and 4.37 on the content plane. */
         color: var(--si-fg-muted);
         background: var(--si-bg5);
         border-radius: var(--si-r0);

@@ -218,7 +218,7 @@ interface CommentRow extends Comment {
         overflow-wrap: anywhere;
       }
       /* Mirrors app-v2-input: filled, with a resting hairline, because the fill
-         alone measures 1.10:1 against the plane it sits on. */
+         alone measures 1.11:1 against the plane it sits on. */
       .cp__field {
         width: 100%;
         resize: vertical;
@@ -237,7 +237,7 @@ interface CommentRow extends Comment {
           outline-offset: 1px;
         }
         /* muted, not tertiary: the field's fill is bg3, where tertiary measures
-           4.38, and this placeholder is the composer's only label. Matches
+           4.37, and this placeholder is the composer's only label. Matches
            app-v2-input, which the fill above already mirrors. */
         &::placeholder {
           color: var(--si-fg-muted);

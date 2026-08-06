@@ -19,7 +19,7 @@
   // it takes the same treatment as a menu rather than a card's.
   background: var(--si-bg5);
   // Which also means the third text tier is not available inside here: tertiary
-  // measures 3.89 on bg5, and `.dock__sub` (rate / ETA / byte counts) and
+  // measures 4.06 on bg5, and `.dock__sub` (rate / ETA / byte counts) and
   // `.dock-row__pct--quiet` both take it. Re-pointed for the subtree rather than
   // edited at those two sites, so the surface and its legal type ramp stay in one
   // place — see _dialog.scss for why this shape rather than per-site lifting.

@@ -56,7 +56,7 @@ const GAP = '…'
         gap: var(--si-space-6);
       }
       /* muted, not tertiary: this is a primitive, so it cannot know its surface, and
-         its only mount today is a bg3 card in the kit — where tertiary is 4.38. A
+         its only mount today is a bg3 card in the kit — where tertiary is 4.37. A
          primitive gets the tone that is legal on the deepest surface it can land on. */
       .pg__range {
         font-family: var(--si-mono);
