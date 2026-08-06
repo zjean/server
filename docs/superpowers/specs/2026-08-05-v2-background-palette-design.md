@@ -194,7 +194,10 @@ None is weakened; the second is strengthened.
    across the seven.
 2. **`--si-border` stays independent of `--si-line-strong`.** `line-strong` on the input
    fill now measures **1.56** (was 1.69), so the argument is stronger. The fill alone is
-   1.11 on the content plane and 1.15 in a dialog — still identifying nothing. `--si-border`
+   1.11 on the content plane and **1.08** in a dialog (bg3 on bg5, where a dialog's input
+   fill actually sits — an earlier draft of this note paired bg3 against bg1 instead and
+   printed 1.15) — still identifying nothing, and if anything more strongly than that
+   wrong figure suggested. `--si-border`
    `#8a9097` measures 4.37 on the fill and 4.06 in a dialog.
 3. **`--si-amber` stays a real warning colour.** Untouched by this change; restated only so
    a future reader does not assume a palette change revisited it.

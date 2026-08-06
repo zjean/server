@@ -55,9 +55,12 @@
 //    The design's inputs are filled rather than outlined ("the fill is what makes
 //    an input findable on a dark plane"), and it uses line-strong (#454950) only
 //    for hovered inputs and dashed drop targets. But the input fill (bg3) is
-//    1.11:1 against the content plane and 1.15:1 inside a dialog — so on its own
-//    it identifies nothing, and SC 1.4.11 wants 3:1 for the boundary of an
-//    interactive control. line-strong measures 1.56 on that fill. #8A9097 — the
+//    1.11:1 against the content plane and 1.08:1 inside a dialog (bg3 sits on
+//    bg5 there, not bg1 — an earlier note here mis-paired the two and printed
+//    1.15) — so on its own it identifies nothing, which is if anything a
+//    STRONGER case for a resting border than the wrong figure was, and
+//    SC 1.4.11 wants 3:1 for the boundary of an interactive control.
+//    line-strong measures 1.56 on that fill. #8A9097 — the
 //    design's own text-tertiary tone, so not an invented colour — measures
 //    5.31 · 5.02 · 4.84 · 4.66 · 4.37 · 4.06 · 3.66 and clears the floor
 //    everywhere. Inputs therefore keep a resting boundary that the mockups draw

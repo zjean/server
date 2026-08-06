@@ -371,7 +371,9 @@ The header states the focus ring's seven measurements and the composited alpha v
 - [ ] **Step 2: Update deviation 2's measured figures**
 
 - `--si-line-strong` on the `bg3` input fill: **1.56** (was 1.69) — the argument is *stronger*, not weaker.
-- the fill alone: **1.11** against the content plane, **1.15** inside a dialog.
+- the fill alone: **1.11** against the content plane, **1.08** inside a dialog (bg3 on bg5 —
+  a prior draft of this step paired bg3 against bg1 instead and got 1.15; the corrected
+  1.08 is *less* identifying, so the argument is stronger still).
 - `--si-border` `#8a9097` across the seven: `5.31 · 5.02 · 4.84 · 4.66 · 4.37 · 4.06 · 3.66`.
 
 Deviation 3 (`--si-amber`) is untouched by this change. Leave its text alone.
