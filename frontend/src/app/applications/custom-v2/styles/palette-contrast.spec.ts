@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -140,7 +139,7 @@ describe('palette — lines must LIFT off the surface they are drawn against', (
   // without moving the lines inverts them: the same declaration that lifts today
   // dents afterwards. Nothing about that fails a build, and it is invisible in a
   // screenshot at these step sizes.
-  const ANCHORS: Array<[string, string]> = [
+  const ANCHORS: [string, string][] = [
     ['line-subtle', 'bg3'], // table + section rules, and card interiors
     ['line', 'bg5'], // card outlines, menu separators
     ['line-strong', 'bg6'] // hovered input outline, dashed drop targets
@@ -178,7 +177,7 @@ describe('palette — the header’s contrast grid must not lie', () => {
   // for each text tier are derived from it. It has been wrong once, and the wrong
   // cell was not a wrong NUMBER — it was a correct number printed without its
   // brackets, from which a false rule was then read. So both are checked.
-  const TIERS: Array<[string, string]> = [
+  const TIERS: [string, string][] = [
     ['fg', 'fg'],
     ['muted', 'fg-muted'],
     ['tertiary', 'fg-tertiary'],
