@@ -72,7 +72,7 @@ export interface SegmentedOption<T extends string = string> {
         gap: var(--si-space-3);
         border: 0;
         background: transparent;
-        /* muted, not tertiary: the .seg track is bg3, where tertiary measures 4.38. */
+        /* muted, not tertiary: the .seg track is bg3, where tertiary measures 4.37. */
         color: var(--si-fg-muted);
         font-family: var(--si-sans);
         font-weight: 400;

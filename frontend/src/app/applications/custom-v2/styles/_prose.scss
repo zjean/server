@@ -68,7 +68,7 @@
   // globally for the classic UI and ships `code { color: var(--bs-code-color) }` —
   // an ELEMENT selector, so no class name of ours avoids it. Leaving colour unset
   // does not inherit the prose colour; it hands every inline code span to
-  // Bootstrap's #d63384 magenta, which is off-palette and measures 3.56:1 on bg3.
+  // Bootstrap's #d63384 magenta, which is off-palette and measures 3.13:1 on bg3.
   // `tokens.spec.ts` cannot catch this: the raw colour is not in custom-v2 source.
   // (Same root cause as the `.row` collision, via an element selector instead.)
   code {

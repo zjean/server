@@ -49,7 +49,7 @@
   -moz-osx-font-smoothing: grayscale;
 
   // Links are accent AS TYPE, so they take accent-400 (--si-accent-ink), not the
-  // accent-600 fill: the fill measures 3.48:1 on the content plane and fails as
+  // accent-600 fill: the fill measures 3.09:1 on the content plane and fails as
   // body text. accent-300 is the hover value the design names.
   a {
     color: var(--si-accent-ink);
@@ -71,7 +71,7 @@
   // cobalt unchanged: the primary button is filled with --si-accent (accent-600)
   // and the ring is accent-500, so a ring drawn ON that fill measures 1.34:1 —
   // invisible. Offsetting puts it on the surrounding surface instead, where it is
-  // 3.28:1 or better on every surface in the system. Outline follows the
+  // 3.14:1 or better on every surface in the system. Outline follows the
   // element's own border-radius, so rounded controls need nothing extra.
   //
   // This is also why we do NOT use the design's two-layer box-shadow ring: its

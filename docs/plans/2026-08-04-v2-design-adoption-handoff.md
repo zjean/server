@@ -7,6 +7,12 @@ none of it is a phase, and none of it blocks anything.
 **Authority on design:** [`2026-08-03-v2-design-system-adoption-plan.md`](2026-08-03-v2-design-system-adoption-plan.md)
 **Authority on the design itself:** Claude Design project `4d96b99d-7b88-4478-bd57-7bfc169b5b0a`, read via the `claude_design` MCP (`DesignSync`)
 
+> **The surface ramp changed on 2026-08-05.** The warm neutral values recorded here are
+> superseded by the cool slate in `_tokens.scss`; the reasoning is in
+> `docs/superpowers/specs/2026-08-05-v2-background-palette-design.md`. Everything else
+> in this document still stands — in particular the focus-ring, `--si-border` and
+> `--si-amber` deviations, all three re-verified against the new ramp.
+
 ---
 
 ## 1. Read this first, in this order

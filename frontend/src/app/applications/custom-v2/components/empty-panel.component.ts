@@ -102,7 +102,7 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
            implies: search projects "N characters minimum" into it, which is the only
            statement of why the panel is empty and what to do about it — exactly the
            "sole carrier of meaning" that _tokens.scss forbids quiet from being. At
-           ghost it measured 2.84 on the panel's bg1; tertiary is 4.98 there. Found by
+           ghost it measured 2.52 on the panel's bg1; tertiary is 5.02 there. Found by
            the surface-outward contrast audit described with the tier in _tokens.scss,
            not by reading this file. */
         color: var(--si-fg-tertiary);

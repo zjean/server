@@ -107,10 +107,10 @@ describe('custom-v2 accent discipline', () => {
         .map((line, i) => ({ file: f, line: i + 1, text: line.trim() }))
     )
 
-  // accent-600 measures 3.48:1 on the content plane and ~3.4 on its own 10% tint,
+  // accent-600 measures 3.09:1 on the content plane and ~2.7 on its own 10% tint,
   // so it fails as text — while the old warm accent at L 0.70 passed, which is
   // exactly why 21 of these existed. Brand-as-type is accent-400
-  // (--si-accent-ink, 7.13:1 on the tint); brand-as-ink-on-the-fill is
+  // (--si-accent-ink, 6.27:1 on the tint); brand-as-ink-on-the-fill is
   // --si-accent-fg. The bare token is a FILL and nothing else.
   //
   // This is not a fact about the accent. EVERY token with an `-ink` partner is a
@@ -180,8 +180,8 @@ describe('custom-v2 token file', () => {
     expect(tokens).toMatch(/--si-focus-ring:\s*#4c7ef3;/i)
   })
 
-  it('keeps --si-border independent of --si-line-strong, which measures 1.69 on the input fill', () => {
-    expect(tokens).toMatch(/--si-border:\s*#8a857d;/i)
+  it('keeps --si-border independent of --si-line-strong, which measures 1.56 on the input fill', () => {
+    expect(tokens).toMatch(/--si-border:\s*#8a9097;/i)
     expect(tokens).not.toMatch(/--si-border:\s*var\(--si-line-strong\)/)
   })
 

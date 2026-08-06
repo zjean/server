@@ -502,8 +502,10 @@ function emptyDraft(isGuest: boolean): UserDraft {
         text-transform: uppercase;
 
         // Brand and semantic used as TYPE on their own soft fill, so both take
-        // the -ink tone. --si-nav resolves to the accent FILL (L 0.70), which
-        // measured 4.35:1 here; the ink tone clears AA on every card surface.
+        // the -ink tone. --si-nav resolves to the accent-600 fill, which measures
+        // only 2.74:1 on nav-soft over this table's bg2 — nowhere near AA; the
+        // ink tone (accent-ink on the same wash) measures 6.27:1 here and clears
+        // AA on every card surface this chip can land on.
         &--admin {
           background: var(--si-nav-soft);
           color: var(--si-accent-ink);

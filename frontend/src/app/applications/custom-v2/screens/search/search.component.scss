@@ -165,7 +165,7 @@
 }
 
 // The matched run. accent-400 rather than the accent fill, because this is TYPE:
-// accent-600 measures 3.48:1 on the content plane and fails.
+// accent-600 measures 3.09:1 on the content plane and fails.
 .result__hit {
   color: var(--si-accent-ink);
 }
@@ -205,7 +205,7 @@
   font-family: var(--si-mono);
   font-size: var(--si-text-5);
   // muted, not tertiary: the result row goes to bg3 on hover/selection, where
-  // tertiary measures 4.38.
+  // tertiary measures 4.37.
   color: var(--si-fg-muted);
   white-space: nowrap;
 }

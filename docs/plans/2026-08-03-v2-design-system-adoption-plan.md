@@ -5,6 +5,12 @@
 **Source files read:** `01 Foundations`, `02 Components`, `03 Patterns`, `04 Desktop Screens`, `05 Mobile Screens`, `SyncNav`
 **Decision sheet:** https://claude.ai/code/artifact/1a8a66ae-7766-493a-9473-80548628f363
 
+> **The surface ramp changed on 2026-08-05.** The warm neutral values recorded here are
+> superseded by the cool slate in `_tokens.scss`; the reasoning is in
+> `docs/superpowers/specs/2026-08-05-v2-background-palette-design.md`. Everything else
+> in this document still stands — in particular the focus-ring, `--si-border` and
+> `--si-amber` deviations, all three re-verified against the new ramp.
+
 ---
 
 ## 0. What was decided before planning
