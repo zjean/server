@@ -99,8 +99,8 @@ const LIFT_ALL = CUR_L.map((L) => L + 0.08)
 
 const OPTIONS = [
   {
-    id: 'current', name: 'Current', tag: 'shipping today',
-    blurb: 'The warm neutral ramp as shipped. Here as the baseline only — every figure below is measured against it.',
+    id: 'current', name: 'Warm neutral (pre-2026-08-05)', tag: 'superseded baseline',
+    blurb: 'The warm neutral ramp that shipped before the cool-slate change. Here as the baseline only — every figure below is measured against it. The cool slate (Option 2 / "Cool slate · 255°") is what ships now; see the note at the top of this page.',
     palette: { p: { ...CURRENT, chrome: CURRENT.bg0 }, moved: [], glyphFails: [], hue: 68, Ls: CUR_L },
     cost: 'n/a', group: 'base',
   },
@@ -295,6 +295,13 @@ const html = `<!doctype html>
 <header class="head">
   <h1>v2 app chrome — background options</h1>
   <p class="lede">The chrome rendered under each candidate ground. Every contrast figure on this page is computed from the hex values shown, by WCAG 2.x relative luminance — nothing here is typed by hand.</p>
+  <div class="finding">
+    <strong>This page records the decision as of 2026-08-05.</strong> The cool slate
+    (<code>hue-slate</code> / Option 2 below) is what shipped from that decision and is what
+    <code>_tokens.scss</code> now ships. "Current" below no longer means current — it is
+    relabelled "Warm neutral (pre-2026-08-05)" and kept only as the baseline every other
+    option was measured against.
+  </div>
   <div class="finding">
     <strong>One measurement worth reading first.</strong> The surfaces shipping today are <em>not</em> brown — all seven measure
     0.003–0.008 chroma in OKLab, i.e. effectively neutral. The warmth lives in the <em>type and line</em> tokens, which are two to
