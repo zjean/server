@@ -93,8 +93,11 @@
   white-space: nowrap;
 }
 
+// muted, for the same reason as .sd__row-desc below and on the same bg3 fill, where
+// quiet measured 2.43 and tertiary 4.37. `(you)` is the only mark that says which of
+// these rows is the reader's own — nothing else in the row distinguishes it.
 .sd__row-you {
-  color: var(--si-fg-ghost);
+  color: var(--si-fg-muted);
   font-size: var(--si-text-7);
 }
 

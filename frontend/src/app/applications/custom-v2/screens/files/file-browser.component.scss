@@ -517,7 +517,14 @@
   min-height: 96px;
   border: 1px dashed var(--si-line-subtle);
   border-radius: var(--si-r2);
-  color: var(--si-fg-ghost);
+  // muted, not quiet, and it sets the icon's colour too (both draw with
+  // currentColor). The panel is `aria-hidden`, so this rendering is the ONLY
+  // channel the instruction has — and "Drop files to upload to X" is stated
+  // nowhere else on the screen. Quiet measured 2.43 on the plane's bg2 against a
+  // 4.5 floor for the sentence and 3:1 for the glyph; muted measures 7.45. The
+  // affordance is quieter than the rows above it by size and by the dashed frame,
+  // which is where that difference belongs.
+  color: var(--si-fg-muted);
   font-size: var(--si-text-7);
   // Decorative: the whole body is already a drop zone, so this is a target
   // affordance rather than the target itself, and it must not eat pointer events
@@ -596,10 +603,13 @@
 }
 
 // ─── Control row additions ──────────────────────────────────────────────────
+// tertiary, not quiet: this word is the name of the control beside it and is not a
+// repeat of anything on screen — the segmented control shows values, never what they
+// are values OF. Quiet measured 2.43 on the plane's bg2; tertiary measures 4.84.
 .personal__control-label {
   font-family: var(--si-mono);
   font-size: var(--si-text-5);
-  color: var(--si-fg-ghost);
+  color: var(--si-fg-tertiary);
   white-space: nowrap;
 }
 

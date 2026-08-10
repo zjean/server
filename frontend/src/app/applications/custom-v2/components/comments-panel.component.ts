@@ -197,10 +197,14 @@ interface CommentRow extends Comment {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* tertiary, not quiet: when a comment was written is stated nowhere else in
+         the thread, and a timestamp is the tertiary tier's own example. Quiet
+         measured 2.52 on the panel's bg1; tertiary measures 5.02, and re-points to
+         muted inside the mobile sheet. */
       .cp-comment__time {
         font-family: var(--si-mono);
         font-size: var(--si-text-3);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
         display: flex;
         align-items: center;
         gap: var(--si-space-3);
@@ -270,13 +274,16 @@ interface CommentRow extends Comment {
         align-items: center;
         gap: var(--si-space-5);
       }
-      /* A keystroke is machine vocabulary, so mono — and it is the hint, so it
-         takes the quiet tone and the leftover width. */
+      /* A keystroke is machine vocabulary, so mono — and it takes the leftover
+         width. It is NOT quiet, though it reads like the definition of a hint: the
+         Post button beside it repeats the action, but nothing repeats the KEY, so
+         the shortcut is carried here alone. Quiet measured 2.43 on the composer's
+         bg2; tertiary measures 4.84. */
       .cp__hint {
         flex: 1 1 auto;
         font-family: var(--si-mono);
         font-size: var(--si-text-3);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
       }
     `
   ]

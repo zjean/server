@@ -236,11 +236,21 @@
   }
 
   // `esc` next to the Close label — the design prints the shortcut where the action
-  // is, and mono because a keystroke is machine vocabulary.
+  // is, and mono because a keystroke is machine vocabulary. It now states NO colour,
+  // and that is the fix: it lives inside a button, so it inherits whatever ink that
+  // button already guarantees against its own fill. Lifting it one tier looked
+  // sufficient — until the audit ran with the SHORTCUTS dialog open, where Close is
+  // `kind="primary"`: the tone lands on an accent-600 FILL, not on the dialog's bg5,
+  // and quiet measured 1.27 there. That is the lowest figure in this sweep by a wide
+  // margin and it was invisible to a stylesheet reading, because nothing in this file
+  // says which button kind wraps the span. Muted would have been 2.41 and accent-100
+  // only 3.90 at this size, while the share dialog's Close is `kind="ghost"` — so no
+  // one tone is legal at both mounts. Inheriting is legal at every mount there will
+  // ever be, and the shortcut stays subordinate by SIZE, which is what _tokens.scss
+  // says emphasis is made of.
   .v2-dialog__kbd {
     font-family: var(--si-mono);
     font-size: var(--si-text-3);
-    color: var(--si-fg-ghost);
     margin-left: var(--si-space-3);
   }
 }

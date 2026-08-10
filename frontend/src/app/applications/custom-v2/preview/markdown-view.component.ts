@@ -365,12 +365,14 @@ type InlineMark = 'bold' | 'italic' | 'strike' | 'code'
       .md-view__spacer {
         flex: 1 1 auto;
       }
-      /* A keystroke is machine vocabulary, so mono, and quiet: it is a reminder,
-         not a control. */
+      /* A keystroke is machine vocabulary, so mono. It is a reminder rather than a
+         control, but not decoration: "⌘S saves a version" is the only place this
+         server tells the reader that saving mints one, so it may not take the quiet
+         tier. Quiet measured 2.43 on the toolbar's bg2; tertiary measures 4.84. */
       .md-view__hint {
         font-family: var(--si-mono);
         font-size: var(--si-text-4);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
         white-space: nowrap;
         margin-right: var(--si-space-4);
       }
