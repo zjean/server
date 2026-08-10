@@ -269,10 +269,15 @@ interface VersionRow extends VersionModel {
           color: var(--si-rose-ink);
         }
       }
+      /* tertiary, not quiet: this sentence explains what a version IS, and it is
+         the only place the panel says so. Tertiary rather than muted so it stays
+         no brighter than the .vp__state line it is subordinate to — quiet measured
+         2.52 on the panel's bg1, tertiary 5.02, and in the mobile sheet it
+         re-points to muted along with its parent. */
       .vp__state-lede {
         margin-top: var(--si-space-2);
         font-size: var(--si-text-4);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
       }
       .vp__list {
         list-style: none;
@@ -330,10 +335,14 @@ interface VersionRow extends VersionModel {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* tertiary, not quiet: this line carries the version's SIZE and where it came
+         from, neither of which the card states anywhere else — the tertiary tier is
+         named for exactly that ("metadata, sizes, timestamps"). Quiet measured 2.43
+         on the card's bg2 fill; tertiary measures 4.84. */
       .vp-row__origin {
         font-family: var(--si-mono);
         font-size: var(--si-text-3);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
         white-space: nowrap;
       }
       .vp-row__actions {
@@ -411,9 +420,13 @@ interface VersionRow extends VersionModel {
           background: var(--si-rose);
         }
       }
+      /* tertiary, not quiet: "history counts towards your quota" is the one thing
+         that tells the reader the figures above it come out of their own allowance,
+         so it is not a repeat. Tertiary keeps it no brighter than the .vp__footer-row
+         figures it annotates — 5.02 on the panel's bg1, against quiet's 2.52. */
       .vp__footer-note {
         font-size: var(--si-text-4);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-tertiary);
         line-height: 1.55;
       }
     `

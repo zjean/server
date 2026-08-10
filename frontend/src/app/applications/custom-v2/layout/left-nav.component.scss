@@ -265,8 +265,14 @@
     white-space: nowrap;
   }
 
+  // No colour of its own: it inherits the usage line's muted tone. This was the one
+  // site the tier audit left in place as legal decoration, and the rendered-tree
+  // audit then flagged it anyway at 2.19 on the user card's bg3 — a text node below
+  // the floor, whichever way the decoration argument is read. Two adjacent figures
+  // with nothing legible between them read as one ("0 KB unlimited"), and the margin
+  // below is what separates them; the dimmer tone was never doing that work. A
+  // permanent known-failure in the audit costs more than this glyph's hierarchy.
   &__user-usage-sep {
-    color: var(--si-fg-ghost);
     margin: 0 var(--si-space-2);
   }
 

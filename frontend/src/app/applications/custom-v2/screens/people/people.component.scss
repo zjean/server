@@ -187,6 +187,10 @@
     text-transform: uppercase;
     color: var(--si-fg-muted);
 
+    // Quiet is legal HERE and nowhere else in this file: the status word sits
+    // beside this dot in the same element, so the offline dot repeats something
+    // already visible rather than carrying it. The avatar's dot below has no such
+    // label and is tertiary — see the note there.
     &::before {
       content: '';
       width: 8px;
@@ -279,6 +283,13 @@
     }
   }
 
+  // tertiary, not quiet: this dot is an empty span with no label anywhere in the
+  // row, so offline presence is carried by the dot alone — a meaningful non-text
+  // element, which SC 1.4.11 asks 3:1 of. What it is measured AGAINST is the 2px
+  // ring below, not the avatar it overlaps: the avatar's tone is per-user and the
+  // ring is what makes the neighbour the same bg2 for everyone. Quiet measured 2.43
+  // there; tertiary is 4.84, and the glyph exemption in _tokens.scss covers it down
+  // to bg6 (3.66) if a row is ever drawn deeper.
   &__status {
     position: absolute;
     bottom: -1px;
@@ -286,7 +297,7 @@
     width: 10px;
     height: 10px;
     border-radius: 5px;
-    background: var(--si-fg-ghost);
+    background: var(--si-fg-tertiary);
     box-shadow: 0 0 0 2px var(--si-bg2);
 
     &--online {

@@ -139,6 +139,9 @@ export interface TabItem<T extends string = string> {
         font-weight: 500;
         box-shadow: inset 0 -2px 0 var(--si-accent-hover);
       }
+      /* Quiet is legal here: SC 1.4.3 exempts an inactive component, and the whole
+         point of the tone is that this tab cannot be opened. See the
+         disabled-control exemption in _tokens.scss. */
       .tabs__tab--disabled {
         color: var(--si-fg-ghost);
         cursor: not-allowed;

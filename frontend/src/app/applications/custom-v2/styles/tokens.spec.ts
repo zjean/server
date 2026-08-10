@@ -94,6 +94,54 @@ describe('custom-v2 colour discipline', () => {
   }
 })
 
+// The quiet tier clears nothing — it is below 4.5:1 on all seven surfaces and below
+// 3:1 as well, so _tokens.scss allows it only where the tone is not what carries the
+// meaning. That was a convention, and #451 found it had drifted at 16 of 19 call
+// sites: a drop-target instruction, an offline presence dot, the name of a control,
+// a version's size, a comment's timestamp, three keyboard hints. None failed a build.
+//
+// So the surviving sites are listed rather than counted in aggregate, with the reason
+// each is legal. A new `--si-fg-ghost` anywhere fails this test until someone writes
+// down why the tone is not the carrier — which is the same question the audit asked,
+// asked at the moment the declaration is added instead of a release later.
+//
+// Both categories here are ones the rendered-tree audit deliberately SKIPS
+// (docs/tools/v2-contrast-audit.js), so this is not a duplicate of it: the audit
+// cannot see these, and would not have found the drift in them.
+const QUIET_ALLOWED: Record<string, { count: number; why: string }> = {
+  'components/pagination.component.ts': {
+    count: 1,
+    why: 'a disabled step. SC 1.4.3 exempts an inactive component, and a step that reads as brightly as a live one is itself a defect.'
+  },
+  'components/tabs.component.ts': {
+    count: 1,
+    why: 'a disabled tab, for the same reason — the dimness IS the statement that it cannot be opened.'
+  },
+  'screens/people/people.component.scss': {
+    count: 1,
+    why: 'the offline dot in the DETAIL header, which prints the status word beside it. The dot repeats what the word already says. The avatar dot in the row has no such label and is tertiary.'
+  }
+}
+
+describe('custom-v2 quiet tier — never the sole carrier of meaning', () => {
+  const quietSitesIn = (rel: string): number => [...stripComments(readFileSync(join(V2, rel), 'utf8')).matchAll(/var\(--si-fg-ghost\)/g)].length
+
+  it('uses --si-fg-ghost only at sites with a written justification', () => {
+    const undocumented = sources.filter((f) => f !== TOKENS && !(f in QUIET_ALLOWED) && quietSitesIn(f) > 0)
+    expect(
+      undocumented,
+      'the quiet tier clears no contrast floor. If the tone is genuinely not what carries the meaning here, add the file to QUIET_ALLOWED with the reason; otherwise use --si-fg-tertiary (glyphs, metadata) or --si-fg-muted (prose, and anything on bg3 or deeper).'
+    ).toEqual([])
+  })
+
+  for (const [file, { count, why }] of Object.entries(QUIET_ALLOWED)) {
+    it(`${file} keeps exactly ${count} quiet site(s) — ${why}`, () => {
+      expect(sources, 'allowlisted file no longer exists; drop it from QUIET_ALLOWED').toContain(file)
+      expect(quietSitesIn(file)).toBe(count)
+    })
+  }
+})
+
 // The accent-hue swap broke 21 declarations that were correct under the old warm
 // accent and silently wrong under cobalt, in three distinct ways. Each is worth a
 // test, because none of them fails a build and two of them look deliberate.

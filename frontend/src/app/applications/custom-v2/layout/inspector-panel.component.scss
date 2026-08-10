@@ -170,10 +170,14 @@
   white-space: nowrap;
 }
 
+// tertiary, not quiet: this line is the only thing that says whether the row above
+// it is a public link or a person, so it is the "sole carrier of meaning" the quiet
+// tier is forbidden from being. On the card's bg2 fill quiet measured 2.43; tertiary
+// measures 4.84, and inside the mobile sheet it re-points to muted with the rest.
 .insp__access-kind {
   font-family: var(--si-mono);
   font-size: var(--si-text-3);
-  color: var(--si-fg-ghost);
+  color: var(--si-fg-tertiary);
 }
 
 .insp__access-none {

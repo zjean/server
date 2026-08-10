@@ -110,8 +110,14 @@
     min-width: 0;
   }
 
+  // tertiary, not quiet. This looked like the safest decoration in the tier — a
+  // chevron between labels that are spaced anyway — and it is the site the audit
+  // was most useful on: the crumb strip resolves to bg0, not the bg1 the top bar
+  // is specified as, where quiet measures 2.66 against the 3:1 SC 1.4.11 asks of a
+  // non-text element. Tertiary is 5.31 there and the glyph exemption in
+  // _tokens.scss covers it down to bg6.
   &__crumb-sep {
-    color: var(--si-fg-ghost);
+    color: var(--si-fg-tertiary);
     flex-shrink: 0;
   }
 

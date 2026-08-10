@@ -94,6 +94,9 @@ const GAP = '…'
         background: var(--si-bg5);
         color: var(--si-fg);
       }
+      /* Quiet is legal here: SC 1.4.3 exempts an inactive component, and a step that
+         reads as brightly as a live one is itself a defect. See the disabled-control
+         exemption in _tokens.scss. */
       .pg__step:disabled {
         color: var(--si-fg-ghost);
         cursor: not-allowed;
@@ -103,12 +106,19 @@ const GAP = '…'
         color: var(--si-accent-ink);
         font-weight: 500;
       }
+      /* muted, by the same rule as .pg__range above — and it took a second look to
+         get here. The ellipsis is aria-hidden and the omission it marks is also
+         visible in the jump between the page numbers either side of it, so it reads
+         as the decoration the quiet tier is for. But that redundancy asks the reader
+         to notice a numeric gap, and a primitive still cannot know its surface:
+         quiet measured 2.19 on the kit's bg3 card, and 2.04 if this ever lands in a
+         dialog. */
       .pg__gap {
         min-width: 30px;
         text-align: center;
         font-family: var(--si-mono);
         font-size: var(--si-text-6);
-        color: var(--si-fg-ghost);
+        color: var(--si-fg-muted);
       }
     `
   ]
