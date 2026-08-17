@@ -80,3 +80,34 @@ export const FILE_ORIGIN_ICONS: Record<FileOrigin, IconV2Name> = {
 export function fileLocationPath(showedPath: string | null | undefined): string {
   return (showedPath ?? '').replace(/^\/+|\/+$/g, '')
 }
+
+// ─── For screens that hold a full repository path rather than a split one ───
+// A recents row arrives pre-split: `path` is the parent directory and the model
+// has already computed `showedPath` with the repository prefix removed. Favorites,
+// shares and the trash bins do not — they carry one addressable `navPath` like
+// `files/personal/Projects/notes.md`, and each was doing its own ad-hoc slicing of
+// it. Favorites' version kept the prefix, so it displayed
+// `files/product-team/Roadmap` where recents displayed `product-team/Roadmap` for
+// the same file, and returned a bare '/' at a root.
+//
+// These two mirror `FileRecentModel`'s own derivation so the two families of
+// screen describe one file the same way.
+
+// Origin from an addressable path. The same three answers as fileOriginOf, read
+// from the prefix instead of from the ids, for callers that have no ids.
+export function fileOriginFromPath(path: string | null | undefined, repositories: { files: string; shares: string }, personalAlias: string): FileOrigin {
+  const [repo, alias] = (path ?? '').split('/').filter(Boolean)
+  if (repo === repositories.shares) return 'share'
+  if (repo === repositories.files && alias === personalAlias) return 'personal'
+  return 'space'
+}
+
+// Drops the repository prefix, exactly as FileRecentModel does: two segments for
+// a personal path (the repository AND the `personal` alias, which is not a folder
+// the user recognises), one segment otherwise (keeping the space or share alias,
+// which they do). Pass `dropLast` for a path that ends in the file's own name.
+export function stripRepositoryPrefix(path: string | null | undefined, personalAlias: string, dropLast = false): string {
+  const segs = (path ?? '').split('/').filter(Boolean)
+  if (dropLast) segs.pop()
+  return segs.slice(segs[1] === personalAlias ? 2 : 1).join('/')
+}

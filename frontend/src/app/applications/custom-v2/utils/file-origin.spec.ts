@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FILE_ORIGIN_ICONS, FILE_ORIGIN_LABELS, fileLocationPath, fileOriginOf } from './file-origin'
+import { FILE_ORIGIN_ICONS, FILE_ORIGIN_LABELS, fileLocationPath, fileOriginFromPath, fileOriginOf, stripRepositoryPrefix } from './file-origin'
 
 describe('fileOriginOf', () => {
   it('reads a file with neither id as personal', () => {
@@ -58,6 +58,71 @@ describe('fileLocationPath', () => {
 
   it('trims surrounding slashes', () => {
     expect(fileLocationPath('/Projects/')).toBe('Projects')
+  })
+})
+
+// The real constant values, so these cases pin behaviour against the same strings
+// production uses rather than against invented ones.
+const REPOS = { files: 'files', shares: 'shares' }
+const PERSONAL = 'personal'
+
+describe('fileOriginFromPath', () => {
+  it('reads the shares repository as share', () => {
+    expect(fileOriginFromPath('shares/benchmarks/query.csv', REPOS, PERSONAL)).toBe('share')
+  })
+
+  it('reads files/personal as personal', () => {
+    expect(fileOriginFromPath('files/personal/Projects/notes.md', REPOS, PERSONAL)).toBe('personal')
+  })
+
+  it('reads any other files alias as a space', () => {
+    expect(fileOriginFromPath('files/product-team/Roadmap/q3.md', REPOS, PERSONAL)).toBe('space')
+  })
+
+  // A folder named `personal` inside a SPACE must not be mistaken for the personal
+  // repository: the alias is the second segment, never a deeper one.
+  it('does not treat a nested personal folder as the personal repository', () => {
+    expect(fileOriginFromPath('files/product-team/personal/notes.md', REPOS, PERSONAL)).toBe('space')
+  })
+
+  it('falls back to space for an empty path rather than throwing', () => {
+    expect(fileOriginFromPath('', REPOS, PERSONAL)).toBe('space')
+  })
+})
+
+describe('stripRepositoryPrefix', () => {
+  // Two segments for personal, because neither `files` nor `personal` is a folder
+  // the user put anything in.
+  it('drops both segments of a personal prefix', () => {
+    expect(stripRepositoryPrefix('files/personal/Projects/Docs', PERSONAL)).toBe('Projects/Docs')
+  })
+
+  // One segment for a space, because the alias IS a container the user recognises.
+  it('keeps the space alias and drops only the repository', () => {
+    expect(stripRepositoryPrefix('files/product-team/Roadmap', PERSONAL)).toBe('product-team/Roadmap')
+  })
+
+  it('keeps the share alias', () => {
+    expect(stripRepositoryPrefix('shares/benchmarks/sub', PERSONAL)).toBe('benchmarks/sub')
+  })
+
+  it('returns empty at a personal root', () => {
+    expect(stripRepositoryPrefix('files/personal', PERSONAL)).toBe('')
+  })
+
+  describe('dropLast, for a path ending in the file name', () => {
+    it('drops the file name as well as the prefix', () => {
+      expect(stripRepositoryPrefix('files/personal/Projects/notes.md', PERSONAL, true)).toBe('Projects')
+    })
+
+    it('returns empty for a file sitting at a personal root', () => {
+      // The old favorites code returned '/' here, which rendered as a stray slash.
+      expect(stripRepositoryPrefix('files/personal/notes.md', PERSONAL, true)).toBe('')
+    })
+
+    it('keeps the space alias for a file at a space root', () => {
+      expect(stripRepositoryPrefix('files/product-team/q3.md', PERSONAL, true)).toBe('product-team')
+    })
   })
 })
 
