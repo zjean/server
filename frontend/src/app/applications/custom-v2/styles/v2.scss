@@ -29,12 +29,16 @@
 // design-adoption handoff, and the header of ./v2-tokens.scss for the split and
 // how to re-measure.
 //
-// What is left here is the root element and the type system: the `.v2-root`
-// declarations below, plus type roles and prose, which are the two partials
-// whose rules describe the same running text.
+// What is left here is the root element, the type system and the card chrome:
+// the `.v2-root` declarations below, plus type roles and prose (the two partials
+// whose rules describe the same running text) and ./card, which holds the shared
+// card + media-well classes. Card chrome lives with them rather than in
+// ./v2-overlays.scss because a card sits in the document flow — overlays is for
+// chrome that floats above it (dialog, sheet, touch sizing).
 
 @use './type';
 @use './prose';
+@use './card';
 
 .v2-root {
   display: flex;

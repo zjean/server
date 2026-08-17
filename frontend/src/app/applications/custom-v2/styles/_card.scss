@@ -1,0 +1,140 @@
+// Sync-In v2 card chrome.
+//
+// One definition for what were five hand-maintained copies — `.space-card`,
+// `.settings-card`, `.admin-card`, `.pinned-card`, `.comment-card`. They were
+// copy-paste siblings, which is why an audit found the SAME three defects
+// distributed across them, none of which fails a build or shows up in a diff
+// review:
+//
+//   1. `&:hover { background: var(--si-bg3) }` — the identical value the card
+//      already paints at rest. Four screens shipped a hover that moved nothing
+//      but the border colour. It reads as an unresponsive card, and it is the
+//      kind of bug that survives precisely because the rule LOOKS like it does
+//      something.
+//   2. `&:active { transform: translateY(1px) }` — banned outright by the shadow
+//      block in _tokens.scss: "the design's rule is 'active is a surface step
+//      plus a 1px inset', and NO CONTROL EVER MOVES ON PRESS". Three sites had
+//      it. The token that expresses the sanctioned version, --si-shadow-press,
+//      already existed and had no consumers.
+//   3. A child painted --si-bg3 inside a --si-bg3 card, i.e. an invisible panel.
+//      The ramp's own rule is "never place surface-1 directly on surface-1".
+//
+// Emitted as CLASSES rather than a mixin, for the reason _type.scss gives: about
+// half of v2's components declare `styles: [...]` inline in a `.ts` file and
+// cannot `@use` a partial. A class works from both, so there is one spelling
+// instead of two that drift.
+
+.v2-root {
+  .v2-card {
+    // ─── The tertiary re-point ────────────────────────────────────────────
+    // Not defensive boilerplate; it is the fix _tokens.scss prescribes, placed
+    // where that file says to place it ("when you add a bg5/bg6 container, add
+    // the re-point next to its background").
+    //
+    // --si-fg-tertiary measures 4.37 on bg3 and 4.06 on bg5. Both are below 4.5,
+    // so tertiary is not legal as text on a card AT REST, and it is further from
+    // legal once the card hovers. That makes any tertiary string inside a card
+    // the "correct in one state, wrong in another" defect class the tokens header
+    // documents — and no single edit to such a declaration can be right in both
+    // states, which is why the fix is not an edit to the declaration.
+    //
+    // Re-pointing here means a consumer keeps saying --si-fg-tertiary (or uses
+    // the .v2-mono-data / .v2-meta roles, which name it) and silently gets the
+    // legal value for the surface it actually landed on. Verified to be a no-op
+    // for the three existing card screens: none of them names tertiary today.
+    --si-fg-tertiary: var(--si-fg-muted);
+
+    position: relative;
+    background: var(--si-bg3);
+    border: 1px solid var(--si-line);
+    border-radius: var(--si-r3);
+
+    // `outline` is deliberately absent from this list. The global focus ring in
+    // v2.scss is an outline, and animating a focus indicator's appearance is
+    // banned — it must show instantly. Transitioning box-shadow is safe because
+    // the ring is not a shadow in this system (see deviation 1 in _tokens.scss).
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      border-color var(--si-dur-2) var(--si-ease-out),
+      box-shadow var(--si-dur-2) var(--si-ease-out);
+  }
+
+  // Opt-in, because a card is not always a control: the settings and admin panels
+  // use card chrome for static grouping, and giving those a pointer cursor and a
+  // hover lift would promise an interaction that is not there.
+  .v2-card--interactive {
+    cursor: pointer;
+    // Inherit the app's type colour rather than the UA's button grey — these are
+    // usually <button> elements, which reset colour and font.
+    color: inherit;
+    font: inherit;
+    text-align: left;
+
+    &:hover {
+      // A REAL step, bg3 → bg5. "Elevation always toward the user": a card
+      // reacting to the pointer moves up the ramp, it does not merely re-outline.
+      background: var(--si-bg5);
+      border-color: var(--si-line-strong);
+      box-shadow: var(--si-shadow1);
+    }
+
+    &:active {
+      // Shading, never motion. The surface holds its hovered step and gains the
+      // inset — that pairing IS the design's definition of pressed.
+      background: var(--si-bg5);
+      box-shadow: var(--si-shadow-press);
+    }
+
+    &:disabled {
+      cursor: default;
+      // The one place a dimmed control is correct: SC 1.4.3 exempts an inactive
+      // component, and a disabled card that reads as brightly as a live one is
+      // itself a defect (_tokens.scss, exemption 2).
+      opacity: 0.55;
+
+      &:hover {
+        background: var(--si-bg3);
+        border-color: var(--si-line);
+        box-shadow: none;
+      }
+    }
+  }
+
+  // ─── The media well ───────────────────────────────────────────────────────
+  // The frame for a thumbnail or, when there is nothing to show, for its absence.
+  //
+  // This exists because the invisible-panel bug above had a sanctioned fix that
+  // nobody had reached for. The recents card drew a 96px block of --si-bg3 inside
+  // a --si-bg3 card and put a glyph in the middle of it: measured, both surfaces
+  // were the identical rgb(39,44,49), so 53% of the card's height was a panel
+  // that could not be seen. The system's own answer is D8's rule, carried by
+  // --si-media-stripe: "media placeholders are striped, never coloured blocks —
+  // the stripe says image goes here." A flat block reads as a swatch, i.e. as
+  // content; 3.5% white at 135° reads as an absence.
+  //
+  // Base colour is the file-type tint, bound per instance as --fc-bg (the same
+  // [style.--fc-bg] convention the gallery tile uses), so the well is never the
+  // same value as the card behind it. The literal fallback is the unmapped-type
+  // floor.
+  .v2-media-well {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--si-r2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--fc-bg, var(--si-bg3));
+    color: var(--fc-fg, var(--si-fg-muted));
+  }
+
+  // The stripe. A pseudo-element so it can never be mistaken for content, and it
+  // sits UNDER the thumbnail: a photo covers it, a placeholder does not, which is
+  // exactly the distinction it exists to draw.
+  .v2-media-well::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(135deg, var(--si-media-stripe) 0 8px, transparent 8px 16px);
+    pointer-events: none;
+  }
+}
