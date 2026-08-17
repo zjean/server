@@ -3,13 +3,13 @@ import { Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
-import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { SpaceModel } from '../../../spaces/models/space.model'
 import { AvatarStackComponent, AvatarStackUser } from '../../components/avatar-stack.component'
 import { memberAvatars } from '../../utils/member-avatars'
 import { ButtonComponent } from '../../components/button.component'
 import { EmptyStateComponent } from '../../components/empty-state.component'
+import { TimestampComponent } from '../../components/timestamp.component'
 import { FabComponent } from '../../components/fab.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -30,7 +30,7 @@ import { CreateSpaceModalComponent } from './create-space-modal.component'
     FabComponent,
     IconButtonComponent,
     ToBytesPipe,
-    TimeAgoPipe,
+    TimestampComponent,
     CreateSpaceModalComponent,
     L10nTranslateDirective,
     L10nTranslatePipe
@@ -42,6 +42,9 @@ export class SpacesComponent implements OnInit {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
+
+  // One instant for every card's timestamp — see the same note in recents.
+  protected readonly renderedAt = Date.now()
 
   protected readonly spaces = signal<SpaceModel[]>([])
   protected readonly loading = signal(true)

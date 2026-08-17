@@ -47,7 +47,13 @@
     position: relative;
     background: var(--si-bg3);
     border: 1px solid var(--si-line);
-    border-radius: var(--si-r3);
+    // r2, which is the radius the ladder assigns to this shape: "--si-r2: 8px ·
+    // radius-md · cards, file-type tiles, toasts", against "--si-r3: 12px ·
+    // radius-lg · dialogs, panels, sheets". Three of the five cards being folded
+    // in here used r3 and one used r2, so they disagreed with each other as well
+    // as with the ladder; the one at r2 was the correct one. Adopting the shared
+    // class moves spaces, admin and the two recents cards from 12px to 8px.
+    border-radius: var(--si-r2);
 
     // `outline` is deliberately absent from this list. The global focus ring in
     // v2.scss is an outline, and animating a focus indicator's appearance is
@@ -98,6 +104,59 @@
         box-shadow: none;
       }
     }
+  }
+
+  // ─── The stretched primary target ─────────────────────────────────────────
+  // For a card that is itself clickable AND carries its own controls — a "more"
+  // menu, a star, a dismiss. Same construction and the same reason as the row's
+  // in file-row.component.ts: a <button> may not contain interactive content, so
+  // the card is a plain element, ONE button is the primary target with its
+  // `::after` stretched over the card, and the controls sit outside that button.
+  //
+  // The Space card had `<app-v2-icon-btn>` — a real <button> — inside
+  // `<button class="space-card">`. Invalid markup, ambiguous activation, and AT is
+  // handed a control containing a control. It renders fine, so nothing caught it.
+  .v2-card__target {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  // Positioned against .v2-card, which is `position: relative` above. Anything
+  // that must stay clickable has to sit above this — see .v2-card__aside.
+  .v2-card__target::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  // The ring belongs to the CARD, not to the stretched button, which would
+  // otherwise trace its content box rather than the card the user is on.
+  .v2-card:has(> .v2-card__target:focus-visible) {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 2px;
+  }
+
+  .v2-card__target:focus-visible {
+    outline: none;
+  }
+
+  // The controls. Raised above the stretched target so they remain clickable, and
+  // it must be a real stacking position rather than `pointer-events` alone,
+  // because these ARE interactive.
+  .v2-card__aside {
+    position: absolute;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--si-space-3);
   }
 
   // ─── The media well ───────────────────────────────────────────────────────

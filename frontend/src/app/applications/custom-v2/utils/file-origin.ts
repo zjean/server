@@ -95,7 +95,11 @@ export function fileLocationPath(showedPath: string | null | undefined): string 
 
 // Origin from an addressable path. The same three answers as fileOriginOf, read
 // from the prefix instead of from the ids, for callers that have no ids.
-export function fileOriginFromPath(path: string | null | undefined, repositories: { files: string; shares: string }, personalAlias: string): FileOrigin {
+export function fileOriginFromPath(
+  path: string | null | undefined,
+  repositories: { files: string; shares: string },
+  personalAlias: string
+): FileOrigin {
   const [repo, alias] = (path ?? '').split('/').filter(Boolean)
   if (repo === repositories.shares) return 'share'
   if (repo === repositories.files && alias === personalAlias) return 'personal'

@@ -338,59 +338,10 @@
   }
 }
 
-.settings-card {
-  display: flex;
-  align-items: center;
-  gap: var(--si-space-6);
-  padding: var(--si-space-7) var(--si-space-8);
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
-  border-radius: var(--si-r2);
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  color: inherit;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease;
-
-  &:hover {
-    background: var(--si-bg3);
-    border-color: var(--si-line-strong);
-  }
-
-  &__icon {
-    width: 34px;
-    height: 34px;
-    border-radius: var(--si-r2);
-    background: var(--si-accent-soft);
-    color: var(--si-accent-ink);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  &__body {
-    flex: 1;
-    min-width: 0;
-  }
-
-  &__title {
-    font-size: var(--si-text-8);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.05px;
-  }
-
-  &__description {
-    font-size: var(--si-text-5);
-    color: var(--si-fg-muted);
-    margin-top: var(--si-space-1);
-  }
-
-  &__chev {
-    color: var(--si-fg-muted);
-    flex-shrink: 0;
-  }
-}
+// `.settings-card` used to live here — 56 lines of card chrome, an icon
+// medallion, a title, a description and a chevron. It had ZERO call sites: no
+// template in this screen or anywhere else referenced it. It is deleted rather
+// than migrated to the shared `.v2-card`, because migrating dead CSS just moves
+// it. Worth noting that it carried the same dead `:hover` (a re-declaration of
+// the resting --si-bg3) as the four live cards — which is how the defect count
+// reached five: the copies propagated into code that was never even used.

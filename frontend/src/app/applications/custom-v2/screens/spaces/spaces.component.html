@@ -23,73 +23,81 @@
   } @else {
     <div class="space-grid">
       @for (s of sortedSpaces(); track s.id) {
-        <button type="button" class="space-card" (click)="openSpace(s)">
-          <div class="space-card__head">
-            <span class="space-card__glyph">
-              <app-v2-icon name="box" [size]="18" />
+        <!-- A plain element wrapping ONE button, not a button: the "more" control
+             below is a real <button>, and a button may not contain interactive
+             content. The primary target's ::after covers the card, so the whole
+             card still opens the Space, and the control sits outside it. See
+             styles/_card.scss § stretched primary target. -->
+        <div class="v2-card v2-card--interactive space-card">
+          <button type="button" class="v2-card__target space-card__target" (click)="openSpace(s)">
+            <span class="space-card__head">
+              <span class="space-card__glyph">
+                <app-v2-icon name="box" [size]="18" />
+              </span>
+              <span class="space-card__name-block">
+                <span class="space-card__name">{{ s.name }}</span>
+                @if (s.description) {
+                  <span class="space-card__description">{{ s.description }}</span>
+                }
+              </span>
             </span>
-            <div class="space-card__name-block">
-              <div class="space-card__name">{{ s.name }}</div>
-              @if (s.description) {
-                <div class="space-card__description">{{ s.description }}</div>
-              }
-            </div>
-            <app-v2-icon-btn
-              iconName="more"
-              [size]="22"
-              class="space-card__more"
-              [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }"
-            />
-          </div>
 
-          @if (s.storageQuota && s.storageQuota > 0) {
-            <div class="space-card__quota">
-              <div class="space-card__quota-bar" [attr.aria-label]="'Storage usage' | translate: locale.language">
-                <div
-                  class="space-card__quota-fill"
-                  [class.space-card__quota-fill--warn]="quotaPct(s) >= 75 && quotaPct(s) < 92"
-                  [class.space-card__quota-fill--danger]="quotaPct(s) >= 92"
-                  [style.width.%]="quotaPct(s)"
-                ></div>
+            @if (s.storageQuota && s.storageQuota > 0) {
+              <div class="space-card__quota">
+                <div class="space-card__quota-bar" [attr.aria-label]="'Storage usage' | translate: locale.language">
+                  <div
+                    class="space-card__quota-fill"
+                    [class.space-card__quota-fill--warn]="quotaPct(s) >= 75 && quotaPct(s) < 92"
+                    [class.space-card__quota-fill--danger]="quotaPct(s) >= 92"
+                    [style.width.%]="quotaPct(s)"
+                  ></div>
+                </div>
+                <div class="space-card__quota-label">
+                  {{ s.storageUsage ?? 0 | toBytes: 1 : true }}
+                  <span class="space-card__quota-sep">/</span>
+                  {{ s.storageQuota | toBytes }}
+                </div>
               </div>
-              <div class="space-card__quota-label">
-                {{ s.storageUsage ?? 0 | toBytes: 1 : true }}
-                <span class="space-card__quota-sep">/</span>
-                {{ s.storageQuota | toBytes }}
+            } @else if (s.storageUsage) {
+              <div class="space-card__quota">
+                <div class="space-card__quota-label">
+                  {{ s.storageUsage | toBytes: 1 : true }}
+                  <span class="space-card__quota-sep">·</span>
+                  <span l10nTranslate>unlimited</span>
+                </div>
               </div>
-            </div>
-          } @else if (s.storageUsage) {
-            <div class="space-card__quota">
-              <div class="space-card__quota-label">
-                {{ s.storageUsage | toBytes: 1 : true }}
-                <span class="space-card__quota-sep">·</span>
-                <span l10nTranslate>unlimited</span>
-              </div>
-            </div>
-          }
-
-          <div class="space-card__footer">
-            <div class="space-card__stats">
-              @if (managerAvatars(s).length > 0) {
-                <app-v2-avatar-stack [users]="managerAvatars(s)" [total]="memberCount(s)" [size]="22" [max]="3" />
-              } @else {
-                <span class="space-card__stat">
-                  <app-v2-icon name="person" [size]="12" />
-                  {{ memberCount(s) }}
-                </span>
-              }
-              @if ((s.counts?.shares ?? 0) > 0) {
-                <span class="space-card__stat">
-                  <app-v2-icon name="share" [size]="12" />
-                  {{ s.counts.shares }}
-                </span>
-              }
-            </div>
-            @if (s.modifiedAt) {
-              <div class="space-card__modified">{{ s.modifiedAt | amTimeAgo }}</div>
             }
-          </div>
-        </button>
+
+            <div class="space-card__footer">
+              <div class="space-card__stats">
+                @if (managerAvatars(s).length > 0) {
+                  <app-v2-avatar-stack [users]="managerAvatars(s)" [total]="memberCount(s)" [size]="22" [max]="3" />
+                } @else {
+                  <span class="space-card__stat">
+                    <app-v2-icon name="person" [size]="12" />
+                    {{ memberCount(s) }}
+                  </span>
+                }
+                @if ((s.counts?.shares ?? 0) > 0) {
+                  <span class="space-card__stat">
+                    <app-v2-icon name="share" [size]="12" />
+                    {{ s.counts.shares }}
+                  </span>
+                }
+              </div>
+              @if (s.modifiedAt) {
+                <app-v2-timestamp class="space-card__modified" [ms]="s.modifiedAt" [now]="renderedAt" />
+              }
+            </div>
+          </button>
+
+          <app-v2-icon-btn
+            iconName="more"
+            [size]="22"
+            class="v2-card__aside space-card__more"
+            [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }"
+          />
+        </div>
       }
     </div>
   }
