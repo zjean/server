@@ -28,7 +28,7 @@ interface AdminCard {
       <div class="admin__grid">
         @for (c of cards; track c.id) {
           @if (c.disabled) {
-            <div class="admin-card admin-card--disabled" [attr.title]="c.disabledReason | translate: locale.language">
+            <div class="v2-card admin-card admin-card--disabled" [attr.title]="c.disabledReason | translate: locale.language">
               <div class="admin-card__icon">
                 <app-v2-icon [name]="c.icon" [size]="20" />
               </div>
@@ -38,7 +38,7 @@ interface AdminCard {
               </div>
             </div>
           } @else {
-            <a [routerLink]="c.route" class="admin-card">
+            <a [routerLink]="c.route" class="v2-card v2-card--interactive admin-card">
               <div class="admin-card__icon">
                 <app-v2-icon [name]="c.icon" [size]="20" />
               </div>
@@ -94,31 +94,28 @@ interface AdminCard {
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         gap: var(--si-space-6);
       }
+      /* Fill, border, radius, cursor and hover come from the shared .v2-card /
+         .v2-card--interactive classes now. What was here had a :hover that
+         re-declared the resting --si-bg3, so hovering an admin card moved only
+         its border.
+
+         The disabled variant stays local: .v2-card--interactive:disabled cannot
+         match, because this card is an <a> and an anchor has no disabled state —
+         the screen expresses it with a class instead. */
       .admin-card {
         display: flex;
         align-items: flex-start;
         gap: var(--si-space-7);
         padding: var(--si-space-7) var(--si-space-8);
-        background: var(--si-bg3);
-        border: 1px solid var(--si-line);
-        border-radius: var(--si-r3);
         text-decoration: none;
-        color: inherit;
-        cursor: pointer;
-        transition:
-          background 120ms ease,
-          border-color 120ms ease;
 
-        &:hover {
-          background: var(--si-bg3);
-          border-color: var(--si-line-strong);
-        }
         &--disabled {
           opacity: 0.55;
           cursor: not-allowed;
           &:hover {
             background: var(--si-bg3);
             border-color: var(--si-line);
+            box-shadow: none;
           }
         }
       }

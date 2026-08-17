@@ -46,11 +46,23 @@ import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
         width: 48px;
         height: 48px;
         border-radius: 24px;
-        background: var(--si-bg3);
+        // A STEP, not the card's own value. This medallion painted --si-bg3
+        // inside a --si-bg3 card, so the only thing separating it from its
+        // ground was the 1px border below — the same surface-on-itself mistake
+        // the recents thumbnail made, and the ramp's rule is "never place
+        // surface-1 directly on surface-1". bg5 is one step up, which is the
+        // right direction for a raised medallion.
+        //
+        // Note this is the flat-CSS form of the bug, which is why a scan for
+        // nested same-surface declarations did not report it: the two rules are
+        // siblings in the stylesheet and only become parent and child in the DOM.
+        background: var(--si-bg5);
         // tertiary, not ghost: ghost on bg4 measured 2.59, below the 3:1 that
         // SC 1.4.11 asks of a meaningful glyph. The icon is arguably decorative
         // (the title states the same thing), but it was also simply too faint
-        // to read — tertiary lands at 3.76 (#397).
+        // to read — tertiary lands at 3.76 (#397). On bg5 it measures 4.06,
+        // which still clears the 3:1 a glyph is held to; tertiary is legal down
+        // to bg6 (3.66) for non-text.
         color: var(--si-fg-tertiary);
         display: flex;
         align-items: center;

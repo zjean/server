@@ -1,0 +1,225 @@
+// Sync-In v2 card chrome.
+//
+// One definition for what were five hand-maintained copies — `.space-card`,
+// `.settings-card`, `.admin-card`, `.pinned-card`, `.comment-card`. They were
+// copy-paste siblings, which is why an audit found the SAME three defects
+// distributed across them, none of which fails a build or shows up in a diff
+// review:
+//
+//   1. `&:hover { background: var(--si-bg3) }` — the identical value the card
+//      already paints at rest. Four screens shipped a hover that moved nothing
+//      but the border colour. It reads as an unresponsive card, and it is the
+//      kind of bug that survives precisely because the rule LOOKS like it does
+//      something.
+//   2. `&:active { transform: translateY(1px) }` — banned outright by the shadow
+//      block in _tokens.scss: "the design's rule is 'active is a surface step
+//      plus a 1px inset', and NO CONTROL EVER MOVES ON PRESS". Three sites had
+//      it. The token that expresses the sanctioned version, --si-shadow-press,
+//      already existed and had no consumers.
+//   3. A child painted --si-bg3 inside a --si-bg3 card, i.e. an invisible panel.
+//      The ramp's own rule is "never place surface-1 directly on surface-1".
+//
+// Emitted as CLASSES rather than a mixin, for the reason _type.scss gives: about
+// half of v2's components declare `styles: [...]` inline in a `.ts` file and
+// cannot `@use` a partial. A class works from both, so there is one spelling
+// instead of two that drift.
+
+.v2-root {
+  .v2-card {
+    // ─── The tertiary re-point ────────────────────────────────────────────
+    // Not defensive boilerplate; it is the fix _tokens.scss prescribes, placed
+    // where that file says to place it ("when you add a bg5/bg6 container, add
+    // the re-point next to its background").
+    //
+    // --si-fg-tertiary measures 4.37 on bg3 and 4.06 on bg5. Both are below 4.5,
+    // so tertiary is not legal as text on a card AT REST, and it is further from
+    // legal once the card hovers. That makes any tertiary string inside a card
+    // the "correct in one state, wrong in another" defect class the tokens header
+    // documents — and no single edit to such a declaration can be right in both
+    // states, which is why the fix is not an edit to the declaration.
+    //
+    // Re-pointing here means a consumer keeps saying --si-fg-tertiary (or uses
+    // the .v2-mono-data / .v2-meta roles, which name it) and silently gets the
+    // legal value for the surface it actually landed on. Verified to be a no-op
+    // for the three existing card screens: none of them names tertiary today.
+    --si-fg-tertiary: var(--si-fg-muted);
+
+    position: relative;
+    background: var(--si-bg3);
+    border: 1px solid var(--si-line);
+    // r2, which is the radius the ladder assigns to this shape: "--si-r2: 8px ·
+    // radius-md · cards, file-type tiles, toasts", against "--si-r3: 12px ·
+    // radius-lg · dialogs, panels, sheets". Three of the five cards being folded
+    // in here used r3 and one used r2, so they disagreed with each other as well
+    // as with the ladder; the one at r2 was the correct one. Adopting the shared
+    // class moves spaces, admin and the two recents cards from 12px to 8px.
+    border-radius: var(--si-r2);
+
+    // `outline` is deliberately absent from this list. The global focus ring in
+    // v2.scss is an outline, and animating a focus indicator's appearance is
+    // banned — it must show instantly. Transitioning box-shadow is safe because
+    // the ring is not a shadow in this system (see deviation 1 in _tokens.scss).
+    transition:
+      background var(--si-dur-2) var(--si-ease-out),
+      border-color var(--si-dur-2) var(--si-ease-out),
+      box-shadow var(--si-dur-2) var(--si-ease-out);
+  }
+
+  // Opt-in, because a card is not always a control: the settings and admin panels
+  // use card chrome for static grouping, and giving those a pointer cursor and a
+  // hover lift would promise an interaction that is not there.
+  .v2-card--interactive {
+    cursor: pointer;
+    // Inherit the app's type colour rather than the UA's button grey — these are
+    // usually <button> elements, which reset colour and font.
+    color: inherit;
+    font: inherit;
+    text-align: left;
+
+    &:hover {
+      // A REAL step, bg3 → bg5. "Elevation always toward the user": a card
+      // reacting to the pointer moves up the ramp, it does not merely re-outline.
+      background: var(--si-bg5);
+      border-color: var(--si-line-strong);
+      box-shadow: var(--si-shadow1);
+    }
+
+    &:active {
+      // Shading, never motion. The surface holds its hovered step and gains the
+      // inset — that pairing IS the design's definition of pressed.
+      background: var(--si-bg5);
+      box-shadow: var(--si-shadow-press);
+    }
+
+    &:disabled {
+      cursor: default;
+      // The one place a dimmed control is correct: SC 1.4.3 exempts an inactive
+      // component, and a disabled card that reads as brightly as a live one is
+      // itself a defect (_tokens.scss, exemption 2).
+      opacity: 0.55;
+
+      &:hover {
+        background: var(--si-bg3);
+        border-color: var(--si-line);
+        box-shadow: none;
+      }
+    }
+  }
+
+  // ─── The stretched primary target ─────────────────────────────────────────
+  // For any surface that is itself clickable AND carries its own controls — a
+  // card with a "more" menu, a table row with a row action. A <button> may not
+  // contain interactive content, so the surface stays a plain element, ONE button
+  // is the primary target with its `::after` stretched across the surface, and the
+  // controls sit outside that button.
+  //
+  // Named for the pattern rather than for the card, because four screens need it
+  // and only one of them is a card: the Space card had `<app-v2-icon-btn>` — a real
+  // <button> — inside `<button class="space-card">`, and the shared, trash and
+  // trash-bin table rows each have the same thing inside a `<button class="…-row">`.
+  // Invalid markup, ambiguous activation, and AT is handed a control containing a
+  // control. It renders fine, so nothing caught it.
+  //
+  // The host takes `.v2-stretch-host`, which supplies the positioning the ::after
+  // resolves against and the focus ring. It is a class rather than a documented
+  // requirement because forgetting `position: relative` is silent and spectacular:
+  // the ::after stretches to the nearest positioned ancestor instead, which is
+  // usually the page, so one row swallows every click on the screen.
+  //
+  // The one requirement left to the call site: anything BETWEEN the target and the
+  // aside in paint order must not eat clicks. Non-interactive cells take
+  // `pointer-events: none`; the aside raises itself, because it IS interactive.
+  // Deliberately sets neither `display` nor `width`. Both are the call site's
+  // business — a card's target is a flex column, a table row's is a flex row that
+  // has to sit in a grid cell — and declaring them here creates a specificity TIE
+  // with the component class beside it (`.v2-root .v2-stretch-target` and
+  // `.share-row__name[_ngcontent-x]` both weigh two classes), which resolves on
+  // stylesheet order and so is not reliably resolvable at all.
+  .v2-stretch-target {
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  // Resolves against .v2-stretch-host. Anything that must stay clickable has to
+  // sit above this — see .v2-stretch-aside.
+  .v2-stretch-target::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .v2-stretch-host {
+    position: relative;
+  }
+
+  // The ring belongs to the HOST, not to the stretched button, which would
+  // otherwise trace its own content box rather than the card or row the user is on.
+  // The offset is a variable because it depends on what surrounds the host. A
+  // card sits in a grid with gaps, so the ring goes OUTSIDE it. Table rows sit
+  // flush against each other, so an outward ring would overlap the row above —
+  // those pass -2px and get a ring drawn inside, which reads as a highlighted row.
+  .v2-stretch-host:has(> .v2-stretch-target:focus-visible) {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: var(--v2-stretch-ring-offset, 2px);
+  }
+
+  .v2-stretch-target:focus-visible {
+    outline: none;
+  }
+
+  // The controls. Raised above the stretched target so they remain clickable, and
+  // it must be a real stacking position rather than `pointer-events` alone,
+  // because these ARE interactive. `position` is left to the call site: a card
+  // pins them to a corner, a table row keeps them in their own column.
+  .v2-stretch-aside {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--si-space-3);
+  }
+
+  // ─── The media well ───────────────────────────────────────────────────────
+  // The frame for a thumbnail or, when there is nothing to show, for its absence.
+  //
+  // This exists because the invisible-panel bug above had a sanctioned fix that
+  // nobody had reached for. The recents card drew a 96px block of --si-bg3 inside
+  // a --si-bg3 card and put a glyph in the middle of it: measured, both surfaces
+  // were the identical rgb(39,44,49), so 53% of the card's height was a panel
+  // that could not be seen. The system's own answer is D8's rule, carried by
+  // --si-media-stripe: "media placeholders are striped, never coloured blocks —
+  // the stripe says image goes here." A flat block reads as a swatch, i.e. as
+  // content; 3.5% white at 135° reads as an absence.
+  //
+  // Base colour is the file-type tint, bound per instance as --fc-bg (the same
+  // [style.--fc-bg] convention the gallery tile uses), so the well is never the
+  // same value as the card behind it. The literal fallback is the unmapped-type
+  // floor.
+  .v2-media-well {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--si-r2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--fc-bg, var(--si-bg3));
+    color: var(--fc-fg, var(--si-fg-muted));
+  }
+
+  // The stripe. A pseudo-element so it can never be mistaken for content, and it
+  // sits UNDER the thumbnail: a photo covers it, a placeholder does not, which is
+  // exactly the distinction it exists to draw.
+  .v2-media-well::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(135deg, var(--si-media-stripe) 0 8px, transparent 8px 16px);
+    pointer-events: none;
+  }
+}

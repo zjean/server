@@ -3,10 +3,10 @@ import { toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
-import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { ShareFileModel } from '../../../shares/models/share-file.model'
 import { SharesService } from '../../../shares/services/shares.service'
 import { EmptyStateComponent } from '../../components/empty-state.component'
+import { TimestampComponent } from '../../components/timestamp.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { ShareDialogService } from '../../components/share-dialog.service'
@@ -51,7 +51,7 @@ const CONFIGS: Record<SharedVariant, VariantConfig> = {
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './shared.component.html',
   styleUrl: './shared.component.scss',
-  imports: [IconButtonComponent, FileGlyphComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe, EmptyStateComponent]
+  imports: [IconButtonComponent, FileGlyphComponent, TimestampComponent, L10nTranslateDirective, L10nTranslatePipe, EmptyStateComponent]
 })
 export class SharedComponent implements OnInit, OnDestroy {
   private readonly sharesService = inject(SharesService)
@@ -63,6 +63,9 @@ export class SharedComponent implements OnInit, OnDestroy {
   private readonly toast = inject(ToastService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
+
+  // One instant for every row's timestamp — see the same note in recents.
+  protected readonly renderedAt = Date.now()
 
   protected readonly mimeToGlyph = mimeToGlyph
   protected readonly allShares = signal<ShareFileModel[]>([])

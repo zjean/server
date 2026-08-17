@@ -1,3 +1,11 @@
+// Favorites.
+//
+// Two thirds shorter than it was, because the row, the section header, the
+// timestamp cell and the empty state are shared components now. What went:
+//   • `.favorite-row` (67 lines)  → components/file-row.component.ts
+//   • `__section-label` / `__count-pill` → components/section-head.component.ts
+//   • the hand-rolled title / meta type → styles/_type.scss roles
+
 :host {
   display: flex;
   flex: 1 1 auto;
@@ -12,133 +20,60 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-
-  // Compact page header, matching personal/spaces/shared/trash (one header
-  // system across the app — 26px title + 14px meta).
-  &__header {
-    padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
-  }
-
-  &__title-text {
-    margin: 0;
-    font-family: var(--si-display);
-    font-size: var(--si-text-15);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.018em;
-    line-height: 1.15;
-  }
-
-  &__title-meta {
-    margin: var(--si-space-2) 0 0;
-    font-size: var(--si-text-10);
-    line-height: 1.4;
-    color: var(--si-fg-muted);
-    font-family: var(--si-sans);
-  }
-
-  &__section {
-    padding: var(--si-space-11) var(--si-space-12) var(--si-space-12);
-  }
-
-  &__section-head {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-5);
-    margin-bottom: var(--si-space-7);
-  }
-
-  &__section-label {
-    font-family: var(--si-display);
-    font-size: var(--si-text-4);
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--si-fg-muted);
-  }
-
-  &__count-pill {
-    display: inline-flex;
-    align-items: center;
-    height: 18px;
-    padding: 0 var(--si-space-4);
-    border-radius: var(--si-r4);
-    background: var(--si-bg3);
-    color: var(--si-fg-muted);
-    font-family: var(--si-mono);
-    font-size: var(--si-text-3);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
 }
 
-.favorite-row {
-  width: 100%;
+.favorites__header {
+  padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
+}
+
+// Counts, matching recents and the "4 spaces" / "0 items" pattern next door. The
+// lede sentence this replaces ("Files and folders you have starred for quick
+// access.") restated the section header directly below it.
+.favorites__meta {
   display: flex;
-  align-items: center;
-  gap: var(--si-space-6);
-  padding: var(--si-space-5) var(--si-space-6);
-  margin: 0 -12px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease;
-
-  &:hover {
-    background: var(--si-bg3);
-  }
-
-  &__meta {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  &__name {
-    font-size: var(--si-text-9);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__sub {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-3);
-    margin-top: var(--si-space-2);
-    font-size: var(--si-text-5);
-    color: var(--si-fg-muted);
-    min-width: 0;
-  }
-
-  &__sub-icon {
-    flex-shrink: 0;
-  }
-
-  &__path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__star {
-    color: var(--si-amber-ink);
-    flex-shrink: 0;
-  }
-
-  &__time {
-    font-family: var(--si-mono);
-    font-size: var(--si-text-3);
-    color: var(--si-fg-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
+  align-items: baseline;
+  gap: var(--si-space-3);
+  margin: var(--si-space-3) 0 0;
+  font-family: var(--si-sans);
+  font-size: var(--si-text-10);
+  line-height: 1.4;
+  color: var(--si-fg-muted);
 }
 
-// Empty state now uses the shared <app-v2-empty-state> component
-// (components/empty-state.component.ts) so it matches shares + spaces.
+.favorites__meta-count {
+  font-family: var(--si-mono);
+  color: var(--si-fg);
+}
+
+.favorites__section {
+  padding: var(--si-space-11) var(--si-space-12) var(--si-space-12);
+}
+
+// Capped for the same reason recents is: a right-aligned date column stretched to
+// 1100px puts too much space between a filename and its date to pair them.
+.favorites__list {
+  margin-top: var(--si-space-7);
+  width: 100%;
+  max-width: 1080px;
+}
+
+// amber-ink, not amber: the base tone is the FILL and the `-ink` tone is the same
+// hue used as TYPE or as a glyph. Drawing a mark with the fill value is the
+// pairing mistake _tokens.scss calls out.
+.favorites__star {
+  display: inline-flex;
+  align-items: center;
+  color: var(--si-amber-ink);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .favorites__header {
+    padding: var(--si-space-11) var(--si-space-8) var(--si-space-7);
+  }
+
+  .favorites__section {
+    padding-left: var(--si-space-8);
+    padding-right: var(--si-space-8);
+  }
+}

@@ -84,36 +84,44 @@
   padding: 0 var(--si-space-12) var(--si-space-12);
 }
 
+// Fill, border, radius, cursor, hover, press and the tertiary re-point now come
+// from `.v2-card` / `.v2-card--interactive` in styles/_card.scss. What this file
+// used to declare had a `:hover` that re-set the resting --si-bg3 (so hover moved
+// only the border) and a `transform: translateY(1px)` on press, which _tokens.scss
+// bans outright. The radius also moves 12px → 8px, which is the value the ladder
+// assigns to a card.
 .space-card {
+  padding: var(--si-space-9) var(--si-space-9) var(--si-space-7);
+  // The card is a flex column and the target grows inside it, which together are
+  // what keeps `&__footer { margin-top: auto }` working. That rule is #399's fix
+  // for footers sitting at different heights across a row, and it needs its flex
+  // parent to be TALLER than its content — the grid stretches every card to the
+  // row height, so the card has the spare height and the target has to inherit it.
+  // With the target merely sizing to its content (the default for the block that
+  // `.v2-stretch-target` makes it), the auto margin has nothing to absorb and the
+  // regression is invisible until two cards in a row have different description
+  // lengths.
   display: flex;
   flex-direction: column;
-  gap: var(--si-space-8);
-  padding: var(--si-space-9) var(--si-space-9) var(--si-space-7);
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
-  border-radius: var(--si-r3);
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  color: inherit;
-  transition:
-    border-color 120ms ease,
-    background 120ms ease,
-    transform 120ms ease;
 
-  &:hover {
-    border-color: var(--si-line-strong);
-    background: var(--si-bg3);
-  }
-
-  &:active {
-    transform: translateY(1px);
+  // The stretched primary target holds the card's own column layout; the card
+  // itself is now just the padded, bordered box around it plus the "more" control.
+  &__target {
+    display: flex;
+    flex-direction: column;
+    gap: var(--si-space-8);
+    flex: 1 1 auto;
+    width: 100%;
   }
 
   &__head {
     display: flex;
     align-items: flex-start;
     gap: var(--si-space-6);
+    // Reserves the top-right corner so a long Space name cannot run under the
+    // absolutely-positioned "more" button. It used to be a flex sibling here, so
+    // the gap did this implicitly.
+    padding-right: var(--si-space-10);
   }
 
   &__glyph {
@@ -130,12 +138,19 @@
     justify-content: center;
   }
 
+  // display is explicit on these three because they became <span>s when the card
+  // stopped being a <button>: a span may not contain a div, so the inner structure
+  // had to become inline elements, and an inline element ignores width, flex and
+  // the line clamp below.
   &__name-block {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     min-width: 0;
   }
 
   &__name {
+    display: block;
     font-size: var(--si-text-11);
     font-weight: 500;
     color: var(--si-fg);
@@ -161,14 +176,30 @@
   // The "more" icon-button only fades in on card hover so the resting
   // grid reads cleanly. Using opacity (not display) keeps the layout
   // stable so the name block doesn't reflow on hover.
+  // Absolutely positioned now rather than a flex sibling, because it moved OUT of
+  // the primary button — it is a real <button> and could not legally stay inside
+  // one. `.v2-stretch-aside` supplies the z-index that keeps it above the stretched
+  // target; the card pins it to a corner, so `position` is set here.
   &__more {
-    flex-shrink: 0;
+    position: absolute;
+    top: var(--si-space-7);
+    right: var(--si-space-7);
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--si-dur-2) var(--si-ease-out);
   }
 
-  &:hover &__more {
+  // focus-within, not only hover: without it a keyboard user tabbing to this
+  // control cannot see the control they are on. It was hover-only before.
+  &:hover &__more,
+  &:focus-within &__more {
     opacity: 1;
+  }
+
+  // Coarse pointers get no hover, so hidden-until-hover would make it unreachable.
+  @media (hover: none) {
+    &__more {
+      opacity: 1;
+    }
   }
 
   &__quota {

@@ -1,29 +1,42 @@
 <div class="favorites">
   <header class="favorites__header">
-    <h1 class="favorites__title-text" l10nTranslate>Favorites</h1>
-    <div class="favorites__title-meta" l10nTranslate>Files and folders you have starred for quick access.</div>
+    <h1 class="v2-page-title" l10nTranslate>Favorites</h1>
+    <p class="favorites__meta">
+      <span class="favorites__meta-count">{{ favorites().length }}</span>
+      <span l10nTranslate>items</span>
+    </p>
   </header>
 
   @if (hasAny()) {
     <section class="favorites__section">
-      <header class="favorites__section-head">
-        <span class="favorites__section-label" l10nTranslate>Starred</span>
-        <span class="favorites__count-pill">{{ favorites().length }}</span>
-      </header>
-      @for (f of favorites(); track f.id) {
-        <button type="button" class="favorite-row" (click)="openFavorite(f)" (auxclick)="onRowAuxClick($event, f)">
-          <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
-          <div class="favorite-row__meta">
-            <div class="favorite-row__name">{{ f.name }}</div>
-            <div class="favorite-row__sub">
-              <app-v2-icon name="folder" [size]="10" class="favorite-row__sub-icon" />
-              <span class="favorite-row__path">{{ parentPath(f) }}</span>
-            </div>
-          </div>
-          <app-v2-icon name="star" [size]="14" class="favorite-row__star" />
-          <div class="favorite-row__time">{{ f.mtime | amTimeAgo }}</div>
-        </button>
-      }
+      <app-v2-section-head label="Starred" [count]="favorites().length" />
+
+      <div class="favorites__list">
+        @for (f of favorites(); track f.id) {
+          <app-v2-file-row
+            [name]="f.name"
+            [mime]="f.mime"
+            [isDir]="f.isDir"
+            [serverPath]="f.navPath"
+            [path]="locationPath(f) || (originKey(f) | translate: locale.language)"
+            [pathIcon]="originIcon(f)"
+            [pathIconLabel]="originKey(f) | translate: locale.language"
+            [mtime]="f.mtime"
+            [now]="renderedAt"
+            (open)="openFavorite(f)"
+            (aux)="openFavoriteInNewTab(f)"
+          >
+            <!-- Decorative here, and aria-hidden for that reason: every row on a
+                 screen called "Starred" is starred, so a label would repeat what
+                 the section header already states. It stays visible because the
+                 mark is what makes the row recognisable when the same file turns
+                 up in a search result or a recents list. -->
+            <span rowBadges class="favorites__star" aria-hidden="true">
+              <app-v2-icon name="star" [size]="14" />
+            </span>
+          </app-v2-file-row>
+        }
+      </div>
     </section>
   } @else {
     <app-v2-empty-state icon="star" title="No favorites yet" lede="Star a file or folder from the file browser and it will show up here." />
