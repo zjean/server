@@ -44,7 +44,7 @@ import { formatTimestamp } from '../utils/format-timestamp'
   ]
 })
 export class TimestampComponent {
-  readonly ms = input<number | string | null | undefined>(null)
+  readonly ms = input<number | string | Date | null | undefined>(null)
 
   // `now` is an input so a caller rendering a long list can pass one shared
   // instant, and so the boundary cases stay drivable from a test. It is read at

@@ -37,7 +37,11 @@ export interface FormattedTimestamp {
 
 // `now` is a parameter rather than a `Date.now()` call inside the body so the
 // spec can pin every boundary without freezing the clock globally.
-export function formatTimestamp(value: number | string | null | undefined, now: number = Date.now()): FormattedTimestamp | null {
+// `Date` is in the union because the payloads genuinely disagree: a recents row
+// carries `mtime` as epoch millis, while a comment carries `modifiedAt` already
+// hydrated to a Date. dayjs takes either, so the alternative would be a coercion
+// at each of the two call sites rather than one union here.
+export function formatTimestamp(value: number | string | Date | null | undefined, now: number = Date.now()): FormattedTimestamp | null {
   // A missing timestamp is a real state — `mtime` is absent on a row the server
   // has not materialised yet — and it must render as nothing rather than as
   // "Invalid Date". Note `0` is deliberately NOT treated as missing here: it is

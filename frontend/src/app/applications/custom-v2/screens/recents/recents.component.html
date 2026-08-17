@@ -1,95 +1,150 @@
 <div class="recents">
+  <!-- The title takes the .v2-page-title role (28px/500, --si-text-16). That role
+       is documented as "the design's one-per-page title" and had no consumers;
+       this screen was hand-rolling 26px instead.
+
+       The lede sentence it replaces — "Files you and your collaborators have
+       touched recently." — restated the page's own name and carried no data. The
+       meta line counts what is actually on screen, which is also the pattern the
+       neighbouring screens already use ("4 spaces", "0 items"). -->
   <header class="recents__header">
-    <h1 class="recents__title-text" l10nTranslate>Recents</h1>
-    <div class="recents__title-meta" l10nTranslate>Files you and your collaborators have touched recently.</div>
+    <h1 class="v2-page-title" l10nTranslate>Recents</h1>
+    <p class="recents__meta">
+      <span class="recents__meta-count">{{ files().length }}</span>
+      <span l10nTranslate>files</span>
+      @if (comments().length > 0) {
+        <span class="recents__meta-sep">·</span>
+        <span class="recents__meta-count">{{ comments().length }}</span>
+        <span l10nTranslate>comments</span>
+      }
+    </p>
   </header>
 
-  @if (pinnedFiles().length > 0) {
-    <section class="recents__section">
-      <header class="recents__section-head">
-        <span class="recents__section-label" l10nTranslate>Pick up where you left off</span>
-        <span class="recents__count-pill">{{ pinnedFiles().length }}</span>
-      </header>
-      <div class="recents__pinned-grid">
-        @for (f of pinnedFiles(); track f.id) {
-          <button type="button" class="pinned-card" (click)="openFile(f.path, f.name)" (auxclick)="onRowAuxClick($event, f.path, f.name)">
-            <div class="pinned-card__thumb">
-              <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="56" [rounded]="12" />
-              <span class="pinned-card__time">{{ f.mtime | amTimeAgo }}</span>
-            </div>
-            <div class="pinned-card__name">{{ f.name }}</div>
-            <div class="pinned-card__sub">
-              <app-v2-icon name="folder" [size]="10" class="pinned-card__sub-icon" />
-              <span class="pinned-card__path">{{ f.showedPath || '/' }}</span>
-            </div>
-          </button>
-        }
-      </div>
-    </section>
-  }
+  @if (hasAny()) {
+    <div class="recents__body">
+      @if (pinnedFiles().length > 0) {
+        <section class="recents__section">
+          <app-v2-section-head label="Pick up where you left off" [count]="pinnedFiles().length" />
 
-  @if (pinnedComments().length > 0) {
-    <section class="recents__section">
-      <header class="recents__section-head">
-        <span class="recents__section-label" l10nTranslate>Recent comments</span>
-        <span class="recents__count-pill">{{ pinnedComments().length }}</span>
-      </header>
-      <div class="recents__comments-grid">
-        @for (c of pinnedComments(); track c.id) {
-          <button
-            type="button"
-            class="comment-card"
-            (click)="openFile(c.file.path, c.file.name)"
-            (auxclick)="onRowAuxClick($event, c.file.path, c.file.name)"
-          >
-            <div class="comment-card__file">
-              <app-v2-file-glyph [type]="mimeToGlyph(c.file.mime)" [size]="20" [rounded]="5" />
-              <span class="comment-card__file-name">{{ c.file.name }}</span>
-            </div>
-            <div class="comment-card__author">
-              <app-v2-avatar [user]="commentAvatar(c.author)" [size]="22" />
-              <span class="comment-card__author-name">{{ c.author?.fullName || c.author?.login }}</span>
-              <span class="comment-card__when">{{ c.modifiedAt | amTimeAgo }}</span>
-            </div>
-            <p class="comment-card__body">{{ c.content }}</p>
-          </button>
-        }
-      </div>
-    </section>
-  }
+          <div class="recents__pinned-grid">
+            @for (f of pinnedFiles(); track f.id) {
+              <!-- Card chrome comes from the shared .v2-card classes, so the hover
+                   step, the pressed inset and the tertiary re-point are the same
+                   here as on every other card in the app. What this file used to
+                   declare locally had a hover identical to its resting state and a
+                   1px translate on press. -->
+              <button
+                type="button"
+                class="v2-card v2-card--interactive pinned-card"
+                (click)="openFile(f.path, f.name)"
+                (auxclick)="onCardAuxClick($event, f.path, f.name)"
+              >
+                <!-- The media well: file-type tint + the 135° stripe, with a real
+                     server thumbnail when the file is an image and the type glyph
+                     when it is not. Replaces a 96px block of --si-bg3 drawn inside
+                     a --si-bg3 card, which measured as the same colour and so was
+                     simply invisible. --fc-bg / --fc-fg are bound per card, the
+                     same convention the gallery tile uses. -->
+                <span
+                  class="v2-media-well pinned-card__well"
+                  [style.--fc-bg]="'var(--fc-' + mimeToGlyph(f.mime) + '-bg)'"
+                  [style.--fc-fg]="'var(--fc-' + mimeToGlyph(f.mime) + '-fg)'"
+                >
+                  <app-v2-file-thumb
+                    [file]="{ name: f.name, mime: f.mime, isDir: false }"
+                    [serverPath]="serverPath(f)"
+                    [glyphSize]="40"
+                    [rounded]="10"
+                    [imageRes]="256"
+                  />
+                </span>
 
-  @if (buckets().length > 0) {
-    <section class="recents__section recents__section--list">
-      @for (g of buckets(); track g.key) {
-        <header class="bucket-head">
-          <span class="recents__section-label">{{ g.label | translate: locale.language }}</span>
-          <span class="recents__count-pill">{{ g.items.length }}</span>
-          <div class="bucket-rule"></div>
-        </header>
-        @for (f of g.items; track f.id) {
-          <button type="button" class="recent-row" (click)="openFile(f.path, f.name)" (auxclick)="onRowAuxClick($event, f.path, f.name)">
-            <app-v2-file-glyph [type]="mimeToGlyph(f.mime)" [size]="36" [rounded]="8" />
-            <div class="recent-row__meta">
-              <div class="recent-row__name">{{ f.name }}</div>
-              <div class="recent-row__sub">
-                <app-v2-icon name="folder" [size]="10" class="recent-row__sub-icon" />
-                <span class="recent-row__path">{{ f.showedPath || '/' }}</span>
-              </div>
-            </div>
-            <div class="recent-row__time">{{ f.mtime | amTimeAgo }}</div>
-          </button>
-        }
+                <span class="pinned-card__name v2-body-strong">{{ f.name }}</span>
+
+                <span class="pinned-card__foot">
+                  <span class="pinned-card__loc">
+                    <span class="pinned-card__loc-icon" role="img" [attr.aria-label]="originKey(f) | translate: locale.language">
+                      <app-v2-icon [name]="originIcon(f)" [size]="10" />
+                    </span>
+                    <span class="pinned-card__loc-text v2-mono-path">{{ locationPath(f) || (originKey(f) | translate: locale.language) }}</span>
+                  </span>
+                  <app-v2-timestamp [ms]="f.mtime" [now]="renderedAt" />
+                </span>
+              </button>
+            }
+          </div>
+        </section>
       }
-    </section>
-  }
 
-  @if (!hasAny()) {
-    <div class="recents-empty">
-      <div class="recents-empty__icon">
-        <app-v2-icon name="doc" [size]="22" />
-      </div>
-      <div class="recents-empty__title" l10nTranslate>No recent activity</div>
-      <div class="recents-empty__lede" l10nTranslate>Files you open or change, and threads on files you follow, will appear here.</div>
+      @if (pinnedComments().length > 0) {
+        <section class="recents__section">
+          <app-v2-section-head label="Recent comments" [count]="pinnedComments().length" />
+
+          <div class="recents__comments-grid">
+            @for (c of pinnedComments(); track c.id) {
+              <button
+                type="button"
+                class="v2-card v2-card--interactive comment-card"
+                (click)="openFile(c.file.path, c.file.name)"
+                (auxclick)="onCardAuxClick($event, c.file.path, c.file.name)"
+              >
+                <span class="comment-card__file">
+                  <app-v2-file-thumb
+                    [file]="{ name: c.file.name, mime: c.file.mime, isDir: false }"
+                    [serverPath]="c.file.path + '/' + c.file.name"
+                    [glyphSize]="20"
+                    [rounded]="5"
+                    [imageRes]="64"
+                  />
+                  <span class="comment-card__file-name v2-body-strong">{{ c.file.name }}</span>
+                </span>
+
+                <span class="comment-card__author">
+                  <app-v2-avatar [user]="commentAvatar(c.author)" [size]="22" />
+                  <span class="comment-card__author-name">{{ c.author?.fullName || c.author?.login }}</span>
+                  <app-v2-timestamp class="comment-card__when" [ms]="c.modifiedAt" [now]="renderedAt" />
+                </span>
+
+                <!-- The comment body is the one genuinely human-authored prose on
+                     this screen, so it stays sans while the paths and dates around
+                     it are mono. -->
+                <span class="comment-card__body">{{ c.content }}</span>
+              </button>
+            }
+          </div>
+        </section>
+      }
+
+      @if (buckets().length > 0) {
+        <section class="recents__section recents__section--list">
+          @for (g of buckets(); track g.key) {
+            <!-- variant="mono" because these headers name a computed date range,
+                 not a human idea — the same rule that puts paths and timestamps in
+                 Plex Mono. It is what stops five identically-tracked uppercase
+                 eyebrows down one page from reading as one repeated ornament. -->
+            <app-v2-section-head [label]="g.label" [count]="g.items.length" variant="mono" [rule]="true" [sticky]="true" />
+
+            @for (f of g.items; track f.id) {
+              <app-v2-file-row
+                [name]="f.name"
+                [mime]="f.mime"
+                [serverPath]="serverPath(f)"
+                [path]="locationPath(f) || (originKey(f) | translate: locale.language)"
+                [pathIcon]="originIcon(f)"
+                [pathIconLabel]="originKey(f) | translate: locale.language"
+                [mtime]="f.mtime"
+                [now]="renderedAt"
+                (open)="openFile(f.path, f.name)"
+                (aux)="openFileInNewTab(f.path, f.name)"
+              />
+            }
+          }
+        </section>
+      }
     </div>
+  } @else {
+    <!-- The shared empty state, replacing a hand-rolled copy of it that had
+         drifted: its own medallion painted --si-bg3 inside a --si-bg3 card. -->
+    <app-v2-empty-state icon="doc" title="No recent activity" lede="Files you open or change, and threads on files you follow, will appear here." />
   }
 </div>

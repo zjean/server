@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core'
-import { IconV2Component } from '../icons/icon-v2.component'
+import { IconV2Component, IconV2Name } from '../icons/icon-v2.component'
 import { FileThumbComponent } from './file-thumb.component'
 import { TimestampComponent } from './timestamp.component'
 
@@ -33,14 +33,37 @@ import { TimestampComponent } from './timestamp.component'
 // The focus ring is then moved from the inner button to the row, because a ring
 // drawn around the stretched button would trace the text box rather than the row
 // the user is on.
+//
+// ─── Why the class is `v2-row` and not `row` ───────────────────────────────
+// Because `row` was, and it broke the layout on mobile in a way that measured as
+// a 24px horizontal overflow inside the list. Bootstrap is loaded globally for the
+// classic UI, and `.row` is one of its grid classes:
+//
+//   .row      { display: flex; flex-wrap: wrap;
+//               margin-right: calc(-.5 * var(--bs-gutter-x));   /* -12px */
+//               margin-left:  calc(-.5 * var(--bs-gutter-x)); }
+//   .row > *  { width: 100%; padding-inline: calc(var(--bs-gutter-x) * .5); }
+//
+// View encapsulation does NOT protect against this. Encapsulation scopes the
+// selectors this component writes; it does nothing about a global selector that
+// happens to match an element in this component's template. So the negative
+// gutter margins widened every row by 24px past its container, and `.row > *`
+// put 12px of padding on all four children — including the two empty projection
+// wrappers, which is why an unused badge slot rendered 24px wide.
+//
+// It is the same collision `custom-v2`'s notes record for `code { color: … }`,
+// reached through a class name instead of an element selector, and it is invisible
+// to `styles/tokens.spec.ts` for the same reason: nothing here names a colour and
+// nothing here is wrong on its own. Namespace any class that could plausibly be a
+// utility name — `row`, `card`, `badge`, `col`, `active`, `show`, `container`.
 @Component({
   selector: 'app-v2-file-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconV2Component, FileThumbComponent, TimestampComponent],
   template: `
-    <div class="row" [class.row--disabled]="disabled()">
+    <div class="v2-row" [class.v2-row--disabled]="disabled()">
       <button
-        class="row__main"
+        class="v2-row__main"
         type="button"
         [disabled]="disabled()"
         [attr.aria-label]="ariaLabel() || null"
@@ -48,7 +71,7 @@ import { TimestampComponent } from './timestamp.component'
         (auxclick)="onAuxClick($event)"
         (contextmenu)="menu.emit($event)"
       >
-        <span class="row__tile" [style.width.px]="tileSize()" [style.height.px]="tileSize()">
+        <span class="v2-row__tile" [style.width.px]="tileSize()" [style.height.px]="tileSize()">
           <app-v2-file-thumb
             [file]="{ name: name(), mime: mime(), isDir: isDir() }"
             [serverPath]="serverPath()"
@@ -57,24 +80,31 @@ import { TimestampComponent } from './timestamp.component'
             [imageRes]="128"
           />
         </span>
-        <span class="row__text">
-          <span class="row__name v2-body-strong">{{ name() }}</span>
+        <span class="v2-row__text">
+          <span class="v2-row__name v2-body-strong">{{ name() }}</span>
           @if (path()) {
-            <span class="row__path">
-              <app-v2-icon name="folder" [size]="10" class="row__path-icon" />
-              <span class="v2-mono-path row__path-text">{{ path() }}</span>
+            <span class="v2-row__path">
+              <!-- Meaningful, not decorative: this glyph is what tells the user
+                   whether the file is their own, in a Space, or shared with them,
+                   so it carries an accessible name rather than aria-hidden. The
+                   name lands inside the primary button, so it joins the row's own
+                   accessible name — "card-mobile.jpg, Space, marketing/Social". -->
+              <span class="v2-row__path-icon" role="img" [attr.aria-label]="pathIconLabel() || null">
+                <app-v2-icon [name]="pathIcon()" [size]="10" />
+              </span>
+              <span class="v2-mono-path v2-row__path-text">{{ path() }}</span>
             </span>
           }
         </span>
       </button>
 
-      <span class="row__badges"><ng-content select="[rowBadges]" /></span>
+      <span class="v2-row__badges"><ng-content select="[rowBadges]" /></span>
 
       @if (mtime() !== null && mtime() !== undefined) {
-        <app-v2-timestamp class="row__time" [ms]="mtime()" [now]="now()" />
+        <app-v2-timestamp class="v2-row__time" [ms]="mtime()" [now]="now()" />
       }
 
-      <span class="row__actions"><ng-content select="[rowActions]" /></span>
+      <span class="v2-row__actions"><ng-content select="[rowActions]" /></span>
     </div>
   `,
   styles: [
@@ -83,7 +113,7 @@ import { TimestampComponent } from './timestamp.component'
         display: block;
       }
 
-      .row {
+      .v2-row {
         /* ─── The tertiary re-point ───────────────────────────────────────
            Same fix, same reason as styles/_card.scss: this row hovers to bg3,
            where --si-fg-tertiary measures 4.37 and is not legal as text. The
@@ -109,21 +139,21 @@ import { TimestampComponent } from './timestamp.component'
         transition: background var(--si-dur-2) var(--si-ease-out);
       }
 
-      .row:hover {
+      .v2-row:hover {
         background: var(--si-bg3);
       }
 
       /* Pressed is shading, never motion — the rows this replaces used a 1px
          translateY, which _tokens.scss bans outright ("NO CONTROL EVER MOVES ON
          PRESS"). */
-      .row:active:not(.row--disabled) {
+      .v2-row:active:not(.v2-row--disabled) {
         box-shadow: var(--si-shadow-press);
       }
 
       /* The ring belongs to the row, not to the stretched button inside it.
          :has() is already used elsewhere in v2 (layout, segmented, empty-panel),
          so this needs no new browser floor. */
-      .row:has(> .row__main:focus-visible) {
+      .v2-row:has(> .v2-row__main:focus-visible) {
         outline: 2px solid var(--si-focus-ring);
         outline-offset: -2px;
       }
@@ -131,11 +161,11 @@ import { TimestampComponent } from './timestamp.component'
       /* Inset, unlike the global +2px offset: rows sit flush against their
          neighbours, so an outward ring would overlap the row above. Drawn inside,
          it reads as a highlighted row rather than a box between two rows. */
-      .row__main:focus-visible {
+      .v2-row__main:focus-visible {
         outline: none;
       }
 
-      .row__main {
+      .v2-row__main {
         display: flex;
         align-items: center;
         gap: var(--si-space-6);
@@ -152,26 +182,26 @@ import { TimestampComponent } from './timestamp.component'
       /* What makes the whole strip clickable while only the text is the button.
          Sits beneath the trailing columns in paint order, which is why those
          disable pointer events rather than raising a z-index. */
-      .row__main::after {
+      .v2-row__main::after {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: inherit;
       }
 
-      .row--disabled .row__main {
+      .v2-row--disabled .v2-row__main {
         cursor: default;
       }
 
-      .row--disabled {
+      .v2-row--disabled {
         opacity: 0.55;
       }
 
-      .row--disabled:hover {
+      .v2-row--disabled:hover {
         background: none;
       }
 
-      .row__tile {
+      .v2-row__tile {
         position: relative;
         flex-shrink: 0;
         overflow: hidden;
@@ -181,7 +211,7 @@ import { TimestampComponent } from './timestamp.component'
         justify-content: center;
       }
 
-      .row__text {
+      .v2-row__text {
         display: flex;
         flex-direction: column;
         gap: var(--si-space-2);
@@ -190,41 +220,47 @@ import { TimestampComponent } from './timestamp.component'
 
       /* Truncation lives here rather than on the role class: .v2-body-strong is
          a type role and has no opinion about layout. */
-      .row__name,
-      .row__path-text {
+      .v2-row__name,
+      .v2-row__path-text {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .row__path {
+      .v2-row__path {
         display: flex;
         align-items: center;
         gap: var(--si-space-3);
         min-width: 0;
       }
 
-      .row__path-icon {
+      .v2-row__path-icon {
         flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        /* tertiary is legal here for the same reason the exemptions in
+           _tokens.scss name: SC 1.4.11 asks 3:1 of a meaningful non-text element,
+           not the 4.5:1 it asks of text, and tertiary clears that down to bg6.
+           The row's re-point lifts it to muted anyway. */
         color: var(--si-fg-tertiary);
       }
 
       /* Non-interactive trailing content: clicks fall through to the stretched
          target so the row still opens when the pointer happens to be over a badge
          or the date. */
-      .row__badges,
-      .row__time {
+      .v2-row__badges,
+      .v2-row__time {
         pointer-events: none;
       }
 
-      .row__badges {
+      .v2-row__badges {
         display: inline-flex;
         align-items: center;
         gap: var(--si-space-4);
       }
 
       /* Above the stretched target and clickable, unlike its two neighbours. */
-      .row__actions {
+      .v2-row__actions {
         position: relative;
         z-index: 1;
         pointer-events: auto;
@@ -236,20 +272,20 @@ import { TimestampComponent } from './timestamp.component'
       /* Actions are revealed on hover and on keyboard focus. focus-within is not
          optional here: without it a keyboard user tabbing into an action cannot
          see the control they are on. */
-      .row__actions:not(:empty) {
+      .v2-row__actions:not(:empty) {
         opacity: 0;
         transition: opacity var(--si-dur-2) var(--si-ease-out);
       }
 
-      .row:hover .row__actions,
-      .row:focus-within .row__actions {
+      .v2-row:hover .v2-row__actions,
+      .v2-row:focus-within .v2-row__actions {
         opacity: 1;
       }
 
       /* Coarse pointers get no hover, so hidden-until-hover would make the
          actions unreachable on a touch device. */
       @media (hover: none) {
-        .row__actions:not(:empty) {
+        .v2-row__actions:not(:empty) {
           opacity: 1;
         }
       }
@@ -258,13 +294,13 @@ import { TimestampComponent } from './timestamp.component'
         /* The date drops below the name rather than off the row: at this width the
            four-column grid cannot hold a filename and a date on one line without
            ellipsing the filename to nothing. */
-        .row {
+        .v2-row {
           grid-template-columns: minmax(0, 1fr) auto auto;
           gap: var(--si-space-4);
           padding: var(--si-space-5) var(--si-space-4);
         }
 
-        .row__time {
+        .v2-row__time {
           grid-column: 1;
           grid-row: 2;
           /* Aligns under the text column, clearing the tile. */
@@ -287,11 +323,20 @@ export class FileRowComponent {
   readonly serverPath = input<string>('')
 
   // The human-readable location shown under the name — a display string, not an
-  // address. Empty renders no second line at all, which is right for a row whose
-  // file sits at a space root.
+  // address. Empty renders no second line at all.
   readonly path = input<string>('')
 
-  readonly mtime = input<number | string | null | undefined>(null)
+  // The glyph beside the path. Defaults to `folder`, which is what every row used
+  // to hard-code; callers that know a file's origin should pass the matching mark
+  // (see FILE_ORIGIN_ICONS) so the row says WHERE the file came from without
+  // spending a word on it.
+  readonly pathIcon = input<IconV2Name>('folder')
+  // Accessible name for that glyph. Required in practice whenever `pathIcon` is
+  // not the default: an origin the sighted user reads from a mark is an origin the
+  // AT user gets only from this.
+  readonly pathIconLabel = input<string>('')
+
+  readonly mtime = input<number | string | Date | null | undefined>(null)
   readonly now = input<number | null>(null)
 
   readonly tileSize = input<number>(36)

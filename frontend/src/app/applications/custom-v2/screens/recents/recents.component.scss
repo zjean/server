@@ -1,3 +1,23 @@
+// Recents.
+//
+// This file is a third of its previous size, and the reason is the point of the
+// change rather than a side effect: the card chrome, the row, the section header,
+// the timestamp cell and the empty state are now shared components, so what is
+// left here is only what is genuinely specific to this screen — its page header,
+// its two grids, and the interior of its two card kinds.
+//
+// What went, and where:
+//   • `.recent-row` (62 lines)      → components/file-row.component.ts
+//   • `.recents-empty` (43 lines)   → components/empty-state.component.ts
+//   • `__section-label` / `__count-pill` / `.bucket-head` / `.bucket-rule`
+//                                   → components/section-head.component.ts
+//   • card fill / border / hover / press on both card kinds
+//                                   → styles/_card.scss (.v2-card)
+//   • every type declaration that restated an existing role
+//                                   → styles/_type.scss (.v2-page-title,
+//                                     .v2-body-strong, .v2-mono-path,
+//                                     .v2-mono-data)
+
 :host {
   display: flex;
   flex: 1 1 auto;
@@ -12,400 +32,242 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
 
-  // Stack hero rhythm: kicker chip → display title → lede line. Same
-  // breathing room as Personal/Spaces so a user moving between them sees
-  // the page-header consistently.
-  // Compact page header, matching the rest of the app (26px title + 14px meta).
-  &__header {
-    padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
-  }
+// ─── Page header ────────────────────────────────────────────────────────────
 
-  &__title-text {
-    margin: 0;
-    font-family: var(--si-display);
-    font-size: var(--si-text-15);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.018em;
-    line-height: 1.15;
-  }
+.recents__header {
+  padding: var(--si-space-13) var(--si-space-12) var(--si-space-9);
+}
 
-  &__title-meta {
-    margin: var(--si-space-2) 0 0;
-    font-size: var(--si-text-10);
-    line-height: 1.4;
-    color: var(--si-fg-muted);
-    font-family: var(--si-sans);
-  }
+// Counts, not a sentence. The numbers are mono because a count is something the
+// system produced; the words between them are sans because they are words.
+.recents__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--si-space-3);
+  margin: var(--si-space-3) 0 0;
+  font-family: var(--si-sans);
+  font-size: var(--si-text-10);
+  line-height: 1.4;
+  color: var(--si-fg-muted);
+}
 
-  &__section {
-    padding: var(--si-space-11) var(--si-space-12) var(--si-space-4);
+.recents__meta-count {
+  font-family: var(--si-mono);
+  color: var(--si-fg);
+}
 
-    &--list {
-      padding-top: var(--si-space-6);
-      padding-bottom: var(--si-space-12);
-    }
-  }
+// tertiary, not ghost. The separator is as decorative as anything in v2 gets —
+// a middot between two counts, carrying no meaning of its own — but the quiet
+// tier clears no contrast floor at all, and `tokens.spec.ts` is right to make
+// that an argued exemption rather than a default. tertiary measures 4.84 on this
+// screen's bg2 plane, which clears AA, so there is nothing to exempt.
+.recents__meta-sep {
+  color: var(--si-fg-tertiary);
+}
 
-  &__section-head {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-5);
-    margin-bottom: var(--si-space-7);
-  }
+// ─── Body ───────────────────────────────────────────────────────────────────
 
-  &__section-label {
-    font-family: var(--si-display);
-    font-size: var(--si-text-4);
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--si-fg-muted);
-  }
+// The one width cap on the screen, and the reason is scanning rather than taste.
+// At 1440px the rows ran 1108px wide, and a measurement put 758px of nothing
+// between the end of a filename and its date. The type roles already encode this
+// principle for prose (`.v2-body` caps its measure at 68ch "because prose set
+// wider than this stops being readable no matter what container it lands in"); a
+// column of filenames is subject to the same limit.
+//
+// What this cap does NOT do is move the date next to the name, and that is a
+// decision rather than an omission. The date stays in a right-aligned column
+// because a column of right-aligned tabular dates is itself scannable — pulling
+// each date up against a name of whatever length makes the whole column ragged,
+// which trades one kind of legibility for a worse one. The cap narrows the gap;
+// the row hover, which genuinely did nothing before this change, is what pairs the
+// two ends of a row.
+//
+// Applied to the whole body rather than to the list alone, so the card grids and
+// the rows share one left edge AND one right edge. Capping only the list would
+// leave the two ragged against each other, which reads as a mistake.
+.recents__body {
+  width: 100%;
+  max-width: 1080px;
+}
 
-  &__count-pill {
-    display: inline-flex;
-    align-items: center;
-    height: 18px;
-    padding: 0 var(--si-space-4);
-    border-radius: var(--si-r4);
-    background: var(--si-bg3);
-    color: var(--si-fg-muted);
-    font-family: var(--si-mono);
-    font-size: var(--si-text-3);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-  }
+.recents__section {
+  padding: var(--si-space-11) var(--si-space-12) var(--si-space-4);
 
-  &__pinned-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--si-space-6);
-
-    @media (max-width: 1100px) {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-    @media (max-width: 820px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    @media (max-width: 520px) {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  &__comments-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--si-space-6);
-
-    @media (max-width: 1100px) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    @media (max-width: 720px) {
-      grid-template-columns: 1fr;
-    }
+  &--list {
+    padding-top: var(--si-space-6);
+    padding-bottom: var(--si-space-12);
   }
 }
 
-// "Pick up where you left off" cards — Stack pattern: bordered card with a
-// thumbnail/glyph block on top (with a glassy time-ago pill bottom-right)
-// and a name/sub stack underneath.
+// The section header component sits flush; the grid below it needs the gap.
+.recents__pinned-grid,
+.recents__comments-grid {
+  margin-top: var(--si-space-7);
+  display: grid;
+  gap: var(--si-space-6);
+}
+
+// auto-fill rather than a fixed count with viewport breakpoints, because the body
+// above is CAPPED: a `@media (max-width: 1100px)` rule keys on the viewport, which
+// on a 1440px screen never fires even though the container the cards actually sit
+// in is 1080px. That mismatch is how a capped container ends up with four cards
+// squeezed into a track width the breakpoints were never told about — the foot of
+// the fourth card truncated mid-word in exactly that way.
+//
+// The minmax floor is the real constraint (a card narrower than this cannot hold a
+// filename and a date), and auto-fill derives the column count from the space
+// actually available, so the grid stays correct at any container width and needs
+// no breakpoints at all. minmax(240px, 1fr) rather than minmax(240px, auto): the
+// 1fr ceiling makes the tracks share the remainder evenly instead of sizing to the
+// longest filename.
+.recents__pinned-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.recents__comments-grid {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+// ─── "Pick up where you left off" ───────────────────────────────────────────
+// Fill, border, radius, hover, press and the tertiary re-point all come from
+// .v2-card / .v2-card--interactive. Only the interior is here.
+//
+// The card is ~120px rather than the 180px it was, and the saving is entirely
+// dead space: the old 96px "thumbnail" panel was --si-bg3 inside a --si-bg3 card
+// and held a 56px glyph in the middle of nothing.
+
 .pinned-card {
   display: flex;
   flex-direction: column;
   gap: var(--si-space-5);
   padding: var(--si-space-6);
-  text-align: left;
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
-  border-radius: var(--si-r3);
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
-
-  &:hover {
-    background: var(--si-bg3);
-    border-color: var(--si-line-strong);
-  }
-
-  &:active {
-    transform: translateY(1px);
-  }
-
-  &__thumb {
-    position: relative;
-    height: 96px;
-    border-radius: 10px;
-    // Clean tonal surface instead of the diagonal hatch texture.
-    background: var(--si-bg3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  &__time {
-    position: absolute;
-    bottom: 8px;
-    right: 8px;
-    padding: var(--si-space-1) var(--si-space-4);
-    border-radius: var(--si-r4);
-    background: var(--si-scrim);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    color: var(--si-fg);
-    font-family: var(--si-mono);
-    font-size: var(--si-text-2);
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 1.4;
-    white-space: nowrap;
-  }
-
-  &__name {
-    font-size: var(--si-text-9);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__sub {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-3);
-    font-size: var(--si-text-5);
-    color: var(--si-fg-muted);
-    min-width: 0;
-  }
-
-  &__sub-icon {
-    flex-shrink: 0;
-  }
-
-  &__path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  min-width: 0;
 }
 
-// "Recent comments" cards — same card chrome as pinned, three sections
-// stacked: file chip → author row → body (clamped 3 lines).
+.pinned-card__well {
+  height: 72px;
+  // The well is the card's only splash of colour, and it is the file-type tint at
+  // the design's 14% — the tile is the one place a file-type colour is allowed to
+  // appear, which is also why the filename below stays --si-fg.
+  flex-shrink: 0;
+}
+
+.pinned-card__name,
+.pinned-card__loc-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Origin glyph + path, matching the row's treatment so a card and a row say
+// "where from" the same way.
+.pinned-card__loc {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-3);
+  min-width: 0;
+}
+
+.pinned-card__loc-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--si-fg-tertiary);
+}
+
+// Location left, date right. Replaces the old glassy time-ago pill, which was
+// absolutely positioned into the bottom-right corner of the invisible panel — so
+// it floated in the middle of the card with nothing to anchor it to.
+.pinned-card__foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--si-space-5);
+  min-width: 0;
+}
+
+.pinned-card__loc {
+  flex: 1 1 auto;
+}
+
+// ─── "Recent comments" ──────────────────────────────────────────────────────
+
 .comment-card {
   display: flex;
   flex-direction: column;
   gap: var(--si-space-5);
   padding: var(--si-space-7);
-  text-align: left;
-  background: var(--si-bg3);
-  border: 1px solid var(--si-line);
-  border-radius: var(--si-r3);
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  transition:
-    background 120ms ease,
-    border-color 120ms ease,
-    transform 120ms ease;
-
-  &:hover {
-    background: var(--si-bg3);
-    border-color: var(--si-line-strong);
-  }
-
-  &:active {
-    transform: translateY(1px);
-  }
-
-  &__file {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-4);
-    min-width: 0;
-  }
-
-  &__file-name {
-    font-size: var(--si-text-7);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-
-  &__author {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-4);
-    min-width: 0;
-  }
-
-  &__author-name {
-    font-size: var(--si-text-7);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
-  &__when {
-    font-family: var(--si-mono);
-    font-size: var(--si-text-3);
-    color: var(--si-fg-muted);
-    margin-left: auto;
-    flex-shrink: 0;
-  }
-
-  &__body {
-    margin: 0;
-    font-size: var(--si-text-7);
-    line-height: 1.45;
-    color: var(--si-fg-muted);
-    letter-spacing: -0.05px;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  min-width: 0;
 }
 
-// Latest activity — grouped flat list. Sticky group header with a thin rule
-// to its right, rows beneath. No card chrome — keeps the list readable when
-// it's long.
-.bucket-head {
+.comment-card__file {
   display: flex;
   align-items: center;
-  gap: var(--si-space-5);
-  padding: var(--si-space-8) 0 var(--si-space-5);
-  position: sticky;
-  top: 0;
-  background: linear-gradient(var(--si-bg2) 70%, transparent);
-  z-index: var(--si-z-base);
+  gap: var(--si-space-4);
+  min-width: 0;
 }
 
-.bucket-rule {
-  flex: 1 1 auto;
-  height: 1px;
-  background: var(--si-line);
+.comment-card__file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.recent-row {
-  width: 100%;
+.comment-card__author {
   display: flex;
   align-items: center;
-  gap: var(--si-space-6);
-  padding: var(--si-space-5) var(--si-space-6);
-  margin: 0 -12px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease;
-
-  &:hover {
-    background: var(--si-bg3);
-  }
-
-  &__meta {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  &__name {
-    font-size: var(--si-text-9);
-    font-weight: 500;
-    color: var(--si-fg);
-    letter-spacing: -0.1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__sub {
-    display: flex;
-    align-items: center;
-    gap: var(--si-space-3);
-    margin-top: var(--si-space-2);
-    font-size: var(--si-text-5);
-    color: var(--si-fg-muted);
-    min-width: 0;
-  }
-
-  &__sub-icon {
-    flex-shrink: 0;
-  }
-
-  &__path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__time {
-    font-family: var(--si-mono);
-    font-size: var(--si-text-3);
-    color: var(--si-fg-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
+  gap: var(--si-space-4);
+  min-width: 0;
 }
 
-.recents-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 56px var(--si-space-10);
-  margin: var(--si-space-8) var(--si-space-12) var(--si-space-12);
+.comment-card__author-name {
+  font-family: var(--si-sans);
+  font-size: var(--si-text-7);
+  font-weight: 500;
+  color: var(--si-fg);
+  letter-spacing: -0.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.comment-card__when {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.comment-card__body {
+  font-family: var(--si-sans);
+  font-size: var(--si-text-7);
+  line-height: 1.45;
   color: var(--si-fg-muted);
-  text-align: center;
-  background: var(--si-bg3);
-  border: 1px dashed var(--si-line-strong);
-  border-radius: var(--si-r3);
+  letter-spacing: -0.05px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  // The clamp needs a definite minimum to resolve against inside a flex column,
+  // or a long comment can collapse the box to a single line in Safari.
+  min-width: 0;
+}
 
-  &__icon {
-    width: 48px;
-    height: 48px;
-    border-radius: 24px;
-    background: var(--si-bg3);
-    // see empty-state.component.ts — ghost on bg4 is 2.59 (#397)
-    color: var(--si-fg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: var(--si-space-7);
-    border: 1px solid var(--si-line);
+// ─── Narrow ─────────────────────────────────────────────────────────────────
+
+@media (max-width: 640px) {
+  .recents__header {
+    padding: var(--si-space-11) var(--si-space-8) var(--si-space-7);
   }
 
-  &__title {
-    font-family: var(--si-display);
-    font-size: var(--si-text-10);
-    font-weight: 500;
-    color: var(--si-fg-muted);
-    letter-spacing: -0.1px;
-  }
-
-  &__lede {
-    margin-top: var(--si-space-3);
-    font-size: var(--si-text-7);
-    color: var(--si-fg-muted);
-    max-width: 32ch;
-    line-height: 1.5;
+  .recents__section {
+    padding-left: var(--si-space-8);
+    padding-right: var(--si-space-8);
   }
 }
