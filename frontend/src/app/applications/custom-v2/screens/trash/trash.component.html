@@ -26,23 +26,32 @@
         <span></span>
       </div>
       @for (b of bins(); track b.id) {
-        <button type="button" class="bin-row" [class.bin-row--disabled]="!b.enabled" (click)="openBin(b)">
-          <div class="bin-row__name">
+        <!-- A div, not a button: the chevron at the end of the row is a real
+             <button> and a button may not contain interactive content. The name
+             cell is the primary target and its ::after spans the row. See
+             styles/_card.scss § stretched primary target. -->
+        <div class="bin-row v2-stretch-host" [class.bin-row--disabled]="!b.enabled">
+          <button type="button" class="v2-stretch-target bin-row__name" [disabled]="!b.enabled" (click)="openBin(b)">
             <span class="bin-row__glyph">
               <app-v2-icon name="trash" [size]="14" />
             </span>
-            <div class="bin-row__title">{{ b.name }}</div>
-          </div>
+            <span class="bin-row__title">{{ b.name }}</span>
+          </button>
           <div class="bin-row__count">{{ b.nb }}</div>
           <div class="bin-row__mtime">
             @if (b.mtime) {
-              {{ b.mtime | amTimeAgo }}
+              <app-v2-timestamp [ms]="b.mtime" [now]="renderedAt" />
             }
           </div>
-          <div class="bin-row__actions">
-            <app-v2-icon-btn iconName="chevRight" [size]="24" [ariaLabel]="'v2_open_name' | translate: locale.language : { name: b.name }" />
+          <div class="bin-row__actions v2-stretch-aside">
+            <app-v2-icon-btn
+              iconName="chevRight"
+              [size]="24"
+              [disabled]="!b.enabled"
+              [ariaLabel]="'v2_open_name' | translate: locale.language : { name: b.name }"
+            />
           </div>
-        </button>
+        </div>
       }
     </div>
   }

@@ -28,8 +28,8 @@
              content. The primary target's ::after covers the card, so the whole
              card still opens the Space, and the control sits outside it. See
              styles/_card.scss § stretched primary target. -->
-        <div class="v2-card v2-card--interactive space-card">
-          <button type="button" class="v2-card__target space-card__target" (click)="openSpace(s)">
+        <div class="v2-card v2-card--interactive v2-stretch-host space-card">
+          <button type="button" class="v2-stretch-target space-card__target" (click)="openSpace(s)">
             <span class="space-card__head">
               <span class="space-card__glyph">
                 <app-v2-icon name="box" [size]="18" />
@@ -94,7 +94,7 @@
           <app-v2-icon-btn
             iconName="more"
             [size]="22"
-            class="v2-card__aside space-card__more"
+            class="v2-stretch-aside space-card__more"
             [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }"
           />
         </div>

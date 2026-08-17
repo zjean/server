@@ -105,18 +105,21 @@
   z-index: var(--si-z-base);
 }
 
+// A div now, not a <button> — see the note in the template. The <button> resets
+// this rule used to carry are gone with it; `.v2-stretch-target` carries them for
+// the one element that is still a button. Ring offset goes negative because rows
+// sit flush against each other.
 .bin-row {
+  --v2-stretch-ring-offset: -2px;
+
+  // Same re-point as the other row surfaces: this row hovers to bg3, where
+  // tertiary measures 4.37 and is not legal as text.
+  --si-fg-tertiary: var(--si-fg-muted);
+
   min-height: 46px;
-  cursor: pointer;
-  background: transparent;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  text-align: left;
-  color: inherit;
-  width: 100%;
-  font-family: inherit;
-  transition: background 120ms ease;
+  transition:
+    background var(--si-dur-2) var(--si-ease-out),
+    opacity var(--si-dur-2) var(--si-ease-out);
   opacity: 0.85;
 
   &:hover {
@@ -132,11 +135,25 @@
     }
   }
 
+  // The primary target keeps the name cell's layout. `cursor` is on the button
+  // rather than the row now, so a disabled bin does not offer a pointer over its
+  // whole width — the button carries `disabled`, which suppresses it.
   &__name {
     display: flex;
     align-items: center;
     gap: var(--si-space-5);
     min-width: 0;
+    width: 100%;
+  }
+
+  &__name:disabled {
+    cursor: default;
+  }
+
+  // Non-interactive cells: clicks fall through to the stretched target.
+  &__count,
+  &__mtime {
+    pointer-events: none;
   }
 
   &__glyph {
@@ -151,7 +168,10 @@
     justify-content: center;
   }
 
+  // display: block because it became a <span> inside the button — a <button> may
+  // not contain a <div>, and an inline element ignores the truncation below.
   &__title {
+    display: block;
     font-size: var(--si-text-8);
     color: var(--si-fg);
     font-weight: 500;

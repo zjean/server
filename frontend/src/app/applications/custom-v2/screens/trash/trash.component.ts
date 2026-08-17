@@ -2,10 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } 
 import { Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
-import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 import { TrashModel } from '../../../spaces/models/trash.model'
 import { SpacesService } from '../../../spaces/services/spaces.service'
 import { EmptyStateComponent } from '../../components/empty-state.component'
+import { TimestampComponent } from '../../components/timestamp.component'
 import { IconButtonComponent } from '../../components/icon-button.component'
 import { ToastService } from '../../components/toast.service'
 import { IconV2Component } from '../../icons/icon-v2.component'
@@ -17,13 +17,16 @@ import { V2_PATH, V2_ROUTES } from '../../v2.constants'
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './trash.component.html',
   styleUrl: './trash.component.scss',
-  imports: [IconV2Component, IconButtonComponent, EmptyStateComponent, TimeAgoPipe, L10nTranslateDirective, L10nTranslatePipe]
+  imports: [IconV2Component, IconButtonComponent, EmptyStateComponent, TimestampComponent, L10nTranslateDirective, L10nTranslatePipe]
 })
 export class TrashComponent implements OnInit {
   private readonly spacesService = inject(SpacesService)
   private readonly router = inject(Router)
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   private readonly toast = inject(ToastService)
+
+  // One instant for every row's timestamp — see the same note in recents.
+  protected readonly renderedAt = Date.now()
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private subscription: Subscription | null = null
 

@@ -107,18 +107,35 @@
   }
 
   // ─── The stretched primary target ─────────────────────────────────────────
-  // For a card that is itself clickable AND carries its own controls — a "more"
-  // menu, a star, a dismiss. Same construction and the same reason as the row's
-  // in file-row.component.ts: a <button> may not contain interactive content, so
-  // the card is a plain element, ONE button is the primary target with its
-  // `::after` stretched over the card, and the controls sit outside that button.
+  // For any surface that is itself clickable AND carries its own controls — a
+  // card with a "more" menu, a table row with a row action. A <button> may not
+  // contain interactive content, so the surface stays a plain element, ONE button
+  // is the primary target with its `::after` stretched across the surface, and the
+  // controls sit outside that button.
   //
-  // The Space card had `<app-v2-icon-btn>` — a real <button> — inside
-  // `<button class="space-card">`. Invalid markup, ambiguous activation, and AT is
-  // handed a control containing a control. It renders fine, so nothing caught it.
-  .v2-card__target {
-    display: block;
-    width: 100%;
+  // Named for the pattern rather than for the card, because four screens need it
+  // and only one of them is a card: the Space card had `<app-v2-icon-btn>` — a real
+  // <button> — inside `<button class="space-card">`, and the shared, trash and
+  // trash-bin table rows each have the same thing inside a `<button class="…-row">`.
+  // Invalid markup, ambiguous activation, and AT is handed a control containing a
+  // control. It renders fine, so nothing caught it.
+  //
+  // The host takes `.v2-stretch-host`, which supplies the positioning the ::after
+  // resolves against and the focus ring. It is a class rather than a documented
+  // requirement because forgetting `position: relative` is silent and spectacular:
+  // the ::after stretches to the nearest positioned ancestor instead, which is
+  // usually the page, so one row swallows every click on the screen.
+  //
+  // The one requirement left to the call site: anything BETWEEN the target and the
+  // aside in paint order must not eat clicks. Non-interactive cells take
+  // `pointer-events: none`; the aside raises itself, because it IS interactive.
+  // Deliberately sets neither `display` nor `width`. Both are the call site's
+  // business — a card's target is a flex column, a table row's is a flex row that
+  // has to sit in a grid cell — and declaring them here creates a specificity TIE
+  // with the component class beside it (`.v2-root .v2-stretch-target` and
+  // `.share-row__name[_ngcontent-x]` both weigh two classes), which resolves on
+  // stylesheet order and so is not reliably resolvable at all.
+  .v2-stretch-target {
     padding: 0;
     border: none;
     background: none;
@@ -128,31 +145,40 @@
     cursor: pointer;
   }
 
-  // Positioned against .v2-card, which is `position: relative` above. Anything
-  // that must stay clickable has to sit above this — see .v2-card__aside.
-  .v2-card__target::after {
+  // Resolves against .v2-stretch-host. Anything that must stay clickable has to
+  // sit above this — see .v2-stretch-aside.
+  .v2-stretch-target::after {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: inherit;
   }
 
-  // The ring belongs to the CARD, not to the stretched button, which would
-  // otherwise trace its content box rather than the card the user is on.
-  .v2-card:has(> .v2-card__target:focus-visible) {
-    outline: 2px solid var(--si-focus-ring);
-    outline-offset: 2px;
+  .v2-stretch-host {
+    position: relative;
   }
 
-  .v2-card__target:focus-visible {
+  // The ring belongs to the HOST, not to the stretched button, which would
+  // otherwise trace its own content box rather than the card or row the user is on.
+  // The offset is a variable because it depends on what surrounds the host. A
+  // card sits in a grid with gaps, so the ring goes OUTSIDE it. Table rows sit
+  // flush against each other, so an outward ring would overlap the row above —
+  // those pass -2px and get a ring drawn inside, which reads as a highlighted row.
+  .v2-stretch-host:has(> .v2-stretch-target:focus-visible) {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: var(--v2-stretch-ring-offset, 2px);
+  }
+
+  .v2-stretch-target:focus-visible {
     outline: none;
   }
 
   // The controls. Raised above the stretched target so they remain clickable, and
   // it must be a real stacking position rather than `pointer-events` alone,
-  // because these ARE interactive.
-  .v2-card__aside {
-    position: absolute;
+  // because these ARE interactive. `position` is left to the call site: a card
+  // pins them to a corner, a table row keeps them in their own column.
+  .v2-stretch-aside {
+    position: relative;
     z-index: 1;
     display: inline-flex;
     align-items: center;

@@ -92,6 +92,17 @@
 // assigns to a card.
 .space-card {
   padding: var(--si-space-9) var(--si-space-9) var(--si-space-7);
+  // The card is a flex column and the target grows inside it, which together are
+  // what keeps `&__footer { margin-top: auto }` working. That rule is #399's fix
+  // for footers sitting at different heights across a row, and it needs its flex
+  // parent to be TALLER than its content — the grid stretches every card to the
+  // row height, so the card has the spare height and the target has to inherit it.
+  // With the target merely sizing to its content (the default for the block that
+  // `.v2-stretch-target` makes it), the auto margin has nothing to absorb and the
+  // regression is invisible until two cards in a row have different description
+  // lengths.
+  display: flex;
+  flex-direction: column;
 
   // The stretched primary target holds the card's own column layout; the card
   // itself is now just the padded, bordered box around it plus the "more" control.
@@ -99,6 +110,8 @@
     display: flex;
     flex-direction: column;
     gap: var(--si-space-8);
+    flex: 1 1 auto;
+    width: 100%;
   }
 
   &__head {
@@ -165,9 +178,10 @@
   // stable so the name block doesn't reflow on hover.
   // Absolutely positioned now rather than a flex sibling, because it moved OUT of
   // the primary button — it is a real <button> and could not legally stay inside
-  // one. `.v2-card__aside` supplies the position and the z-index that keeps it
-  // above the stretched target; this supplies where.
+  // one. `.v2-stretch-aside` supplies the z-index that keeps it above the stretched
+  // target; the card pins it to a corner, so `position` is set here.
   &__more {
+    position: absolute;
     top: var(--si-space-7);
     right: var(--si-space-7);
     opacity: 0;

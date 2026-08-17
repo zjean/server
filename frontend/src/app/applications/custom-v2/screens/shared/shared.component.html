@@ -29,16 +29,22 @@
         <span></span>
       </div>
       @for (s of shares(); track s.id) {
-        <button type="button" class="share-row" (click)="openShare(s)">
-          <div class="share-row__name">
+        <!-- A div, not a button. The "more" control at the end of the row is a real
+             <button>, and a button may not contain interactive content — so the row
+             is a plain grid, the NAME cell is the primary target, and its ::after
+             stretches across the row to keep the whole strip clickable. The two
+             middle cells pass clicks through; the actions cell raises itself above
+             the stretched target. See styles/_card.scss § stretched primary target. -->
+        <div class="share-row v2-stretch-host">
+          <button type="button" class="v2-stretch-target share-row__name" (click)="openShare(s)">
             <app-v2-file-glyph [type]="s.file?.mime ? mimeToGlyph(s.file.mime) : 'folder'" [size]="28" [rounded]="6" />
-            <div class="share-row__meta">
-              <div class="share-row__title">{{ s.name }}</div>
+            <span class="share-row__meta">
+              <span class="share-row__title">{{ s.name }}</span>
               @if (s.description) {
-                <div class="share-row__description">{{ s.description }}</div>
+                <span class="share-row__description">{{ s.description }}</span>
               }
-            </div>
-          </div>
+            </span>
+          </button>
           <div class="share-row__recipients">
             {{ (recipientCount(s) === 1 ? 'one_user' : 'nb_users') | translate: locale.language : { nb: recipientCount(s) } }}
             @if ((s.counts?.links ?? 0) > 0) {
@@ -47,13 +53,13 @@
           </div>
           <div class="share-row__modified">
             @if (s.modifiedAt) {
-              {{ s.modifiedAt | amTimeAgo }}
+              <app-v2-timestamp [ms]="s.modifiedAt" [now]="renderedAt" />
             }
           </div>
-          <div class="share-row__actions">
+          <div class="share-row__actions v2-stretch-aside">
             <app-v2-icon-btn iconName="more" [size]="26" [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }" />
           </div>
-        </button>
+        </div>
       }
     </div>
   }

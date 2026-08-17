@@ -96,37 +96,50 @@
   z-index: var(--si-z-base);
 }
 
+// A div now, not a <button> — see the note in the template. The <button> resets
+// this rule used to carry (background: transparent, border-*: none, width: 100%,
+// font-family: inherit, text-align: left) are gone with it; `.v2-stretch-target`
+// carries them for the one element that is still a button.
+//
+// `position: relative` comes from `.v2-stretch-host`, and the ring offset goes
+// negative because rows sit flush: an outward ring would overlap the row above.
 .share-row {
+  --v2-stretch-ring-offset: -2px;
+
   min-height: 46px;
   padding-top: var(--si-space-3);
   padding-bottom: var(--si-space-3);
-  cursor: pointer;
-  background: transparent;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-  text-align: left;
-  color: inherit;
-  width: 100%;
-  font-family: inherit;
-  transition: background 120ms ease;
+  transition: background var(--si-dur-2) var(--si-ease-out);
 
   &:hover {
     background: var(--si-bg3);
   }
 
+  // The tertiary re-point, for the same reason the shared card and row carry it:
+  // this row hovers to bg3, where tertiary measures 4.37 and is not legal as text.
+  --si-fg-tertiary: var(--si-fg-muted);
+
+  // The primary target. It is the name cell, so it keeps that cell's layout; the
+  // reset half comes from `.v2-stretch-target`.
   &__name {
     display: flex;
     align-items: center;
     gap: var(--si-space-6);
     min-width: 0;
+    width: 100%;
   }
 
   &__meta {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
   }
 
+  // display: block because these became <span>s when the cell became a button's
+  // content — a <button> may not contain a <div>, and an inline element ignores the
+  // truncation below.
   &__title {
+    display: block;
     font-size: var(--si-text-8);
     color: var(--si-fg);
     font-weight: 500;
@@ -137,12 +150,20 @@
   }
 
   &__description {
+    display: block;
     font-size: var(--si-text-3);
     color: var(--si-fg-muted);
     margin-top: var(--si-space-1);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  // Non-interactive cells: clicks fall through to the stretched target so the row
+  // still opens when the pointer happens to be over the recipient count or the date.
+  &__recipients,
+  &__modified {
+    pointer-events: none;
   }
 
   &__recipients {
@@ -171,7 +192,8 @@
     transition: opacity 120ms ease;
   }
 
-  &:hover &__actions {
+  &:hover &__actions,
+  &:focus-within &__actions {
     opacity: 1;
   }
 }
