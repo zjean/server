@@ -1,5 +1,14 @@
 # Favorites (Custom, Fork-Isolated) Implementation Plan
 
+> **SUPERSEDED (2026-09-07).** Upstream shipped favorites natively in 2.5.0
+> (`d3724ec5`), so the fork's `custom_files_favorites` table, its controller and its
+> `/api/custom-favorites` routes described below **no longer exist** — the rows were
+> migrated into upstream's `files_favorites`. What remains fork-side is the
+> `custom-v2` UI plus a small NC bridge. This document is kept for the reasoning that
+> led here; for current state read
+> [`2026-09-07-favorites-upstream-adoption-plan.md`](2026-09-07-favorites-upstream-adoption-plan.md).
+
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Ship a per-user file favorites feature for the zjean/server fork — a `custom-favorites` backend module plus a v2 UI — touching upstream files in only two additive single lines, so weekly upstream syncs never conflict.

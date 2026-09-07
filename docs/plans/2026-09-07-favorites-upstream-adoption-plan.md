@@ -364,3 +364,87 @@ documented manual recovery merges into `develop` and never advances the mirror. 
 therefore re-reports workflow changes develop absorbed months ago. Upstream has made no net
 `.github/workflows` change since that merge base. Fix separately: advance the mirror after a
 manual sync, or baseline the guard on develop's merge base.
+
+
+---
+
+## 11. What code review changed
+
+Reviewed independently after execution. It verified the risky half rather than taking
+the plan's word — 0009 byte-identical to upstream's migration, the snapshot chain,
+`INSERT IGNORE` unable to mask a lost row, the `-1` sweep complete, the purge guard
+still mutually exclusive with a trash-move, no test weakened — and found two real
+defects in the parts the plan had treated as routine.
+
+### 11.1 Two bugs, both in id adoption
+
+**The row-id rewrite corrupted the selection.** `adoptResolvedFileId` replaced a row's
+negative id with the real one, but `selection` is a `Set` of file ids and the
+reconcile effect drops any id no longer present in `filteredFiles()`. So starring a
+file silently deselected it and collapsed the inspector — on the COMMON path, since
+most personal-space files carry a negative id.
+
+**And the inspector panel never adopted at all**, because its toggle passes no
+callback — so a file starred from the panel kept its negative id, and unstarring it
+sent that negative id into a DELETE that `@Min(1)` rejects. Found while verifying the
+first bug; the reviewer had not caught this one.
+
+Both are the same design error: id adoption was the CALLER's job, and one caller
+structurally cannot do it. The fix moves resolution into `FavoritesService`
+(`resolvedIds`, browse id → real id) and deletes the row rewrite entirely, so there is
+no id mutation left to corrupt anything. `favorites.service.spec.ts` pins it.
+
+### 11.2 The bridge had dropped two upstream guards
+
+`addFavorite` duplicated upstream's body minus `checkSupportedTarget`, which refuses
+the trash (read-only) and a virtual external root (no persisted row to key on). An NC
+PROPPATCH on an external share root would therefore have materialized a `files` row
+upstream deliberately never creates, producing a favorite its own location queries can
+never resolve — permanently `isDisabled`.
+
+Now delegates: `filesFavoritesManager.addFavorite(user, space, NO_CLIENT_FILE_ID)`.
+This works because `rejectIdMismatch` is gated on `fileId > 0`, so the negative
+sentinel skips it. The fix DELETED code. `removeFavorite` stays fork-side — upstream's
+is id-addressed with no path form — and needs no guard, since `getSpaceFileId` is a
+read-only lookup that cannot materialize anything.
+
+### 11.3 Hiding unreachable favorites was wrong
+
+§7 filtered out `isDisabled` rows. The classic UI is the authority and does the
+opposite: a "No longer accessible" badge, navigation withheld, **removal kept**
+(`favorites/components/favorites.component.html:123`, `.ts:212`). Hiding them left a
+v2-only user unable to see or clean up a stale favorite — the count just dropped.
+
+v2 now mirrors classic: all rows shown, disabled ones dimmed via `FileRowComponent`'s
+`disabled` input with an amber `soft`/`ink` badge, navigation replaced by a toast, and
+the star made actionable so a disabled row can be cleared — which is the only way,
+since it cannot be reached through the file browser.
+
+### 11.4 Two comments that had become false
+
+Both were load-bearing explanations, which is why they mattered:
+
+- `FileRowEnsurer`'s `inTrash` predicate justified itself with "trashing only sets
+  `inTrash = true` and leaves path/name untouched". Since upstream routes trashing
+  through `moveFiles`, that is no longer true — the predicate is now belt-and-braces,
+  and the comment says so rather than inviting someone to delete it as dead.
+- `0010`'s `INSERT IGNORE` claimed to guard a window between 0009 and itself. There is
+  none: drizzle applies a pending batch in one call and both ship together. It guards
+  a re-run or a hand-applied 0009.
+
+### 11.5 Deliberately not done
+
+- **The classic avatar bug is out of scope.** `user-account.component.ts:133-139`
+  never subscribes to the fork's cold `genAvatar()` / `uploadAvatar()` observables, so
+  both silently do nothing. Verified **pre-existing at 4435a1e2** and untouched by this
+  sync (its only diff here is upstream's Lucide swap and OIDC password logic). Filed
+  separately rather than bundled into a sync PR.
+- **`navPath(f)` called from the template** is consistent with how `recents` does it
+  (`serverPath(f)`), and the list is short under OnPush. Left alone for consistency.
+
+### 11.6 Migration recovery, if 0010 ever fails mid-batch
+
+MySQL DDL is not transactional. If 0010's INSERT failed, 0009's `CREATE TABLE` would
+already be committed while the journal rows for both roll back, and a retry would fail
+with "table already exists". `INSERT IGNORE` makes this close to unreachable, but the
+recovery is: `DROP TABLE files_favorites`, then re-run `db:migrate`.

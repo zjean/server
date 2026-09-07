@@ -1010,17 +1010,16 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   // negative id in the browse response, and upstream materializes the row and
   // returns the real id. Adopting it matters because the subsequent DELETE is
   // id-addressed and rejects anything below 1.
+  // The row's id is deliberately NOT rewritten when upstream materializes the file.
+  // `selection` is a Set of file ids and the reconcile effect above drops any id no
+  // longer present in filteredFiles(), so swapping a row's id mid-flight silently
+  // deselected it and collapsed the inspector — on the common path, since most
+  // personal-space files carry a negative id. FavoritesService remembers the mapping
+  // instead, which also fixes the inspector panel, whose toggle cannot reach these
+  // rows to adopt anything.
   protected toggleFavorite(file: FileProps): void {
     if (!this.repository.alias()) return
-    this.favoritesService.toggle(this.buildFullPath(file), file, (realId) => this.adoptResolvedFileId(file.id, realId))
-  }
-
-  // Replaces the row object rather than mutating it: the template is OnPush and
-  // tracks by id, so it re-renders only on a new reference. Mirrors the lock-clear
-  // update above.
-  private adoptResolvedFileId(previousId: number, realId: number): void {
-    if (previousId === realId) return
-    this.files.update((rows) => rows.map((f) => (f.id === previousId ? { ...f, id: realId, isFavorite: true } : f)))
+    this.favoritesService.toggle(this.buildFullPath(file), file)
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {

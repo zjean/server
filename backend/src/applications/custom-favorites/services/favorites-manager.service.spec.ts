@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common'
+import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { Mock } from 'vitest'
 import { FilesFavoritesManager } from '../../files/services/files-favorites-manager.service'
@@ -8,6 +8,7 @@ import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { FavoritesManager } from './favorites-manager.service'
 import { FavoritesQueries } from './favorites-queries.service'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // Stub the fs-touching helpers so addFavorite/removeFavorite resolve a file id
 // without hitting disk.
@@ -25,7 +26,7 @@ describe(FavoritesManager.name, () => {
   let moduleRef: TestingModule
   let service: FavoritesManager
   let favoritesQueriesMock: { getFavoriteIdsForUser: Mock }
-  let filesFavoritesManagerMock: { getFavorites: Mock }
+  let filesFavoritesManagerMock: { getFavorites: Mock; addFavorite: Mock }
   let filesFavoritesQueriesMock: { addFavorite: Mock; removeFavorite: Mock }
   let filesQueriesMock: { getOrCreateSpaceFile: Mock; getSpaceFileId: Mock }
 
@@ -34,7 +35,7 @@ describe(FavoritesManager.name, () => {
   beforeEach(async () => {
     vi.mocked(filesUtils.isPathExists).mockResolvedValue(true)
     favoritesQueriesMock = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([11, 22]) }
-    filesFavoritesManagerMock = { getFavorites: vi.fn().mockResolvedValue([{ fileId: 9 }]) }
+    filesFavoritesManagerMock = { getFavorites: vi.fn().mockResolvedValue([{ fileId: 9 }]), addFavorite: vi.fn().mockResolvedValue({ fileId: 9 }) }
     filesFavoritesQueriesMock = { addFavorite: vi.fn().mockResolvedValue(undefined), removeFavorite: vi.fn().mockResolvedValue(undefined) }
     filesQueriesMock = {
       getOrCreateSpaceFile: vi.fn().mockResolvedValue(9),
@@ -73,11 +74,27 @@ describe(FavoritesManager.name, () => {
     expect(filesFavoritesManagerMock.getFavorites).not.toHaveBeenCalled()
   })
 
-  // The whole reason this bridge exists: NC PROPPATCH carries a path, not a file id.
-  it('addFavorite resolves the path to a file id, materializing the row if needed', async () => {
-    await service.addFavorite(user, makeSpace({ inPersonalSpace: true, url: 'files/personal/docs/x.md' }))
-    expect(filesQueriesMock.getOrCreateSpaceFile).toHaveBeenCalled()
-    expect(filesFavoritesQueriesMock.addFavorite).toHaveBeenCalledWith(1, 9)
+  // DELEGATED, not reimplemented. The bridge previously duplicated upstream's body
+  // and lost checkSupportedTarget with it — which silently allowed a favorite on the
+  // trash and on a virtual external root. Asserting the delegation is what keeps that
+  // guard in the path.
+  it('addFavorite delegates to upstream, passing the no-client-id sentinel', async () => {
+    const space = makeSpace({ inPersonalSpace: true, url: 'files/personal/docs/x.md' })
+
+    await service.addFavorite(user, space)
+
+    expect(filesFavoritesManagerMock.addFavorite).toHaveBeenCalledWith(user, space, NO_CLIENT_FILE_ID)
+    // The bridge must not resolve the id itself any more.
+    expect(filesQueriesMock.getOrCreateSpaceFile).not.toHaveBeenCalled()
+    expect(filesFavoritesQueriesMock.addFavorite).not.toHaveBeenCalled()
+  })
+
+  it('addFavorite surfaces upstream refusals (trash, virtual external root) unchanged', async () => {
+    filesFavoritesManagerMock.addFavorite.mockRejectedValueOnce(new HttpException('The trash is read-only', HttpStatus.FORBIDDEN))
+
+    await expect(service.addFavorite(user, makeSpace({ inTrashRepository: true } as never))).rejects.toMatchObject({
+      status: HttpStatus.FORBIDDEN
+    })
   })
 
   it('removeFavorite resolves the path WITHOUT materializing a row', async () => {
@@ -93,8 +110,11 @@ describe(FavoritesManager.name, () => {
     expect(filesFavoritesQueriesMock.removeFavorite).not.toHaveBeenCalled()
   })
 
-  it('addFavorite 404s when the path is gone from disk', async () => {
-    vi.mocked(filesUtils.isPathExists).mockResolvedValue(false)
+  // The path-exists check now lives in upstream's manager, so the bridge's job is
+  // only to let that rejection through.
+  it('addFavorite 404s when upstream reports the path is gone', async () => {
+    filesFavoritesManagerMock.addFavorite.mockRejectedValueOnce(new HttpException('Location not found', HttpStatus.NOT_FOUND))
+
     await expect(service.addFavorite(user, makeSpace())).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
     expect(filesFavoritesQueriesMock.addFavorite).not.toHaveBeenCalled()
   })

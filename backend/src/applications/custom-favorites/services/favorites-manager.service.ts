@@ -16,9 +16,11 @@ import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 //
 // This exists ONLY because custom-mobile-compat cannot call upstream's manager:
 //
-//   - NC PROPPATCH <oc:favorite> carries a PATH and no file id, while upstream's
-//     addFavorite(user, space, fileId) requires a client-supplied id. The path→id
-//     resolution below is what closes that gap.
+//   - NC PROPPATCH <oc:favorite> carries a PATH and no file id. For an ADD that is
+//     solved by handing upstream's own manager NO_CLIENT_FILE_ID (see addFavorite);
+//     for a REMOVE it cannot be, because upstream's removeFavorite is id-addressed
+//     with no path form — so getFileId below is the one piece of resolution this
+//     bridge still owns.
 //   - NC PROPFIND needs a cheap id Set per listing; upstream has no such query.
 //     See FavoritesQueries for why its list method is not a substitute.
 //
@@ -43,9 +45,19 @@ export class FavoritesManager {
     return this.favoritesQueries.getFavoriteIdsForUser(user.id)
   }
 
+  // Delegated, NOT reimplemented. Upstream's addFavorite also enforces
+  // checkSupportedTarget — the trash is read-only, and a virtual external root has
+  // no persisted file row to key a favorite on. An earlier version of this bridge
+  // duplicated the resolution and dropped both guards, which let an NC PROPPATCH on
+  // an external share root materialize a `files` row upstream deliberately never
+  // creates, producing a favorite its own location queries can never resolve
+  // (permanently isDisabled).
+  //
+  // NO_CLIENT_FILE_ID is what makes the delegation work: upstream's
+  // `rejectIdMismatch` is gated on `fileId > 0` (files-queries.service.ts:165), so a
+  // negative sentinel skips that check and takes the path-keyed branch we want.
   async addFavorite(user: UserModel, space: SpaceEnv): Promise<void> {
-    const fileId = await this.getOrCreateFileId(space)
-    return this.filesFavoritesQueries.addFavorite(user.id, fileId)
+    await this.filesFavoritesManager.addFavorite(user, space, NO_CLIENT_FILE_ID)
   }
 
   async removeFavorite(user: UserModel, space: SpaceEnv): Promise<void> {
@@ -54,16 +66,6 @@ export class FavoritesManager {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }
     return this.filesFavoritesQueries.removeFavorite(user.id, fileId)
-  }
-
-  private async getOrCreateFileId(space: SpaceEnv): Promise<number> {
-    if (!(await isPathExists(space.realPath))) {
-      throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
-    }
-    const fileProps: FileProps = { ...(await getProps(space.realPath, space.dbFile.path)), id: undefined }
-    // No client-supplied fileId — a NEGATIVE sentinel skips the lookup-by-id
-    // branch; 0 is rejected by upstream's assertValidFileId.
-    return this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, fileProps, space.dbFile)
   }
 
   private async getFileId(space: SpaceEnv): Promise<number | undefined> {

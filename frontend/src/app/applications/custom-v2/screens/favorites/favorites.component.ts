@@ -25,9 +25,12 @@ export class FavoritesComponent implements OnInit {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
-  // Upstream marks a favorite the user can no longer reach as isDisabled and leaves
-  // its `path` unaddressable, so it is excluded rather than shown as a dead row.
-  protected readonly favorites = computed(() => this.favoritesService.favorites().filter((f) => !f.isDisabled))
+  // Every favorite, INCLUDING the ones upstream marks isDisabled. Filtering those out
+  // was wrong: the classic UI is the authority here and it shows them with a
+  // "No longer accessible" badge, withholds only navigation, and keeps removal
+  // available (favorites.component.html:123, .ts:212). Hiding them left a v2-only
+  // user unable to see or clean up a stale favorite — the count just dropped.
+  protected readonly favorites = this.favoritesService.favorites
   protected readonly hasAny = computed(() => this.favorites().length > 0)
 
   // One instant for the whole list — see the same note in recents.
@@ -80,6 +83,14 @@ export class FavoritesComponent implements OnInit {
   // as recents does (the FILE screen takes a repository path query param).
   protected openFavorite(fav: FileFavorite): void {
     const navPath = this.navPath(fav)
+    // Defence in depth, not the primary mechanism: FileRowComponent's `disabled`
+    // input puts `[disabled]` on the row's main button, so a disabled row cannot emit
+    // (open) at all. The persistent "No longer accessible" badge is what explains it
+    // — deliberately preferred over classic's transient warning toast. This guard
+    // exists so removing `[disabled]` from the template cannot turn into a 404:
+    // `path` on such a row is the raw owner-relative files.path (literally '.' for a
+    // space root), not an addressable repository path.
+    if (fav.isDisabled) return
     if (!fav.path || !fav.name) return
     if (!fav.isDir) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: navPath } }).catch(console.error)
@@ -100,8 +111,15 @@ export class FavoritesComponent implements OnInit {
   // browser route, and opening that in a background tab is not what the gesture
   // means here. The button-number guard now lives in FileRowComponent.
   protected openFavoriteInNewTab(fav: FileFavorite): void {
-    if (fav.isDir || !fav.path || !fav.name) return
+    if (fav.isDisabled || fav.isDir || !fav.path || !fav.name) return
     if (typeof window === 'undefined') return
     window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(this.navPath(fav))}`, '_blank', 'noopener')
+  }
+  // Unstar from the Favorites screen itself. Addressed by file id, so it works for a
+  // disabled row as well — which is the whole point: that row cannot be reached
+  // through the file browser to unstar it there.
+  protected removeFavorite(fav: FileFavorite): void {
+    this.favoritesService.dropFromList(fav.fileId)
+    this.favoritesService.removeById(fav.fileId)
   }
 }

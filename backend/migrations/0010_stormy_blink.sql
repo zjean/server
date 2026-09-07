@@ -9,12 +9,15 @@
 -- Ordering is load-bearing: `files_favorites` is created in 0009 and
 -- `custom_files_favorites` must survive until after this INSERT.
 --
--- INSERT IGNORE because both tables are keyed (userId, fileId): a user who
--- favorited the same file through the new UI between 0009 and this migration would
--- otherwise abort it. Both columns already carry the same FKs to users.id /
--- files.id, so every copied row satisfies upstream's constraints. The columns left
--- behind (path, spaceId, shareId) are the fork's stored access context, which
--- upstream re-derives per request instead.
+-- INSERT IGNORE because both tables are keyed (userId, fileId). NOT because of a
+-- window between 0009 and this file — there is none: drizzle applies a pending batch
+-- in one `migrate` call, and both ship in the same release, so files_favorites is
+-- empty when the copy runs. It guards the cases that CAN happen: a re-run, or 0009
+-- having been applied by hand. Both columns already carry the same FKs to users.id /
+-- files.id, so every copied row satisfies upstream's constraints, and the fork's
+-- table cascade-deleted its own orphans — so IGNORE cannot be masking a lost row.
+-- The columns left behind (path, spaceId, shareId) are the fork's stored access
+-- context, which upstream re-derives per request instead.
 INSERT IGNORE INTO `files_favorites` (`userId`, `fileId`, `createdAt`)
 	SELECT `userId`, `fileId`, `createdAt` FROM `custom_files_favorites`;
 --> statement-breakpoint

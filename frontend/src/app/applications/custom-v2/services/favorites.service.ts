@@ -30,6 +30,19 @@ export class FavoritesService {
   // fileId -> desired flag, pending a fresh browse response. Empty in the common case.
   private readonly overrides = signal<ReadonlyMap<number, boolean>>(new Map())
 
+  // browse id -> the real id upstream materialized for it.
+  //
+  // A file with no `files` row carries a NEGATIVE id in the browse response
+  // (getProps sets `id: -stats.ino`), and adding a favorite is what materializes the
+  // row. The remove endpoint is id-addressed and rejects anything below 1
+  // (DeleteFileFavoriteDto's @Min(1)), so a star-then-unstar before the next browse
+  // has to send the id upstream handed back, not the negative one the row still holds.
+  //
+  // This lives in the SERVICE rather than being pushed onto callers: the inspector
+  // panel has no access to the browser's rows and so cannot adopt an id at all, and
+  // an unfixable caller is exactly how the DELETE-rejection bug survived review.
+  private readonly resolvedIds = new Map<number, number>()
+
   // The star for one row: an in-flight toggle wins, otherwise the browse response.
   isFavorite(file: FavoritableFile | null | undefined): boolean {
     if (!file) return false
@@ -38,7 +51,7 @@ export class FavoritesService {
 
   // Optimistically flip, fire, and roll back on failure. `onIdResolved` is how the
   // caller learns that an unmaterialized file just acquired a real id.
-  toggle(spacePath: string, file: FavoritableFile, onIdResolved?: (realFileId: number) => void): void {
+  toggle(spacePath: string, file: FavoritableFile): void {
     const id = file.id
     const next = !this.isFavorite(file)
     this.setOverride(id, next)
@@ -47,22 +60,36 @@ export class FavoritesService {
         spacePath,
         id,
         (realFileId) => {
+          // Re-assert unconditionally: a browse response landing while this POST was
+          // in flight clears every override, and the row it brought back may still
+          // carry the pre-toggle `isFavorite`.
+          this.setOverride(id, true)
           if (realFileId === id) return
-          // Hold the flag under BOTH ids: the row still carries the negative one
-          // until the next browse, and the real one after it.
+          // Hold the flag under BOTH ids — the row keeps the negative one until the
+          // next browse, and carries the real one after it — and remember the mapping
+          // so a remove before that browse addresses the right row.
+          this.resolvedIds.set(id, realFileId)
           this.setOverride(realFileId, true)
-          onIdResolved?.(realFileId)
         },
         () => this.clearOverride(id)
       )
     } else {
-      this.removeFavorite(id, () => this.clearOverride(id))
+      this.removeFavorite(this.resolvedIds.get(id) ?? id, () => this.clearOverride(id))
     }
+  }
+
+  // Remove by id alone, for the Favorites SCREEN. Upstream's DELETE is id-addressed,
+  // so this works even for a row whose location no longer resolves (isDisabled) and
+  // which therefore has no addressable path to toggle through.
+  removeById(fileId: number): void {
+    this.removeFavorite(fileId, () => undefined)
   }
 
   // Called once a browse response has landed: its rows are authoritative, so every
   // override is now either confirmed or superseded.
   clearOverrides(): void {
+    // Rows now carry real ids and the server's own flag, so both caches are stale.
+    this.resolvedIds.clear()
     if (this.overrides().size > 0) this.overrides.set(new Map())
   }
 
@@ -130,5 +157,11 @@ export class FavoritesService {
   // extra request on every file-browser toggle.
   private refreshIfLoaded(): void {
     if (this.favorites().length > 0) this.loadFavorites()
+  }
+
+  // Optimistically drop a row from the screen's list so a removal is visible before
+  // the refetch lands. Safe on failure: refreshIfLoaded re-reads the server's truth.
+  dropFromList(fileId: number): void {
+    this.favorites.update((favs) => favs.filter((f) => f.fileId !== fileId))
   }
 }

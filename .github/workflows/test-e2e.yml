@@ -102,6 +102,10 @@ jobs:
       #
       # Done in node rather than sed because the dist file has several other empty
       # `secret:` keys (ldap, oidc, eurooffice) that a line-oriented match would hit.
+      #
+      # KEEP EVERY `sed` STEP ABOVE THIS ONE. yaml.dump reflows the file and drops its
+      # comments, so any line-oriented pattern added after this step would be matching
+      # against re-serialised YAML rather than the dist file's own formatting.
       - name: Inject test secrets
         run: |
           node -e "

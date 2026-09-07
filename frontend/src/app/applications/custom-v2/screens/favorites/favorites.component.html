@@ -23,17 +23,31 @@
             [pathIconLabel]="originKey(f) | translate: locale.language"
             [mtime]="f.mtime"
             [now]="renderedAt"
+            [disabled]="f.isDisabled"
             (open)="openFavorite(f)"
             (aux)="openFavoriteInNewTab(f)"
           >
-            <!-- Decorative here, and aria-hidden for that reason: every row on a
-                 screen called "Starred" is starred, so a label would repeat what
-                 the section header already states. It stays visible because the
-                 mark is what makes the row recognisable when the same file turns
-                 up in a search result or a recents list. -->
-            <span rowBadges class="favorites__star" aria-hidden="true">
+            @if (f.isDisabled) {
+              <!-- Upstream could not resolve this favorite to a location the user can
+                   still reach. Mirrors classic's warning badge rather than hiding the
+                   row, so it can be seen and removed. -->
+              <span rowBadges class="favorites__stale" l10nTranslate>No longer accessible</span>
+            }
+
+            <!-- Actionable, not decorative: on a screen called "Starred" the star is
+                 the only affordance that makes sense, and it is the ONLY way to clear
+                 a disabled favorite — that row cannot be reached through the file
+                 browser to unstar it there. -->
+            <button
+              rowActions
+              type="button"
+              class="favorites__unstar"
+              [title]="'Remove from favorites' | translate: locale.language"
+              [attr.aria-label]="'Remove from favorites' | translate: locale.language"
+              (click)="removeFavorite(f)"
+            >
               <app-v2-icon name="star" [size]="14" />
-            </span>
+            </button>
           </app-v2-file-row>
         }
       </div>
