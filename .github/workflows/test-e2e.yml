@@ -59,7 +59,21 @@ jobs:
           # back, so it needs a writable data path.
           sed -i "s|dataPath: /home/|dataPath: /tmp/|" environment/environment.yaml
           # Point at the service container.
-          sed -i "s|url: 'mysql://user:MySQLPassword@localhost:3306/database'|url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+          #
+          # Matched on the `url:` KEY, not on the credential literal. The literal
+          # version broke on the 2.5.0 sync: upstream changed the sample from
+          # `user:MySQLPassword` to `root:MySQLRootPassword` (8ad87f62), the sed
+          # silently matched nothing, the URL kept pointing at :3306 where nothing
+          # listens, and the whole suite died at "Apply migrations" with
+          # ECONNREFUSED — long before a single test ran.
+          sed -i "s|^\([[:space:]]*\)url: 'mysql://.*'|\1url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+          # Fail LOUDLY if that ever stops matching again, rather than handing the
+          # suite an unusable URL and letting it fail somewhere less obvious.
+          grep -q "url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'" environment/environment.yaml || {
+            echo "::error title=DB url rewrite failed::The mysql url in environment.dist.yaml no longer matches the sed in this workflow. Upstream probably changed its shape; update the pattern."
+            grep -n "mysql://" environment/environment.yaml || true
+            exit 1
+          }
           # Enable OnlyOffice. NOT so documents can be edited — no document server
           # runs here. FilesModule imports OnlyOfficeModule CONDITIONALLY at
           # module-definition time, so with the flag off `app.get(OnlyOfficeManager)`
