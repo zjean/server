@@ -1,26 +1,32 @@
 import { AsyncPipe } from '@angular/common'
-import { ChangeDetectionStrategy, Component, computed, inject, input, InputSignal, Signal } from '@angular/core'
+import { HttpErrorResponse } from '@angular/common/http'
+import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core'
+import { FormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowsAlt, faClipboardCheck, faLock, faSpinner, faUnlock } from '@fortawesome/free-solid-svg-icons'
+import { LucideDynamicIcon, LucideLoader, LucideLock, LucideLockOpen, LucideMessageSquareMore, LucideX } from '@lucide/angular'
+import { TAR_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
+import type { CompressFileDto } from '@sync-in-server/backend/src/applications/files/dto/file-operations.dto'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
-import { catchError, of, shareReplay } from 'rxjs'
-import { map } from 'rxjs/operators'
+import { take } from 'rxjs/operators'
 import { BadgePermissionsComponent } from '../../../../common/components/badge-permissions.component'
 import { AutoResizeDirective } from '../../../../common/directives/auto-resize.directive'
 import { TimeDateFormatPipe } from '../../../../common/pipes/time-date-format.pipe'
-import { convertBytesToText } from '../../../../common/utils/functions'
-import { defaultCardImageSize, defaultResizeOffset } from '../../../../layout/layout.constants'
+import { defaultCardImageSize } from '../../../../layout/layout.constants'
 import { TAB_MENU } from '../../../../layout/layout.interfaces'
 import { LayoutService } from '../../../../layout/layout.service'
+import { StoreService } from '../../../../store/store.service'
+import { FAVORITES_ICON } from '../../../favorites/favorites.constants'
 import { SPACES_ICON, SPACES_PATH } from '../../../spaces/spaces.constants'
 import { SYNC_ICON } from '../../../sync/sync.constants'
 import { UserAvatarComponent } from '../../../users/components/utils/user-avatar.component'
 import { USER_PATH } from '../../../users/user.constants'
+import type { SelectionAction } from '../../interfaces/file-selection.interface'
 import { FileModel } from '../../models/file.model'
 import { FilesService } from '../../services/files.service'
+import { FilesCompressionDialogComponent } from '../dialogs/files-compression-dialog.component'
 import { FileLockFormatPipe } from '../utils/file-lock.utils'
 import { FilesViewerMediaComponent } from '../viewers/files-viewer-media.component'
+import { FilesSummaryComponent } from '../utils/files-summary.component'
 
 @Component({
   selector: 'app-files-selection',
@@ -31,35 +37,38 @@ import { FilesViewerMediaComponent } from '../viewers/files-viewer-media.compone
     TimeDateFormatPipe,
     L10nTranslateDirective,
     L10nTranslatePipe,
-    FaIconComponent,
+    LucideDynamicIcon,
     FilesViewerMediaComponent,
     UserAvatarComponent,
     BadgePermissionsComponent,
     AsyncPipe,
-    FileLockFormatPipe
+    FileLockFormatPipe,
+    FormsModule,
+    FilesSummaryComponent
   ],
   styles: ['.card {width: 100%; background: transparent; border: none}']
 })
 export class FilesSelectionComponent {
-  files: InputSignal<FileModel[]> = input.required<FileModel[]>()
-  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
-  protected multiple: Signal<boolean> = computed(() => this.files().length > 1)
-  protected resizeOffset: Signal<number> = computed(() => defaultResizeOffset + (this.multiple() ? 40 : 0))
-  protected readonly cardImageSize = defaultCardImageSize
-  protected readonly icons = {
-    SPACES: SPACES_ICON.SPACES,
-    SHARES: SPACES_ICON.SHARES,
-    LINKS: SPACES_ICON.LINKS,
-    SYNC: SYNC_ICON.SYNC,
-    faLock,
-    faUnlock,
-    faClipboardCheck,
-    faArrowsAlt,
-    faSpinner
-  }
+  files = input.required<FileModel[]>()
   private readonly router = inject(Router)
   private readonly layout = inject(LayoutService)
   private readonly filesService = inject(FilesService)
+  private readonly store = inject(StoreService)
+  protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected readonly cardImageSize = defaultCardImageSize
+  protected selectedAction: SelectionAction = 'clipboard'
+  protected readonly icons = {
+    SPACES: SPACES_ICON.SPACES,
+    SHARED: SPACES_ICON.SHARED_WITH_OTHERS,
+    LINKS: SPACES_ICON.LINKS,
+    SYNC: SYNC_ICON.SYNC,
+    FAVORITES: FAVORITES_ICON,
+    LucideMessageSquareMore,
+    LucideLock,
+    LucideLockOpen,
+    LucideLoader,
+    LucideX
+  }
 
   goToShare(share: { type: number; name: string }) {
     this.layout.toggleRSideBar(false)
@@ -75,9 +84,43 @@ export class FilesSelectionComponent {
     this.layout.showRSideBarTab(TAB_MENU.COMMENTS, true)
   }
 
+  protected get canManageFavorite(): boolean {
+    return !this.store.user.getValue()?.isLink && this.store.repository() !== SPACES_PATH.TRASH
+  }
+
+  toggleFavorite(file: FileModel) {
+    if (!this.canManageFavorite) return
+    this.filesService
+      .toggleFavorite(file)
+      .pipe(take(1))
+      .subscribe({
+        error: (e: HttpErrorResponse) => this.layout.sendNotification('error', 'Favorites', file.name, e)
+      })
+  }
+
   addToClipboard() {
     this.filesService.addToClipboard(this.files())
+    this.filesService.fileSelectionClear.next()
     this.layout.showRSideBarTab(TAB_MENU.CLIPBOARD, true)
+  }
+
+  removeFromSelection(file: FileModel) {
+    this.filesService.fileSelectionRemove.next(file)
+  }
+
+  doAction() {
+    if (this.selectedAction === 'clipboard') return this.addToClipboard()
+    if (this.selectedAction === 'copyMove') return this.filesService.openTreeCopyMove()
+    const archiveProps: CompressFileDto = {
+      name: this.files()[0].name,
+      compressInDirectory: this.selectedAction === 'compress',
+      compression: false,
+      files: this.files().map((file) => ({ name: file.name, rootAlias: file.root?.alias, path: file.path })),
+      extension: TAR_EXTENSION
+    }
+    this.layout.openDialog(FilesCompressionDialogComponent, null, {
+      initialState: { archiveProps } as FilesCompressionDialogComponent
+    })
   }
 
   goToSync(sync: { clientId: string; clientName: string; id: number }) {
@@ -97,14 +140,6 @@ export class FilesSelectionComponent {
   }
 
   getSizeLazy(f: FileModel) {
-    if (!f.isDir) return of(f.hSize)
-    if (!f.hDirSize) {
-      f.hDirSize = this.filesService.getSize(f).pipe(
-        map((size) => convertBytesToText(size, 0, true)),
-        catchError(() => (f.hDirSize = of(f.hSize))),
-        shareReplay(1)
-      )
-    }
-    return f.hDirSize
+    return this.filesService.getSizeLazy(f)
   }
 }

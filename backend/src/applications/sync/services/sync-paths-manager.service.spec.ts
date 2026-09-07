@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { currentTimeStamp } from '../../../common/shared'
-import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
+import type { FileProps } from '../../files/interfaces/file-props.interface'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { getProps, isPathExists, isPathIsDir } from '../../files/utils/files'
 import { NotificationsManager } from '../../notifications/services/notifications-manager.service'
@@ -63,10 +63,9 @@ vi.mock('../../notifications/constants/notifications', async (importOriginal) =>
 
 describe(SyncPathsManager.name, () => {
   let service: SyncPathsManager
-  let contextManager: { headerOriginUrl: Mock }
   let spacesManager: { spaceEnv: Mock }
   let usersQueries: Record<string, Mock>
-  let filesQueries: { getSpaceFileId: Mock; getOrCreateSpaceFile: Mock }
+  let filesQueries: { getOrCreateSpaceFile: Mock }
   let notificationsManager: { create: Mock }
   let syncQueries: {
     getClient: Mock
@@ -81,13 +80,10 @@ describe(SyncPathsManager.name, () => {
 
   const userWith = (clientId?: string) => ({ id: 1, clientId })
   const flush = () => new Promise((r) => setImmediate(r))
-
   beforeEach(async () => {
-    contextManager = { headerOriginUrl: vi.fn(() => 'http://origin.local') }
     spacesManager = { spaceEnv: vi.fn() }
     usersQueries = {}
     filesQueries = {
-      getSpaceFileId: vi.fn(),
       getOrCreateSpaceFile: vi.fn()
     }
     notificationsManager = {
@@ -105,14 +101,15 @@ describe(SyncPathsManager.name, () => {
     }
     vi.mocked(isPathExists).mockReset()
     vi.mocked(isPathIsDir).mockReset()
-    vi.mocked(getProps).mockReset()
+    vi.mocked(getProps)
+      .mockReset()
+      .mockResolvedValue({ id: -1, name: 'file' } as FileProps)
     vi.mocked(getEnvPermissions).mockReset().mockReturnValue('server-perms')
     vi.mocked(currentTimeStamp).mockReset().mockReturnValue(1000)
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SyncPathsManager,
-        { provide: ContextManager, useValue: contextManager },
         { provide: SpacesManager, useValue: spacesManager },
         { provide: UsersQueries, useValue: usersQueries },
         { provide: FilesQueries, useValue: filesQueries },
@@ -587,28 +584,16 @@ describe(SyncPathsManager.name, () => {
     })
   })
 
-  describe('getOrCreateFileId (private) branches', () => {
-    it('should return existing file id without creation', async () => {
-      vi.mocked(getProps).mockResolvedValue({ name: 'file' })
-      filesQueries.getSpaceFileId.mockResolvedValue(101)
+  describe('getOrCreateFileId (private)', () => {
+    it('should resolve or create a file id from its inode', async () => {
+      vi.mocked(getProps).mockResolvedValue({ id: -101, name: 'file' } as FileProps)
+      filesQueries.getOrCreateSpaceFile.mockResolvedValue(101)
       const id = await (service as any).getOrCreateFileId({
         realPath: '/rp',
         dbFile: { path: '.' }
       })
       expect(id).toBe(101)
-      expect(filesQueries.getOrCreateSpaceFile).not.toHaveBeenCalled()
-    })
-
-    it('should create file when not exists and return its id', async () => {
-      vi.mocked(getProps).mockResolvedValue({ id: 999, name: 'file' })
-      filesQueries.getSpaceFileId.mockResolvedValue(0)
-      filesQueries.getOrCreateSpaceFile.mockResolvedValue(202)
-      const id = await (service as any).getOrCreateFileId({
-        realPath: '/rp',
-        dbFile: { path: '.' }
-      })
-      expect(id).toBe(202)
-      expect(filesQueries.getOrCreateSpaceFile).toHaveBeenCalledWith(0, expect.objectContaining({ id: undefined }), { path: '.' })
+      expect(filesQueries.getOrCreateSpaceFile).toHaveBeenCalledWith(-101, expect.objectContaining({ id: undefined }), { path: '.' })
     })
   })
 })

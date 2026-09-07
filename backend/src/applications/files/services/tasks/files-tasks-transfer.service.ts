@@ -5,11 +5,21 @@ import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { UserModel } from '../../../users/models/user.model'
 import { SpaceEnv } from '../../../spaces/models/space-env.model'
+import { temporaryRootFromSpace } from '../../../spaces/utils/paths'
 import { DEFAULT_HIGH_WATER_MARK } from '../../constants/files'
+import { FILE_OPERATION } from '../../constants/operations'
 import { FileTaskEvent } from '../../events/file-events'
 import type { FileTaskCopyTaskOptions, FileTaskExtractionEntry, FileTaskTransferOptions } from '../../interfaces/file-task.interface'
-import { createProgressTransform, fileSize, isCrossDevice, isPathExists, moveFiles, removeFiles } from '../../utils/files'
-import { countDirEntriesAndSize, taskTemporaryPath } from '../../utils/tasks'
+import {
+  createProgressTransform,
+  fileSize,
+  isCrossDevice,
+  isInternalTemporaryEntry,
+  isPathExists,
+  removeFiles,
+  temporaryFilePath
+} from '../../utils/files'
+import { countDirEntriesAndSize, isCrossDeviceError } from '../../utils/tasks'
 import { SourceCleanupError } from '../../models/file-error'
 
 @Injectable()
@@ -27,13 +37,14 @@ export class FilesTasksTransfer {
     await this.initializeTaskProps(srcSpace, isDir)
     await this.copyAbortable(srcSpace.realPath, dstSpace.realPath, {
       beforeCommit: this.prepareTaskDestination(srcSpace, dstSpace, overwrite, deleteDestination),
-      cacheKey: srcSpace.task!.cacheKey,
+      executionId: srcSpace.task!.id,
       onProgress: this.createByteProgressHandler(srcSpace),
       onTransferStart: () => this.startTransferTaskWatch(srcSpace, dstSpace.realPath),
+      operation: FILE_OPERATION.COPY,
       overwrite,
       recursive,
       signal,
-      stagingDir: user.tasksPath
+      stagingDir: temporaryRootFromSpace(user, dstSpace)
     })
   }
 
@@ -46,45 +57,38 @@ export class FilesTasksTransfer {
     signal: AbortSignal,
     deleteDestination: () => Promise<void>
   ): Promise<SourceCleanupError | undefined> {
-    await this.initializeTaskProps(srcSpace, isDir)
     const beforeCommit = this.prepareTaskDestination(srcSpace, dstSpace, overwrite, deleteDestination)
     return this.moveAbortable(srcSpace.realPath, dstSpace.realPath, {
       beforeCommit,
-      cacheKey: srcSpace.task!.cacheKey,
-      crossDevice: true,
+      beforeTransfer: () => this.initializeTaskProps(srcSpace, isDir),
+      executionId: srcSpace.task!.id,
       onProgress: this.createByteProgressHandler(srcSpace),
       onTransferStart: () => this.startTransferTaskWatch(srcSpace, dstSpace.realPath),
+      operation: FILE_OPERATION.MOVE,
       overwrite,
       signal,
-      stagingDir: user.tasksPath
+      stagingDir: temporaryRootFromSpace(user, dstSpace)
     })
   }
 
   async delete(
-    user: UserModel,
     space: SpaceEnv,
     trashFile: string,
+    stagingDir: string,
     isDir: boolean,
     signal: AbortSignal | undefined,
     prepareDestination: () => Promise<void>
   ): Promise<SourceCleanupError | undefined> {
-    await this.initializeTaskProps(space, isDir)
-    if (!signal) {
-      // Moving to trash on the same device stays atomic and does not copy bytes.
-      this.startTransferTaskWatch(space, trashFile)
-      await prepareDestination()
-      await moveFiles(space.realPath, trashFile, true)
-      return
-    }
     return this.moveAbortable(space.realPath, trashFile, {
       beforeCommit: prepareDestination,
-      cacheKey: space.task!.cacheKey,
-      crossDevice: true,
+      beforeTransfer: () => this.initializeTaskProps(space, isDir),
+      executionId: space.task!.id,
       onProgress: this.createByteProgressHandler(space),
       onTransferStart: () => this.startTransferTaskWatch(space, trashFile),
+      operation: FILE_OPERATION.DELETE,
       overwrite: true,
-      signal,
-      stagingDir: user.tasksPath
+      signal: signal ?? new AbortController().signal,
+      stagingDir
     })
   }
 
@@ -152,16 +156,17 @@ export class FilesTasksTransfer {
   private async copyAbortable(srcPath: string, dstPath: string, options: FileTaskCopyTaskOptions): Promise<void> {
     const {
       beforeCommit,
-      cacheKey,
+      executionId,
       onProgress,
       onTransferStart,
+      operation,
       overwrite = false,
       preserveTimestamps = true,
       recursive = true,
       signal,
       stagingDir = path.dirname(dstPath)
     } = options
-    const temporaryPath = taskTemporaryPath(stagingDir, cacheKey, dstPath)
+    const temporaryPath = temporaryFilePath(stagingDir, dstPath, operation, executionId)
     await fs.mkdir(stagingDir, { recursive: true })
     const copyDirectlyToDestination = await isCrossDevice(stagingDir, dstPath)
 
@@ -177,7 +182,7 @@ export class FilesTasksTransfer {
         await this.copyEntry(srcPath, dstPath, recursive, preserveTimestamps, signal, onProgress)
       } catch (e) {
         if (transferStarted) {
-          await this.cleanupAfterFailure(dstPath)
+          await this.removeBestEffort(dstPath)
         }
         throw e
       }
@@ -190,27 +195,70 @@ export class FilesTasksTransfer {
       signal.throwIfAborted()
       await beforeCommit?.()
       await this.prepareDestination(dstPath, overwrite)
-      await fs.rename(temporaryPath, dstPath)
+      await this.publishTemporaryEntry(temporaryPath, dstPath, recursive, preserveTimestamps, signal)
     } catch (e) {
-      await this.cleanupAfterFailure(temporaryPath)
+      await this.removeBestEffort(temporaryPath)
       throw e
     }
   }
 
   private async moveAbortable(srcPath: string, dstPath: string, options: FileTaskTransferOptions): Promise<SourceCleanupError | undefined> {
-    const { beforeCommit, cacheKey, onProgress, onTransferStart, overwrite = false, signal, stagingDir } = options
-    const crossDevice = options.crossDevice ?? (await isCrossDevice(srcPath, dstPath))
+    const { beforeCommit, beforeTransfer, executionId, onProgress, onTransferStart, operation, overwrite = false, signal, stagingDir } = options
+    const crossDevice = await isCrossDevice(srcPath, dstPath)
+    let streamedBeforeCommit = beforeCommit
     if (!crossDevice) {
       signal.throwIfAborted()
       await beforeCommit?.()
-      await moveFiles(srcPath, dstPath, overwrite)
-      return
+      streamedBeforeCommit = undefined
+      if (!overwrite && srcPath.toLowerCase() !== dstPath.toLowerCase() && (await isPathExists(dstPath))) {
+        throw this.destinationExistsError()
+      }
+      if (await this.tryRename(srcPath, dstPath)) return
     }
-    await this.copyAbortable(srcPath, dstPath, { beforeCommit, cacheKey, onProgress, onTransferStart, overwrite, signal, stagingDir })
+    signal.throwIfAborted()
+    await beforeTransfer?.()
+    await this.copyAbortable(srcPath, dstPath, {
+      beforeCommit: streamedBeforeCommit,
+      executionId,
+      onProgress,
+      onTransferStart,
+      operation,
+      overwrite,
+      signal,
+      stagingDir
+    })
     try {
       await removeFiles(srcPath)
     } catch (cause) {
       return new SourceCleanupError(srcPath, dstPath, { cause })
+    }
+  }
+
+  private async publishTemporaryEntry(
+    temporaryPath: string,
+    dstPath: string,
+    recursive: boolean,
+    preserveTimestamps: boolean,
+    signal: AbortSignal
+  ): Promise<void> {
+    if (await this.tryRename(temporaryPath, dstPath)) return
+    try {
+      // Bytes were already accounted for while filling the staging entry.
+      await this.copyEntry(temporaryPath, dstPath, recursive, preserveTimestamps, signal)
+    } catch (error) {
+      await this.removeBestEffort(dstPath)
+      throw error
+    }
+    await this.removeBestEffort(temporaryPath)
+  }
+
+  private async tryRename(srcPath: string, dstPath: string): Promise<boolean> {
+    try {
+      await fs.rename(srcPath, dstPath)
+      return true
+    } catch (error) {
+      if (isCrossDeviceError(error)) return false
+      throw error
     }
   }
 
@@ -228,6 +276,7 @@ export class FilesTasksTransfer {
       await fs.mkdir(dstPath)
       if (recursive) {
         for (const entry of await fs.readdir(srcPath)) {
+          if (isInternalTemporaryEntry(entry)) continue
           await this.copyEntry(path.join(srcPath, entry), path.join(dstPath, entry), true, preserveTimestamps, signal, onProgress)
         }
       }
@@ -253,16 +302,20 @@ export class FilesTasksTransfer {
   private async prepareDestination(dstPath: string, overwrite: boolean): Promise<void> {
     if (!(await isPathExists(dstPath))) return
     if (!overwrite) {
-      throw Object.assign(new Error('Destination already exists'), { code: 'EEXIST' })
+      throw this.destinationExistsError()
     }
     await removeFiles(dstPath)
   }
 
-  private async cleanupAfterFailure(rPath: string): Promise<void> {
+  private destinationExistsError(): NodeJS.ErrnoException {
+    return Object.assign(new Error('Destination already exists'), { code: 'EEXIST' })
+  }
+
+  private async removeBestEffort(rPath: string): Promise<void> {
     try {
       await removeFiles(rPath)
     } catch {
-      // Cleanup is best-effort and must not replace the transfer error.
+      // Cleanup is best-effort and must not replace the transfer result.
     }
   }
 }

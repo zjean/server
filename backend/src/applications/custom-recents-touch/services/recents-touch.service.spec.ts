@@ -6,6 +6,7 @@ import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { RecentsTouchService } from './recents-touch.service'
 import { Mock } from 'vitest'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // Stub fs.stat at the module level. The service does `import fs from 'node:fs/promises'`
 // and calls `fs.stat`; under vitest a default-import spy (vi.spyOn(fs, 'stat')) does not
@@ -126,7 +127,7 @@ describe(RecentsTouchService.name, () => {
 
     expect(filesQueriesMock.getOrCreateUserFile).toHaveBeenCalledWith(
       7,
-      expect.objectContaining({ id: 0, path: 'folder', name: 'foo.txt', isDir: false })
+      expect.objectContaining({ id: NO_CLIENT_FILE_ID, path: 'folder', name: 'foo.txt', isDir: false })
     )
     expect(inserts).toHaveLength(1)
     expect(inserts[0]).toMatchObject({

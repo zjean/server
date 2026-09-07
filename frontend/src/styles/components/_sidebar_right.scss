@@ -31,24 +31,52 @@
   }
 
   .sidebar-component-title {
+    .lucide {
+      font-size: $font-size-xl;
+    }
+
     > span {
       margin-right: auto;
       margin-left: auto;
+    }
+
+    > .sidebar-component-title-label {
+      position: absolute;
+      left: 50%;
+      max-width: calc(100% - 90px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    > .sidebar-component-title-side {
+      display: flex;
+      align-items: center;
+      min-width: 35px;
+
+      &:last-child {
+        justify-content: flex-end;
+      }
     }
   }
 
   .sidebar-item {
     .sidebar-item-container {
       display: flex;
-      cursor: pointer;
 
       .sidebar-item-content {
         display: flex;
         align-items: center;
         width: 100%;
-        height: 40px;
+        height: 38px;
         padding: .2rem .4rem .2rem .4rem;
         border-bottom: .5px solid transparent;
+        user-select: none;
+
+        > img {
+          margin-right: .3rem;
+        }
       }
     }
   }
@@ -93,7 +121,7 @@
         border-radius: calc(#{$border-radius-base} + #{$icon-item-inset});
         background-clip: content-box !important;
 
-        > fa-icon {
+        > .lucide {
           font-size: $font-size-xl;
         }
 

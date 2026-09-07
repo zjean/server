@@ -51,7 +51,7 @@ describeFileBrowserContract({
   filesAreOwnedByUser: false,
   // The extra listSpaces call is the space-name lookup fired from the listing's
   // success handler.
-  navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'spaces.listSpaces', 'favorites.loadFavoriteIds'],
+  navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'favorites.clearOverrides', 'spaces.listSpaces'],
   // Space-files' onFabSheetSelect closes the sheet before dispatching.
   fabSheetClosesOnSelect: true
 })

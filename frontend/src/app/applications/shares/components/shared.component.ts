@@ -2,20 +2,18 @@ import { KeyValuePipe } from '@angular/common'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Component, ElementRef, inject, OnInit, ViewChild } from '@angular/core'
 import { ActivatedRoute } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
 import {
-  faArrowDown,
-  faArrowRotateRight,
-  faArrowUp,
-  faCircleInfo,
-  faCommentDots,
-  faEllipsisH,
-  faMapMarkerAlt,
-  faMinus,
-  faPen,
-  faPlus,
-  faRotate
-} from '@fortawesome/free-solid-svg-icons'
+  LucideArrowDown,
+  LucideArrowUp,
+  LucideDynamicIcon,
+  LucideEllipsis,
+  LucideMapPin,
+  LucideMessageSquareMore,
+  LucideMinus,
+  LucidePencil,
+  LucidePlus,
+  LucideRotateCw
+} from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
 import type { ShareFile } from '@sync-in-server/backend/src/applications/shares/interfaces/share-file.interface'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -46,7 +44,7 @@ import { ShareRepositoryComponent } from './utils/share-repository.component'
 @Component({
   selector: 'app-shared',
   imports: [
-    FaIconComponent,
+    LucideDynamicIcon,
     KeyValuePipe,
     L10nTranslateDirective,
     L10nTranslatePipe,
@@ -77,17 +75,17 @@ export class SharedComponent implements OnInit {
   protected readonly layout = inject(LayoutService)
   protected readonly icons = {
     SHARED: SPACES_ICON.SHARED_WITH_OTHERS,
-    faArrowRotateRight,
-    faArrowDown,
-    faArrowUp,
-    faRotate,
-    faPlus,
-    faMinus,
-    faPen,
-    faEllipsisH,
-    faMapMarkerAlt,
-    faCircleInfo,
-    faCommentDots
+    SHARES: SPACES_ICON.SHARES,
+    LucideArrowDown,
+    LucideArrowUp,
+    LucideRotateCw,
+    LucidePlus,
+    LucideMinus,
+    LucidePencil,
+    LucideEllipsis,
+    LucideMapPin,
+    SELECTION: SPACES_ICON.SELECTION,
+    LucideMessageSquareMore
   }
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected readonly TAB_MENU = TAB_MENU
@@ -130,7 +128,6 @@ export class SharedComponent implements OnInit {
       sortable: true
     }
   }
-  protected btnSortFields = { name: 'Name', created: 'Created' }
   private readonly activatedRoute = inject(ActivatedRoute)
   private readonly store = inject(StoreService)
   private readonly sharesService = inject(SharesService)

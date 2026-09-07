@@ -1,10 +1,8 @@
 import { NgTemplateOutlet } from '@angular/common'
 import { Component, ElementRef, EventEmitter, forwardRef, inject, Input, OnDestroy, OnInit, Output, TemplateRef } from '@angular/core'
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms'
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
-import { faQuestion, faXmark } from '@fortawesome/free-solid-svg-icons'
+import type { LucideIcon } from '@lucide/angular'
+import { LucideCircleQuestionMark, LucideDynamicIcon, LucideX } from '@lucide/angular'
 import { Subscription } from 'rxjs'
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators'
 import { OffClickDirective } from '../../directives/off-click.directive'
@@ -15,7 +13,7 @@ import { SelectItem } from './select.model'
   selector: 'app-select',
   templateUrl: 'select.component.html',
   styleUrls: ['select.component.scss'],
-  imports: [OffClickDirective, HighlightPipe, FaIconComponent, NgTemplateOutlet],
+  imports: [OffClickDirective, HighlightPipe, LucideDynamicIcon, NgTemplateOutlet],
   providers: [
     {
       provide: NG_VALUE_ACCESSOR,
@@ -29,7 +27,7 @@ export class SelectComponent implements OnInit, OnDestroy, ControlValueAccessor 
   @Input({ required: true }) searchFunction: (search: string) => any
   @Input() customTemplateOptions: TemplateRef<any>
   @Input() customTemplateSelect: TemplateRef<any>
-  @Input() itemIcon: IconDefinition = faQuestion
+  @Input() itemIcon: LucideIcon = LucideCircleQuestionMark
   @Input() allowClear = true
   @Input() placeholder = ''
   @Input() idField = 'id'
@@ -40,7 +38,7 @@ export class SelectComponent implements OnInit, OnDestroy, ControlValueAccessor 
   @Output() removed = new EventEmitter<any>()
   @Output() typed = new EventEmitter<any>()
   @Output() opened = new EventEmitter<any>()
-  protected xMarkIcon = faXmark
+  protected xMarkIcon = LucideX
   public options: SelectItem[] = []
   public itemObjects: SelectItem[] = []
   public activeOption: SelectItem
@@ -48,7 +46,6 @@ export class SelectComponent implements OnInit, OnDestroy, ControlValueAccessor 
   public inputValue = ''
   protected onChange: any = Function.prototype
   protected onTouched: any = Function.prototype
-  private readonly sanitizer = inject(DomSanitizer)
   private subscription: Subscription
   private behavior: GenericBehavior
 
@@ -126,10 +123,6 @@ export class SelectComponent implements OnInit, OnDestroy, ControlValueAccessor 
               description: selectedItem[this.descriptionField]
             })
     }
-  }
-
-  public sanitize(html: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(html)
   }
 
   public inputEvent(e: any, isUpMode = false) {

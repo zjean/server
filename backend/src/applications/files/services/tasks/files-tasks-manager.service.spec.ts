@@ -391,15 +391,37 @@ describe(FilesTasksManager.name, () => {
   it('should run a non-cancellable task without an abort signal', async () => {
     filesMethods.doWork.mockResolvedValueOnce(undefined)
     const user = { id: 7 } as any
-    const space = { realPath: '/data/users/john/files/document.txt', url: 'files/personal/document.txt' } as any
-    const dto = { dstDirectory: 'files/personal' }
+    const space = {
+      inTrashRepository: true,
+      realPath: '/data/users/john/trash/document.txt',
+      url: 'trash/personal/document.txt'
+    } as any
 
-    const task = await filesTasksManager.createTask(FILE_OPERATION.MOVE, user, space, dto, 'doWork')
+    const task = await filesTasksManager.createTask(FILE_OPERATION.DELETE, user, space, null, 'doWork')
     await flushPromises()
 
-    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'document.txt'])
     expect(task.cancellable).toBe(false)
-    expect(filesMethods.doWork).toHaveBeenCalledWith(user, space, dto)
+    expect(filesMethods.doWork).toHaveBeenCalledWith(user, space, null)
+  })
+
+  it('should stream trash deletes without relying on storage-specific ids', async () => {
+    filesMethods.doWork.mockReturnValueOnce(new Promise<void>(() => undefined))
+    const user = { id: 7 } as any
+    const space = {
+      dbFile: { path: 'documents/report.png', shareExternalId: 33 },
+      inFilesRepository: false,
+      inSharesRepository: true,
+      inTrashRepository: false,
+      realPath: '/mnt/archive/documents/report.png',
+      root: { externalPath: '/mnt/archive', file: { space: { alias: 'project', id: 11 } } },
+      url: 'shares/project/documents/report.png'
+    } as any
+
+    const task = await filesTasksManager.createTask(FILE_OPERATION.DELETE, user, space, null, 'doWork')
+
+    expect(task.cancellable).toBe(true)
+    expect(task.props).toEqual({ progress: 1 })
+    expect(filesMethods.doWork).toHaveBeenCalledWith(user, space, null, expect.any(AbortSignal))
   })
 
   it('should queue tasks when a user already has three running tasks', async () => {
@@ -546,9 +568,10 @@ describe(FilesTasksManager.name, () => {
   it('should delete completed task, remove archive file and delete cache entry', async () => {
     const removeFilesSpy = vi.spyOn(filesUtils, 'removeFiles').mockResolvedValueOnce(undefined)
     const stopWatchSpy = vi.spyOn(filesTasksWatcher as any, 'stopWatch').mockResolvedValueOnce(undefined)
-    const user = { id: 22, tasksPath: '/tmp/tasks' } as any
+    const user = { id: 22, tmpPath: '/tmp' } as any
     cacheStore.set(`${CACHE_TASK_PREFIX}-22-task-ok`, {
       id: 'task-ok',
+      type: FILE_OPERATION.COMPRESS,
       name: 'archive.tar',
       status: FileTaskStatus.SUCCESS,
       props: { compressInDirectory: false }
@@ -556,7 +579,7 @@ describe(FilesTasksManager.name, () => {
 
     await filesTasksManager.deleteTasks(user, ['task-ok'])
 
-    expect(removeFilesSpy).toHaveBeenCalledWith('/tmp/tasks/archive.tar')
+    expect(removeFilesSpy).toHaveBeenCalledWith('/tmp/~tmp-compress-task-ok-archive.tar')
     expect(stopWatchSpy).toHaveBeenCalledWith(`${CACHE_TASK_PREFIX}-22-task-ok`)
     expect(cache.mget).toHaveBeenCalledWith([`${CACHE_TASK_PREFIX}-22-task-ok`])
     expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_TASK_PREFIX}-22-task-ok`])
@@ -573,19 +596,22 @@ describe(FilesTasksManager.name, () => {
   it('should ignore active tasks when deleting all tasks', async () => {
     const removeFilesSpy = vi.spyOn(filesUtils, 'removeFiles').mockResolvedValue(undefined)
     const stopWatchSpy = vi.spyOn(filesTasksWatcher as any, 'stopWatch').mockResolvedValue(undefined)
-    const user = { id: 31, tasksPath: '/tmp/tasks' } as any
+    const user = { id: 31, tmpPath: '/tmp' } as any
     cacheStore.set(`${CACHE_TASK_PREFIX}-31-task-pending`, {
       id: 'task-pending',
+      type: FILE_OPERATION.COMPRESS,
       status: FileTaskStatus.PENDING,
       props: { compressInDirectory: false }
     })
     cacheStore.set(`${CACHE_TASK_PREFIX}-31-task-queued`, {
       id: 'task-queued',
+      type: FILE_OPERATION.COMPRESS,
       status: FileTaskStatus.QUEUED,
       props: { compressInDirectory: false }
     })
     cacheStore.set(`${CACHE_TASK_PREFIX}-31-task-done`, {
       id: 'task-done',
+      type: FILE_OPERATION.COMPRESS,
       name: 'done.tar',
       status: FileTaskStatus.SUCCESS,
       props: { compressInDirectory: true }
@@ -609,11 +635,12 @@ describe(FilesTasksManager.name, () => {
   it('should reject archive download when task is not applicable', async () => {
     cacheStore.set(`${CACHE_TASK_PREFIX}-40-task-a`, {
       id: 'task-a',
+      type: FILE_OPERATION.COMPRESS,
       status: FileTaskStatus.PENDING,
       props: { compressInDirectory: false }
     })
 
-    await expect(filesTasksManager.downloadArchive({ id: 40, tasksPath: '/tmp/tasks' } as any, 'task-a', {} as any, {} as any)).rejects.toEqual(
+    await expect(filesTasksManager.downloadArchive({ id: 40, tmpPath: '/tmp' } as any, 'task-a', {} as any, {} as any)).rejects.toEqual(
       new HttpException('Not applicable', HttpStatus.BAD_REQUEST)
     )
   })
@@ -621,13 +648,14 @@ describe(FilesTasksManager.name, () => {
   it('should map send-file checks error to HttpException during archive download', async () => {
     cacheStore.set(`${CACHE_TASK_PREFIX}-50-task-ok`, {
       id: 'task-ok',
+      type: FILE_OPERATION.COMPRESS,
       name: 'archive.tar',
       status: FileTaskStatus.SUCCESS,
       props: { compressInDirectory: false }
     })
     vi.spyOn(SendFile.prototype, 'checks').mockRejectedValueOnce({ message: 'Location not found', httpCode: 404 } as any)
 
-    const downloadPromise = filesTasksManager.downloadArchive({ id: 50, tasksPath: '/tmp/tasks' } as any, 'task-ok', {} as any, {} as any)
+    const downloadPromise = filesTasksManager.downloadArchive({ id: 50, tmpPath: '/tmp' } as any, 'task-ok', {} as any, {} as any)
     await expect(downloadPromise).rejects.toThrow(HttpException)
     await expect(downloadPromise).rejects.toThrow('Location not found')
     await expect(downloadPromise).rejects.toSatisfy((e: HttpException) => {
@@ -639,6 +667,7 @@ describe(FilesTasksManager.name, () => {
     const streamable = { ok: true } as any
     cacheStore.set(`${CACHE_TASK_PREFIX}-60-task-ok`, {
       id: 'task-ok',
+      type: FILE_OPERATION.COMPRESS,
       name: 'archive.tar',
       status: FileTaskStatus.SUCCESS,
       props: { compressInDirectory: false }
@@ -646,7 +675,7 @@ describe(FilesTasksManager.name, () => {
     vi.spyOn(SendFile.prototype, 'checks').mockResolvedValueOnce(undefined)
     vi.spyOn(SendFile.prototype, 'stream').mockResolvedValueOnce(streamable)
 
-    const result = await filesTasksManager.downloadArchive({ id: 60, tasksPath: '/tmp/tasks' } as any, 'task-ok', { raw: {} } as any, {} as any)
+    const result = await filesTasksManager.downloadArchive({ id: 60, tmpPath: '/tmp' } as any, 'task-ok', { raw: {} } as any, {} as any)
 
     expect(result).toBe(streamable)
   })

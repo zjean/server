@@ -8,6 +8,7 @@ import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
+import { NO_CLIENT_FILE_ID } from '../constants/file-ids'
 
 // Materializes a `files` DB row for a filesystem entry that does not have one
 // yet, and returns its real, positive `files.id`.
@@ -66,9 +67,10 @@ export class FileRowEnsurer {
       if (space.inPersonalSpace) {
         const existing = await this.findUserFileByPath(user.id, props, space.inTrashRepository === true)
         if (existing > 0) return existing
-        // Force id to 0 so getOrCreateUserFile does not take its lookup-by-id
-        // branch with a placeholder (negative inode) value.
-        return (await this.filesQueries.getOrCreateUserFile(user.id, { ...props, id: 0 })) || 0
+        // Force a NEGATIVE sentinel so getOrCreateUserFile does not take its
+        // lookup-by-id branch. It must not be 0: upstream's assertValidFileId
+        // rejects 0 outright. See NO_CLIENT_FILE_ID.
+        return (await this.filesQueries.getOrCreateUserFile(user.id, { ...props, id: NO_CLIENT_FILE_ID })) || 0
       }
       // Shared / external space: getSpaceFileId already does the path-keyed
       // lookup against (spaceId|spaceExternalRootId|shareExternalId, path,
@@ -76,7 +78,7 @@ export class FileRowEnsurer {
       const dbFile = dbFileFromSpace(user.id, space)
       const existing = await this.filesQueries.getSpaceFileId(props, dbFile)
       if (existing > 0) return existing
-      return (await this.filesQueries.getOrCreateSpaceFile(0, props, dbFile)) || 0
+      return (await this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, props, dbFile)) || 0
     } catch (e) {
       this.logger.warn({
         tag: this.ensureFileId.name,

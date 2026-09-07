@@ -64,6 +64,20 @@
       "when": 1785241513665,
       "tag": "0008_military_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1788776148088,
+      "tag": "0009_wise_night_thrasher",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1788776160340,
+      "tag": "0010_stormy_blink",
+      "breakpoints": true
     }
   ]
 }

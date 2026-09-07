@@ -1,21 +1,24 @@
-import { Inject, Injectable, Logger } from '@nestjs/common'
-import { and, desc, eq, getTableColumns, inArray, isNull, or, SelectedFields, sql, SQL } from 'drizzle-orm'
+import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
+import { and, desc, eq, getTableColumns, inArray, isNotNull, isNull, or, SelectedFields, sql, SQL } from 'drizzle-orm'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { concatDistinctObjectsInArray, convertToWhere, dbCheckAffectedRows, dbGetInsertedId } from '../../../infrastructure/database/utils'
 import { fileHasCommentsSubquerySQL } from '../../comments/schemas/comments.schema'
 import { shares } from '../../shares/schemas/shares.schema'
+import type { GetOrCreateSpaceFileOptions, SpaceBrowseContext, SpaceBrowseDetails } from '../../spaces/interfaces/space-files.interface'
 import { spacesRoots } from '../../spaces/schemas/spaces-roots.schema'
 import { spaces } from '../../spaces/schemas/spaces.schema'
 import { syncClients } from '../../sync/schemas/sync-clients.schema'
 import { syncPaths } from '../../sync/schemas/sync-paths.schema'
+import { FILES_RECENTS_MAX_LIMIT } from '../constants/recents'
 import { FileDBProps } from '../interfaces/file-db-props.interface'
 import { FileProps } from '../interfaces/file-props.interface'
 import type { FileRecent, FileRecentLocation, FileRecentUpdate } from '../schemas/file-recent.interface'
 import { File } from '../schemas/file.interface'
+import { filesFavorites } from '../schemas/files-favorites.schema'
 import { filesRecents } from '../schemas/files-recents.schema'
-import { childFilesFindRegexp, childFilesReplaceRegexp, childPathFindRegexp, filePathSQL, files } from '../schemas/files.schema'
-import { dirName, fileName, isPathInside } from '../utils/files'
+import { childFilesMatch, childFilesReplacePath, childPathMatch, filePathSQL, files } from '../schemas/files.schema'
+import { assertValidFileId, dirName, fileName, isPathInside } from '../utils/files'
 
 @Injectable()
 export class FilesQueries {
@@ -23,17 +26,8 @@ export class FilesQueries {
 
   constructor(@Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema) {}
 
-  browseFiles(
-    userId: number,
-    dbFile: FileDBProps,
-    options: {
-      withSpaces?: boolean
-      withShares?: boolean
-      withSyncs?: boolean
-      withHasComments?: boolean
-      ignoreChildShares?: boolean
-    }
-  ): Promise<FileProps[]> {
+  browseFiles(userId: number, context: SpaceBrowseContext, details: SpaceBrowseDetails): Promise<FileProps[]> {
+    const withSpaces = !!details && context.inPersonalSpace
     const q = this.db
       .select({
         id: files.id,
@@ -44,8 +38,8 @@ export class FilesQueries {
         size: files.size,
         mtime: files.mtime,
         ctime: files.ctime,
-        ...(options.withSpaces && { spaces: concatDistinctObjectsInArray(spaces.id, { id: spaces.id, alias: spaces.alias, name: spaces.name }) }),
-        ...(options.withShares && {
+        ...(withSpaces && { spaces: concatDistinctObjectsInArray(spaces.id, { id: spaces.id, alias: spaces.alias, name: spaces.name }) }),
+        ...(!!details && {
           shares: concatDistinctObjectsInArray(shares.id, {
             id: shares.id,
             alias: shares.alias,
@@ -53,32 +47,36 @@ export class FilesQueries {
             type: shares.type
           })
         }),
-        ...(options.withSyncs && {
+        ...(details?.syncs && {
           syncs: concatDistinctObjectsInArray(syncPaths.id, {
             id: syncPaths.id,
             clientId: syncClients.id,
             clientName: sql`JSON_VALUE(${syncClients.info}, '$.node')`
           })
         }),
-        ...(options.withHasComments && { hasComments: sql`${fileHasCommentsSubquerySQL(files.id)}`.mapWith(Boolean) })
+        ...(!!details && { hasComments: sql`${fileHasCommentsSubquerySQL(files.id)}`.mapWith(Boolean) }),
+        ...(details?.favorites && { isFavorite: isNotNull(filesFavorites.fileId).mapWith(Boolean) })
       })
       .from(files)
-      .where(and(...convertToWhere(files, dbFile)))
+      .where(and(...convertToWhere(files, context.dbFile)))
       .groupBy(files.id)
-    if (options.withSpaces) {
+    if (withSpaces) {
       // show spaces for files in personal space
       q.leftJoin(spacesRoots, eq(spacesRoots.fileId, files.id))
       q.leftJoin(spaces, eq(spaces.id, spacesRoots.spaceId))
     }
-    if (options.withShares) {
+    if (details) {
       q.leftJoin(
         shares,
-        and(...[eq(shares.ownerId, userId), eq(shares.fileId, files.id)], ...(options.ignoreChildShares ? [isNull(shares.parentId)] : []))
+        and(...[eq(shares.ownerId, userId), eq(shares.fileId, files.id)], ...(!context.inSharesRepository ? [isNull(shares.parentId)] : []))
       )
     }
-    if (options.withSyncs) {
+    if (details?.syncs) {
       q.leftJoin(syncClients, eq(syncClients.ownerId, userId))
       q.leftJoin(syncPaths, and(eq(syncPaths.clientId, syncClients.id), eq(syncPaths.fileId, files.id)))
+    }
+    if (details?.favorites) {
+      q.leftJoin(filesFavorites, and(eq(filesFavorites.userId, userId), eq(filesFavorites.fileId, files.id)))
     }
     return q
   }
@@ -118,7 +116,8 @@ export class FilesQueries {
   }
 
   async getOrCreateUserFile(userId: number, file: FileProps): Promise<number> {
-    if (file.id && file.id > 0) {
+    assertValidFileId(file.id)
+    if (file.id > 0) {
       const [searchFileInDB] = await this.db
         .select({ id: files.id })
         .from(files)
@@ -133,7 +132,8 @@ export class FilesQueries {
     return dbGetInsertedId(await this.db.insert(files).values({ ...file, id: undefined, ownerId: userId } as File))
   }
 
-  async getOrCreateSpaceFile(fileId: number, file: FileProps, dbFile: FileDBProps): Promise<number> {
+  async getOrCreateSpaceFile(fileId: number, file: FileProps, dbFile: FileDBProps, options: GetOrCreateSpaceFileOptions = {}): Promise<number> {
+    assertValidFileId(fileId)
     // `isDir` is intentionally excluded here: this flow reconciles an existing path before insert,
     // even if the caller has a stale file/dir kind for the same location.
     const fileInDB = {
@@ -141,7 +141,7 @@ export class FilesQueries {
       name: file.name,
       path: file.path
     }
-    const hasDbFileId = Number.isSafeInteger(fileId) && fileId > 0
+    const hasDbFileId = fileId > 0
     if (hasDbFileId) {
       const [searchFileInDB] = await this.db
         .select({ id: files.id })
@@ -161,7 +161,12 @@ export class FilesQueries {
     // Before inserting, check whether a record already exists at this path to avoid
     // creating duplicate rows when repeated calls index the same file.
     const existingId = await this.getSpaceFileId(file, dbFile, { withDir: false })
-    if (existingId !== undefined) return existingId
+    if (existingId !== undefined) {
+      if (options.rejectIdMismatch && hasDbFileId && existingId !== fileId) {
+        throw new HttpException('File id mismatch', HttpStatus.BAD_REQUEST)
+      }
+      return existingId
+    }
 
     // `fileInDB` keeps the DB scope and uses the `FileProps` path/name.
     return dbGetInsertedId(await this.db.insert(files).values({ ...file, ...fileInDB, id: undefined } as File))
@@ -208,7 +213,7 @@ export class FilesQueries {
     }
 
     // prepare (or not) the child files update/delete
-    const childFiles = isDir ? childFilesFindRegexp(props.path) : null
+    const childFiles = isDir ? childFilesMatch(props.path) : null
     if (fileProps.inTrash || force) {
       // delete file
       await this.db.delete(files).where(and(...convertToWhere(files, fileProps)))
@@ -269,10 +274,10 @@ export class FilesQueries {
       .where(and(...convertToWhere(files, srcFileDB)))
     if (isDir) {
       // prepare child file props update
-      const childFiles: SQL<string> = childFilesFindRegexp(srcProps.path)
+      const childFiles: SQL<string> = childFilesMatch(srcProps.path)
       const childProps: Omit<FileDBProps, 'path'> & { path: SQL<string> } = {
         ...dstCommonProps,
-        path: childFilesReplaceRegexp(srcProps.path, dstProps.path)
+        path: childFilesReplacePath(srcProps.path, dstProps.path)
       }
       // update child file props
       await this.db
@@ -301,7 +306,8 @@ export class FilesQueries {
     }
   }
 
-  getRecentsFromUser(userId: number | undefined, spaceIds: number[], shareIds: number[], limit = 10): Promise<FileRecent[]> {
+  getRecentsFromUser(userId: number | undefined, spaceIds: number[], shareIds: number[], limit: number): Promise<FileRecent[]> {
+    const recentsLimit = Math.min(limit, FILES_RECENTS_MAX_LIMIT)
     const where: SQL[] = [
       ...(userId !== undefined ? [eq(filesRecents.ownerId, userId)] : []),
       ...(spaceIds.length ? [inArray(filesRecents.spaceId, spaceIds)] : []),
@@ -319,13 +325,16 @@ export class FilesQueries {
         path: filesRecents.path,
         name: filesRecents.name,
         mime: filesRecents.mime,
-        mtime: filesRecents.mtime
+        mtime: filesRecents.mtime,
+        displayRootName: sql<string>`COALESCE(${spaces.name}, ${shares.name})`.as('displayRootName')
       } satisfies FileRecent | SelectedFields<any, any>)
       .from(filesRecents)
+      .leftJoin(spaces, eq(spaces.id, filesRecents.spaceId))
+      .leftJoin(shares, eq(shares.id, filesRecents.shareId))
       .where(or(...where))
       .groupBy(filesRecents.id)
       .orderBy(desc(filesRecents.mtime))
-      .limit(limit)
+      .limit(recentsLimit)
   }
 
   getRecentsFromLocation(location: FileRecentLocation): Promise<FileRecent[]> {
@@ -360,7 +369,7 @@ export class FilesQueries {
         try {
           await this.db
             .delete(filesRecents)
-            .where(and(...where, or(...batch.map((sourcePath) => childPathFindRegexp(filePathSQL(filesRecents), sourcePath)))))
+            .where(and(...where, or(...batch.map((sourcePath) => childPathMatch(filePathSQL(filesRecents), sourcePath)))))
         } catch (e) {
           this.logger.error({ tag: this.deleteRecents.name, msg: `${e}` })
         }

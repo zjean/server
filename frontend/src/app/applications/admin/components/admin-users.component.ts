@@ -1,26 +1,21 @@
 import { KeyValuePipe } from '@angular/common'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Component, ElementRef, inject, ViewChild } from '@angular/core'
-import { FormsModule } from '@angular/forms'
 import { ActivatedRoute, Data, Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
 import {
-  faArrowDown,
-  faArrowRotateRight,
-  faArrowUp,
-  faKey,
-  faRotate,
-  faToggleOff,
-  faToggleOn,
-  faUserPen,
-  faUserPlus,
-  faUserSecret
-} from '@fortawesome/free-solid-svg-icons'
+  LucideArrowDown,
+  LucideArrowUp,
+  LucideDynamicIcon,
+  LucideKeyRound,
+  LucideRotateCw,
+  LucideUserRoundPen,
+  LucideUserRoundPlus,
+  LucideVenetianMask
+} from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
 import { USER_ROLE } from '@sync-in-server/backend/src/applications/users/constants/user'
 import type { LoginResponseDto } from '@sync-in-server/backend/src/authentication/dto/login-response.dto'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
-import { ButtonCheckboxDirective } from 'ngx-bootstrap/buttons'
 import { BsModalRef } from 'ngx-bootstrap/modal'
 import { TooltipDirective } from 'ngx-bootstrap/tooltip'
 import { take } from 'rxjs/operators'
@@ -47,7 +42,7 @@ import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
 @Component({
   selector: 'app-admin-users',
   imports: [
-    FaIconComponent,
+    LucideDynamicIcon,
     L10nTranslatePipe,
     FilterComponent,
     TooltipDirective,
@@ -58,8 +53,6 @@ import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
     StorageUsageComponent,
     TimeDateFormatPipe,
     ContextMenuModule,
-    ButtonCheckboxDirective,
-    FormsModule,
     UserAvatarStackComponent,
     TapDirective,
     ToBytesPipe
@@ -78,16 +71,13 @@ export class AdminUsersComponent {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected readonly icons = {
-    faRotate,
-    faUserPlus,
-    faUserPen,
-    faArrowDown,
-    faArrowUp,
-    faKey,
-    faUserSecret,
-    faArrowRotateRight,
-    faToggleOn,
-    faToggleOff
+    LucideRotateCw,
+    LucideUserRoundPlus,
+    LucideUserRoundPen,
+    LucideArrowDown,
+    LucideArrowUp,
+    LucideKeyRound,
+    LucideVenetianMask
   }
   // Sort
   protected tableHeaders: Record<'login' | 'fullName' | 'managers' | 'storage' | 'currentAccess' | 'currentIp' | 'isActive', TableHeaderConfig> = {

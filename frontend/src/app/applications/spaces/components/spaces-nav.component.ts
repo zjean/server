@@ -1,8 +1,7 @@
 import { Component, computed, inject, OnDestroy } from '@angular/core'
 import { toObservable } from '@angular/core/rxjs-interop'
 import { RouterOutlet } from '@angular/router'
-import { faCommentDots } from '@fortawesome/free-regular-svg-icons'
-import { faClipboardList, faFolderTree, faInfo } from '@fortawesome/free-solid-svg-icons'
+import { LucideFolderTree, LucideList, LucideMessageSquareMore } from '@lucide/angular'
 import { map } from 'rxjs/operators'
 import { TAB_GROUP, TAB_MENU, TabMenu } from '../../../layout/layout.interfaces'
 import { LayoutService } from '../../../layout/layout.service'
@@ -12,6 +11,7 @@ import { CommentsSelectionComponent } from '../../comments/components/sidebar/co
 import { FilesClipboardComponent } from '../../files/components/sidebar/files-clipboard.component'
 import { FilesTreeComponent } from '../../files/components/sidebar/files-tree.component'
 import { FileModel } from '../../files/models/file.model'
+import { SPACES_ICON } from '../spaces.constants'
 
 @Component({
   selector: 'app-spaces-nav',
@@ -22,11 +22,12 @@ export class SpacesNavComponent implements OnDestroy {
   private readonly layout = inject(LayoutService)
   private readonly store = inject(StoreService)
   private tabs: TabMenu[] = [
+    { label: TAB_MENU.TREE, components: [FilesTreeComponent], loadComponent: true, icon: LucideFolderTree, title: null, active: false },
     {
       label: TAB_MENU.SELECTION,
       components: [SelectionComponent],
       loadComponent: false,
-      icon: faInfo,
+      icon: SPACES_ICON.SELECTION,
       count: {
         value: toObservable(
           computed(() =>
@@ -35,18 +36,24 @@ export class SpacesNavComponent implements OnDestroy {
         ),
         level: 'primary'
       },
-      title: 'Info',
+      title: null,
       active: false
     },
-    { label: TAB_MENU.TREE, components: [FilesTreeComponent], loadComponent: true, icon: faFolderTree, title: null, active: false },
-    { label: TAB_MENU.COMMENTS, components: [CommentsSelectionComponent], loadComponent: false, icon: faCommentDots, title: null, active: false },
     {
       label: TAB_MENU.CLIPBOARD,
       components: [FilesClipboardComponent],
       loadComponent: false,
-      icon: faClipboardList,
+      icon: LucideList,
       count: { value: this.store.filesClipboard.pipe(map((files: FileModel[]) => files.length)), level: 'maroon' },
       showOnCount: true,
+      title: null,
+      active: false
+    },
+    {
+      label: TAB_MENU.COMMENTS,
+      components: [CommentsSelectionComponent],
+      loadComponent: false,
+      icon: LucideMessageSquareMore,
       title: null,
       active: false
     }

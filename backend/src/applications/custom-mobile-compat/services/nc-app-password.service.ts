@@ -63,12 +63,6 @@ export class NcAppPasswordService {
     const slugName = createLightSlug(sanitizeName(name))
     if (!slugName) throw new HttpException('Invalid app-password name', HttpStatus.BAD_REQUEST)
 
-    const secrets = await this.usersQueries.getUserSecrets(user.id)
-    if (Array.isArray(secrets.appPasswords) && secrets.appPasswords.find((p) => p.name === slugName)) {
-      throw new HttpException('Name already used', HttpStatus.BAD_REQUEST)
-    }
-    secrets.appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
-
     // 18 bytes → 24 base64url chars → 144 bits entropy. Comfortably above
     // the upstream 24-char × 73-symbol-alphabet ≈ 148 bits.
     const clearPassword = randomBytes(18).toString('base64url')
@@ -78,16 +72,33 @@ export class NcAppPasswordService {
       app: AUTH_SCOPE.MOBILE_NC,
       // Match the upstream row shape; nullable fields remain null until the
       // password is exercised (currentAccess is set on first successful auth).
-      expiration: null as unknown as Date,
+      expiration: null,
       password: await hashPassword(clearPassword),
       createdAt: new Date(),
-      currentIp: null as unknown as string,
-      currentAccess: null as unknown as Date,
-      lastIp: null as unknown as string,
-      lastAccess: null as unknown as Date
+      currentIp: null,
+      currentAccess: null,
+      lastIp: null,
+      lastAccess: null
     }
-    secrets.appPasswords.unshift(newRow)
-    if (!(await this.usersQueries.updateUserOrGuest(user.id, { secrets }))) {
+
+    // Upstream 2.5.0 removed `secrets` from updateUserOrGuest's allowed keys and
+    // added mutateUserSecrets, which does the read/check/write under a SELECT ...
+    // FOR UPDATE row lock. The old read-then-write here was a lost-update race:
+    // two NC clients signing in concurrently would each write back a blob built
+    // from a stale read, silently dropping the other's app-password. Hashing stays
+    // OUTSIDE the lock (bcrypt is slow); only check-and-append is serialized.
+    // Mirrors UsersManager.generateAppPassword.
+    try {
+      await this.usersQueries.mutateUserSecrets(user.id, (secrets) => {
+        const appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
+        if (appPasswords.some((p: UserAppPassword) => p.name === slugName)) {
+          throw new HttpException('Name already used', HttpStatus.BAD_REQUEST)
+        }
+        return { result: undefined, secrets: { ...secrets, appPasswords: [newRow, ...appPasswords] } }
+      })
+    } catch (e) {
+      if (e instanceof HttpException) throw e
+      this.logger.error({ tag: this.mintMobileAppPassword.name, msg: `unable to persist app password for user (${user.id}) : ${e}` })
       throw new HttpException('Unable to persist app password', HttpStatus.INTERNAL_SERVER_ERROR)
     }
     return { name: slugName, password: clearPassword }

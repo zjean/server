@@ -905,7 +905,10 @@ export class AdminUsersComponent implements OnInit {
     const twoFa = await this.twoFa.verify(true)
     if (twoFa === false) return
     const headers = twoFa ?? new HttpHeaders()
-    this.admin.deleteUser(u.id, { isGuest, deleteSpace: false }, headers).subscribe({
+    // Upstream 2.5.0 split guest deletion out: DeleteUserDto lost `isGuest` and
+    // deleteGuest(id, headers) became its own endpoint, so the branch is here now.
+    const request = isGuest ? this.admin.deleteGuest(u.id, headers) : this.admin.deleteUser(u.id, { deleteSpace: false }, headers)
+    request.subscribe({
       next: () => {
         this.users.update((list) => list.filter((x) => x.id !== u.id))
         this.toast.success(isGuest ? 'Guest deleted' : 'User deleted')

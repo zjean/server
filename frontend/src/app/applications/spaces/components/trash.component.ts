@@ -1,8 +1,7 @@
 import { KeyValuePipe } from '@angular/common'
 import { Component, ElementRef, inject, OnInit, ViewChild } from '@angular/core'
 import { Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowDown, faArrowRotateRight, faArrowUp, faCircleInfo } from '@fortawesome/free-solid-svg-icons'
+import { LucideArrowDown, LucideArrowUp, LucideDynamicIcon, LucideRotateCw } from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
 import type { SpaceTrash } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-trash.interface'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -25,7 +24,7 @@ import { SPACES_ICON, SPACES_PATH, SPACES_TITLE } from '../spaces.constants'
 @Component({
   selector: 'app-spaces-trash',
   imports: [
-    FaIconComponent,
+    LucideDynamicIcon,
     NavigationViewComponent,
     L10nTranslatePipe,
     FilterComponent,
@@ -48,7 +47,14 @@ export class TrashComponent implements OnInit {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly layout = inject(LayoutService)
   protected readonly originalOrderKeyValue = originalOrderKeyValue
-  protected readonly icons = { SPACES: SPACES_ICON.SPACES, PERSONAL: SPACES_ICON.PERSONAL, faArrowDown, faArrowUp, faArrowRotateRight, faCircleInfo }
+  protected readonly icons = {
+    SPACES: SPACES_ICON.SPACES,
+    PERSONAL: SPACES_ICON.PERSONAL,
+    LucideArrowDown,
+    LucideArrowUp,
+    LucideRotateCw,
+    SELECTION: SPACES_ICON.SELECTION
+  }
   protected readonly TAB_MENU = TAB_MENU
   protected galleryMode: ViewMode
   protected loading = false
@@ -82,7 +88,6 @@ export class TrashComponent implements OnInit {
       sortable: true
     }
   }
-  protected btnSortFields = { name: 'Name', nb: 'Elements', mtime: 'Modified' }
   private readonly router = inject(Router)
   private readonly store = inject(StoreService)
   private readonly spacesService = inject(SpacesService)

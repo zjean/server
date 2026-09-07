@@ -67,7 +67,7 @@ describe(NcShareMountResolverService.name, () => {
     it('passes the requesting user through to the queries layer', async () => {
       sharesQueries.shareRootFiles.mockResolvedValue([])
       await svc.listMounts(user)
-      expect(sharesQueries.shareRootFiles).toHaveBeenCalledWith(user, {})
+      expect(sharesQueries.shareRootFiles).toHaveBeenCalledWith(user, null)
     })
 
     it('returns empty when the user has no incoming shares', async () => {

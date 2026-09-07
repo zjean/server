@@ -7,6 +7,7 @@ import { API_ONLY_OFFICE_SETTINGS } from '@sync-in-server/backend/src/applicatio
 import { LayoutService } from '../../../../layout/layout.service'
 import { StoreService } from '../../../../store/store.service'
 import { FileModel } from '../../models/file.model'
+import { FilesService } from '../../services/files.service'
 import { fileLockPropsToString } from '../utils/file-lock.utils'
 import { OnlyOfficeComponent } from '../utils/only-office.component'
 
@@ -30,7 +31,6 @@ import { OnlyOfficeComponent } from '../utils/only-office.component'
           [documentServerUrl]="documentConfig.documentServerUrl"
           [config]="documentConfig.config"
           (loadError)="loadError($event)"
-          (wasSaved)="onSave()"
         ></app-files-onlyoffice-document>
       </div>
     }
@@ -43,8 +43,10 @@ export class FilesViewerOnlyOfficeComponent implements OnInit, OnDestroy {
   protected docId: string
   protected documentConfig: OnlyOfficeReqDto = null
   private readonly http = inject(HttpClient)
+  private readonly filesService = inject(FilesService)
   private readonly layout = inject(LayoutService)
   private readonly store = inject(StoreService)
+  private shouldReconcileMetadata = false
   protected readonly officeEditorName = this.store.server().files.editors.onlyoffice ? ONLY_OFFICE_APP_LOCK : EURO_OFFICE_APP_LOCK
 
   ngOnInit() {
@@ -65,6 +67,7 @@ export class FilesViewerOnlyOfficeComponent implements OnInit, OnDestroy {
           }
         }
         this.isReadonly.set(data.config.editorConfig.mode === FILE_MODE.VIEW)
+        this.shouldReconcileMetadata = !this.isReadonly()
         if (!this.isReadonly() && !this.file().lock) {
           // Set lock on file
           this.file().createLock({
@@ -86,22 +89,21 @@ export class FilesViewerOnlyOfficeComponent implements OnInit, OnDestroy {
         this.layout.sendNotification(
           'error',
           'Unable to open document',
-          e.status === 404 ? `Unable to load ${this.officeEditorName} editor` : e.error.message
+          e.status === 404 ? this.layout.translateString('office_editor_load_error', { editor: this.officeEditorName }) : e.error.message
         )
       }
     })
   }
 
-  loadError(e: { title: string; message: string }): void {
+  loadError(e: { title: string; titleArgs: { editor: string }; message: string }): void {
     this.layout.closeDialog()
-    this.layout.sendNotification('error', e.title, e.message)
-  }
-
-  onSave() {
-    this.file().updateHTimeAgo()
+    this.layout.sendNotification('error', this.layout.translateString(e.title, e.titleArgs), e.message)
   }
 
   ngOnDestroy() {
+    if (this.shouldReconcileMetadata) {
+      this.filesService.reconcileMetadataAfterEditorClose(this.file())
+    }
     if (!this.isReadonly() && this.file().lock && this.file().lock.owner.login === this.store.user.getValue().login) {
       // Remove lock
       this.file().removeLock()

@@ -1,20 +1,27 @@
 import { Component, inject, OnDestroy } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Router, RouterLink } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faCircleHalfStroke, faCog, faPowerOff, faThumbTack, faThumbTackSlash, faUserAlt, faUserSecret } from '@fortawesome/free-solid-svg-icons'
+import {
+  LucideContrast,
+  LucideDynamicIcon,
+  LucidePin,
+  LucidePinOff,
+  LucidePower,
+  LucideSettings,
+  LucideUserRound,
+  LucideVenetianMask
+} from '@lucide/angular'
 import { APP_URL } from '@sync-in-server/backend/src/common/shared'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { Subscription } from 'rxjs'
+import { APP_VERSION } from '../../../../app.constants'
 import { AuthService } from '../../../../auth/auth.service'
 import { AutoResizeDirective } from '../../../../common/directives/auto-resize.directive'
 import { CapitalizePipe } from '../../../../common/pipes/capitalize.pipe'
 import { setUiVersion } from '../../../custom-v2/ui-version'
 import { V2_PATH } from '../../../custom-v2/v2.constants'
-import { themeLight } from '../../../../layout/layout.interfaces'
 import { LayoutService } from '../../../../layout/layout.service'
 import { StoreService } from '../../../../store/store.service'
-import { logoDarkUrl, logoUrl } from '../../../files/files.constants'
 import { UserType } from '../../interfaces/user.interface'
 import { USER_ONLINE_STATUS_LIST, USER_PATH } from '../../user.constants'
 import { UserService } from '../../user.service'
@@ -22,20 +29,18 @@ import { UserService } from '../../user.service'
 @Component({
   selector: 'app-user-profile',
   templateUrl: 'user-profile.component.html',
-  imports: [FormsModule, RouterLink, CapitalizePipe, FaIconComponent, L10nTranslateDirective, L10nTranslatePipe, AutoResizeDirective]
+  imports: [FormsModule, RouterLink, CapitalizePipe, LucideDynamicIcon, L10nTranslateDirective, L10nTranslatePipe, AutoResizeDirective]
 })
 export class UserProfileComponent implements OnDestroy {
-  protected readonly logoDarkUrl = logoDarkUrl
-  protected readonly logoUrl = logoUrl
   protected readonly store = inject(StoreService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly USER_PATH = USER_PATH
   protected readonly allOnlineStatus = USER_ONLINE_STATUS_LIST
+  protected readonly appVersion = APP_VERSION
   protected appBaseUrl = `${APP_URL.WEBSITE}`
-  protected readonly icons = { faUserAlt, faCircleHalfStroke, faCog, faPowerOff, faUserSecret, faThumbTack, faThumbTackSlash }
+  protected readonly icons = { LucideUserRound, LucideContrast, LucideSettings, LucidePower, LucideVenetianMask, LucidePin, LucidePinOff }
   protected user: UserType
   protected userAvatar: string = null
-  protected readonly themeLight = themeLight
   protected readonly layout = inject(LayoutService)
   private readonly authService = inject(AuthService)
   private readonly userService = inject(UserService)

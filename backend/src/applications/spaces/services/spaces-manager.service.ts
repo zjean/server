@@ -5,11 +5,10 @@ import path from 'node:path'
 import { ACTION } from '../../../common/constants'
 import { convertDiffUpdate, diffCollection, differencePermissions } from '../../../common/functions'
 import type { Entries } from '../../../common/interfaces'
-import { createSlug, regExpNumberSuffix } from '../../../common/shared'
+import { createSlug, InvalidSlugError, regExpNumberSuffix } from '../../../common/shared'
 import { configuration } from '../../../configuration/config.environment'
-import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
 import { FileError } from '../../files/models/file-error'
-import { dirListFileNames, getProps, isPathExists, moveFiles, removeFiles } from '../../files/utils/files'
+import { dirListFileNames, getProps, isInternalTemporaryEntry, isPathExists, moveFiles, removeFiles } from '../../files/utils/files'
 import { LINK_TYPE } from '../../links/constants/links'
 import { NOTIFICATION_APP, NOTIFICATION_APP_EVENT } from '../../notifications/constants/notifications'
 import { NotificationContent } from '../../notifications/interfaces/notification-properties.interface'
@@ -28,6 +27,7 @@ import {
   SPACE_MAX_DISABLED_DAYS,
   SPACE_OPERATION,
   SPACE_PERSONAL,
+  SPACE_PERSONAL_TITLE,
   SPACE_REPOSITORY,
   SPACE_ROLE,
   SPACE_SHARES
@@ -54,7 +54,6 @@ export class SpacesManager {
   private readonly logger = new Logger(SpacesManager.name)
 
   constructor(
-    private readonly contextManager: ContextManager,
     private readonly spacesQueries: SpacesQueries,
     private readonly usersQueries: UsersQueries,
     private readonly sharesManager: SharesManager,
@@ -173,12 +172,21 @@ export class SpacesManager {
 
   async listTrashes(user: UserModel): Promise<SpaceTrash[]> {
     const trashes: SpaceTrash[] = []
-    // todo: store 'Personal files' as const somewhere (used in frontend too)
-    const personalTrash: SpaceTrash = { id: 0, name: 'Personal files', alias: SPACE_ALIAS.PERSONAL, nb: 0, mtime: 0, ctime: 0, enabled: true }
+    const personalTrash: SpaceTrash = {
+      id: 0,
+      name: SPACE_PERSONAL_TITLE,
+      alias: SPACE_ALIAS.PERSONAL,
+      nb: 0,
+      mtime: 0,
+      ctime: 0,
+      enabled: true
+    }
     for (const space of [...(await this.listSpaces(user.id)), personalTrash] as SpaceTrash[]) {
       const rPath = space.alias === SPACE_ALIAS.PERSONAL ? user.trashPath : SpaceModel.getTrashPath(space.alias)
       try {
-        space.nb = (await fs.readdir(rPath)).filter((f) => configuration.applications.files.showHiddenFiles || f[0] !== '.').length
+        space.nb = (await fs.readdir(rPath)).filter(
+          (f) => !isInternalTemporaryEntry(f) && (configuration.applications.files.showHiddenFiles || f[0] !== '.')
+        ).length
         if (space.nb) {
           const stats = await fs.stat(rPath)
           space.mtime = stats.mtime.getTime()
@@ -237,13 +245,15 @@ export class SpacesManager {
     const space: SpaceProps = await this.userCanAccessSpace(user, spaceId, true)
     // check and update space info
     let mustInvalidateCache = false
+    let renamedSpaceAlias: string
     const spaceDiffProps: Partial<SpaceProps> = { modifiedAt: new Date() }
     const props: (keyof CreateOrUpdateSpaceDto)[] = ['name', 'description', 'enabled', 'storageQuota', 'storageIndexing']
     for (const prop of props) {
       if (createOrUpdateSpaceDto[prop] !== space[prop]) {
         spaceDiffProps[prop] = createOrUpdateSpaceDto[prop]
         if (prop === 'name') {
-          spaceDiffProps.alias = await this.uniqueSpaceAlias(spaceDiffProps.name, true)
+          renamedSpaceAlias = space.alias
+          spaceDiffProps.alias = await this.uniqueSpaceAlias(spaceDiffProps.name, true, space.id)
           if (space.alias !== spaceDiffProps.alias) {
             // must move the space to match the new alias
             const spaceLocationWasRenamed: boolean = await this.renameSpaceLocation(space.alias, spaceDiffProps.alias)
@@ -261,6 +271,9 @@ export class SpacesManager {
     // update in db
     if (!(await this.spacesQueries.updateSpace(spaceId, spaceDiffProps))) {
       throw new HttpException('Unable to update space', HttpStatus.INTERNAL_SERVER_ERROR)
+    }
+    if (renamedSpaceAlias) {
+      void this.spacesQueries.clearCachePermissions(renamedSpaceAlias)
     }
     // update quota in cache
     if ('storageQuota' in spaceDiffProps) {
@@ -355,16 +368,20 @@ export class SpacesManager {
     }
   }
 
-  async uniqueRootAlias(spaceId: number, alias: string, aliasesAndNames: string[], replaceCount = false): Promise<string> {
+  async uniqueRootAlias(spaceId: number, alias: string, aliasesAndNames: string[], replaceCount = false, excludedRootId?: number): Promise<string> {
     /* for some webdav clients the root alias is displayed instead of the file name.
      * This is why a root alias must be unique for files too */
-    if (aliasesAndNames.find((fName: string) => alias.toLowerCase() === fName.toLowerCase())) {
+    const aliasExists = (candidate: string): boolean => {
+      const normalizedCandidate = candidate.toLowerCase()
+      return aliasesAndNames.some((aliasOrName: string) => normalizedCandidate === aliasOrName.toLowerCase())
+    }
+    if (aliasExists(alias) || (await this.spacesQueries.spaceRootExistsForAlias(spaceId, alias, excludedRootId))) {
       const aliasExtension = path.extname(alias)
       const aliasWithoutExtension = path.basename(alias, aliasExtension)
-      const originalAlias = createSlug(aliasWithoutExtension, replaceCount)
+      const originalAlias = this.createAliasSlug(aliasWithoutExtension, replaceCount)
       let count = 1
       let newAlias = `${originalAlias}-${count}${aliasExtension}`
-      while (await this.spacesQueries.spaceRootExistsForAlias(spaceId, newAlias)) {
+      while (aliasExists(newAlias) || (await this.spacesQueries.spaceRootExistsForAlias(spaceId, newAlias, excludedRootId))) {
         count += 1
         newAlias = `${originalAlias}-${count}${aliasExtension}`
       }
@@ -552,19 +569,38 @@ export class SpacesManager {
 
     // update
     for (const props of toUpdate) {
+      const root = props.object as SpaceRootProps
       if ('alias' in props) {
-        props.alias.new = (await this.uniqueRootAlias(space.id, props.alias.new, aliases.concat(names), true)) || props.alias.new
+        const aliasesAndNames = aliases.concat(names)
+        const currentName = 'name' in props ? props.name.old : root.name
+        for (const currentValue of [props.alias.old, currentName]) {
+          const currentValueIndex = aliasesAndNames.findIndex((aliasOrName: string) => aliasOrName.toLowerCase() === currentValue.toLowerCase())
+          if (currentValueIndex > -1) {
+            aliasesAndNames.splice(currentValueIndex, 1)
+          }
+        }
+        props.alias.new = (await this.uniqueRootAlias(space.id, props.alias.new, aliasesAndNames, true, root.id)) || props.alias.new
         // remove from space cache permissions
         this.spacesQueries
           .clearCachePermissions(space.alias, [props.alias.old, props.alias.new])
           .catch((e: Error) => this.logger.error({ tag: this.updateRoots.name, msg: `${e}` }))
         // update aliases list for next roots
-        aliases.push(props.alias.new)
+        const currentAliasIndex = aliases.indexOf(props.alias.old)
+        if (currentAliasIndex > -1) {
+          aliases.splice(currentAliasIndex, 1, props.alias.new)
+        } else {
+          aliases.push(props.alias.new)
+        }
       }
       if ('name' in props) {
         props.name.new = this.uniqueRootName(props.name.new, names) || props.name.new
         // update names list for next roots
-        names.push(props.name.new)
+        const currentNameIndex = names.lastIndexOf(props.name.old)
+        if (currentNameIndex > -1) {
+          names.splice(currentNameIndex, 1, props.name.new)
+        } else {
+          names.push(props.name.new)
+        }
       }
     }
 
@@ -721,19 +757,31 @@ export class SpacesManager {
     }
   }
 
-  private async uniqueSpaceAlias(name: string, replaceCount = false): Promise<string> {
-    let alias = createSlug(name, replaceCount)
+  private async uniqueSpaceAlias(name: string, replaceCount = false, excludedSpaceId?: number): Promise<string> {
+    const originalAlias = this.createAliasSlug(name, replaceCount)
+    let alias = originalAlias
     let count = 0
     // Personal space name is reserved
     if (alias === SPACE_ALIAS.PERSONAL) {
       count += 1
-      alias = `${name}-${count}`
+      alias = `${originalAlias}-${count}`
     }
-    while (await this.spacesQueries.spaceExistsForAlias(alias)) {
+    while (await this.spacesQueries.spaceExistsForAlias(alias, excludedSpaceId)) {
       count += 1
-      alias = `${name}-${count}`
+      alias = `${originalAlias}-${count}`
     }
     return alias
+  }
+
+  private createAliasSlug(name: string, replaceCount = false): string {
+    try {
+      return createSlug(name, replaceCount)
+    } catch (e) {
+      if (e instanceof InvalidSlugError) {
+        throw new HttpException(e.message, HttpStatus.BAD_REQUEST)
+      }
+      throw e
+    }
   }
 
   private async userCanAccessSpace(user: UserModel, spaceId: number, asManager: true): Promise<SpaceProps>
@@ -778,9 +826,7 @@ export class SpacesManager {
       space,
       action,
       user,
-      Array.from(new Set([...(await this.usersQueries.allUserIdsFromGroupsAndSubGroups(members.groupIds)), ...members.userIds])).filter(
-        (uid) => uid !== user?.id
-      )
+      Array.from(new Set([...(await this.usersQueries.allUserIdsFromGroupsAndSubGroups(members.groupIds)), ...members.userIds]))
     ).catch((e: Error) => this.logger.error({ tag: this.onSpaceActionForMembers.name, msg: `${e}` }))
   }
 
@@ -809,7 +855,8 @@ export class SpacesManager {
           .catch((e: Error) => this.logger.error({ tag: this.clearCachePermissionsAndOrNotify.name, msg: `${e}` }))
       }
       // notify
-      if (action !== ACTION.UPDATE) {
+      const notificationMemberIds = memberIds.filter((uid) => uid !== user?.id)
+      if (action !== ACTION.UPDATE && notificationMemberIds.length) {
         // notify the members who have joined or left the space
         const notification: NotificationContent = {
           app: NOTIFICATION_APP.SPACES,
@@ -818,8 +865,7 @@ export class SpacesManager {
           url: ''
         }
         this.notificationsManager
-          .create(memberIds, notification, {
-            currentUrl: this.contextManager.headerOriginUrl(),
+          .create(notificationMemberIds, notification, {
             action: action
           })
           .catch((e: Error) => this.logger.error({ tag: this.clearCachePermissionsAndOrNotify.name, msg: `${e}` }))
@@ -855,7 +901,6 @@ export class SpacesManager {
           }
           this.notificationsManager
             .create(spaceUserIds, notification, {
-              currentUrl: this.contextManager.headerOriginUrl(),
               author: user,
               action: action
             })

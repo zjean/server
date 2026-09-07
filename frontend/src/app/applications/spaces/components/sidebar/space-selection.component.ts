@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input, InputSignal } from '@angular/core'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
+import { LucideDynamicIcon } from '@lucide/angular'
 import { SPACE_ROLE } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective } from 'angular-l10n'
 import { BadgeMembersComponent } from '../../../../common/components/badge-members.component'
@@ -21,7 +21,7 @@ import { SpaceUserAnchorsDialogComponent } from '../dialogs/space-user-anchors-d
   templateUrl: 'space-selection.component.html',
   imports: [
     AutoResizeDirective,
-    FaIconComponent,
+    LucideDynamicIcon,
     L10nTranslateDirective,
     TimeDateFormatPipe,
     BadgePermissionsComponent,
@@ -34,7 +34,7 @@ export class SpaceSelectionComponent {
   space: InputSignal<SpaceModel> = input.required<SpaceModel>()
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly SPACE_ROLE = SPACE_ROLE
-  protected readonly icons = { SPACES: SPACES_ICON.SPACES, ANCHORED: SPACES_ICON.ANCHORED, SHARED: SPACES_ICON.SHARED_WITH_OTHERS }
+  protected readonly icons = { SPACES: SPACES_ICON.SPACES, ANCHORED: SPACES_ICON.ANCHORED, SHARES: SPACES_ICON.SHARES }
   protected readonly cardImageSize = defaultCardImageSize
   protected resizeOffset = defaultResizeOffset
   private readonly userService = inject(UserService)

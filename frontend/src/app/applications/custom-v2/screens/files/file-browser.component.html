@@ -174,7 +174,7 @@
                      makes a folder of mixed states scannable. Everything that used
                      to trail the file name lives here now. -->
                 <div class="file-row__badges">
-                  @if (favoritesService.isFavorite(f.id)) {
+                  @if (favoritesService.isFavorite(f)) {
                     <app-v2-pill color="amber" [size]="11" [attr.title]="'Favorites' | translate: locale.language">
                       <app-v2-icon name="star" [size]="11" />
                     </app-v2-pill>
@@ -300,7 +300,7 @@
                        Favourite is a pill now rather than a bare icon, so all
                        three badges are the same shape at the same size. -->
                   <span class="file-card__badges">
-                    @if (favoritesService.isFavorite(f.id)) {
+                    @if (favoritesService.isFavorite(f)) {
                       <app-v2-pill color="amber" [size]="10" [attr.title]="'Favorites' | translate: locale.language">
                         <app-v2-icon name="star" [size]="10" />
                       </app-v2-pill>
@@ -417,9 +417,9 @@
                   <!-- One veiled chip rather than four scattered pills: a badge that is
                        legible on a dark tile disappears on a bright photo, so they share
                        a ground. Top-right, away from the selection target. -->
-                  @if (favoritesService.isFavorite(f.id) || f.hasComments || f.lock) {
+                  @if (favoritesService.isFavorite(f) || f.hasComments || f.lock) {
                     <div class="gallery-tile__badges">
-                      @if (favoritesService.isFavorite(f.id)) {
+                      @if (favoritesService.isFavorite(f)) {
                         <span class="gallery-tile__badge gallery-tile__badge--fav" [attr.title]="'Favorites' | translate: locale.language">
                           <app-v2-icon name="star" [size]="11" />
                         </span>
@@ -485,7 +485,7 @@
               {{ f.mtime | amTimeAgo }}
             </div>
           </div>
-          @if (favoritesService.isFavorite(f.id)) {
+          @if (favoritesService.isFavorite(f)) {
             <app-v2-pill color="amber" [size]="11" [attr.title]="'Favorites' | translate: locale.language">
               <app-v2-icon name="star" [size]="11" />
             </app-v2-pill>

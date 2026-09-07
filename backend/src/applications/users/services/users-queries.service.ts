@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { and, countDistinct, eq, inArray, isNotNull, like, lte, ne, notInArray, or, SelectedFields, SQL, sql } from 'drizzle-orm'
+import { and, countDistinct, desc, eq, inArray, isNotNull, isNull, like, lte, ne, notInArray, or, SelectedFields, SQL, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/mysql-core'
 import { MySql2PreparedQuery, MySqlQueryResult } from 'drizzle-orm/mysql2'
 import { anonymizePassword, comparePassword, uniquePermissions } from '../../../common/functions'
@@ -39,6 +39,7 @@ import { userFullNameSQL, users } from '../schemas/users.schema'
 @Injectable()
 export class UsersQueries {
   private readonly logger = new Logger(UsersQueries.name)
+  private fromExternalIdOrEmailPermissionsQuery: MySql2PreparedQuery<any> = null
   private fromLoginOrEmailPermissionsQuery: MySql2PreparedQuery<any> = null
   private fromIdPermissionsQuery: MySql2PreparedQuery<any> = null
 
@@ -101,7 +102,10 @@ export class UsersQueries {
     if (!pQuery) {
       const where = userId
         ? eq(users.id, sql.placeholder('userId'))
-        : or(eq(users.login, sql.placeholder('loginOrEmail')), eq(users.email, sql.placeholder('loginOrEmail')))
+        : and(
+            lte(users.role, USER_ROLE.GUEST),
+            or(eq(users.login, sql.placeholder('loginOrEmail')), eq(users.email, sql.placeholder('loginOrEmail')))
+          )
       pQuery = this.db
         .select({
           user: users,
@@ -128,9 +132,54 @@ export class UsersQueries {
     return user
   }
 
+  async fromExternalIdOrEmail(externalId: string, email: string): Promise<User> {
+    if (!this.fromExternalIdOrEmailPermissionsQuery) {
+      const externalIdPlaceholder = sql.placeholder('externalId')
+      const emailPlaceholder = sql.placeholder('email')
+      this.fromExternalIdOrEmailPermissionsQuery = this.db
+        .select({
+          user: users,
+          groupsPermissions: sql`GROUP_CONCAT(DISTINCT (${groups.permissions}) SEPARATOR ${USER_PERMS_SEP})`
+        })
+        .from(users)
+        .leftJoin(usersGroups, eq(usersGroups.userId, users.id))
+        .leftJoin(groups, and(eq(groups.id, usersGroups.groupId), ne(groups.permissions, '')))
+        .where(and(lte(users.role, USER_ROLE.GUEST), or(eq(users.externalId, externalIdPlaceholder), eq(users.email, emailPlaceholder))))
+        .groupBy(users.id)
+        .orderBy(desc(eq(users.externalId, externalIdPlaceholder)))
+        .limit(1)
+        .prepare()
+    }
+    const r = await this.fromExternalIdOrEmailPermissionsQuery.execute({ externalId, email })
+    if (!r.length) return null
+    const [user, groupsPermissions] = [r[0].user, r[0].groupsPermissions]
+    user.permissions = uniquePermissions(`${user.permissions},${groupsPermissions}`, USER_PERMS_SEP)
+    return user
+  }
+
   async getUserSecrets(userId: number): Promise<UserSecrets> {
     const [r]: { secrets: UserSecrets }[] = await this.db.select({ secrets: users.secrets }).from(users).where(eq(users.id, userId)).limit(1)
     return r.secrets || {}
+  }
+
+  async mutateUserSecrets<T>(userId: number, mutate: (secrets: UserSecrets) => { result: T; secrets?: UserSecrets }): Promise<T> {
+    // Every secrets writer must use the latest document while holding the same row lock.
+    return this.db.transaction(async (tx) => {
+      const [user]: { secrets: UserSecrets }[] = await tx
+        .select({ secrets: users.secrets })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1)
+        .for('update')
+      if (!user) {
+        throw new Error(`User (${userId}) not found`)
+      }
+      const mutation = mutate(user.secrets || {})
+      if (mutation.secrets !== undefined) {
+        dbCheckAffectedRows(await tx.update(users).set({ secrets: mutation.secrets }).where(eq(users.id, userId)), 1)
+      }
+      return mutation.result
+    })
   }
 
   selectUsers(fields: Partial<keyof User>[] = ['id', 'login', 'email'], where: SQL[]): Promise<Partial<User>[]> {
@@ -158,7 +207,7 @@ export class UsersQueries {
     return userId
   }
 
-  async updateUserOrGuest(userId: number, set: Partial<Record<keyof User, any>>, userRole?: USER_ROLE): Promise<boolean> {
+  async updateUserOrGuest(userId: number, set: Partial<Record<Exclude<keyof User, 'secrets'>, any>>, userRole?: USER_ROLE): Promise<boolean> {
     try {
       dbCheckAffectedRows(
         await this.db
@@ -174,6 +223,46 @@ export class UsersQueries {
         tag: this.updateUserOrGuest.name,
         msg: `user (${userId}) was not updated : ${JSON.stringify(anonymizePassword(set))} : ${e}`
       })
+      return false
+    }
+  }
+
+  async bindExternalId(userId: number, externalId: string): Promise<boolean> {
+    try {
+      const isBound = await this.db.transaction(async (tx) => {
+        const [user]: Pick<User, 'externalId'>[] = await tx
+          .select({ externalId: users.externalId })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1)
+          .for('update')
+
+        if (!user) {
+          return false
+        }
+
+        if (user.externalId !== null) {
+          return user.externalId === externalId
+        }
+
+        dbCheckAffectedRows(
+          await tx
+            .update(users)
+            .set({ externalId })
+            .where(and(eq(users.id, userId), isNull(users.externalId))),
+          1
+        )
+        return true
+      })
+
+      if (isBound) {
+        this.logger.verbose({ tag: this.bindExternalId.name, msg: `external identity was bound to user (${userId})` })
+      } else {
+        this.logger.warn({ tag: this.bindExternalId.name, msg: `external identity binding was rejected for user (${userId})` })
+      }
+      return isBound
+    } catch (e) {
+      this.logger.error({ tag: this.bindExternalId.name, msg: `external identity was not bound to user (${userId}) : ${e}` })
       return false
     }
   }
@@ -278,7 +367,7 @@ export class UsersQueries {
         name: userFullNameSQL(users).as('name'),
         description: users.email,
         createdAt: usersGroups.createdAt,
-        type: sql<MEMBER_TYPE>`IF(${users.role} = ${USER_ROLE.GUEST}, ${sql.raw(`'${MEMBER_TYPE.GUEST}'`)}, ${sql.raw(`'${MEMBER_TYPE.USER}'`)})`,
+        type: sql<MEMBER_TYPE>`IF(${users.role} = ${USER_ROLE.GUEST}, ${MEMBER_TYPE.GUEST}, ${MEMBER_TYPE.USER})`,
         groupRole: sql<USER_GROUP_ROLE>`${usersGroups.role}`
       } satisfies Member | SelectedFields<any, any>)
       .from(groups)
@@ -335,13 +424,13 @@ export class UsersQueries {
         description: groups.description,
         createdAt: groups.createdAt,
         modifiedAt: groups.modifiedAt,
-        type: sql<MEMBER_TYPE>`IF(${groups.type} = ${GROUP_TYPE.USER}, ${sql.raw(`'${MEMBER_TYPE.GROUP}'`)}, ${sql.raw(`'${MEMBER_TYPE.PGROUP}'`)})`,
+        type: sql<MEMBER_TYPE>`IF(${groups.type} = ${GROUP_TYPE.USER}, ${MEMBER_TYPE.GROUP}, ${MEMBER_TYPE.PGROUP})`,
         members: concatDistinctObjectsInArray(users.id, {
           id: users.id,
           login: users.login,
           name: userFullNameSQL(users),
           description: users.email,
-          type: sql<MEMBER_TYPE>`IF(${users.role} = ${USER_ROLE.GUEST}, ${sql.raw(`'${MEMBER_TYPE.GUEST}'`)}, ${sql.raw(`'${MEMBER_TYPE.USER}'`)})`,
+          type: sql<MEMBER_TYPE>`IF(${users.role} = ${USER_ROLE.GUEST}, ${MEMBER_TYPE.GUEST}, ${MEMBER_TYPE.USER})`,
           groupRole: usersGroupsAlias.role,
           createdAt: dateTimeUTC(usersGroupsAlias.createdAt)
         } satisfies Record<keyof Pick<Member, 'id' | 'name' | 'login' | 'description' | 'type' | 'groupRole' | 'createdAt'>, any>)
@@ -467,7 +556,7 @@ export class UsersQueries {
           id: managersAlias.id,
           login: managersAlias.login,
           name: userFullNameSQL(managersAlias),
-          type: sql.raw(`'${MEMBER_TYPE.USER}'`),
+          type: sql`${MEMBER_TYPE.USER}`,
           description: managersAlias.email,
           createdAt: dateTimeUTC(managersGuestAlias.createdAt)
         } satisfies Record<keyof Pick<Member, 'id' | 'name' | 'login' | 'description' | 'type' | 'createdAt'>, any>),
@@ -476,7 +565,7 @@ export class UsersQueries {
             id: groups.id,
             name: groups.name,
             description: groups.description,
-            type: sql.raw(`'${MEMBER_TYPE.PGROUP}'`),
+            type: sql`${MEMBER_TYPE.PGROUP}`,
             permissions: groups.permissions,
             createdAt: dateTimeUTC(usersGroups.createdAt)
           } satisfies Record<keyof Pick<Member, 'id' | 'name' | 'description' | 'type' | 'permissions' | 'createdAt'>, any>)
@@ -510,6 +599,7 @@ export class UsersQueries {
   @CacheDecorator(1800)
   async usersWhitelist(userId: number, lowerOrEqualUserRole: USER_ROLE = USER_ROLE.GUEST): Promise<number[]> {
     /* Get the list of user ids allowed to the current user
+       - the current user, when their role is lower than or equal to lowerOrEqualUserRole
        - users with no groups only when applications.users.showUngroupedUsers = true
          (guest accounts are excluded from this global branch, and guest requesters never get this branch)
          (also excludes users with a role higher than lowerOrEqualUserRole)
@@ -542,6 +632,14 @@ export class UsersQueries {
     )
     SELECT JSON_ARRAYAGG(id) AS ids
     FROM (
+      -- 0) Current user
+      SELECT ${users.id} AS id
+      FROM ${users}
+      WHERE ${users.id} = ${userId}
+        AND ${users.role} <= ${lowerOrEqualUserRole}
+
+      UNION
+
       -- 1) Users from groups visible to the current user
       SELECT ${users.id} AS id
       FROM ${users}
@@ -549,7 +647,7 @@ export class UsersQueries {
         ON ${usersGroups.userId} = ${users.id}
       INNER JOIN visible_groups
         ON visible_groups.id = ${usersGroups.groupId}
-      WHERE ${users.role} <= ${sql.raw(`${lowerOrEqualUserRole}`)}
+      WHERE ${users.role} <= ${lowerOrEqualUserRole}
 
       UNION
 
@@ -559,7 +657,7 @@ export class UsersQueries {
       WHERE
         ${showUngroupedUsers} = 1
         AND
-        ${users.role} <= ${sql.raw(`${lowerOrEqualUserRole}`)}
+        ${users.role} <= ${lowerOrEqualUserRole}
         -- Guests without (personal) groups are not globally visible.
         -- They are allowed only through part 1 (shared visible group) or part 3 (manager relation).
         AND ${users.role} != ${USER_ROLE.GUEST}

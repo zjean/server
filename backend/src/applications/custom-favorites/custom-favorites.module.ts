@@ -1,19 +1,14 @@
 import { Module } from '@nestjs/common'
 import { FilesModule } from '../files/files.module'
-import { SharesModule } from '../shares/shares.module'
-import { SpacesModule } from '../spaces/spaces.module'
-import { UsersModule } from '../users/users.module'
-import { FavoritesController } from './controllers/favorites.controller'
 import { FavoritesManager } from './services/favorites-manager.service'
 import { FavoritesQueries } from './services/favorites-queries.service'
 
 @Module({
-  imports: [UsersModule, FilesModule, SpacesModule, SharesModule],
-  controllers: [FavoritesController],
+  imports: [FilesModule],
   providers: [FavoritesManager, FavoritesQueries],
-  // Exported so custom-mobile-compat can reuse the same favorites logic when
-  // exposing favorites to the stock NC iOS/Android clients (PROPFIND star,
-  // PROPPATCH toggle, REPORT listing) — no second source of truth.
+  // No controller: upstream's FilesController owns /api/files/favorites since 2.5.0.
+  // FavoritesManager is exported purely as the NC mobile bridge for
+  // custom-mobile-compat (PROPFIND star, PROPPATCH toggle, REPORT listing).
   exports: [FavoritesManager]
 })
 export class CustomFavoritesModule {}

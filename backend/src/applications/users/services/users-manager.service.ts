@@ -10,13 +10,14 @@ import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { LoginResponseDto } from '../../../authentication/dto/login-response.dto'
 import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/auth-request.interface'
 import { JwtIdentityPayload } from '../../../authentication/interfaces/jwt-payload.interface'
+import { AUTH_SESSION } from '../../../authentication/providers/auth-providers.constants'
 import { ACTION } from '../../../common/constants'
 import { comparePassword, hashPassword } from '../../../common/functions'
 import { convertTempImageToPng, generateAvatar, imgMimeTypePrefix, pngMimeType, svgMimeType } from '../../../common/image'
 import { createLightSlug, genPassword } from '../../../common/shared'
 import { configuration, serverConfig } from '../../../configuration/config.environment'
 import { Cache } from '../../../infrastructure/cache/cache.service'
-import { isPathExists, removeFiles, sanitizeName } from '../../files/utils/files'
+import { isPathExists, removeFiles, sanitizeName, temporaryFilePath } from '../../files/utils/files'
 import { NOTIFICATION_APP, NOTIFICATION_APP_EVENT } from '../../notifications/constants/notifications'
 import { NotificationsManager } from '../../notifications/services/notifications-manager.service'
 import { GROUP_TYPE } from '../constants/group'
@@ -76,6 +77,7 @@ export class UsersManager {
       user.impersonatedClientId = authUser.impersonatedClientId
     }
     user.clientId = authUser.clientId
+    user.authSession = authUser.authSession
     user.exp = authUser.exp
     return user
   }
@@ -84,6 +86,13 @@ export class UsersManager {
   async findUser(loginOrEmail: string, removePassword?: true): Promise<Omit<UserModel, 'password'>>
   async findUser(loginOrEmail: string, removePassword: boolean = true): Promise<Omit<UserModel, 'password'>> {
     const user: User = await this.usersQueries.from(null, loginOrEmail)
+    return user ? new UserModel(user, removePassword) : null
+  }
+
+  async findUserByExternalIdOrEmail(externalId: string, email: string, removePassword: false): Promise<UserModel>
+  async findUserByExternalIdOrEmail(externalId: string, email: string, removePassword?: true): Promise<Omit<UserModel, 'password'>>
+  async findUserByExternalIdOrEmail(externalId: string, email: string, removePassword: boolean = true): Promise<Omit<UserModel, 'password'>> {
+    const user: User = await this.usersQueries.fromExternalIdOrEmail(externalId, email)
     return user ? new UserModel(user, removePassword) : null
   }
 
@@ -128,7 +137,10 @@ export class UsersManager {
 
   async logUser(user: UserModel, password: string, ip: string, scope?: AUTH_SCOPE): Promise<UserModel | null> {
     this.validateUserAccess(user, ip)
-    let authSuccess: boolean = await comparePassword(password, user.password)
+    const webDAVRequiresAppPassword = scope === AUTH_SCOPE.WEBDAV && configuration.auth.mfa.totp.enabled && user.twoFaEnabled
+    // Keep the primary-password bcrypt path for scoped auth timing, but never accept it for 2FA WebDAV.
+    const primaryPasswordMatches: boolean = await comparePassword(password, user.password)
+    let authSuccess: boolean = webDAVRequiresAppPassword ? false : primaryPasswordMatches
     if (!authSuccess && scope) {
       authSuccess = await this.validateAppPassword(user, password, ip, scope)
     }
@@ -149,7 +161,9 @@ export class UsersManager {
     if (!user.isActive || user.passwordAttempts >= USER_MAX_PASSWORD_ATTEMPTS) {
       this.updateAccesses(user, ip, false).catch((e: Error) => this.logger.error({ tag: this.validateUserAccess.name, msg: `${e}` }))
       this.logger.error({ tag: this.validateUserAccess.name, msg: `user account *${user.login}* is locked` })
-      this.notifyAccountLocked(user, ip)
+      if (user.isActive) {
+        this.notifyAccountLocked(user, ip)
+      }
       throw new HttpException('Account locked', HttpStatus.FORBIDDEN)
     }
   }
@@ -162,6 +176,7 @@ export class UsersManager {
     }
     user.impersonated = !!authUser.impersonatedFromId
     user.clientId = authUser.clientId
+    user.authSession = authUser.authSession
     return { user: user, server: serverConfig }
   }
 
@@ -181,7 +196,8 @@ export class UsersManager {
     if (!r) {
       throw new HttpException('Unable to check password', HttpStatus.NOT_FOUND)
     }
-    if (!(await comparePassword(userPasswordDto.oldPassword, r.password))) {
+    const canSetLocalPasswordFromOIDC = user.authSession === AUTH_SESSION.OIDC && userPasswordDto.oldPassword === userPasswordDto.newPassword
+    if (!canSetLocalPasswordFromOIDC && !(await comparePassword(userPasswordDto.oldPassword, r.password))) {
       throw new HttpException('Password mismatch', HttpStatus.BAD_REQUEST)
     }
     const hash = await bcrypt.hash(userPasswordDto.newPassword, 10)
@@ -207,7 +223,7 @@ export class UsersManager {
     if (!part.mimetype.startsWith(imgMimeTypePrefix)) {
       throw new HttpException('Unsupported file type', HttpStatus.BAD_REQUEST)
     }
-    const tmpPath = path.join(req.user.tmpPath, USER_AVATAR_FILE_NAME)
+    const tmpPath = temporaryFilePath(req.user.tmpPath, USER_AVATAR_FILE_NAME, 'avatar')
     try {
       await pipeline(part.file, createWriteStream(tmpPath))
     } catch (e) {
@@ -232,11 +248,30 @@ export class UsersManager {
   }
 
   async updateSecrets(userId: number, secrets: UserSecrets) {
-    const userSecrets = await this.usersQueries.getUserSecrets(userId)
-    const updatedSecrets = { ...userSecrets, ...secrets }
-    if (!(await this.usersQueries.updateUserOrGuest(userId, { secrets: updatedSecrets }))) {
+    try {
+      await this.usersQueries.mutateUserSecrets(userId, (userSecrets) => ({
+        result: undefined,
+        secrets: { ...userSecrets, ...secrets }
+      }))
+    } catch (e) {
+      this.logger.error({ tag: this.updateSecrets.name, msg: `Unable to update secrets for user (${userId}) : ${e}` })
       throw new HttpException('Unable to update secrets', HttpStatus.INTERNAL_SERVER_ERROR)
     }
+  }
+
+  consumeRecoveryCode(userId: number, encryptedCode: string): Promise<boolean> {
+    // Only the transaction that still finds the code can consume it successfully.
+    return this.usersQueries.mutateUserSecrets(userId, (secrets) => {
+      const recoveryCodes = Array.isArray(secrets.recoveryCodes) ? secrets.recoveryCodes : []
+      const codeIndex = recoveryCodes.indexOf(encryptedCode)
+      if (codeIndex === -1) return { result: false }
+      const updatedRecoveryCodes = [...recoveryCodes]
+      updatedRecoveryCodes.splice(codeIndex, 1)
+      return {
+        result: true,
+        secrets: { ...secrets, recoveryCodes: updatedRecoveryCodes }
+      }
+    })
   }
 
   async updateAccesses(user: UserModel, ip: string, success: boolean, isAuthTwoFa = false) {
@@ -288,14 +323,10 @@ export class UsersManager {
   }
 
   async generateAppPassword(user: UserModel, userAppPasswordDto: UserAppPasswordDto): Promise<UserAppPassword> {
-    const secrets = await this.usersQueries.getUserSecrets(user.id)
     const slugName = createLightSlug(sanitizeName(userAppPasswordDto.name))
     if (!slugName) throw new HttpException('Invalid name', HttpStatus.BAD_REQUEST)
-    if (Array.isArray(secrets.appPasswords) && secrets.appPasswords.find((p: UserAppPassword) => p.name === slugName)) {
-      throw new HttpException('Name already used', HttpStatus.BAD_REQUEST)
-    }
-    secrets.appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
     const clearPassword = genPassword(24)
+    // Hash before acquiring the row lock: only the final read/check/write must be serialized.
     const appPassword: UserAppPassword = {
       name: slugName,
       app: userAppPasswordDto.app,
@@ -307,8 +338,20 @@ export class UsersManager {
       lastIp: null,
       lastAccess: null
     }
-    secrets.appPasswords.unshift(appPassword)
-    if (!(await this.usersQueries.updateUserOrGuest(user.id, { secrets: secrets }))) {
+    try {
+      await this.usersQueries.mutateUserSecrets(user.id, (secrets) => {
+        const appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
+        if (appPasswords.some((p: UserAppPassword) => p.name === slugName)) {
+          throw new HttpException('Name already used', HttpStatus.BAD_REQUEST)
+        }
+        return {
+          result: undefined,
+          secrets: { ...secrets, appPasswords: [appPassword, ...appPasswords] }
+        }
+      })
+    } catch (e) {
+      if (e instanceof HttpException) throw e
+      this.logger.error({ tag: this.generateAppPassword.name, msg: `Unable to update app passwords for user (${user.id}) : ${e}` })
       throw new HttpException('Unable to update app passwords', HttpStatus.INTERNAL_SERVER_ERROR)
     }
     // return clear password only once
@@ -316,16 +359,26 @@ export class UsersManager {
   }
 
   async deleteAppPassword(user: UserModel, passwordName: string): Promise<void> {
-    const secrets = await this.usersQueries.getUserSecrets(user.id)
-    const appPassword = Array.isArray(secrets.appPasswords) ? secrets.appPasswords.find((p: UserAppPassword) => p.name === passwordName) : undefined
+    let appPassword: UserAppPassword | null
+    try {
+      appPassword = await this.usersQueries.mutateUserSecrets<UserAppPassword | null>(user.id, (secrets) => {
+        const appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
+        const currentAppPassword = appPasswords.find((p: UserAppPassword) => p.name === passwordName)
+        if (!currentAppPassword) return { result: null }
+        return {
+          result: currentAppPassword,
+          secrets: { ...secrets, appPasswords: appPasswords.filter((p: UserAppPassword) => p.name !== passwordName) }
+        }
+      })
+    } catch (e) {
+      this.logger.error({ tag: this.deleteAppPassword.name, msg: `Unable to delete app password for user (${user.id}) : ${e}` })
+      throw new HttpException('Unable to delete app password', HttpStatus.INTERNAL_SERVER_ERROR)
+    }
     if (!appPassword) {
       throw new HttpException('App password not found', HttpStatus.NOT_FOUND)
     }
-    secrets.appPasswords = secrets.appPasswords.filter((p: UserAppPassword) => p.name !== passwordName)
-    if (!(await this.usersQueries.updateUserOrGuest(user.id, { secrets: secrets }))) {
-      throw new HttpException('Unable to delete app password', HttpStatus.INTERNAL_SERVER_ERROR)
-    }
     if (appPassword.app === AUTH_SCOPE.WEBDAV) {
+      // mutateUserSecrets has committed the revocation; cached Basic-auth results can now be discarded.
       await this.clearWebDAVAuthCache(user.id).catch((e: Error) => this.logger.error({ tag: this.clearWebDAVAuthCache.name, msg: `${e}` }))
     }
   }
@@ -350,15 +403,30 @@ export class UsersManager {
       if (p.expiration && new Date() > expMs) continue // expired
       hasComparedAppPassword = true
       if (await comparePassword(password, p.password)) {
-        p.lastAccess = p.currentAccess
-        p.currentAccess = new Date()
-        p.lastIp = p.currentIp
-        p.currentIp = ip
-        // update accesses
-        this.usersQueries
-          .updateUserOrGuest(user.id, { secrets: secrets })
-          .catch((e: Error) => this.logger.error({ tag: this.validateAppPassword.name, msg: `${e}` }))
-        return true
+        // Keep bcrypt outside the transaction, then recheck that the matched credential still exists under the row lock.
+        return this.usersQueries.mutateUserSecrets(user.id, (currentSecrets) => {
+          const appPasswords = Array.isArray(currentSecrets.appPasswords) ? currentSecrets.appPasswords : []
+          const passwordIndex = appPasswords.findIndex(
+            (currentPassword: UserAppPassword) =>
+              currentPassword.name === p.name && currentPassword.app === scope && currentPassword.password === p.password
+          )
+          if (passwordIndex === -1) return { result: false }
+          const currentPassword = appPasswords[passwordIndex]
+          const currentExpiration = currentPassword.expiration ? new Date(currentPassword.expiration) : null
+          if (currentExpiration && new Date() > currentExpiration) return { result: false }
+          const updatedAppPasswords = [...appPasswords]
+          updatedAppPasswords[passwordIndex] = {
+            ...currentPassword,
+            lastAccess: currentPassword.currentAccess,
+            currentAccess: new Date(),
+            lastIp: currentPassword.currentIp,
+            currentIp: ip
+          }
+          return {
+            result: true,
+            secrets: { ...currentSecrets, appPasswords: updatedAppPasswords }
+          }
+        })
       }
     }
     if (!hasComparedAppPassword) {
@@ -596,7 +664,7 @@ export class UsersManager {
       throw new HttpException('You are not allowed to do this action', HttpStatus.FORBIDDEN)
     }
     // guest has no space but a temporary directory
-    return this.adminUsersManager.deleteUserOrGuest(guest.id, guest.login, { deleteSpace: true, isGuest: true })
+    return this.adminUsersManager.deleteUserOrGuest(guest.id, guest.login, { deleteSpace: true })
   }
 
   searchMembers(user: UserModel, searchMembersDto: SearchMembersDto): Promise<Member[]> {
@@ -604,6 +672,8 @@ export class UsersManager {
   }
 
   private async clearWebDAVAuthCache(userId: number): Promise<void> {
+    // Cache keys contain a hash of login + clear password, which cannot be rebuilt from the stored bcrypt hash.
+    // Inspect cached values instead and remove every positive WebDAV authentication entry for this user.
     const keys = await this.cache.keys(`${CACHE_AUTH_WEBDAV_PREFIX}-*`)
     const keysToDelete: string[] = []
     for (const key of keys) {

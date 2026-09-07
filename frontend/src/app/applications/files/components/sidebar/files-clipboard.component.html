@@ -1,35 +1,40 @@
-<div class="sidebar-component-title  justify-content-between">
-  <fa-icon class="cursor-pointer"
-           [icon]="icons.faQuestion"
-           [tooltip]="'Actions will be performed in the current folder' | translate:locale.language"
-           container="body"
-           placement="left">
-  </fa-icon>
-  <div l10nTranslate>Clipboard</div>
-  <button (click)="clearAll()" class="btn btn-sm btn-default">
-    <fa-icon [icon]="icons.faTrashCan"></fa-icon>
-  </button>
+<div class="sidebar-component-title justify-content-between position-relative">
+  <div class="sidebar-component-title-side">
+    <svg class="cursor-pointer"
+             [lucideIcon]="icons.LucideCircleQuestionMark"
+             [tooltip]="'Actions will be performed in the current folder' | translate:locale.language"
+             container="body"
+             placement="left">
+    </svg>
+  </div>
+  <div class="sidebar-component-title-label" l10nTranslate>Clipboard</div>
+  <div class="sidebar-component-title-side">
+    <button (click)="clearAll()" class="btn btn-default" type="button">
+      <svg [lucideIcon]="icons.LucideX"></svg>
+    </button>
+  </div>
 </div>
 @if (files.length) {
   <div class="px-2 pt-2 pb-2 fs-xs">
-    <div class="d-flex justify-content-between mt-2">
+    <app-files-summary [files]="files" class="mb-2"></app-files-summary>
+    <div class="d-flex">
       <select [(ngModel)]="selectedAction" class="form-select form-select-sm">
         @for (item of operations| keyvalue: originalOrderKeyValue; track item.key) {
           <option [ngValue]="item.key" l10nTranslate>{{ item.value.text }}</option>
         }
       </select>
-      <button (click)="doAction()" class="btn btn-xs btn-primary ms-1" type="button" l10nTranslate>Confirm</button>
+      <button (click)="doAction()" class="btn btn-sm btn-primary ms-1" type="button" l10nTranslate>Confirm</button>
     </div>
   </div>
-  <hr class="mx-0 my-2">
-  <div appAutoResize class="sidebar-item" [resizeOffset]=120>
+  <hr class="mx-0 my-1">
+  <div appAutoResize class="sidebar-item" [resizeOffset]="170">
     @for (f of files; track f.id) {
       <div class="sidebar-item-container">
-        <div class="sidebar-item-content" [tooltip]="f.path">
-          <img [src]="f.mimeUrl" alt="" class="me-1" height="28" width="auto" (error)="f.fallBackMimeUrl()">
+        <div class="sidebar-item-content" [tooltip]="fileLocation(f)">
+          <img [src]="f.mimeUrl" alt="" height="28" width="28" (error)="f.fallBackMimeUrl()">
           <div class="text-truncate fs-sm">{{ f.name }}</div>
-          <button (click)="remove(f)" class="btn btn-xs btn-danger ms-auto">
-            <fa-icon [icon]="icons.faTimes"></fa-icon>
+          <button (click)="remove(f)" class="btn btn-xs btn-default ms-auto">
+            <svg class="fs-md" [lucideIcon]="icons.LucideX"></svg>
           </button>
         </div>
       </div>

@@ -216,7 +216,7 @@ export class FilesConfig {
 
   @IsNotEmpty()
   @IsString()
-  tmpPath: string
+  linksPath: string
 
   @IsInt()
   maxUploadSize: number = 5368709120 // 5 GB

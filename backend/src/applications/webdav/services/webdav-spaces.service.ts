@@ -158,10 +158,11 @@ export class WebDAVSpaces {
       // Enrich with hasComments + lock + shares so the NC mobile prop
       // builder can emit <nc:has-comments>, <nc:lock>, and <oc:share-types>
       // children without an extra round-trip (mobile-compat consumes this
-      // generator). All three options are read-only additive DB joins —
-      // they don't change the file set, just attach optional fields that
-      // all WebDAV clients can use if they care.
-      const { files } = await this.spacesBrowser.browse(req.user, space, { withHasComments: true, withLocks: true, withSpacesAndShares: true })
+      // generator). Upstream collapsed the three per-option flags into a
+      // single `withDetails` boolean (2.5.0) which enables exactly those,
+      // plus syncs (permission-gated) and isFavorite. All are read-only
+      // additive DB joins — they don't change the file set.
+      const { files } = await this.spacesBrowser.browse(req.user, space, true)
       for (const f of files) {
         yield new WebDAVFile(f, req.dav.url)
       }

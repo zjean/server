@@ -1,17 +1,15 @@
 import { Component, inject, Input, OnChanges, OnInit } from '@angular/core'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
-import { faQuestion } from '@fortawesome/free-solid-svg-icons'
+import type { LucideIcon } from '@lucide/angular'
+import { LucideCircleQuestionMark, LucideDynamicIcon } from '@lucide/angular'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe } from 'angular-l10n'
-import { ViewMode } from '../../../../common/components/navigation-view/navigation-view.component'
-import { LayoutService } from '../../../../layout/layout.service'
+import type { ViewMode } from '../../../../common/components/navigation-view/navigation-view.component'
 import { ShareLinkModel } from '../../../links/models/share-link.model'
 import { SPACES_ICON, SPACES_TITLE } from '../../../spaces/spaces.constants'
 import { ShareFileModel } from '../../models/share-file.model'
 import { ShareModel } from '../../models/share.model'
 
 interface ShareRepository {
-  icon: IconDefinition
+  icon: LucideIcon
   label: string
   class: string
   translate: boolean
@@ -19,20 +17,23 @@ interface ShareRepository {
 
 @Component({
   selector: 'app-share-repository',
-  imports: [L10nTranslatePipe, FaIconComponent],
+  imports: [L10nTranslatePipe, LucideDynamicIcon],
   template: `
-    @if (galleryMode) {
-      <fa-icon
-        [icon]="repository.icon"
+    @if (galleryMode?.enabled) {
+      <span
         [class]="repository.class"
         [style.min-width.px]="galleryMode.dimensions / 3.5"
         [style.min-height.px]="galleryMode.dimensions / 3.5"
-        [style.font-size.px]="galleryMode.faSize / 2.2"
-      ></fa-icon>
+        [style.font-size.px]="galleryMode.iconSize / 2.2"
+      >
+        <svg [lucideIcon]="repository.icon"></svg>
+      </span>
     } @else {
       <div class="d-flex align-items-center overflow-wrap-and-whitespace">
         @if (showIcon) {
-          <fa-icon [icon]="repository.icon" [class]="repository.class" class="me-2"></fa-icon>
+          <span [class]="repository.class" class="me-2">
+            <svg [lucideIcon]="repository.icon"></svg>
+          </span>
         }
         <span class="no-pointer-events" draggable="false">
           @if (repository.translate) {
@@ -52,9 +53,8 @@ export class ShareRepositoryComponent implements OnInit, OnChanges {
   @Input() showFullPath = false
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected repository: ShareRepository
-  private readonly layout = inject(LayoutService)
   private unknownRepository: ShareRepository = {
-    icon: faQuestion,
+    icon: LucideCircleQuestionMark,
     label: '',
     class: 'circle-primary-icon',
     translate: false
@@ -79,7 +79,7 @@ export class ShareRepositoryComponent implements OnInit, OnChanges {
     } else if (this.share.file?.ownerId) {
       this.repository = {
         icon: SPACES_ICON.PERSONAL,
-        label: SPACES_TITLE.PERSONAL_FILES,
+        label: SPACES_TITLE.PERSONAL_SPACE,
         class: 'circle-primary-icon',
         translate: true
       }
@@ -120,10 +120,10 @@ export class ShareRepositoryComponent implements OnInit, OnChanges {
         }
       }
     }
-    if (this.repository.label === SPACES_TITLE.PERSONAL_FILES) {
-      this.repository.label = this.layout.translateString(this.repository.label)
-    }
-    if (paths.length) {
+    if (this.repository.label === SPACES_TITLE.PERSONAL_SPACE && paths.length) {
+      this.repository.label = paths.join('/')
+      this.repository.translate = false
+    } else if (paths.length) {
       this.repository.label = `${this.repository.label}/${paths.join('/')}`
     }
   }

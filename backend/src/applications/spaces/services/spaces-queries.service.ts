@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { and, countDistinct, eq, isNotNull, isNull, max, or, SelectedFields, SQL, sql } from 'drizzle-orm'
+import { and, countDistinct, eq, isNotNull, isNull, max, ne, or, SelectedFields, SQL, sql } from 'drizzle-orm'
 import { alias, union } from 'drizzle-orm/mysql-core'
 import { MySql2PreparedQuery, MySqlQueryResult } from 'drizzle-orm/mysql2'
 import { ACTION } from '../../../common/constants'
@@ -20,6 +20,7 @@ import {
 import { fileHasCommentsSubquerySQL } from '../../comments/schemas/comments.schema'
 import { FileDBProps } from '../../files/interfaces/file-db-props.interface'
 import { FileProps } from '../../files/interfaces/file-props.interface'
+import { filesFavorites } from '../../files/schemas/files-favorites.schema'
 import { File } from '../../files/schemas/file.interface'
 import { filePathSQL, files } from '../../files/schemas/files.schema'
 import { FilesQueries } from '../../files/services/files-queries.service'
@@ -37,6 +38,7 @@ import { usersGroups } from '../../users/schemas/users-groups.schema'
 import { userFullNameSQL, users } from '../../users/schemas/users.schema'
 import { SPACE_ROLE } from '../constants/spaces'
 import { SpaceMemberDto } from '../dto/create-or-update-space.dto'
+import type { GetOrCreateSpaceFileOptions, SpaceBrowseDetails } from '../interfaces/space-files.interface'
 import { SpaceEnv } from '../models/space-env.model'
 import { SpaceProps } from '../models/space-props.model'
 import { SpaceRootProps } from '../models/space-root-props.model'
@@ -54,7 +56,7 @@ export class SpacesQueries {
   private spaceAndRootPermissionsQuery: MySql2PreparedQuery<any> = null
   private spacesWithDetailsQuery: MySql2PreparedQuery<any> = null
   private spacesQuery: MySql2PreparedQuery<any> = null
-  private spaceIdsQuery: MySql2PreparedQuery<any> = null
+  private spaceIdentitiesQuery: MySql2PreparedQuery<any> = null
   private spaceQuery: MySql2PreparedQuery<any> = null
   private spacesWithPermissionsQuery: MySql2PreparedQuery<any> = null
   private spaceFromIdWithPermissionsQuery: MySql2PreparedQuery<any> = null
@@ -66,14 +68,20 @@ export class SpacesQueries {
     private readonly filesQueries: FilesQueries
   ) {}
 
-  spaceExistsForAlias(alias: string): any | undefined {
-    return this.db.query.spaces.findFirst({ columns: { id: true }, where: eq(spaces.alias, alias) })
+  spaceExistsForAlias(alias: string, excludedSpaceId?: number): any | undefined {
+    return this.db.query.spaces.findFirst({
+      columns: { id: true },
+      where: excludedSpaceId === undefined ? eq(spaces.alias, alias) : and(eq(spaces.alias, alias), ne(spaces.id, excludedSpaceId))
+    })
   }
 
-  spaceRootExistsForAlias(spaceId: number, rootAlias: string): any | undefined {
+  spaceRootExistsForAlias(spaceId: number, rootAlias: string, excludedRootId?: number): any | undefined {
     return this.db.query.spacesRoots.findFirst({
       columns: { id: true },
-      where: and(eq(spacesRoots.spaceId, spaceId), eq(spacesRoots.alias, rootAlias))
+      where:
+        excludedRootId === undefined
+          ? and(eq(spacesRoots.spaceId, spaceId), eq(spacesRoots.alias, rootAlias))
+          : and(eq(spacesRoots.spaceId, spaceId), eq(spacesRoots.alias, rootAlias), ne(spacesRoots.id, excludedRootId))
     })
   }
 
@@ -173,7 +181,7 @@ export class SpacesQueries {
             id: linkUsers.id,
             linkId: links.id,
             name: links.name,
-            type: sql.raw(`'${MEMBER_TYPE.USER}'`),
+            type: sql`${MEMBER_TYPE.USER}`,
             spaceRole: sql`${SPACE_ROLE.IS_MEMBER}`,
             description: links.email,
             permissions: otherMembers.permissions,
@@ -240,15 +248,7 @@ export class SpacesQueries {
     }
   }
 
-  async spaceRootFiles(
-    userId: number,
-    spaceId: number,
-    options: {
-      withShares?: boolean
-      withHasComments?: boolean
-      withSyncs?: boolean
-    }
-  ): Promise<FileProps[]> {
+  async spaceRootFiles(userId: number, spaceId: number, details: SpaceBrowseDetails): Promise<FileProps[]> {
     if (!this.spaceRootFilesQuery) {
       const select: FileProps | SelectedFields<any, any> = {
         id: files.id,
@@ -267,7 +267,7 @@ export class SpacesQueries {
           permissions: spacesRoots.permissions,
           owner: { id: users.id, login: users.login, email: users.email, fullName: userFullNameSQL(users) }
         },
-        shares: sql`IF (${sql.placeholder('withShares')}, ${concatDistinctObjectsInArray(shares.id, {
+        shares: sql`IF (${sql.placeholder('withDetails')}, ${concatDistinctObjectsInArray(shares.id, {
           id: shares.id,
           alias: shares.alias,
           name: shares.name,
@@ -278,7 +278,8 @@ export class SpacesQueries {
           clientId: syncClients.id,
           clientName: sql`JSON_VALUE(${syncClients.info}, '$.node')`
         })}, '[]')`.mapWith(dbParseJson),
-        hasComments: sql<boolean>`IF (${sql.placeholder('withHasComments')}, ${fileHasCommentsSubquerySQL(files.id)}, 0)`.mapWith(Boolean)
+        hasComments: sql<boolean>`IF (${sql.placeholder('withDetails')}, ${fileHasCommentsSubquerySQL(files.id)}, 0)`.mapWith(Boolean),
+        isFavorite: isNotNull(filesFavorites.fileId).mapWith(Boolean)
       }
       this.spaceRootFilesQuery = this.db
         .select(select)
@@ -286,20 +287,24 @@ export class SpacesQueries {
         .leftJoin(files, eq(files.id, spacesRoots.fileId))
         .leftJoin(users, eq(users.id, files.ownerId))
         .leftJoin(
+          filesFavorites,
+          and(eq(sql.placeholder('withFavorites'), sql`1`), eq(filesFavorites.userId, sql.placeholder('userId')), eq(filesFavorites.fileId, files.id))
+        )
+        .leftJoin(
           shares,
           and(
-            eq(sql.placeholder('withShares'), sql.raw('1')),
+            eq(sql.placeholder('withDetails'), sql`1`),
             eq(shares.ownerId, sql.placeholder('userId')),
             isNull(shares.fileId),
             isNull(shares.parentId),
             eq(shares.spaceRootId, spacesRoots.id)
           )
         )
-        .leftJoin(syncClients, and(eq(sql.placeholder('withSyncs'), sql.raw('1')), eq(syncClients.ownerId, sql.placeholder('userId'))))
+        .leftJoin(syncClients, and(eq(sql.placeholder('withSyncs'), sql`1`), eq(syncClients.ownerId, sql.placeholder('userId'))))
         .leftJoin(
           syncPaths,
           and(
-            eq(sql.placeholder('withSyncs'), sql.raw('1')),
+            eq(sql.placeholder('withSyncs'), sql`1`),
             eq(syncPaths.clientId, syncClients.id),
             eq(syncPaths.spaceId, sql.placeholder('spaceId')),
             eq(syncPaths.spaceRootId, spacesRoots.id),
@@ -313,9 +318,9 @@ export class SpacesQueries {
     return this.spaceRootFilesQuery.execute({
       userId,
       spaceId,
-      withHasComments: +!!options.withHasComments,
-      withShares: +!!options.withShares,
-      withSyncs: +!!options.withSyncs
+      withDetails: +!!details,
+      withFavorites: +(details?.favorites ?? false),
+      withSyncs: +(details?.syncs ?? false)
     })
   }
 
@@ -476,13 +481,17 @@ export class SpacesQueries {
   }
 
   @CacheDecorator()
-  async spaceIds(userId: number): Promise<number[]> {
-    if (!this.spaceIdsQuery) {
-      const unionAlias = this.fromUserAndGroups({ id: spaces.id })
-      this.spaceIdsQuery = this.db.select({ id: unionAlias.id }).from(unionAlias).groupBy(unionAlias.id).prepare()
+  async spaceIdentities(userId: number): Promise<Pick<Space, 'id' | 'alias' | 'name'>[]> {
+    if (!this.spaceIdentitiesQuery) {
+      const unionAlias = this.fromUserAndGroups({ id: spaces.id, alias: spaces.alias, name: spaces.name })
+      this.spaceIdentitiesQuery = this.db
+        .select({ id: unionAlias.id, alias: unionAlias.alias, name: unionAlias.name })
+        .from(unionAlias)
+        .groupBy(unionAlias.id, unionAlias.alias, unionAlias.name)
+        .prepare()
     }
     // `userId` is used in `fromUserAndGroups` function
-    return (await this.spaceIdsQuery.execute({ userId })).map((r: { id: number }) => r.id)
+    return this.spaceIdentitiesQuery.execute({ userId })
   }
 
   @CacheDecorator()
@@ -574,7 +583,7 @@ export class SpacesQueries {
           login: managers.login,
           name: userFullNameSQL(managers),
           description: managers.email,
-          type: sql.raw(`'${MEMBER_TYPE.USER}'`),
+          type: sql`${MEMBER_TYPE.USER}`,
           spaceRole: spacesMembers.role,
           permissions: sql<string>`''`,
           createdAt: dateTimeUTC(spacesMembers.createdAt)
@@ -622,7 +631,7 @@ export class SpacesQueries {
         login: managers.login,
         name: userFullNameSQL(managers),
         description: managers.email,
-        type: sql.raw(`'${MEMBER_TYPE.USER}'`),
+        type: sql`${MEMBER_TYPE.USER}`,
         spaceRole: spacesMembers.role,
         permissions: sql<string>`''`,
         createdAt: dateTimeUTC(spacesMembers.createdAt)
@@ -699,8 +708,8 @@ export class SpacesQueries {
     return this.filesQueries.getOrCreateUserFile(userId, file)
   }
 
-  getOrCreateSpaceFile(fileId: number, file: FileProps, dbFile: FileDBProps): Promise<number> {
-    return this.filesQueries.getOrCreateSpaceFile(fileId, file, dbFile)
+  getOrCreateSpaceFile(fileId: number, file: FileProps, dbFile: FileDBProps, options: GetOrCreateSpaceFileOptions = {}): Promise<number> {
+    return this.filesQueries.getOrCreateSpaceFile(fileId, file, dbFile, options)
   }
 
   async clearCachePermissions(spaceAlias: string, rootAliases?: string[], userIds?: number[]) {
@@ -712,6 +721,8 @@ export class SpacesQueries {
         // clear cache on space root
         rootAliases.forEach((rAlias: string) => patterns.push(this.cache.genSlugKey(...basePattern, rAlias)))
       } else {
+        // clear cache on accessible space identities
+        patterns.push(this.cache.genSlugKey(this.constructor.name, this.spaceIdentities.name, uid))
         // clear cache on spaces list
         patterns.push(this.cache.genSlugKey(...[this.constructor.name, this.spaces.name, uid]))
         patterns.push(this.cache.genSlugKey(...[this.constructor.name, this.spaces.name, uid, '*']))

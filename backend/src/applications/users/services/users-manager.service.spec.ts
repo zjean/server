@@ -9,6 +9,7 @@ import { Readable } from 'node:stream'
 import { AuthManager } from '../../../authentication/auth.service'
 import { CACHE_AUTH_WEBDAV_PREFIX } from '../../../authentication/constants/cache'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
+import { AUTH_SESSION } from '../../../authentication/providers/auth-providers.constants'
 import { comparePassword } from '../../../common/functions'
 import * as imageModule from '../../../common/image'
 import { pngMimeType, svgMimeType } from '../../../common/image'
@@ -22,6 +23,7 @@ import { MEMBER_TYPE } from '../constants/member'
 import { USER_GROUP_ROLE, USER_MAX_PASSWORD_ATTEMPTS, USER_PERMISSION, USER_ROLE } from '../constants/user'
 import { CreateUserDto } from '../dto/create-or-update-user.dto'
 import { DeleteUserDto } from '../dto/delete-user.dto'
+import { UserSecrets } from '../interfaces/user-secrets.interface'
 import { UserModel } from '../models/user.model'
 import { generateUserTest } from '../utils/test'
 import { AdminUsersManager } from './admin-users-manager.service'
@@ -58,7 +60,7 @@ describe(UsersManager.name, () => {
     dataPath: configuration.applications.files.dataPath,
     usersPath: configuration.applications.files.usersPath,
     spacesPath: configuration.applications.files.spacesPath,
-    tmpPath: configuration.applications.files.tmpPath
+    linksPath: configuration.applications.files.linksPath
   }
   const flush = () => new Promise<void>((r) => setImmediate(r))
   const okStream = (d = 'OK') => {
@@ -81,6 +83,15 @@ describe(UsersManager.name, () => {
       await userTest.makePaths()
     }
   }
+  const mockSecretsMutation = (initialSecrets: UserSecrets) => {
+    let currentSecrets = initialSecrets
+    usersQueriesService.mutateUserSecrets = vi.fn().mockImplementation(async (_userId, mutate) => {
+      const mutation = mutate(currentSecrets)
+      if (mutation.secrets !== undefined) currentSecrets = mutation.secrets
+      return mutation.result
+    })
+    return () => currentSecrets
+  }
 
   const notificationsManager = {
     sendEmailNotification: vi.fn().mockResolvedValue(undefined)
@@ -91,7 +102,7 @@ describe(UsersManager.name, () => {
     configuration.applications.files.dataPath = testDataPath
     configuration.applications.files.usersPath = path.join(testDataPath, 'users')
     configuration.applications.files.spacesPath = path.join(testDataPath, 'spaces')
-    configuration.applications.files.tmpPath = path.join(testDataPath, 'tmp')
+    configuration.applications.files.linksPath = path.join(testDataPath, 'links')
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -116,7 +127,7 @@ describe(UsersManager.name, () => {
     usersQueriesService = module.get(UsersQueries)
     cache = module.get(Cache)
     userTest = new UserModel(generateUserTest(), false)
-    deleteUserDto = { deleteSpace: true, isGuest: false } satisfies DeleteUserDto
+    deleteUserDto = { deleteSpace: true } satisfies DeleteUserDto
   })
 
   afterEach(() => vi.restoreAllMocks())
@@ -126,7 +137,7 @@ describe(UsersManager.name, () => {
     configuration.applications.files.dataPath = initialFilesPaths.dataPath
     configuration.applications.files.usersPath = initialFilesPaths.usersPath
     configuration.applications.files.spacesPath = initialFilesPaths.spacesPath
-    configuration.applications.files.tmpPath = initialFilesPaths.tmpPath
+    configuration.applications.files.linksPath = initialFilesPaths.linksPath
     await fs.rm(testDataPath, { recursive: true, force: true })
   })
 
@@ -139,6 +150,11 @@ describe(UsersManager.name, () => {
     const u2 = await usersManager.findUser(userTest.login, false)
     expect(u2).toBeInstanceOf(UserModel)
     expect(u2.password).toBeDefined()
+    const externalLookupSpy = vi.spyOn(usersQueriesService, 'fromExternalIdOrEmail').mockResolvedValue(userTest)
+    const externalUser = await usersManager.findUserByExternalIdOrEmail('subject-1', userTest.email, false)
+    expect(externalUser).toBeInstanceOf(UserModel)
+    expect(externalUser.password).toBeDefined()
+    expect(externalLookupSpy).toHaveBeenCalledWith('subject-1', userTest.email)
     const me1: any = await usersManager.me(userTest)
     expect(me1.user.password).toBeUndefined()
     usersQueriesService.from = vi.fn().mockReturnValue(null)
@@ -146,12 +162,16 @@ describe(UsersManager.name, () => {
     await expect(usersManager.me({ id: 0 } as UserModel)).rejects.toThrow()
     usersQueriesService.from = vi.fn().mockResolvedValue(null)
     await expect(usersManager.fromUserId(123)).resolves.toBeNull()
-    const authUser = new UserModel({ ...generateUserTest(), id: 42, clientId: 'CID', impersonatedFromId: 1 } as any, true)
+    const authUser = new UserModel(
+      { ...generateUserTest(), id: 42, clientId: 'CID', authSession: AUTH_SESSION.OIDC, impersonatedFromId: 1 } as any,
+      true
+    )
     const fromUser = new UserModel({ ...generateUserTest(), id: 42 }, true)
     usersQueriesService.from = vi.fn().mockResolvedValue(fromUser)
     const me2 = await usersManager.me(authUser)
     expect(me2.user.impersonated).toBe(true)
     expect(me2.user.clientId).toBe('CID')
+    expect(me2.user.authSession).toBe(AUTH_SESSION.OIDC)
   })
 
   it('should resolve token users from current database state', async () => {
@@ -161,6 +181,7 @@ describe(UsersManager.name, () => {
       role: USER_ROLE.ADMINISTRATOR,
       applications: Object.values(USER_PERMISSION),
       clientId: 'client-id',
+      authSession: AUTH_SESSION.OIDC,
       exp: 1234
     } as any)
     const currentUser = {
@@ -176,6 +197,7 @@ describe(UsersManager.name, () => {
     expect(resolved.role).toBe(USER_ROLE.USER)
     expect(resolved.applications).toEqual([USER_PERMISSION.SPACES])
     expect(resolved.clientId).toBe('client-id')
+    expect(resolved.authSession).toBe(AUTH_SESSION.OIDC)
     expect(resolved.exp).toBe(1234)
 
     usersQueriesService.from = vi.fn().mockResolvedValue({ ...currentUser, isActive: false })
@@ -342,15 +364,116 @@ describe(UsersManager.name, () => {
     expect(comparePassword).toHaveBeenCalledWith('pwd', 'APP_HASH')
   })
 
+  it('requires app passwords for WebDAV when TOTP is enabled without affecting client scope', async () => {
+    const previousTotpEnabled = configuration.auth.mfa.totp.enabled
+    configuration.auth.mfa.totp.enabled = true
+    try {
+      const twoFaUser = new UserModel(
+        {
+          ...generateUserTest(),
+          role: USER_ROLE.USER,
+          isActive: true,
+          passwordAttempts: 0,
+          password: 'ACCOUNT_HASH',
+          secrets: { twoFaSecret: 'two-fa' }
+        } as any,
+        false
+      )
+      vi.spyOn(usersManager, 'updateAccesses').mockResolvedValue(undefined)
+      vi.spyOn(twoFaUser, 'makePaths').mockResolvedValue(undefined)
+      vi.mocked(comparePassword).mockImplementation(async (_password, hash) => hash === 'ACCOUNT_HASH' || hash === 'APP_HASH')
+
+      usersQueriesService.getUserSecrets = vi.fn().mockResolvedValue({ appPasswords: [] })
+      await expect(usersManager.logUser(twoFaUser, 'account-password', '192.0.2.20', AUTH_SCOPE.WEBDAV)).resolves.toBeNull()
+
+      const appPassword = {
+        name: 'webdav-client',
+        app: AUTH_SCOPE.WEBDAV,
+        password: 'APP_HASH'
+      } as any
+      usersQueriesService.getUserSecrets = vi.fn().mockResolvedValue({ appPasswords: [appPassword] })
+      mockSecretsMutation({ twoFaSecret: 'two-fa', appPasswords: [appPassword] })
+      await expect(usersManager.logUser(twoFaUser, 'app-password', '192.0.2.21', AUTH_SCOPE.WEBDAV)).resolves.toBe(twoFaUser)
+
+      await expect(usersManager.logUser(twoFaUser, 'account-password', '192.0.2.22', AUTH_SCOPE.CLIENT)).resolves.toBe(twoFaUser)
+    } finally {
+      configuration.auth.mfa.totp.enabled = previousTotpEnabled
+    }
+  })
+
+  it('rechecks a matched app password against the locked secrets before authenticating', async () => {
+    const localUser = new UserModel({ ...generateUserTest(), role: USER_ROLE.USER, isActive: true, passwordAttempts: 0 }, false)
+    const matchedPassword = {
+      name: 'webdav-client',
+      app: AUTH_SCOPE.WEBDAV,
+      password: 'APP_HASH',
+      expiration: null,
+      currentAccess: new Date('2026-01-02T00:00:00.000Z'),
+      lastAccess: null,
+      currentIp: '127.0.0.1',
+      lastIp: null,
+      createdAt: new Date('2026-01-01T00:00:00.000Z')
+    }
+    usersQueriesService.getUserSecrets = vi.fn().mockResolvedValue({ appPasswords: [matchedPassword] })
+    vi.mocked(comparePassword).mockResolvedValue(true)
+    const getCurrentSecrets = mockSecretsMutation({ twoFaSecret: 'two-fa', appPasswords: [matchedPassword] })
+
+    await expect(usersManager.validateAppPassword(localUser, 'pwd', '192.0.2.10', AUTH_SCOPE.WEBDAV)).resolves.toBe(true)
+
+    expect(getCurrentSecrets().twoFaSecret).toBe('two-fa')
+    expect(getCurrentSecrets().appPasswords[0]).toEqual(
+      expect.objectContaining({
+        name: matchedPassword.name,
+        lastAccess: matchedPassword.currentAccess,
+        currentIp: '192.0.2.10',
+        lastIp: matchedPassword.currentIp
+      })
+    )
+
+    mockSecretsMutation({ twoFaSecret: 'two-fa', appPasswords: [] })
+    await expect(usersManager.validateAppPassword(localUser, 'pwd', '192.0.2.10', AUTH_SCOPE.WEBDAV)).resolves.toBe(false)
+  })
+
+  it('updates independent secrets and consumes recovery codes from the locked state', async () => {
+    const appPasswords = [{ name: 'webdav-client', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }] as any
+    const getCurrentSecrets = mockSecretsMutation({ twoFaSecret: 'old-secret', recoveryCodes: ['code-1', 'code-2'], appPasswords })
+
+    await expect(usersManager.updateSecrets(userTest.id, { twoFaSecret: 'new-secret' })).resolves.toBeUndefined()
+    await expect(usersManager.consumeRecoveryCode(userTest.id, 'code-1')).resolves.toBe(true)
+    await expect(usersManager.consumeRecoveryCode(userTest.id, 'code-1')).resolves.toBe(false)
+
+    expect(getCurrentSecrets()).toEqual({
+      twoFaSecret: 'new-secret',
+      recoveryCodes: ['code-2'],
+      appPasswords
+    })
+  })
+
+  it('generates an app password from the locked secrets and enforces name uniqueness there', async () => {
+    const existingPassword = { name: 'existing', app: AUTH_SCOPE.CLIENT, password: 'EXISTING_HASH' } as any
+    const getCurrentSecrets = mockSecretsMutation({ twoFaSecret: 'two-fa', appPasswords: [existingPassword] })
+
+    const generated = await usersManager.generateAppPassword(userTest, { name: 'new password', app: AUTH_SCOPE.WEBDAV })
+
+    expect(generated.name).toBe('new password')
+    expect(generated.password).not.toBe('hashed-password')
+    expect(getCurrentSecrets().twoFaSecret).toBe('two-fa')
+    expect(getCurrentSecrets().appPasswords).toEqual([
+      expect.objectContaining({ name: 'new password', password: 'hashed-password' }),
+      existingPassword
+    ])
+    await expect(usersManager.generateAppPassword(userTest, { name: 'new password', app: AUTH_SCOPE.WEBDAV })).rejects.toThrow('Name already used')
+  })
+
   it('deletes WebDAV auth cache entries for the user when deleting a WebDAV app password', async () => {
     const secrets = {
+      twoFaSecret: 'two-fa',
       appPasswords: [
         { name: 'webdav-client', app: AUTH_SCOPE.WEBDAV, password: 'HASH' },
         { name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }
       ]
     }
-    usersQueriesService.getUserSecrets = vi.fn().mockResolvedValue(secrets)
-    usersQueriesService.updateUserOrGuest = vi.fn().mockResolvedValue(true)
+    const getCurrentSecrets = mockSecretsMutation(secrets as UserSecrets)
     cache.keys = vi
       .fn()
       .mockResolvedValue([`${CACHE_AUTH_WEBDAV_PREFIX}-match`, `${CACHE_AUTH_WEBDAV_PREFIX}-other`, `${CACHE_AUTH_WEBDAV_PREFIX}-failed`])
@@ -363,8 +486,9 @@ describe(UsersManager.name, () => {
 
     await expect(usersManager.deleteAppPassword(userTest, 'webdav-client')).resolves.toBeUndefined()
 
-    expect(usersQueriesService.updateUserOrGuest).toHaveBeenCalledWith(userTest.id, {
-      secrets: { appPasswords: [{ name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }] }
+    expect(getCurrentSecrets()).toEqual({
+      twoFaSecret: 'two-fa',
+      appPasswords: [{ name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }]
     })
     expect(cache.keys).toHaveBeenCalledWith(`${CACHE_AUTH_WEBDAV_PREFIX}-*`)
     expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_AUTH_WEBDAV_PREFIX}-match`])
@@ -374,8 +498,7 @@ describe(UsersManager.name, () => {
     const secrets = {
       appPasswords: [{ name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }]
     }
-    usersQueriesService.getUserSecrets = vi.fn().mockResolvedValue(secrets)
-    usersQueriesService.updateUserOrGuest = vi.fn().mockResolvedValue(true)
+    mockSecretsMutation(secrets as UserSecrets)
     cache.keys = vi.fn()
     cache.mdel = vi.fn()
 
@@ -401,11 +524,22 @@ describe(UsersManager.name, () => {
     usersQueriesService.selectUserProperties = vi.fn().mockResolvedValue({ password: 'HASH' })
     vi.mocked(comparePassword).mockResolvedValue(false)
     await expect(usersManager.updatePassword(userTest, { oldPassword: 'a', newPassword: 'b' })).rejects.toThrow('Password mismatch')
+    vi.mocked(comparePassword).mockClear()
+    await expect(usersManager.updatePassword(userTest, { oldPassword: 'same-password', newPassword: 'same-password' })).rejects.toThrow(
+      'Password mismatch'
+    )
+    expect(comparePassword).toHaveBeenCalledWith('same-password', 'HASH')
     vi.mocked(comparePassword).mockResolvedValue(true)
     ;(bcrypt.hash as unknown as Mock).mockResolvedValue('HASHED')
     usersQueriesService.updateUserOrGuest = vi.fn().mockResolvedValue(true)
     await expect(usersManager.updatePassword(userTest, { oldPassword: 'a', newPassword: 'b' })).resolves.toBeUndefined()
     expect(usersQueriesService.updateUserOrGuest).toHaveBeenCalledWith(userTest.id, { password: 'HASHED' })
+    const oidcUser = new UserModel({ ...generateUserTest(), authSession: AUTH_SESSION.OIDC } as any, false)
+    vi.mocked(comparePassword).mockClear()
+    ;(bcrypt.hash as unknown as Mock).mockResolvedValue('OIDC_HASHED')
+    await expect(usersManager.updatePassword(oidcUser, { oldPassword: 'local-password', newPassword: 'local-password' })).resolves.toBeUndefined()
+    expect(comparePassword).not.toHaveBeenCalled()
+    expect(usersQueriesService.updateUserOrGuest).toHaveBeenCalledWith(oidcUser.id, { password: 'OIDC_HASHED' })
     usersQueriesService.updateUserOrGuest = vi.fn().mockResolvedValue(false)
     usersQueriesService.selectUserProperties = vi.fn().mockResolvedValue({ password: 'HASH' })
     vi.mocked(comparePassword).mockResolvedValue(true)
@@ -468,6 +602,31 @@ describe(UsersManager.name, () => {
     expect(preserve.isActive).toBeUndefined()
   })
 
+  it('should lock the user row while mutating secrets', async () => {
+    const lock = vi.fn().mockResolvedValue([{ secrets: { twoFaSecret: 'old-secret', appPasswords: [{ name: 'existing' }] } }])
+    const selectLimit = vi.fn().mockReturnValue({ for: lock })
+    const selectWhere = vi.fn().mockReturnValue({ limit: selectLimit })
+    const from = vi.fn().mockReturnValue({ where: selectWhere })
+    const select = vi.fn().mockReturnValue({ from })
+    const updateWhere = vi.fn().mockResolvedValue([{ affectedRows: 1 }])
+    const set = vi.fn().mockReturnValue({ where: updateWhere })
+    const update = vi.fn().mockReturnValue({ set })
+    const tx = { select, update }
+    const transaction = vi.fn().mockImplementation(async (callback) => callback(tx))
+    const usersQueries = new UsersQueries({ transaction } as any, {} as Cache)
+
+    const result = await usersQueries.mutateUserSecrets(userTest.id, (secrets) => ({
+      result: 'updated',
+      secrets: { ...secrets, twoFaSecret: 'new-secret' }
+    }))
+
+    expect(result).toBe('updated')
+    expect(lock).toHaveBeenCalledWith('update')
+    expect(set).toHaveBeenCalledWith({
+      secrets: { twoFaSecret: 'new-secret', appPasswords: [{ name: 'existing' }] }
+    })
+  })
+
   it('avatars advanced: generateIsNotExists, failure branches, base64 fallback', async () => {
     await ensurePaths()
     usersManager.findUser = vi.fn().mockResolvedValue({ login: userTest.login, getInitials: () => 'UT' } as unknown as UserModel)
@@ -508,8 +667,10 @@ describe(UsersManager.name, () => {
 
     convertTempImageToPngMock.mockResolvedValueOnce(undefined)
     await expect(usersManager.updateAvatar(mkReq('image/png', okStream()) as any)).resolves.toBeUndefined()
-    const expectedSrc = path.join(userTest.tmpPath, 'avatar.png')
+    const expectedSrc = convertTempImageToPngMock.mock.calls[convertTempImageToPngMock.mock.calls.length - 1][0]
     const expectedDst = path.join(userTest.homePath, 'avatar.png')
+    expect(path.dirname(expectedSrc)).toBe(userTest.tmpPath)
+    expect(path.basename(expectedSrc)).toMatch(/^~tmp-avatar-[a-z0-9-]+-avatar\.png$/)
     expect(convertTempImageToPngMock).toHaveBeenLastCalledWith(expectedSrc, expectedDst)
   })
 
@@ -852,7 +1013,7 @@ describe(UsersManager.name, () => {
     usersQueriesService.isGuestManager = vi.fn().mockResolvedValue({ id: 9, login: 'guest' })
     const delSpy = vi.spyOn(adminUsersManager, 'deleteUserOrGuest').mockResolvedValue(undefined)
     await expect(usersManager.deleteGuest(userTest, 9)).resolves.toBeUndefined()
-    expect(delSpy).toHaveBeenCalledWith(9, 'guest', { deleteSpace: true, isGuest: true })
+    expect(delSpy).toHaveBeenCalledWith(9, 'guest', { deleteSpace: true })
   })
 
   it('proxies forward search + online + whitelist', async () => {

@@ -6,6 +6,7 @@ import { UserModel } from '../../../../applications/users/models/user.model'
 import { configuration } from '../../../../configuration/config.environment'
 import { TWO_FA_HEADER_CODE, TWO_FA_HEADER_PASSWORD } from '../../../constants/auth'
 import { FastifyAuthenticatedRequest } from '../../../interfaces/auth-request.interface'
+import { AUTH_SESSION } from '../../auth-providers.constants'
 import { AuthProvider2FA } from '../auth-provider-two-fa.service'
 import type { TwoFaVerifyDto } from '../auth-two-fa.dtos'
 import type { TwoFaVerifyResult } from '../auth-two-fa.interfaces'
@@ -54,6 +55,20 @@ describe(AuthTwoFaVerificationOrPasswordGuard.name, () => {
     expect(authProvider2FA.loadUser).toHaveBeenCalledWith(userWithTotp.id, '127.0.0.1')
     expect(authProvider2FA.verifyUserPassword).not.toHaveBeenCalled()
     expect(authProvider2FA.verify).toHaveBeenCalledWith({ code: '123456' }, context.switchToHttp().getRequest())
+  })
+
+  it('should not skip step-up verification for OIDC sessions', async () => {
+    authProvider2FA.loadUser.mockResolvedValueOnce(userWithTotp).mockResolvedValueOnce(userWithoutTotp)
+    authProvider2FA.verifyUserPassword.mockResolvedValue(undefined)
+    mockVerifyResult(authProvider2FA, { success: true, message: '' })
+
+    const totpContext = makeContext({ [TWO_FA_HEADER_CODE]: '123456' }, { authSession: AUTH_SESSION.OIDC })
+    await expect(guard.canActivate(totpContext)).resolves.toBe(true)
+    expect(authProvider2FA.verify).toHaveBeenCalledWith({ code: '123456' }, totpContext.switchToHttp().getRequest())
+
+    await expect(guard.canActivate(makeContext({ [TWO_FA_HEADER_PASSWORD]: 'password' }, { authSession: AUTH_SESSION.OIDC }))).resolves.toBe(true)
+    expect(authProvider2FA.verifyUserPassword).toHaveBeenCalledWith(userWithoutTotp, 'password', '127.0.0.1')
+    expect(authProvider2FA.verify).toHaveBeenCalledTimes(1)
   })
 
   it('should require the current password instead of TOTP when the user has no TOTP enabled', async () => {
@@ -114,10 +129,10 @@ function mockVerifyResult(authProvider2FA: DeepMocked<AuthProvider2FA>, result: 
   ;(authProvider2FA.verify as unknown as MockInstance<VerifyWithoutLogin>).mockResolvedValue(result)
 }
 
-function makeContext(headers: Record<string, string> = {}): DeepMocked<ExecutionContext> {
+function makeContext(headers: Record<string, string> = {}, user: Partial<UserModel> = {}): DeepMocked<ExecutionContext> {
   const context = createMock<ExecutionContext>()
   context.switchToHttp().getRequest.mockReturnValue({
-    user: { id: 1 },
+    user: { id: 1, ...user },
     ip: '127.0.0.1',
     headers
   } as FastifyAuthenticatedRequest)

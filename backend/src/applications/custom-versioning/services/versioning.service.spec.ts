@@ -54,6 +54,7 @@ import { VersionInsert, VersionRow } from '../interfaces/version.interface'
 import { blobPathFromRoot } from '../utils/paths'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersioningService } from './versioning.service'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 const versionsConfig = configuration.applications.files.versions as any
 
@@ -450,7 +451,7 @@ describe(VersioningService.name, () => {
     expect(ensurer.ensureFileId).toHaveBeenCalledTimes(2)
     // The lookup is by (in-space dir path, name) — never a URL, never absolute.
     const [, , props] = ensurer.ensureFileId.mock.calls[0]
-    expect(props).toMatchObject({ path: 'docs', name: 'report.txt', isDir: false, id: 0 })
+    expect(props).toMatchObject({ path: 'docs', name: 'report.txt', isDir: false, id: NO_CLIENT_FILE_ID })
   })
 
   it('passes path "." for a root-level file, matching how files.path stores it', async () => {

@@ -1,26 +1,14 @@
 import { Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
-import path from 'node:path'
 import { FILE_OPERATION } from '../constants/operations'
-import { isCrossDevice, walkDir } from './files'
+import { isInternalTemporaryEntry, walkDir } from './files'
 import { FileTaskProps, FileTaskStatus } from '../models/file-task'
 
-export function taskTemporaryPrefix(cacheKey: string): string {
-  return `~${cacheKey}-`
+export function isCrossDeviceError(error: unknown): error is NodeJS.ErrnoException {
+  return (error as NodeJS.ErrnoException)?.code === 'EXDEV'
 }
 
-export function taskTemporaryPath(parentPath: string, cacheKey: string, name: string): string {
-  return path.join(parentPath, `${taskTemporaryPrefix(cacheKey)}${path.basename(name)}`)
-}
-
-export async function createTaskTemporaryDir(parentPath: string, cacheKey: string, name: string): Promise<string> {
-  await fs.mkdir(parentPath, { recursive: true })
-  const temporaryPath = taskTemporaryPath(parentPath, cacheKey, name)
-  await fs.mkdir(temporaryPath)
-  return temporaryPath
-}
-
-export async function isTaskCancellable(type: FILE_OPERATION, srcPath: string, dstPath?: string): Promise<boolean> {
+export function isTaskCancellable(type: FILE_OPERATION, dstPath?: string): boolean {
   switch (type) {
     case FILE_OPERATION.COPY:
     case FILE_OPERATION.DOWNLOAD:
@@ -29,12 +17,9 @@ export async function isTaskCancellable(type: FILE_OPERATION, srcPath: string, d
       return true
     case FILE_OPERATION.MOVE:
     case FILE_OPERATION.DELETE:
-      if (!dstPath) return false
-      try {
-        return await isCrossDevice(srcPath, dstPath)
-      } catch {
-        return false
-      }
+      // The real rename capability is only authoritative at execution time.
+      // Supplying a signal keeps the streamed EXDEV fallback cancellable.
+      return Boolean(dstPath)
     default:
       return false
   }
@@ -63,7 +48,8 @@ export async function countDirEntriesAndSize(rPath: string): Promise<Pick<FileTa
         }
       }
     },
-    ignoredErrors
+    ignoredErrors,
+    (entry) => !isInternalTemporaryEntry(entry.name)
   )
 
   return entriesCount

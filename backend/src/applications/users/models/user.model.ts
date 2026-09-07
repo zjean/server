@@ -1,15 +1,16 @@
 import { Exclude, Expose } from 'class-transformer'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import type { AUTH_SESSION } from '../../../authentication/providers/auth-providers.constants'
 import { popFromObject } from '../../../common/shared'
 import { configuration } from '../../../configuration/config.environment'
 import { isPathInside } from '../../files/utils/files'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
-import { GUEST_PERMISSION, USER_PATH, USER_PERMISSION, USER_PERMS_SEP, USER_ROLE } from '../constants/user'
+import { GUEST_PERMISSION, USER_PERMISSION, USER_PERMS_SEP, USER_ROLE, USER_TMP_DIRECTORY } from '../constants/user'
 import type { Owner } from '../interfaces/owner.interface'
 import type { UserSecrets } from '../interfaces/user-secrets.interface'
 import type { User } from '../schemas/user.interface'
-import { isSafePathSegment } from '../utils/login'
+import { isSafePathSegment, validateUserId } from '../utils/login'
 
 export class UserModel implements User {
   id: number
@@ -34,6 +35,8 @@ export class UserModel implements User {
   createdAt: Date
   // exclusions
   @Exclude()
+  externalId: string | null
+  @Exclude()
   password: string
   @Exclude()
   secrets: UserSecrets
@@ -47,6 +50,7 @@ export class UserModel implements User {
   // outside db schema
   fullName: string
   impersonated?: boolean
+  authSession?: AUTH_SESSION
   avatarBase64?: string
   // permissions as a list
   applications: string[] = []
@@ -70,7 +74,7 @@ export class UserModel implements User {
   private _homePath: string
 
   get homePath(): string {
-    return (this._homePath ||= UserModel.getHomePath(this.login, this.isGuest, this.isLink))
+    return (this._homePath ||= this.isLink ? UserModel.getLinkHomePath(this.id) : UserModel.getHomePath(this.login))
   }
 
   private _filesPath: string
@@ -88,13 +92,7 @@ export class UserModel implements User {
   private _tmpPath: string
 
   get tmpPath(): string {
-    return (this._tmpPath ||= path.join(this.homePath, USER_PATH.TMP))
-  }
-
-  private _tasksPath: string
-
-  get tasksPath(): string {
-    return (this._tasksPath ||= path.join(this.tmpPath, USER_PATH.TASKS))
+    return (this._tmpPath ||= path.join(this.homePath, USER_TMP_DIRECTORY))
   }
 
   @Expose()
@@ -132,14 +130,11 @@ export class UserModel implements User {
     return this.secrets?.appPasswords?.length || 0
   }
 
-  static getHomePath(userLogin: string, isGuest = false, isLink = false): string {
+  static getHomePath(userLogin: string): string {
     if (!isSafePathSegment(userLogin)) {
       throw new Error('User login must be a single path segment')
     }
-    const basePath =
-      isGuest || isLink
-        ? path.join(configuration.applications.files.tmpPath, isGuest ? 'guests' : 'links')
-        : configuration.applications.files.usersPath
+    const basePath = configuration.applications.files.usersPath
     const homePath = path.resolve(basePath, userLogin)
     if (!isPathInside(basePath, homePath)) {
       throw new Error('User login resolves outside user data directory')
@@ -155,8 +150,22 @@ export class UserModel implements User {
     return path.join(UserModel.getHomePath(userLogin), SPACE_REPOSITORY.TRASH)
   }
 
-  static getTmpPath(userLogin: string, isGuest = false, isLink = false): string {
-    return path.join(UserModel.getHomePath(userLogin, isGuest, isLink), USER_PATH.TMP)
+  static getTmpPath(userLogin: string): string {
+    return path.join(UserModel.getHomePath(userLogin), USER_TMP_DIRECTORY)
+  }
+
+  static getLinkHomePath(userId: number): string {
+    validateUserId(userId)
+    const basePath = configuration.applications.files.linksPath
+    const homePath = path.resolve(basePath, String(userId))
+    if (!isPathInside(basePath, homePath)) {
+      throw new Error('Link user id resolves outside link data directory')
+    }
+    return homePath
+  }
+
+  static getLinkTmpPath(userId: number): string {
+    return path.join(UserModel.getLinkHomePath(userId), USER_TMP_DIRECTORY)
   }
 
   static getRepositoryPath(userLogin: string, inTrash = false): string {
@@ -179,12 +188,10 @@ export class UserModel implements User {
   }
 
   async makePaths(): Promise<void> {
-    if (this.isGuest || this.isLink) {
-      await fs.mkdir(this.tasksPath, { recursive: true })
-    } else {
-      for (const p of [this.filesPath, this.trashPath, this.tasksPath]) {
-        await fs.mkdir(p, { recursive: true })
-      }
+    if (this.isLink) return
+    const paths = this.isGuest ? [this.tmpPath] : [this.filesPath, this.trashPath, this.tmpPath]
+    for (const p of paths) {
+      await fs.mkdir(p, { recursive: true })
     }
   }
 

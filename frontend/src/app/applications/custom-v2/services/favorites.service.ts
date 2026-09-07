@@ -1,71 +1,134 @@
 import { HttpClient } from '@angular/common/http'
 import { inject, Injectable, signal } from '@angular/core'
-import { API_CUSTOM_FAVORITES } from '@sync-in-server/backend/src/applications/custom-favorites/constants/routes'
-import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
+import { API_FILES_FAVORITES } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import type { DeleteFileFavoriteDto, FileFavoriteDto } from '@sync-in-server/backend/src/applications/files/dto/file-favorite.dto'
+import type { FileFavorite, FileFavoriteIdentity } from '@sync-in-server/backend/src/applications/files/schemas/file-favorite.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
 
-// custom-v2-owned favorites state. Deliberately self-contained — it does NOT
-// touch the upstream StoreService or FilesService, so an upstream sync never
-// has to reckon with fork-only favorite state. Two signals back the two views:
-//   - `favorites`     → the Favorites screen list (full FileFavorite rows)
-//   - `favoriteIds`   → a Set used by the file browser to render the star
-//                       indicator + drive the context-menu label cheaply.
+// Any browse row (or inspector selection) whose star this service can report on.
+export interface FavoritableFile {
+  id: number
+  isFavorite?: boolean
+}
+
+// custom-v2-owned favorites state, on top of UPSTREAM's favorites backend
+// (upstream shipped the feature in 2.5.0, commit d3724ec5; the fork's own table,
+// module and endpoints are gone — see
+// docs/plans/2026-09-07-favorites-upstream-adoption-plan.md).
+//
+// Per-row star state is AUTHORITATIVE on the browse response (`isFavorite` on each
+// file), so the fork's old `GET /ids` request — one per directory opened — is gone.
+// What remains here is a thin optimistic OVERRIDE layer on top of it, which has to
+// be shared: two independent consumers must agree on an in-flight toggle — the file
+// browser rows and the inspector panel, and the panel cannot reach the rows.
 @Injectable({ providedIn: 'root' })
 export class FavoritesService {
   private readonly http = inject(HttpClient)
 
   readonly favorites = signal<FileFavorite[]>([])
-  readonly favoriteIds = signal<Set<number>>(new Set())
 
-  loadFavorites(limit = 100): void {
-    this.http.get<FileFavorite[]>(API_CUSTOM_FAVORITES, { params: { limit } }).subscribe({
+  // fileId -> desired flag, pending a fresh browse response. Empty in the common case.
+  private readonly overrides = signal<ReadonlyMap<number, boolean>>(new Map())
+
+  // The star for one row: an in-flight toggle wins, otherwise the browse response.
+  isFavorite(file: FavoritableFile | null | undefined): boolean {
+    if (!file) return false
+    return this.overrides().get(file.id) ?? !!file.isFavorite
+  }
+
+  // Optimistically flip, fire, and roll back on failure. `onIdResolved` is how the
+  // caller learns that an unmaterialized file just acquired a real id.
+  toggle(spacePath: string, file: FavoritableFile, onIdResolved?: (realFileId: number) => void): void {
+    const id = file.id
+    const next = !this.isFavorite(file)
+    this.setOverride(id, next)
+    if (next) {
+      this.addFavorite(
+        spacePath,
+        id,
+        (realFileId) => {
+          if (realFileId === id) return
+          // Hold the flag under BOTH ids: the row still carries the negative one
+          // until the next browse, and the real one after it.
+          this.setOverride(realFileId, true)
+          onIdResolved?.(realFileId)
+        },
+        () => this.clearOverride(id)
+      )
+    } else {
+      this.removeFavorite(id, () => this.clearOverride(id))
+    }
+  }
+
+  // Called once a browse response has landed: its rows are authoritative, so every
+  // override is now either confirmed or superseded.
+  clearOverrides(): void {
+    if (this.overrides().size > 0) this.overrides.set(new Map())
+  }
+
+  private setOverride(fileId: number, isFavorite: boolean): void {
+    const next = new Map(this.overrides())
+    next.set(fileId, isFavorite)
+    this.overrides.set(next)
+  }
+
+  private clearOverride(fileId: number): void {
+    const next = new Map(this.overrides())
+    next.delete(fileId)
+    this.overrides.set(next)
+  }
+
+  // Upstream's endpoint takes no `limit`; it returns the user's whole list. The
+  // fork's old default was 100 (max 1000). Favorites lists are small by nature, so
+  // this is accepted rather than paginated client-side.
+  loadFavorites(): void {
+    this.http.get<FileFavorite[]>(API_FILES_FAVORITES).subscribe({
       next: (favs) => this.favorites.set(favs),
       error: (e) => console.error(e)
     })
   }
 
-  loadFavoriteIds(): void {
-    this.http.get<number[]>(`${API_CUSTOM_FAVORITES}/ids`).subscribe({
-      next: (ids) => this.favoriteIds.set(new Set(ids)),
-      error: (e) => console.error(e)
+  // `spacePath` is a Sync-in repository path (e.g. `files/<alias>/dir/name`) — its
+  // slashes are path separators that must reach the wildcard route intact.
+  // encodeUrl() percent-encodes each segment but preserves the slashes, so names
+  // containing reserved chars (#, %, ?) survive the round-trip.
+  //
+  // `fileId` may be NEGATIVE: the browse response gives an unmaterialized file a
+  // negative id, and upstream's POST materializes the row and returns the real one
+  // in `{ fileId }`. The caller MUST adopt that id (see `onResolved`) — a later
+  // DELETE is rejected by DeleteFileFavoriteDto's @Min(1) otherwise. This mirrors
+  // classic's `if (file.id < 0) file.id = fileId` in files.service.ts.
+  private addFavorite(spacePath: string, fileId: number, onResolved: (realFileId: number) => void, onError: () => void): void {
+    const body: FileFavoriteDto = { fileId }
+    this.http.post<FileFavoriteIdentity>(`${API_FILES_FAVORITES}/${encodeUrl(spacePath)}`, body).subscribe({
+      next: ({ fileId: realFileId }) => {
+        if (realFileId) onResolved(realFileId)
+        this.refreshIfLoaded()
+      },
+      error: (e) => {
+        onError()
+        console.error(e)
+      }
     })
   }
 
-  isFavorite(fileId: number): boolean {
-    return this.favoriteIds().has(fileId)
+  // Upstream's DELETE is id-addressed and carries its id in the BODY, so it must go
+  // through http.request — Angular's http.delete() cannot send one.
+  private removeFavorite(fileId: number, onError: () => void): void {
+    const body: DeleteFileFavoriteDto = { fileId }
+    this.http.request<void>('delete', API_FILES_FAVORITES, { body }).subscribe({
+      next: () => this.refreshIfLoaded(),
+      error: (e) => {
+        onError()
+        console.error(e)
+      }
+    })
   }
 
-  // Optimistically flip the Set so the star/menu update instantly, then fire
-  // the path-based add/remove. On error the Set rolls back to its prior state.
-  // `spacePath` is a Sync-in repository path (e.g. `files/<alias>/dir/name`) —
-  // its slashes are path separators that must reach the wildcard route intact.
-  // encodeUrl() percent-encodes each segment but preserves the slashes, so
-  // names containing reserved chars (#, %, ?) survive the round-trip.
-  toggle(spacePath: string, fileId: number, add: boolean): void {
-    const previous = this.favoriteIds()
-    const next = new Set(previous)
-    if (add) next.add(fileId)
-    else next.delete(fileId)
-    this.favoriteIds.set(next)
-
-    const url = `${API_CUSTOM_FAVORITES}/spaces/${encodeUrl(spacePath)}`
-    const onSuccess = (): void => {
-      // Keep the Favorites screen list coherent after a successful toggle.
-      // Only refresh when the list is already populated (i.e. the screen has
-      // been visited) — avoids an extra request on every browser toggle.
-      if (this.favorites().length > 0) this.loadFavorites()
-    }
-    const onError = (e: unknown): void => {
-      this.favoriteIds.set(previous)
-      console.error(e)
-    }
-    // Branch the subscribe rather than the Observable: post<FileFavorite> and
-    // delete<void> have incompatible emission types, so a shared `request`
-    // variable would be a union TS can't call .subscribe on.
-    if (add) {
-      this.http.post<FileFavorite>(url, {}).subscribe({ next: onSuccess, error: onError })
-    } else {
-      this.http.delete<void>(url).subscribe({ next: onSuccess, error: onError })
-    }
+  // Keep the Favorites screen list coherent after a successful toggle, but only
+  // when it is already populated (i.e. the screen has been visited) — avoids an
+  // extra request on every file-browser toggle.
+  private refreshIfLoaded(): void {
+    if (this.favorites().length > 0) this.loadFavorites()
   }
 }

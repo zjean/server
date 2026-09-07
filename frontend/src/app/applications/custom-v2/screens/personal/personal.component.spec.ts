@@ -42,7 +42,7 @@ describeFileBrowserContract({
   // In your personal space you are always the file owner, so the unlock always
   // carries forceAsFileOwner=true — classic's `inPersonalSpace` short-circuit.
   filesAreOwnedByUser: true,
-  navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'favorites.loadFavoriteIds'],
+  navSequence: ['breadcrumbs.set', 'folderSize.clear', 'http.get', 'favorites.clearOverrides'],
   // Personal's onFabSheetSelect has its own switch and never closes the sheet.
   fabSheetClosesOnSelect: false
 })

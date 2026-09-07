@@ -1,56 +1,51 @@
-import { HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
+import type { FileFavorite } from '../../files/schemas/file-favorite.interface'
+import { FilesFavoritesManager } from '../../files/services/files-favorites-manager.service'
+import { FilesFavoritesQueries } from '../../files/services/files-favorites-queries.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { getProps, isPathExists } from '../../files/utils/files'
-import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
-import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { UserModel } from '../../users/models/user.model'
-import { FavoriteContext } from '../interfaces/favorite-context.interface'
-import { FileFavorite } from '../interfaces/file-favorite.interface'
 import { FavoritesQueries } from './favorites-queries.service'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
-const FAVORITES_LIMIT_DEFAULT = 100
-const FAVORITES_LIMIT_MAX = 1000
-
+// NC mobile bridge over upstream's favorites (upstream shipped the feature in 2.5.0,
+// commit d3724ec5 — the fork's own table and controller are gone; see
+// docs/plans/2026-09-07-favorites-upstream-adoption-plan.md).
+//
+// This exists ONLY because custom-mobile-compat cannot call upstream's manager:
+//
+//   - NC PROPPATCH <oc:favorite> carries a PATH and no file id, while upstream's
+//     addFavorite(user, space, fileId) requires a client-supplied id. The path→id
+//     resolution below is what closes that gap.
+//   - NC PROPFIND needs a cheap id Set per listing; upstream has no such query.
+//     See FavoritesQueries for why its list method is not a substitute.
+//
+// Everything else delegates, so the NC surface and the v2 UI cannot drift apart.
 @Injectable()
 export class FavoritesManager {
-  private readonly logger = new Logger(FavoritesManager.name)
-
   constructor(
     private readonly favoritesQueries: FavoritesQueries,
-    private readonly filesQueries: FilesQueries,
-    private readonly spacesQueries: SpacesQueries,
-    private readonly sharesQueries: SharesQueries
+    private readonly filesFavoritesManager: FilesFavoritesManager,
+    private readonly filesFavoritesQueries: FilesFavoritesQueries,
+    private readonly filesQueries: FilesQueries
   ) {}
 
-  async getFavorites(user: UserModel, limit?: number): Promise<FileFavorite[]> {
-    const [spaceIds, shareIds] = await Promise.all([this.spacesQueries.spaceIds(user.id), this.sharesQueries.shareIds(user.id, +user.isAdmin)])
-    return this.favoritesQueries.getFavorites(user.id, spaceIds, shareIds, Math.min(limit ?? FAVORITES_LIMIT_DEFAULT, FAVORITES_LIMIT_MAX))
+  // Delegated verbatim. Rows the user can no longer reach come back with
+  // isDisabled: true and a raw owner-relative `path` — callers must skip those
+  // rather than treat `path` as addressable.
+  getFavorites(user: UserModel): Promise<FileFavorite[]> {
+    return this.filesFavoritesManager.getFavorites(user)
   }
 
   getFavoriteIds(user: UserModel): Promise<number[]> {
     return this.favoritesQueries.getFavoriteIdsForUser(user.id)
   }
 
-  async addFavorite(user: UserModel, space: SpaceEnv): Promise<FileFavorite> {
+  async addFavorite(user: UserModel, space: SpaceEnv): Promise<void> {
     const fileId = await this.getOrCreateFileId(space)
-    await this.favoritesQueries.addFavorite(user.id, fileId, this.favoriteContext(space))
-    const fav = await this.favoritesQueries.getFavoriteForFile(user.id, fileId)
-    if (!fav) throw new NotFoundException('Favorite not found after insert')
-    return fav
-  }
-
-  // Capture the per-user access context at favorite-time. `space.url` is the
-  // full repository path the user reached the file through (e.g.
-  // `files/personal/x/y.md`, `shares/<alias>/x`) — stored verbatim as the nav
-  // path. The space/share id lets the list re-check current access later.
-  // In the shares repository, `space.id` is the share id. Mirrors the
-  // location mapping in FilesRecents.
-  private favoriteContext(space: SpaceEnv): FavoriteContext {
-    if (space.inPersonalSpace) return { path: space.url, spaceId: null, shareId: null }
-    if (space.inSharesRepository) return { path: space.url, spaceId: null, shareId: space.id }
-    return { path: space.url, spaceId: space.id, shareId: null }
+    return this.filesFavoritesQueries.addFavorite(user.id, fileId)
   }
 
   async removeFavorite(user: UserModel, space: SpaceEnv): Promise<void> {
@@ -58,7 +53,7 @@ export class FavoritesManager {
     if (fileId === undefined) {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }
-    return this.favoritesQueries.removeFavorite(user.id, fileId)
+    return this.filesFavoritesQueries.removeFavorite(user.id, fileId)
   }
 
   private async getOrCreateFileId(space: SpaceEnv): Promise<number> {
@@ -66,8 +61,9 @@ export class FavoritesManager {
       throw new HttpException('Location not found', HttpStatus.NOT_FOUND)
     }
     const fileProps: FileProps = { ...(await getProps(space.realPath, space.dbFile.path)), id: undefined }
-    // no client-supplied fileId — pass 0 to skip the fast-path lookup
-    return this.filesQueries.getOrCreateSpaceFile(0, fileProps, space.dbFile)
+    // No client-supplied fileId — a NEGATIVE sentinel skips the lookup-by-id
+    // branch; 0 is rejected by upstream's assertValidFileId.
+    return this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, fileProps, space.dbFile)
   }
 
   private async getFileId(space: SpaceEnv): Promise<number | undefined> {

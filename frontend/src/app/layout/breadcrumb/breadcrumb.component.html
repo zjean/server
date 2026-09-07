@@ -2,12 +2,19 @@
   <div class="breadcrumb-content">
     @for (item of levels; track $index) {
       @if (!$first) {
-        <fa-icon [icon]="icons.faChevronRight" [fixedWidth]="false"></fa-icon>
+        <svg
+          [class.breadcrumb-mobile-hidden]="$index > 1"
+          [lucideIcon]="icons.LucideChevronRight">
+        </svg>
       }
-      <li routerLinkActive="active" [routerLinkActiveOptions]="{matrixParams: 'ignored', queryParams: 'ignored', paths: 'exact', fragment: 'ignored'}">
+      <li
+        [class.breadcrumb-mobile-active]="$index === 1"
+        [class.breadcrumb-mobile-hidden]="$index > 1"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{matrixParams: 'ignored', queryParams: 'ignored', paths: 'exact', fragment: 'ignored'}">
         <a [routerLink]="item.link">
           @if ($first && breadcrumbIcon) {
-            <fa-icon [icon]="breadcrumbIcon"></fa-icon>
+            <svg [lucideIcon]="breadcrumbIcon"></svg>
           }
           <span>{{ item.title }}</span>
         </a>

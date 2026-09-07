@@ -2,18 +2,16 @@ import { KeyValuePipe } from '@angular/common'
 import { HttpErrorResponse } from '@angular/common/http'
 import { Component, ElementRef, inject, OnInit, ViewChild } from '@angular/core'
 import { ActivatedRoute, Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
 import {
-  faAnchor,
-  faArrowDown,
-  faArrowRotateRight,
-  faArrowUp,
-  faCircleInfo,
-  faPen,
-  faPlus,
-  faRotate,
-  faUpload
-} from '@fortawesome/free-solid-svg-icons'
+  LucideAnchor,
+  LucideArrowDown,
+  LucideArrowUp,
+  LucideDynamicIcon,
+  LucideHardDriveUpload,
+  LucidePencil,
+  LucidePlus,
+  LucideRotateCw
+} from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
 import { SPACE_OPERATION, SPACE_ROLE } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { USER_PERMISSION } from '@sync-in-server/backend/src/applications/users/constants/user'
@@ -49,7 +47,7 @@ import { SpaceUserAnchorsDialogComponent } from './dialogs/space-user-anchors-di
   imports: [
     KeyValuePipe,
     L10nTranslateDirective,
-    FaIconComponent,
+    LucideDynamicIcon,
     UserAvatarStackComponent,
     VirtualScrollComponent,
     TooltipModule,
@@ -78,16 +76,15 @@ export class SpacesComponent implements OnInit {
   protected readonly TAB_MENU = TAB_MENU
   protected readonly icons = {
     SPACES: SPACES_ICON.SPACES,
-    SHARED: SPACES_ICON.SHARED_WITH_OTHERS,
-    faAnchor,
-    faArrowDown,
-    faArrowUp,
-    faRotate,
-    faArrowRotateRight,
-    faUpload,
-    faPlus,
-    faPen,
-    faCircleInfo
+    SHARES: SPACES_ICON.SHARES,
+    LucideAnchor,
+    LucideArrowDown,
+    LucideArrowUp,
+    LucideRotateCw,
+    LucideHardDriveUpload,
+    LucidePlus,
+    LucidePencil,
+    SELECTION: SPACES_ICON.SELECTION
   }
   // Sort
   protected tableHeaders: Record<'name' | 'managers' | 'members' | 'info' | 'permissions' | 'modified', TableHeaderConfig> = {
@@ -133,7 +130,6 @@ export class SpacesComponent implements OnInit {
       sortable: true
     }
   }
-  protected btnSortFields = { name: 'Name', managers: 'Managers', permissions: 'Permissions', modified: 'Modified' }
   protected loading = false
   protected spaces: SpaceModel[] = []
   protected selected: SpaceModel = null
@@ -160,7 +156,7 @@ export class SpacesComponent implements OnInit {
     this.loadSpaces()
     this.canCreateSpace = this.userService.userHavePermission(USER_PERMISSION.SPACES_ADMIN)
     this.layout.setBreadcrumbIcon(SPACES_ICON.SPACES)
-    this.layout.setBreadcrumbNav({ url: `/${SPACES_PATH.SPACES}/${SPACES_TITLE.SPACES}`, translating: true, sameLink: true })
+    this.layout.setBreadcrumbNav({ url: `/${SPACES_PATH.SPACES}/${SPACES_TITLE.COLLABORATIVE_SPACES}`, translating: true, sameLink: true })
     this.activatedRoute.queryParams.subscribe((params) => (this.focusOnSelect = params.select))
   }
 

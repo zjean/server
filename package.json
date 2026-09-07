@@ -1,7 +1,7 @@
 {
   "productName": "Sync-in",
   "name": "sync-in-server",
-  "version": "2.4.4-custom.1",
+  "version": "2.5.0-custom.1",
   "description": "The secure, open-source platform for file storage, sharing, collaboration, and syncing",
   "keywords": [
     "self-hosted",
@@ -79,6 +79,8 @@
     "release:clean": "rm -rf release",
     "bump:version": "npm run test && commit-and-tag-version",
     "bump:version:patch": "npm run test && commit-and-tag-version --release-as patch",
+    "bump:version:minor": "npm run test && commit-and-tag-version --release-as minor",
+    "bump:version:major": "npm run test && commit-and-tag-version --release-as major",
     "bump:version:dry": "npm run test && commit-and-tag-version --dry-run",
     "lint": "npm --ws run lint",
     "lint:staged": "npm --ws run lint:staged",
@@ -115,16 +117,13 @@
     }
   },
   "allowScripts": {
-    "core-js@3.49.0": true,
-    "fsevents@2.3.3": true,
-    "lmdb@3.5.1": true,
-    "msgpackr-extract@3.0.4": true,
-    "tesseract.js@7.0.0": true,
-    "esbuild@0.27.7": true,
-    "esbuild@0.18.20": true,
-    "esbuild@0.25.12": true,
-    "esbuild@0.28.1": true,
-    "@parcel/watcher@2.6.0": true,
-    "@swc/core@1.15.46": true
+    "fsevents": true,
+    "lmdb": true,
+    "msgpackr-extract": true,
+    "tesseract.js": true,
+    "esbuild": true,
+    "@parcel/watcher": true,
+    "core-js": true,
+    "@swc/core": true
   }
 }

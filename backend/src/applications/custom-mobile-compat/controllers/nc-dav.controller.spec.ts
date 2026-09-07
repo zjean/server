@@ -14,6 +14,7 @@ import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { NcFavoritesReportService } from '../services/nc-favorites-report.service'
 import { NcDavController } from './nc-dav.controller'
 import { Mock } from 'vitest'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // `getProps` does fs.stat. Mock it so the test doesn't need a real file on disk.
 // Partial mock (importActual): vitest is stricter than jest about missing named
@@ -103,7 +104,8 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
     expect(mockedDbFileFromSpace).toHaveBeenCalledWith(7, space)
     // Then the space-aware insert is invoked with fileId=0 (caller has no
     // existing id), the FS-derived fileProps, and the dbFile skeleton.
-    expect(spacesQueries.getOrCreateSpaceFile).toHaveBeenCalledWith(0, fileProps, { ownerId: 7, spaceId: 42, path: 'sub' })
+    // Sentinel, not 0: upstream's assertValidFileId rejects 0 since 2.5.0.
+    expect(spacesQueries.getOrCreateSpaceFile).toHaveBeenCalledWith(NO_CLIENT_FILE_ID, fileProps, { ownerId: 7, spaceId: 42, path: 'sub' })
     // The personal-space helper must NOT fire for shared-space writes.
     expect(spacesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
   })

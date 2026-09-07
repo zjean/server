@@ -29,9 +29,13 @@
     .sidebar-apps-menus {
       .menu-title {
         .logo-toggle {
-          > img.logo-toggle-spin-in {
+          > .sync-in-favicon.logo-toggle-spin-in {
             animation: logo-toggle-spin-in .45s $transition-fn both;
             transform-origin: 50% 50%;
+
+            &.icon-spin {
+              animation: icon-spin 1s infinite linear reverse;
+            }
           }
         }
       }

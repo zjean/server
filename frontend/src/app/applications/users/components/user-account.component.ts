@@ -2,8 +2,7 @@ import { KeyValuePipe } from '@angular/common'
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http'
 import { Component, inject, OnDestroy, OnInit } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faCopy, faKey } from '@fortawesome/free-solid-svg-icons'
+import { LucideCopy, LucideDynamicIcon, LucideKeyRound } from '@lucide/angular'
 import { COLLABORA_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/collabora-online/collabora-online.constants'
 import type { FileEditorProviders } from '@sync-in-server/backend/src/applications/files/editors/file-editor-providers.interface'
 import { ONLY_OFFICE_APP_LOCK } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
@@ -11,6 +10,7 @@ import { USER_PASSWORD_MIN_LENGTH } from '@sync-in-server/backend/src/applicatio
 import { UserAppPassword } from '@sync-in-server/backend/src/applications/users/interfaces/user-secrets.interface'
 import { WEBDAV_BASE_PATH } from '@sync-in-server/backend/src/applications/webdav/constants/routes'
 import { TWO_FA_HEADER_CODE, TWO_FA_HEADER_PASSWORD } from '@sync-in-server/backend/src/authentication/constants/auth'
+import { AUTH_SESSION } from '@sync-in-server/backend/src/authentication/providers/auth-providers.constants'
 import type { TwoFaSetup } from '@sync-in-server/backend/src/authentication/providers/two-fa/auth-two-fa.interfaces'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { BsModalRef } from 'ngx-bootstrap/modal'
@@ -45,7 +45,7 @@ import { UserAuthManageAppPasswordsDialogComponent } from './dialogs/user-auth-m
     TimeAgoPipe,
     PasswordStrengthBarComponent,
     L10nTranslateDirective,
-    FaIconComponent,
+    LucideDynamicIcon,
     StorageUsageComponent,
     InputPasswordComponent,
     KeyValuePipe
@@ -58,7 +58,7 @@ export class UserAccountComponent implements OnInit, OnDestroy {
   protected readonly allNotifications = Object.values(USER_NOTIFICATION_TEXT)
   protected readonly allOnlineStatus = USER_ONLINE_STATUS_LIST
   protected readonly passwordMinLength = USER_PASSWORD_MIN_LENGTH
-  protected readonly icons = { faCopy, faKey }
+  protected readonly icons = { LucideCopy, LucideKeyRound }
   protected user: UserType
   protected userAvatar: string = null
   protected webdavUrl = `${window.location.origin}/${WEBDAV_BASE_PATH}`
@@ -114,6 +114,10 @@ export class UserAccountComponent implements OnInit, OnDestroy {
     })
   }
 
+  get requiresCurrentPassword() {
+    return this.user?.authSession !== AUTH_SESSION.OIDC
+  }
+
   ngOnInit() {
     this.userService.refreshUser()
   }
@@ -135,7 +139,7 @@ export class UserAccountComponent implements OnInit, OnDestroy {
   }
 
   async submitPassword() {
-    if (!this.oldPassword) {
+    if (this.requiresCurrentPassword && !this.oldPassword) {
       this.layout.sendNotification('error', 'Configuration', 'Current password missing !')
       return
     }
@@ -151,7 +155,8 @@ export class UserAccountComponent implements OnInit, OnDestroy {
     if (auth2FaHeaders === false) {
       return
     }
-    this.userService.changePassword({ oldPassword: this.oldPassword, newPassword: this.newPassword }, auth2FaHeaders).subscribe({
+    const oldPassword = this.requiresCurrentPassword ? this.oldPassword : this.newPassword
+    this.userService.changePassword({ oldPassword, newPassword: this.newPassword }, auth2FaHeaders).subscribe({
       next: () => {
         this.oldPassword = ''
         this.newPassword = ''

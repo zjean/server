@@ -1,19 +1,22 @@
-<div class="sidebar-component-title">
-  @if (windows.length) {
-    <button (click)="onCloseAll()" class="btn btn-default">
-      <fa-icon [icon]="icons.faXmark"></fa-icon>
-    </button>
-  }
-  <span l10nTranslate>Windows Manager</span>
+<div class="sidebar-component-title justify-content-between position-relative">
+  <div class="sidebar-component-title-side"></div>
+  <div class="sidebar-component-title-label" l10nTranslate>Windows Manager</div>
+  <div class="sidebar-component-title-side">
+    @if (windows.length) {
+      <button (click)="onCloseAll()" class="btn btn-default" type="button" aria-label="Close all windows">
+        <svg [lucideIcon]="icons.LucideX"></svg>
+      </button>
+    }
+  </div>
 </div>
 <div class="sidebar-item" appAutoResize>
   @for (modal of windows; track modal.id) {
-    <div class="sidebar-item-container" (click)="onMaximize(modal)">
+    <div class="sidebar-item-container cursor-pointer" (click)="onMaximize(modal)">
       <div class="sidebar-item-content">
         <img [ngSrc]="modal.element.mimeUrl" alt="" width="28" height="28">
-        <div class="text-truncate fs-sm mx-1">{{ modal.element.name }}</div>
-        <button (click)="onClose($event, modal)" class="btn btn-xs btn-danger ms-auto">
-          <fa-icon [icon]="icons.faTimes"></fa-icon>
+        <div class="text-truncate fs-sm">{{ modal.element.name }}</div>
+        <button (click)="onClose($event, modal)" class="btn btn-xs btn-default ms-auto">
+          <svg class="fs-md" [lucideIcon]="icons.LucideX"></svg>
         </button>
       </div>
     </div>

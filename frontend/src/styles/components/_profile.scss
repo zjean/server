@@ -36,6 +36,26 @@
   margin: 0.4rem 0.6rem 0.2rem;
   flex: 1 1 auto !important;
   font-size: $font-size-sm;
+
+  .lucide {
+    font-size: $font-size-sm;
+  }
+}
+
+.profile-sync-in-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .25rem;
+
+  .sync-in-logo {
+    height: 30px;
+  }
+}
+
+.profile-sync-in-version {
+  font-size: $font-size-2xs;
+  opacity: .72;
 }
 
 .profile-user-img {

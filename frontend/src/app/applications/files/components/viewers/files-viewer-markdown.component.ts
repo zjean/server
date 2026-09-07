@@ -4,35 +4,36 @@ import { FormsModule } from '@angular/forms'
 import { redo, redoDepth, undo, undoDepth } from '@codemirror/commands'
 import { LanguageDescription } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faSquareMinus, faSquarePlus } from '@fortawesome/free-regular-svg-icons'
 import {
-  faArrowsLeftRightToLine,
-  faBold,
-  faCode,
-  faEye,
-  faFloppyDisk,
-  faHeading,
-  faImage,
-  faItalic,
-  faKeyboard,
-  faLink,
-  faListOl,
-  faListUl,
-  faLock,
-  faLockOpen,
-  faMagnifyingGlass,
-  faMinus,
-  faQuoteLeft,
-  faReply,
-  faShare,
-  faSpinner,
-  faSquareCheck,
-  faStrikethrough,
-  faTable,
-  faTrashCan,
-  faUnderline
-} from '@fortawesome/free-solid-svg-icons'
+  LucideBold,
+  LucideCode,
+  LucideDynamicIcon,
+  LucideEye,
+  LucideHeading,
+  LucideImage,
+  LucideItalic,
+  LucideKeyboard,
+  LucideLink,
+  LucideList,
+  LucideListOrdered,
+  LucideLoader,
+  LucideLock,
+  LucideLockOpen,
+  LucideMinus,
+  LucideQuote,
+  LucideRedo,
+  LucideSave,
+  LucideSearch,
+  LucideSquareCheck,
+  LucideSquareMinus,
+  LucideSquarePlus,
+  LucideStrikethrough,
+  LucideTable,
+  LucideTextWrap,
+  LucideTrash2,
+  LucideUnderline,
+  LucideUndo
+} from '@lucide/angular'
 import { Editor, Extension, type Range } from '@tiptap/core'
 import Image, { type SetImageOptions } from '@tiptap/extension-image'
 import { TaskItem } from '@tiptap/extension-list'
@@ -80,7 +81,7 @@ const ExitInlineCodeOnEnter = Extension.create({
     FormsModule,
     ButtonCheckboxDirective,
     BsDropdownModule,
-    FaIconComponent,
+    LucideDynamicIcon,
     L10nTranslatePipe,
     L10nTranslateDirective,
     FilesViewerSearchComponent
@@ -129,33 +130,33 @@ export class FilesViewerMarkdownComponent extends FilesViewerEditableBase implem
     onSelectionUpdate: () => this.visualSearchAdapter.sync()
   })
   protected readonly icons = {
-    faArrowsLeftRightToLine,
-    faBold,
-    faCode,
-    faEye,
-    faFloppyDisk,
-    faHeading,
-    faImage,
-    faItalic,
-    faKeyboard,
-    faLink,
-    faListOl,
-    faListUl,
-    faLock,
-    faLockOpen,
-    faMagnifyingGlass,
-    faMinus,
-    faQuoteLeft,
-    faReply,
-    faShare,
-    faSquareCheck,
-    faSpinner,
-    faStrikethrough,
-    faTable,
-    faTrashCan,
-    faUnderline,
-    faSquareMinus,
-    faSquarePlus
+    LucideTextWrap,
+    LucideBold,
+    LucideCode,
+    LucideEye,
+    LucideSave,
+    LucideHeading,
+    LucideImage,
+    LucideItalic,
+    LucideKeyboard,
+    LucideLink,
+    LucideListOrdered,
+    LucideList,
+    LucideLock,
+    LucideLockOpen,
+    LucideSearch,
+    LucideMinus,
+    LucideQuote,
+    LucideUndo,
+    LucideRedo,
+    LucideSquareCheck,
+    LucideLoader,
+    LucideStrikethrough,
+    LucideTable,
+    LucideTrash2,
+    LucideUnderline,
+    LucideSquareMinus,
+    LucideSquarePlus
   }
   protected readonly headingLevels: MarkdownHeadingLevel[] = [1, 2, 3, 4]
   private readonly sourceEditor = viewChild<CodeEditor>('sourceEditor')
@@ -179,6 +180,7 @@ export class FilesViewerMarkdownComponent extends FilesViewerEditableBase implem
 
   @HostListener('document:keydown', ['$event'])
   onKeyDown(event: KeyboardEvent) {
+    if (!this.isActiveDialog()) return
     if (event.key === 'Escape' || event.key === 'Esc') {
       event.preventDefault()
       event.stopPropagation()

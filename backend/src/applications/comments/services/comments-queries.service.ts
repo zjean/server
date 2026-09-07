@@ -7,6 +7,7 @@ import { dbCheckAffectedRows, dbGetInsertedId } from '../../../infrastructure/da
 import { filePathSQL, files } from '../../files/schemas/files.schema'
 import { UserMailNotification } from '../../notifications/interfaces/user-mail-notification.interface'
 import { shares } from '../../shares/schemas/shares.schema'
+import { externalShareScopeSQL } from '../../shares/utils/external-share-scope.sql'
 import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { spacesRoots } from '../../spaces/schemas/spaces-roots.schema'
@@ -15,6 +16,7 @@ import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { USER_PERMISSION } from '../../users/constants/user'
 import { UserModel } from '../../users/models/user.model'
 import { userFullNameSQL, users } from '../../users/schemas/users.schema'
+import { COMMENTS_RECENTS_MAX_LIMIT } from '../constants/recents'
 import { CommentRecent } from '../interfaces/comment-recent.interface'
 import { Comment } from '../schemas/comment.interface'
 import { comments } from '../schemas/comments.schema'
@@ -40,7 +42,7 @@ export class CommentsQueries {
     return this.db
       .select({
         ...getTableColumns(comments),
-        author: { login: users.login, fullName: userFullNameSQL(users), email: users.email, isAuthor: sql`${users.id} = ${userId}`.mapWith(Boolean) },
+        author: { login: users.login, fullName: userFullNameSQL(users), email: users.email, isAuthor: eq(users.id, userId).mapWith(Boolean) },
         isFileOwner: sql`${+isFileOwner}`.mapWith(Boolean)
       })
       .from(comments)
@@ -100,6 +102,13 @@ export class CommentsQueries {
 
   getRecentsFromShares(userId: number, shareIds: number[], limit: number) {
     const shareFile: any = alias(files, 'shareFile')
+    const externalShareTargets = this.db
+      .select({ id: shares.id, parentId: shares.parentId, externalPath: shares.externalPath })
+      .from(shares)
+      .where(and(isNull(shares.fileId), isNotNull(shares.externalPath), inArray(shares.id, shareIds)))
+    const externalShareScope = externalShareScopeSQL(externalShareTargets, 'commentExternalShareScope', {
+      oneTargetPerStorage: true
+    })
     return this.db
       .select({
         id: comments.id,
@@ -109,7 +118,7 @@ export class CommentsQueries {
         file: {
           name: sql<string>`IF (${files.id} = ${shareFile.id}, ${shares.name}, ${files.name})`.as('name'),
           path: sql<string>`
-          CONCAT_WS('/', '${sql.raw(SPACE_REPOSITORY.SHARES)}',
+          CONCAT_WS('/', ${SPACE_REPOSITORY.SHARES},
             IF (${shareFile.id} IS NOT NULL,
               IF (${files.id} = ${shareFile.id}, NULL, REGEXP_REPLACE(${files.path}, ${filePathSQL(shareFile)}, ${shares.alias})),
               CONCAT_WS('/', ${shares.alias}, IF (${files.path} = '.', NULL, ${files.path}))
@@ -118,24 +127,28 @@ export class CommentsQueries {
           mime: files.mime,
           inTrash: sql<number>`0`.as('inTrash'),
           fromSpace: sql<number>`0`.as('fromSpace'),
-          fromShare: sql<number>`1`.as('fromShare')
+          fromShare: sql<number>`1`.as('fromShare'),
+          displayRootName: shares.name
         }
       } satisfies CommentRecent | SelectedFields<any, any>)
       .from(shares)
       .leftJoin(shareFile, eq(shareFile.id, shares.fileId))
       .leftJoin(spaces, eq(spaces.id, shareFile.spaceId))
       .leftJoin(spacesRoots, eq(spacesRoots.spaceId, spaces.id))
+      .leftJoin(externalShareScope.table, eq(externalShareScope.targetShareId, shares.id))
       .leftJoin(
         files,
         or(
           // file linked to the share
           eq(files.id, shareFile.id),
           // all files with an external share id
-          and(isNull(shareFile.id), eq(files.shareExternalId, shares.id)),
+          and(isNull(shareFile.id), eq(files.shareExternalId, externalShareScope.storageShareId)),
           // all files under the share
           and(
             isNotNull(shareFile.id),
             eq(shareFile.isDir, true),
+            // A file moved to trash leaves the storage scope of its former share root.
+            eq(files.inTrash, shareFile.inTrash),
             sql`${files.spaceId} <=> ${shareFile.spaceId}`,
             sql`${files.ownerId} <=> ${shareFile.ownerId}`,
             sql`${files.spaceExternalRootId} <=> ${shareFile.spaceExternalRootId}`,
@@ -163,8 +176,8 @@ export class CommentsQueries {
           name: files.name,
           path: sql<string>`
           CONCAT_WS('/', 
-            IF (${files.inTrash} = 0, '${sql.raw(SPACE_REPOSITORY.FILES)}', '${sql.raw(SPACE_REPOSITORY.TRASH)}'), 
-            '${sql.raw(SPACE_ALIAS.PERSONAL)}',
+            IF (${files.inTrash} = 0, ${SPACE_REPOSITORY.FILES}, ${SPACE_REPOSITORY.TRASH}),
+            ${SPACE_ALIAS.PERSONAL},
             IF (${files.path} = '.', NULL, ${files.path})
           )`.as('path'),
           mime: files.mime,
@@ -194,8 +207,8 @@ export class CommentsQueries {
           name: sql<string>`IF (${files.id} = ${spacesRoots.fileId}, ${spacesRoots.name}, ${files.name})`.as('name'),
           path: sql<string>`
           CONCAT_WS('/', 
-            IF (${files.inTrash} = 0, '${sql.raw(SPACE_REPOSITORY.FILES)}', '${sql.raw(SPACE_REPOSITORY.TRASH)}'), 
-            IF (${files.ownerId} = ${userId}, '${sql.raw(SPACE_ALIAS.PERSONAL)}', ${spaces.alias}),
+            IF (${files.inTrash} = 0, ${SPACE_REPOSITORY.FILES}, ${SPACE_REPOSITORY.TRASH}),
+            IF (${files.ownerId} = ${userId}, ${SPACE_ALIAS.PERSONAL}, ${spaces.alias}),
             IF (${spaceRootFile.id} IS NOT NULL,
                 IF (${files.id} = ${spaceRootFile.id}, NULL, IF (${files.path} = '.', NULL, REGEXP_REPLACE(${files.path}, ${filePathSQL(spaceRootFile)}, ${spacesRoots.alias}))),
                 NULLIF(CONCAT_WS('/', IF (${files.spaceExternalRootId} = ${spacesRoots.id}, ${spacesRoots.alias}, NULL), IF (${files.path} = '.', NULL, ${files.path})), '')
@@ -204,7 +217,8 @@ export class CommentsQueries {
           mime: files.mime,
           inTrash: sql<number>`${files.inTrash}`.as('inTrash'),
           fromSpace: sql<number>`IF (${files.ownerId} = ${userId}, 0, 1)`.as('fromSpace'),
-          fromShare: sql<number>`0`.as('fromShare')
+          fromShare: sql<number>`0`.as('fromShare'),
+          displayRootName: sql<string>`IF (${files.ownerId} = ${userId}, NULL, ${spaces.name})`.as('displayRootName')
         }
       } satisfies CommentRecent | SelectedFields<any, any>)
       .from(spaces)
@@ -221,6 +235,8 @@ export class CommentsQueries {
           and(
             isNotNull(spaceRootFile.id),
             eq(spaceRootFile.isDir, true),
+            // A file moved to trash leaves the storage scope of its former anchored root.
+            eq(files.inTrash, spaceRootFile.inTrash),
             sql`${files.ownerId} <=> ${spaceRootFile.ownerId}`,
             sql`${files.path} REGEXP CONCAT('^', IF(${spaceRootFile.path} = '.', CONCAT(${spaceRootFile.name}, '(/.*|)$'), CONCAT(${spaceRootFile.path}, '/')))`
           )
@@ -234,22 +250,25 @@ export class CommentsQueries {
       .limit(limit)
   }
 
-  async getRecentsFromUser(user: UserModel, limit = 10): Promise<CommentRecent[]> {
+  async getRecentsFromUser(user: UserModel, limit: number): Promise<CommentRecent[]> {
+    const recentsLimit = Math.min(limit, COMMENTS_RECENTS_MAX_LIMIT)
     const hasPersonal = user.havePermission(USER_PERMISSION.PERSONAL_SPACE)
-    const [spaceIds, shareIds] = await Promise.all([
-      user.havePermission(USER_PERMISSION.SPACES) ? this.spacesQueries.spaceIds(user.id) : Promise.resolve([]),
-      user.havePermission(USER_PERMISSION.SHARES) ? this.sharesQueries.shareIds(user.id, +user.isAdmin) : Promise.resolve([])
+    const [spaces, shares] = await Promise.all([
+      user.havePermission(USER_PERMISSION.SPACES) ? this.spacesQueries.spaceIdentities(user.id) : Promise.resolve([]),
+      user.havePermission(USER_PERMISSION.SHARES) ? this.sharesQueries.shareIdentities(user.id, +user.isAdmin) : Promise.resolve([])
     ])
+    const spaceIds = spaces.map(({ id }) => id)
+    const shareIds = shares.map(({ id }) => id)
     const hasSpaces = spaceIds.length > 0
     const hasShares = shareIds.length > 0
     const sourceCount = +hasPersonal + +hasSpaces + +hasShares
-    const sourceLimit = sourceCount > 1 ? limit * 2 : limit
-    const sources: Promise<CommentRecent[]>[] = [
-      ...(hasPersonal ? [this.getRecentsFromPersonal(user.id, sourceLimit) as Promise<CommentRecent[]>] : []),
-      ...(hasSpaces ? [this.getRecentsFromSpaces(user.id, spaceIds, sourceLimit) as Promise<CommentRecent[]>] : []),
-      ...(hasShares ? [this.getRecentsFromShares(user.id, shareIds, sourceLimit) as Promise<CommentRecent[]>] : [])
-    ]
-    const recents = (await Promise.all(sources)).flat().sort((a, b) => b.id - a.id)
-    return Array.from(new Map(recents.map((r) => [r.id, r])).values()).slice(0, limit)
+    const sourceLimit = sourceCount > 1 ? recentsLimit * 2 : recentsLimit
+    const sourceRecents = await Promise.all([
+      hasPersonal ? this.getRecentsFromPersonal(user.id, sourceLimit) : Promise.resolve([]),
+      hasSpaces ? this.getRecentsFromSpaces(user.id, spaceIds, sourceLimit) : Promise.resolve([]),
+      hasShares ? this.getRecentsFromShares(user.id, shareIds, sourceLimit) : Promise.resolve([])
+    ])
+    const recents = sourceRecents.flat().sort((a, b) => b.id - a.id)
+    return Array.from(new Map(recents.map((r) => [r.id, r])).values()).slice(0, recentsLimit)
   }
 }

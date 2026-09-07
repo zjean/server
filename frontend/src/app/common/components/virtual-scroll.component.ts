@@ -56,7 +56,7 @@ export class VirtualScrollComponent<T> implements OnInit, OnChanges, OnDestroy {
   @Input() resizeOffset = 134
   @Input() galleryMode = false
   @Input() items: T[] = []
-  @Input() childHeight = 36
+  @Input() childHeight = 38
   @Input() childWidth: number
   @Input() bufferAmount = 0
   protected viewPortItems: T[] = []
@@ -84,6 +84,10 @@ export class VirtualScrollComponent<T> implements OnInit, OnChanges, OnDestroy {
   @HostBinding('class.virtual-scroll-border-top')
   get withBorderTop(): boolean {
     return !this.galleryMode
+  }
+
+  get itemsPerRow(): number {
+    return this.dimensionsView?.itemsPerRow || 1
   }
 
   ngOnInit() {

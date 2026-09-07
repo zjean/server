@@ -40,7 +40,7 @@ export class NcShareMountResolverService {
   // No per-request caching here; callers that read mounts multiple times in
   // one request (PROPFIND home + child traversal) should cache at their layer.
   async listMounts(user: UserModel): Promise<NcShareMount[]> {
-    const rows = await this.sharesQueries.shareRootFiles(user, {})
+    const rows = await this.sharesQueries.shareRootFiles(user, null)
     const mounts: NcShareMount[] = []
     for (const r of rows) {
       const m = toMount(r)

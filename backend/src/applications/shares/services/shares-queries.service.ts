@@ -20,8 +20,10 @@ import {
 import { fileHasCommentsSubquerySQL } from '../../comments/schemas/comments.schema'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
 import type { FileSpace } from '../../files/interfaces/file-space.interface'
+import { filesFavorites } from '../../files/schemas/files-favorites.schema'
 import { filePathSQL, files } from '../../files/schemas/files.schema'
 import { links } from '../../links/schemas/links.schema'
+import type { SpaceBrowseDetails } from '../../spaces/interfaces/space-files.interface'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { spacesRoots } from '../../spaces/schemas/spaces-roots.schema'
 import { spaceGroupConcatPermissions, spaces } from '../../spaces/schemas/spaces.schema'
@@ -47,12 +49,13 @@ import type { ShareMembers } from '../schemas/share-members.interface'
 import type { Share } from '../schemas/share.interface'
 import { sharesMembers } from '../schemas/shares-members.schema'
 import { shares } from '../schemas/shares.schema'
+import { externalShareScopeSQL } from '../utils/external-share-scope.sql'
 
 @Injectable()
 export class SharesQueries {
   private readonly logger = new Logger(SharesQueries.name)
   private sharesListQuery: MySql2PreparedQuery<any> = null
-  private shareIdsQuery: MySql2PreparedQuery<any> = null
+  private shareIdentitiesQuery: MySql2PreparedQuery<any> = null
   private shareLinksListQuery: MySql2PreparedQuery<any> = null
   private shareWithMembersQuery: MySql2PreparedQuery<any> = null
   private sharePermissionsQuery: MySql2PreparedQuery<any> = null
@@ -63,13 +66,13 @@ export class SharesQueries {
     public readonly cache: Cache
   ) {}
 
-  async uniqueShareAlias(name: string): Promise<string> {
-    let alias = createSlug(name, true)
+  async uniqueShareAlias(name: string, excludedShareId?: number): Promise<string> {
+    const originalAlias = createSlug(name, true)
+    let alias = originalAlias
     let count = 0
-    // Personal space name is reserved
-    while (await this.shareExistsForAlias(alias)) {
+    while (await this.shareExistsForAlias(alias, excludedShareId)) {
       count += 1
-      alias = `${name}-${count}`
+      alias = `${originalAlias}-${count}`
     }
     return alias
   }
@@ -270,7 +273,7 @@ export class SharesQueries {
           linkId: links.id,
           login: linkUsers.login,
           name: links.name,
-          type: sql.raw(`'${MEMBER_TYPE.USER}'`),
+          type: sql`${MEMBER_TYPE.USER}`,
           description: links.email,
           permissions: shareMembers.permissions,
           createdAt: dateTimeUTC(shareMembers.createdAt)
@@ -473,16 +476,17 @@ export class SharesQueries {
   }
 
   @CacheDecorator()
-  async shareIds(userId: number, isAdmin: number): Promise<number[]> {
-    if (!this.shareIdsQuery) {
-      const unionAlias = union(
-        this.fromUserQuery({ id: shares.id }),
-        this.fromGroupsQuery({ id: shares.id }),
-        this.fromAdminSharesQuery({ id: shares.id })
-      ).as('unionAlias')
-      this.shareIdsQuery = this.db.select({ id: unionAlias.id }).from(unionAlias).groupBy(unionAlias.id).prepare()
+  async shareIdentities(userId: number, isAdmin: number): Promise<Pick<Share, 'id' | 'alias' | 'name'>[]> {
+    if (!this.shareIdentitiesQuery) {
+      const select = { id: shares.id, alias: shares.alias, name: shares.name }
+      const unionAlias = union(this.fromUserQuery(select), this.fromGroupsQuery(select), this.fromAdminSharesQuery(select)).as('unionAlias')
+      this.shareIdentitiesQuery = this.db
+        .select({ id: unionAlias.id, alias: unionAlias.alias, name: unionAlias.name })
+        .from(unionAlias)
+        .groupBy(unionAlias.id, unionAlias.alias, unionAlias.name)
+        .prepare()
     }
-    return (await this.shareIdsQuery.execute({ userId: userId, isAdmin: +isAdmin })).map((r: { id: number }) => r.id)
+    return this.shareIdentitiesQuery.execute({ userId: userId, isAdmin: +isAdmin })
   }
 
   async listShares(user: UserModel): Promise<ShareFile[]> {
@@ -646,7 +650,7 @@ export class SharesQueries {
     return r
   }
 
-  async shareRootFiles(user: UserModel, options: { withShares?: boolean; withHasComments?: boolean; withSyncs?: boolean }): Promise<FileProps[]> {
+  async shareRootFiles(user: UserModel, details: SpaceBrowseDetails): Promise<FileProps[]> {
     if (!this.shareRootFilesQuery) {
       const shareSpaceRoot: any = alias(spacesRoots, 'shareSpaceRoot')
       const originOwner: any = alias(users, 'originOwner')
@@ -667,7 +671,6 @@ export class SharesQueries {
         originSpaceExternalRootId: sql`${files.spaceExternalRootId}`.as('originSpaceExternalRootId'),
         originSpaceRootExternalPath: sql`IF (${spacesRoots.externalPath} IS NULL,
                                              ${shareSpaceRoot.externalPath}, ${spacesRoots.externalPath})`.as('originSpaceRootExternalPath'),
-        originShareExternalId: sql`IF (${shares.externalPath} IS NOT NULL, ${shares.parentId}, NULL)`.as('originShareExternalId'),
         rootId: sql`${shares.id}`.as('rootId'),
         rootAlias: shares.alias,
         rootName: shares.name,
@@ -688,9 +691,24 @@ export class SharesQueries {
         syncPathClientName: sql`JSON_VALUE(${syncClients.info}, '$.node')`.as('syncPathClientName')
       }
       const filters: SQL[] = [or(isNull(shares.ownerId), ne(shares.ownerId, sql.placeholder('userId')))]
+      const externalShareFilters = [...filters, isNotNull(shares.externalPath)]
+      const externalShareTargets = union(
+        this.fromUserQuery({ id: shares.id, parentId: shares.parentId, externalPath: shares.externalPath }, externalShareFilters),
+        this.fromGroupsQuery({ id: shares.id, parentId: shares.parentId, externalPath: shares.externalPath }, externalShareFilters),
+        this.fromAdminSharesQuery({ id: shares.id, parentId: shares.parentId, externalPath: shares.externalPath }, externalShareFilters)
+      )
+      // Make lock enrichment use the same storage namespace regardless of the
+      // descendant through which an external file is listed. File records and
+      // locks are indexed by the highest external ancestor, not by the immediate
+      // parent. `targetShares` applies the same user/group/admin filters as the
+      // main UNION, so recursion walks only the ancestors of visible shares.
+      // For A -> B -> C, the result maps A, B and C to the storage scope A.
+      // A missing or non-external parent stops the traversal, leaving the
+      // malformed external share without a scope so it can be filtered below.
+      const externalRootScope = externalShareScopeSQL(externalShareTargets, 'shareRootExternalScope')
       const fromUser = this.fromUserQuery(selectUnion, filters).$dynamic()
       const fromGroups = this.fromGroupsQuery(selectUnion, filters).$dynamic()
-      const fromAdminShares = this.fromAdminSharesQuery({ ...selectUnion, rootPermissions: sql.raw(`'${SHARE_ALL_OPERATIONS}'`) }, filters).$dynamic()
+      const fromAdminShares = this.fromAdminSharesQuery({ ...selectUnion, rootPermissions: sql`${SHARE_ALL_OPERATIONS}` }, filters).$dynamic()
       for (const q of [fromUser, fromGroups, fromAdminShares]) {
         q.leftJoin(shareSpaceRoot, and(isNull(shares.externalPath), isNull(shares.fileId), eq(shareSpaceRoot.id, shares.spaceRootId)))
           .leftJoin(
@@ -706,7 +724,7 @@ export class SharesQueries {
           .leftJoin(
             childShare,
             and(
-              eq(sql.placeholder('withShares'), sql.raw('1')),
+              eq(sql.placeholder('withDetails'), sql`1`),
               eq(childShare.ownerId, sql.placeholder('userId')),
               eq(childShare.parentId, shares.id),
               or(
@@ -721,11 +739,11 @@ export class SharesQueries {
               )
             )
           )
-          .leftJoin(syncClients, and(eq(sql.placeholder('withSyncs'), sql.raw('1')), eq(syncClients.ownerId, sql.placeholder('userId'))))
+          .leftJoin(syncClients, and(eq(sql.placeholder('withSyncs'), sql`1`), eq(syncClients.ownerId, sql.placeholder('userId'))))
           .leftJoin(
             syncPaths,
             and(
-              eq(sql.placeholder('withSyncs'), sql.raw('1')),
+              eq(sql.placeholder('withSyncs'), sql`1`),
               eq(syncPaths.clientId, syncClients.id),
               isNull(syncPaths.fileId),
               eq(syncPaths.shareId, shares.id)
@@ -751,7 +769,7 @@ export class SharesQueries {
           spaceAlias: unionAlias.originSpaceAlias,
           spaceExternalRootId: unionAlias.originSpaceExternalRootId,
           spaceRootExternalPath: unionAlias.originSpaceRootExternalPath,
-          shareExternalId: unionAlias.originShareExternalId
+          shareExternalId: externalRootScope.storageShareId
         },
         root: {
           id: unionAlias.rootId,
@@ -768,7 +786,7 @@ export class SharesQueries {
             fullName: unionAlias.rootOwnerFullName
           } satisfies Owner
         },
-        shares: sql`IF (${sql.placeholder('withShares')}, ${concatDistinctObjectsInArray(unionAlias.childShareId, {
+        shares: sql`IF (${sql.placeholder('withDetails')}, ${concatDistinctObjectsInArray(unionAlias.childShareId, {
           id: unionAlias.childShareId,
           alias: unionAlias.childShareAlias,
           name: unionAlias.childShareName,
@@ -779,16 +797,34 @@ export class SharesQueries {
           clientId: unionAlias.syncPathClientId,
           clientName: unionAlias.syncPathClientName
         })}, '[]')`.mapWith(dbParseJson),
-        hasComments: sql<boolean>`IF (${sql.placeholder('withHasComments')}, ${fileHasCommentsSubquerySQL(unionAlias.id)}, 0)`.mapWith(Boolean)
+        hasComments: sql<boolean>`IF (${sql.placeholder('withDetails')}, ${fileHasCommentsSubquerySQL(unionAlias.id)}, 0)`.mapWith(Boolean),
+        isFavorite: isNotNull(filesFavorites.fileId).mapWith(Boolean)
       }
-      this.shareRootFilesQuery = this.db.select(select).from(unionAlias).groupBy(unionAlias.rootId).prepare()
+      this.shareRootFilesQuery = this.db
+        .select(select)
+        .from(unionAlias)
+        .leftJoin(
+          filesFavorites,
+          and(
+            eq(sql.placeholder('withFavorites'), sql`1`),
+            eq(filesFavorites.userId, sql.placeholder('userId')),
+            eq(filesFavorites.fileId, unionAlias.id)
+          )
+        )
+        .leftJoin(externalRootScope.table, eq(externalRootScope.targetShareId, unionAlias.rootId))
+        // Non-external shares do not need this scope. An external share must
+        // resolve one: otherwise omit it so `updateRootFile()` cannot mistake
+        // the share-record owner for the owner of its external storage.
+        .where(or(isNull(unionAlias.rootExternalPath), isNotNull(externalRootScope.storageShareId)))
+        .groupBy(unionAlias.rootId)
+        .prepare()
     }
     const fps: FileProps[] = await this.shareRootFilesQuery.execute({
       userId: user.id,
       isAdmin: +user.isAdmin,
-      withHasComments: +!!options.withHasComments,
-      withShares: +!!options.withShares,
-      withSyncs: +!!options.withSyncs
+      withDetails: +!!details,
+      withFavorites: +(details?.favorites ?? false),
+      withSyncs: +(details?.syncs ?? false)
     })
     for (const f of fps) {
       f.root.permissions = uniquePermissions(f.root.permissions)
@@ -800,6 +836,20 @@ export class SharesQueries {
   async permissions(userId: number, shareAlias: string, isAdmin: number = 0): Promise<Partial<SpaceEnv>> {
     if (!this.sharePermissionsQuery) {
       const shareSpaceRoot: any = alias(spacesRoots, 'shareSpaceRoot')
+      // Make every file operation through a nested external share address the
+      // same file records and locks as an operation through its external root.
+      // This storage ancestry is independent from permission inheritance:
+      // `shares.parentId` remains the immediate permission parent, while this
+      // CTE exposes the highest ancestor used by `files.shareExternalId`.
+      // Only external child shares recurse; roots and non-external shares keep
+      // a null `externalParentShareId` and retain their existing fallback scope.
+      // A missing or non-external parent produces no root row, so the inner join
+      // denies access to a malformed external child before any file operation.
+      const targetShare = this.db
+        .select({ id: shares.id, parentId: shares.parentId, externalPath: shares.externalPath })
+        .from(shares)
+        .where(eq(shares.alias, sql.placeholder('shareAlias')))
+      const externalRootScope = externalShareScopeSQL(targetShare, 'permissionExternalScope', { mapExternalRootToSelf: false })
       const selectUnion: SpaceEnv | SelectedFields<any, any> = {
         id: shares.id,
         alias: shares.alias,
@@ -814,7 +864,6 @@ export class SharesQueries {
         rootPath: sql`IF (${files.id} IS NOT NULL, ${filePathSQL(files)}, NULL)`.as('rootPath'),
         rootInTrash: files.inTrash,
         rootExternalPath: shares.externalPath,
-        rootExternalParentShareId: sql`IF (${shares.externalPath} IS NOT NULL, ${shares.parentId}, NULL)`.as('rootExternalParentShareId'),
         rootSpaceRootId: sql`IF (${spacesRoots.id} IS NULL, ${shareSpaceRoot.id}, ${spacesRoots.id})`.as('rootSpaceRootId'),
         rootSpaceRootExternalPath: sql`IF (${spacesRoots.externalPath} IS NULL,
                                            ${shareSpaceRoot.externalPath}, ${spacesRoots.externalPath})`.as('rootSpaceRootExternalPath')
@@ -822,7 +871,7 @@ export class SharesQueries {
       const filters: SQL[] = [eq(shares.alias, sql.placeholder('shareAlias'))]
       const fromUser = this.fromUserQuery(selectUnion, filters).$dynamic()
       const fromGroups = this.fromGroupsQuery(selectUnion, filters).$dynamic()
-      const fromAdminShares = this.fromAdminSharesQuery({ ...selectUnion, permissions: sql.raw(`'${SHARE_ALL_OPERATIONS}'`) }, filters).$dynamic()
+      const fromAdminShares = this.fromAdminSharesQuery({ ...selectUnion, permissions: sql`${SHARE_ALL_OPERATIONS}` }, filters).$dynamic()
       for (const q of [fromUser, fromGroups, fromAdminShares]) {
         q.leftJoin(shareSpaceRoot, and(isNull(shares.externalPath), isNull(shares.fileId), eq(shareSpaceRoot.id, shares.spaceRootId)))
           .leftJoin(
@@ -863,10 +912,16 @@ export class SharesQueries {
             root: { id: unionAlias.rootSpaceRootId, externalPath: unionAlias.rootSpaceRootExternalPath }
           },
           externalPath: unionAlias.rootExternalPath,
-          externalParentShareId: unionAlias.rootExternalParentShareId
+          externalParentShareId: externalRootScope.storageShareId
         }
       }
-      this.sharePermissionsQuery = this.db.select(select).from(unionAlias).groupBy(unionAlias.id).limit(1).prepare()
+      this.sharePermissionsQuery = this.db
+        .select(select)
+        .from(unionAlias)
+        .innerJoin(externalRootScope.table, eq(externalRootScope.targetShareId, unionAlias.id))
+        .groupBy(unionAlias.id)
+        .limit(1)
+        .prepare()
     }
     // `userId` is used in `fromUserQuery` and `fromGroupsQuery` function
     // `isAdmin` is used in `fromAdminSharesQuery` function
@@ -898,9 +953,21 @@ export class SharesQueries {
     return r.length ? r[0].count : 0
   }
 
-  async clearCachePermissions(shareAlias: string, userIds: number[]) {
+  async clearCacheIdentities(userIds?: number[]) {
+    for (const userId of userIds ?? ['*']) {
+      const pattern = this.cache.genSlugKey(this.constructor.name, this.shareIdentities.name, userId, '*')
+      const keys = await this.cache.keys(pattern)
+      if (keys.length) {
+        this.logger.verbose({ tag: this.clearCacheIdentities.name, msg: `${JSON.stringify(keys)}` })
+        this.cache.mdel(keys).catch((e: Error) => this.logger.error({ tag: this.clearCacheIdentities.name, msg: `${e}` }))
+      }
+    }
+  }
+
+  async clearCachePermissions(shareAlias: string, userIds?: number[]) {
     // `permissions` argument must match with `this.permissions.name` function
-    for (const userId of userIds) {
+    await this.clearCacheIdentities(userIds)
+    for (const userId of userIds ?? ['*']) {
       const pattern = this.cache.genSlugKey(this.constructor.name, this.permissions.name, userId, shareAlias, '*')
       const keys = await this.cache.keys(pattern)
       if (keys.length) {
@@ -910,8 +977,11 @@ export class SharesQueries {
     }
   }
 
-  private shareExistsForAlias(alias: string): any | undefined {
-    return this.db.query.shares.findFirst({ columns: { id: true }, where: eq(shares.alias, alias) })
+  private shareExistsForAlias(alias: string, excludedShareId?: number): any | undefined {
+    return this.db.query.shares.findFirst({
+      columns: { id: true },
+      where: excludedShareId === undefined ? eq(shares.alias, alias) : and(eq(shares.alias, alias), ne(shares.id, excludedShareId))
+    })
   }
 
   private fromUserQuery(select: SelectedFields<any, any>, filters: SQL[] = []) {
@@ -934,7 +1004,7 @@ export class SharesQueries {
   }
 
   private fromAdminSharesQuery(select: SelectedFields<any, any>, filters: SQL[] = []) {
-    const where: SQL[] = [eq(sql.placeholder('isAdmin'), sql.raw('1')), isNull(shares.ownerId), ...filters]
+    const where: SQL[] = [eq(sql.placeholder('isAdmin'), sql`1`), isNull(shares.ownerId), ...filters]
     return this.db
       .select(select)
       .from(shares)

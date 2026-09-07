@@ -66,18 +66,28 @@ export class NcFavoritesReportService {
 
     const responses: unknown[] = []
     for (const fav of favs) {
-      const ncSub = ncSubpathForFavorite(fav.navPath, { spaceAlias: home.spaceAlias, rootAlias: home.rootAlias }, mounts)
+      // Upstream (2.5.0) marks a favorite the user can no longer reach as
+      // isDisabled, and leaves its `path` as the raw OWNER-relative files.path —
+      // not addressable. Emitting it would produce a phantom entry the client
+      // cannot open, so omit it.
+      if (fav.isDisabled) continue
+
+      // Upstream splits the address into `path` (repository-qualified PARENT) plus
+      // `name`, where the fork's own table stored one `navPath`. Recomposing them
+      // yields the same [repository, alias, ...path] segment list.
+      const navPath = `${fav.path}/${fav.name}`
+      const ncSub = ncSubpathForFavorite(navPath, { spaceAlias: home.spaceAlias, rootAlias: home.rootAlias }, mounts)
       if (ncSub === null) continue // not reachable under this home — omit
 
       // navPath IS the spaceEnv segment list ([repository, alias, ...path]) —
       // the same shape SpacesManager.spaceEnv consumes — so resolve straight
       // from it rather than rebuilding from the home-relative ncSub.
-      const segments = fav.navPath.split('/').filter(Boolean)
+      const segments = navPath.split('/').filter(Boolean)
       let space
       try {
         space = await this.spacesManager.spaceEnv(user, segments)
       } catch (e) {
-        this.logger.warn({ tag: this.respond.name, msg: `spaceEnv failed for favorite ${fav.navPath}: ${(e as Error).message}` })
+        this.logger.warn({ tag: this.respond.name, msg: `spaceEnv failed for favorite ${navPath}: ${(e as Error).message}` })
         continue
       }
 
@@ -87,7 +97,7 @@ export class NcFavoritesReportService {
       } catch (e) {
         // File gone from disk (favorite row outlived the file) — skip rather
         // than emit a phantom entry the client would fail to open.
-        this.logger.debug({ tag: this.respond.name, msg: `stat failed for favorite ${fav.navPath}: ${(e as Error).message}` })
+        this.logger.debug({ tag: this.respond.name, msg: `stat failed for favorite ${navPath}: ${(e as Error).message}` })
         continue
       }
 
@@ -95,7 +105,7 @@ export class NcFavoritesReportService {
       // parent URL to WebDAVFile, which encodeUrl-encodes once.
       const urlFilePath = `${NC_FILES_URL_PREFIX}/${user.login}/${ncSub}`
       const file = new WebDAVFile(props, path.posix.dirname(urlFilePath))
-      file.id = fav.id
+      file.id = fav.fileId
       responses.push(
         buildNcPropResponse(
           file,

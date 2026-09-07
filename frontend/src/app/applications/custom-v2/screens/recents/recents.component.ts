@@ -85,8 +85,10 @@ export class RecentsComponent implements OnInit {
 
   ngOnInit(): void {
     this.breadcrumbs.setBreadcrumbs([{ label: 'Recents', icon: 'clock' }])
-    this.filesService.loadRecents(RECENT_LIMIT)
-    this.commentsService.loadRecents(RECENT_LIMIT)
+    // Upstream 2.5.0 moved the limit server-side (c51e31fd), so these take no
+    // argument now. RECENT_LIMIT still caps what this screen RENDERS.
+    this.filesService.loadRecents()
+    this.commentsService.loadRecents()
   }
 
   // The addressable path FileThumb needs, and the one `openFile` navigates to.

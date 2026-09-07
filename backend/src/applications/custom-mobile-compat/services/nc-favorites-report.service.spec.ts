@@ -46,8 +46,24 @@ function fakeReply() {
 
 const user = { id: 7, login: 'alice', fullName: 'Alice' } as UserModel
 
+// Shaped like upstream's FileFavorite (files/schemas/file-favorite.interface.ts):
+// `path` is the repository-qualified PARENT and `name` the entry, so the service
+// recomposes the address. Callers still pass the full nav path for readability.
 function favorite(navPath: string, name: string, id = 100) {
-  return { id, name, isDir: false, mime: 'application/pdf', size: 5, mtime: Date.now(), ctime: Date.now(), isFavorite: true, navPath }
+  const parent = navPath.slice(0, navPath.length - name.length).replace(/\/$/, '')
+  return {
+    fileId: id,
+    id,
+    name,
+    path: parent,
+    isDir: false,
+    mime: 'application/pdf',
+    size: 5,
+    mtime: Date.now(),
+    ctime: Date.now(),
+    createdAt: new Date(),
+    isDisabled: false
+  }
 }
 
 describe('NcFavoritesReportService', () => {

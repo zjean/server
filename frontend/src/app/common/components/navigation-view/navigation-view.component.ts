@@ -1,78 +1,109 @@
-import { KeyValuePipe } from '@angular/common'
-import { ChangeDetectionStrategy, Component, EventEmitter, inject, Input, Output } from '@angular/core'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
-import { faArrowDown, faArrowUp, faSliders, faTh, faThLarge, faThList } from '@fortawesome/free-solid-svg-icons'
+import { ChangeDetectionStrategy, Component, EventEmitter, Output } from '@angular/core'
+import { LucideDynamicIcon, LucideGrid2x2, LucideList } from '@lucide/angular'
 import { L10nTranslateDirective } from 'angular-l10n'
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown'
-import { LayoutService } from '../../../layout/layout.service'
-import { originalOrderKeyValue } from '../../utils/functions'
+import type { ViewMode } from './interfaces/view-mode.interface'
 
-export interface ViewMode {
-  enabled: boolean
-  text: string
-  icon: IconDefinition
-  dimensions?: number
-  maxBadges?: number
-  image?: number
-  imageRes?: number
-  faSize?: number
-  textSize?: number
-  margins?: number
+const GALLERY_VIEW_MODE_STORAGE_KEY = 'galleryViewMode'
+const VIEW_MODE_STORAGE_KEY = 'viewMode'
+
+const GALLERY_VIEW_OPTIONS = [
+  { key: 'th', label: 'S' },
+  { key: 'thM', label: 'M' },
+  { key: 'thL', label: 'L' },
+  { key: 'thXl', label: 'XL' },
+  { key: 'thXxl', label: 'XXL' }
+] as const
+
+type GalleryViewModeKey = (typeof GALLERY_VIEW_OPTIONS)[number]['key']
+type ViewModeKey = 'tl' | GalleryViewModeKey
+
+const DEFAULT_GALLERY_VIEW_MODE: GalleryViewModeKey = 'thM'
+const DEFAULT_GALLERY_VIEW_MODE_INDEX = GALLERY_VIEW_OPTIONS.findIndex(({ key }) => key === DEFAULT_GALLERY_VIEW_MODE)
+
+const VIEW_MODES = {
+  tl: { enabled: false },
+  th: { enabled: true, maxBadges: 0, badgeSize: 10, dimensions: 96, image: 56, imageRes: 128, iconSize: 30, textSize: 12 },
+  thM: { enabled: true, maxBadges: 1, badgeSize: 11, dimensions: 112, image: 72, imageRes: 192, iconSize: 34, textSize: 12 },
+  thL: { enabled: true, maxBadges: 2, badgeSize: 12, dimensions: 152, image: 112, imageRes: 256, iconSize: 50, textSize: 13 },
+  thXl: { enabled: true, maxBadges: 6, badgeSize: 13, dimensions: 192, image: 152, imageRes: 512, iconSize: 65, textSize: 13 },
+  thXxl: {
+    enabled: true,
+    maxBadges: 6,
+    badgeSize: 14,
+    dimensions: 232,
+    image: 192,
+    imageRes: 1024,
+    iconSize: 80,
+    textSize: 14
+  }
+} satisfies Record<ViewModeKey, ViewMode>
+
+function isViewModeKey(value: string | null): value is ViewModeKey {
+  return !!value && Object.hasOwn(VIEW_MODES, value)
 }
+
+export type { ViewMode } from './interfaces/view-mode.interface'
 
 @Component({
   selector: 'app-navigation-view',
   templateUrl: 'navigation-view.component.html',
-  imports: [KeyValuePipe, BsDropdownModule, FaIconComponent, L10nTranslateDirective],
+  styleUrls: ['navigation-view.component.scss'],
+  imports: [BsDropdownModule, LucideDynamicIcon, L10nTranslateDirective],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NavigationViewComponent {
-  @Input() sortParams: { column: string; asc: boolean }
-  @Input() sortFields: Record<string, string>
   @Output() switchView = new EventEmitter<ViewMode>()
-  @Output() sortBy = new EventEmitter()
-  protected readonly originalOrderKeyValue = originalOrderKeyValue
-  protected readonly icons = { faSliders, faArrowDown, faArrowUp }
-  protected viewsMode: Record<string, ViewMode> = {
-    tl: { enabled: false, text: 'List', icon: faThList },
-    th: { enabled: true, text: 'S', icon: faTh, maxBadges: 0, dimensions: 96, image: 56, imageRes: 128, faSize: 30, textSize: 12, margins: 18 },
-    thM: { enabled: true, text: 'M', icon: faTh, maxBadges: 1, dimensions: 112, image: 72, imageRes: 192, faSize: 34, textSize: 12, margins: 18 },
-    thL: { enabled: true, text: 'L', icon: faTh, maxBadges: 2, dimensions: 152, image: 112, imageRes: 256, faSize: 50, textSize: 13, margins: 18 },
-    thXl: { enabled: true, text: 'XL', icon: faTh, maxBadges: 6, dimensions: 192, image: 152, imageRes: 512, faSize: 65, textSize: 13, margins: 18 },
-    thXxl: {
-      enabled: true,
-      text: 'XXL',
-      icon: faThLarge,
-      maxBadges: 6,
-      dimensions: 232,
-      image: 192,
-      imageRes: 1024,
-      faSize: 80,
-      textSize: 14,
-      margins: 18
+  protected readonly icons = { LucideGrid2x2, LucideList }
+  protected readonly galleryViewOptions = GALLERY_VIEW_OPTIONS
+  protected viewMode = this.getStoredViewMode()
+
+  currentView(): ViewMode {
+    return VIEW_MODES[this.viewMode]
+  }
+
+  protected setView(view: ViewModeKey) {
+    const currentViewMode = this.viewMode
+    const selectedView = VIEW_MODES[view]
+    if (view === currentViewMode) return
+    if (selectedView.enabled) {
+      localStorage.setItem(GALLERY_VIEW_MODE_STORAGE_KEY, view)
+    } else if (VIEW_MODES[currentViewMode].enabled) {
+      localStorage.setItem(GALLERY_VIEW_MODE_STORAGE_KEY, currentViewMode)
     }
-  }
-  private readonly layout = inject(LayoutService)
-
-  constructor() {
-    this.viewsMode.tl.text = this.layout.translateString(this.viewsMode.tl.text)
-  }
-
-  get viewMode() {
-    return localStorage.getItem('viewMode') || 'tl'
-  }
-
-  set viewMode(view: string) {
-    localStorage.setItem('viewMode', view)
-  }
-
-  currentView() {
-    return this.viewsMode[this.viewMode]
-  }
-
-  setView(view: string) {
     this.viewMode = view
-    this.switchView.emit(this.viewsMode[view])
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, view)
+    this.switchView.emit(selectedView)
+  }
+
+  protected get galleryModeEnabled() {
+    return this.currentView().enabled
+  }
+
+  protected get gallerySizeIndex() {
+    const index = GALLERY_VIEW_OPTIONS.findIndex(({ key }) => key === this.viewMode)
+    return index === -1 ? DEFAULT_GALLERY_VIEW_MODE_INDEX : index
+  }
+
+  protected get gallerySizeLabel() {
+    return GALLERY_VIEW_OPTIONS[this.gallerySizeIndex].label
+  }
+
+  protected setGallerySize(event: Event) {
+    const option = GALLERY_VIEW_OPTIONS[Number((event.target as HTMLInputElement).value)]
+    if (option) this.setView(option.key)
+  }
+
+  protected selectGalleryMode() {
+    if (this.galleryModeEnabled) return
+    const storedGalleryViewMode = localStorage.getItem(GALLERY_VIEW_MODE_STORAGE_KEY)
+    const galleryViewMode =
+      isViewModeKey(storedGalleryViewMode) && VIEW_MODES[storedGalleryViewMode].enabled ? storedGalleryViewMode : DEFAULT_GALLERY_VIEW_MODE
+    this.setView(galleryViewMode)
+  }
+
+  private getStoredViewMode(): ViewModeKey {
+    const storedViewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+    return isViewModeKey(storedViewMode) ? storedViewMode : 'tl'
   }
 }

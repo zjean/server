@@ -1,58 +1,53 @@
+import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
+import { Mock } from 'vitest'
+import { FilesFavoritesManager } from '../../files/services/files-favorites-manager.service'
+import { FilesFavoritesQueries } from '../../files/services/files-favorites-queries.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
-import { SharesQueries } from '../../shares/services/shares-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
-import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { UserModel } from '../../users/models/user.model'
 import { FavoritesManager } from './favorites-manager.service'
 import { FavoritesQueries } from './favorites-queries.service'
-import { Mock } from 'vitest'
 
 // Stub the fs-touching helpers so addFavorite/removeFavorite resolve a file id
-// without hitting disk — lets us assert the access-context mapping.
+// without hitting disk.
 vi.mock('../../files/utils/files', () => ({
   isPathExists: vi.fn().mockResolvedValue(true),
   getProps: vi.fn().mockResolvedValue({ name: 'x.md', path: '.', isDir: false, size: 1, mtime: 1, ctime: 1 })
 }))
+import * as filesUtils from '../../files/utils/files'
 
 // Build a minimal SpaceEnv-like object carrying just the fields the manager reads.
-const makeSpace = (over: Partial<SpaceEnv>): SpaceEnv =>
+const makeSpace = (over: Partial<SpaceEnv> = {}): SpaceEnv =>
   ({ id: 0, url: '', inPersonalSpace: false, inSharesRepository: false, realPath: '/tmp/x', dbFile: { path: '.' }, ...over }) as unknown as SpaceEnv
-
-// All injected deps are mocked with vi.fn().
 
 describe(FavoritesManager.name, () => {
   let moduleRef: TestingModule
   let service: FavoritesManager
-  let favoritesQueriesMock: { getFavorites: Mock; getFavoriteIdsForUser: Mock; addFavorite: Mock; getFavoriteForFile: Mock; removeFavorite: Mock }
+  let favoritesQueriesMock: { getFavoriteIdsForUser: Mock }
+  let filesFavoritesManagerMock: { getFavorites: Mock }
+  let filesFavoritesQueriesMock: { addFavorite: Mock; removeFavorite: Mock }
   let filesQueriesMock: { getOrCreateSpaceFile: Mock; getSpaceFileId: Mock }
-  let spacesQueriesMock: { spaceIds: Mock }
-  let sharesQueriesMock: { shareIds: Mock }
 
   const user = { id: 1, isAdmin: false } as unknown as UserModel
 
   beforeEach(async () => {
-    favoritesQueriesMock = {
-      getFavorites: vi.fn().mockResolvedValue([]),
-      getFavoriteIdsForUser: vi.fn().mockResolvedValue([11, 22]),
-      addFavorite: vi.fn().mockResolvedValue(undefined),
-      getFavoriteForFile: vi.fn().mockResolvedValue({ id: 9, isFavorite: true, navPath: 'files/personal/x' }),
-      removeFavorite: vi.fn().mockResolvedValue(undefined)
-    }
+    vi.mocked(filesUtils.isPathExists).mockResolvedValue(true)
+    favoritesQueriesMock = { getFavoriteIdsForUser: vi.fn().mockResolvedValue([11, 22]) }
+    filesFavoritesManagerMock = { getFavorites: vi.fn().mockResolvedValue([{ fileId: 9 }]) }
+    filesFavoritesQueriesMock = { addFavorite: vi.fn().mockResolvedValue(undefined), removeFavorite: vi.fn().mockResolvedValue(undefined) }
     filesQueriesMock = {
       getOrCreateSpaceFile: vi.fn().mockResolvedValue(9),
       getSpaceFileId: vi.fn().mockResolvedValue(9)
     }
-    spacesQueriesMock = { spaceIds: vi.fn().mockResolvedValue([]) }
-    sharesQueriesMock = { shareIds: vi.fn().mockResolvedValue([]) }
 
     moduleRef = await Test.createTestingModule({
       providers: [
         FavoritesManager,
         { provide: FavoritesQueries, useValue: favoritesQueriesMock },
-        { provide: FilesQueries, useValue: filesQueriesMock },
-        { provide: SpacesQueries, useValue: spacesQueriesMock },
-        { provide: SharesQueries, useValue: sharesQueriesMock }
+        { provide: FilesFavoritesManager, useValue: filesFavoritesManagerMock },
+        { provide: FilesFavoritesQueries, useValue: filesFavoritesQueriesMock },
+        { provide: FilesQueries, useValue: filesQueriesMock }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
@@ -67,36 +62,40 @@ describe(FavoritesManager.name, () => {
     expect(service).toBeDefined()
   })
 
-  it('getFavorites resolves spaceIds + shareIds then delegates with a capped limit', async () => {
-    await service.getFavorites(user, 9999)
-    expect(spacesQueriesMock.spaceIds).toHaveBeenCalledWith(1)
-    expect(sharesQueriesMock.shareIds).toHaveBeenCalledWith(1, 0)
-    expect(favoritesQueriesMock.getFavorites).toHaveBeenCalledWith(1, [], [], 1000)
+  it('getFavorites delegates to upstream FilesFavoritesManager verbatim', async () => {
+    await expect(service.getFavorites(user)).resolves.toEqual([{ fileId: 9 }])
+    expect(filesFavoritesManagerMock.getFavorites).toHaveBeenCalledWith(user)
   })
 
-  it('getFavorites defaults to 100 when no limit is supplied', async () => {
-    await service.getFavorites(user)
-    expect(favoritesQueriesMock.getFavorites).toHaveBeenCalledWith(1, [], [], 100)
-  })
-
-  it('getFavoriteIds delegates to favoritesQueries.getFavoriteIdsForUser', async () => {
-    const ids = await service.getFavoriteIds(user)
+  it('getFavoriteIds uses the fork-owned id query, not upstream list resolution', async () => {
+    await expect(service.getFavoriteIds(user)).resolves.toEqual([11, 22])
     expect(favoritesQueriesMock.getFavoriteIdsForUser).toHaveBeenCalledWith(1)
-    expect(ids).toEqual([11, 22])
+    expect(filesFavoritesManagerMock.getFavorites).not.toHaveBeenCalled()
   })
 
-  it('addFavorite stamps the PERSONAL context (no space/share) from the space url', async () => {
-    await service.addFavorite(user, makeSpace({ inPersonalSpace: true, url: 'files/personal/docs/x.md', id: 5 }))
-    expect(favoritesQueriesMock.addFavorite).toHaveBeenCalledWith(1, 9, { path: 'files/personal/docs/x.md', spaceId: null, shareId: null })
+  // The whole reason this bridge exists: NC PROPPATCH carries a path, not a file id.
+  it('addFavorite resolves the path to a file id, materializing the row if needed', async () => {
+    await service.addFavorite(user, makeSpace({ inPersonalSpace: true, url: 'files/personal/docs/x.md' }))
+    expect(filesQueriesMock.getOrCreateSpaceFile).toHaveBeenCalled()
+    expect(filesFavoritesQueriesMock.addFavorite).toHaveBeenCalledWith(1, 9)
   })
 
-  it('addFavorite stamps the SPACE context with the space id', async () => {
-    await service.addFavorite(user, makeSpace({ url: 'files/team/x.md', id: 3 }))
-    expect(favoritesQueriesMock.addFavorite).toHaveBeenCalledWith(1, 9, { path: 'files/team/x.md', spaceId: 3, shareId: null })
+  it('removeFavorite resolves the path WITHOUT materializing a row', async () => {
+    await service.removeFavorite(user, makeSpace({ url: 'files/personal/x.md' }))
+    expect(filesQueriesMock.getSpaceFileId).toHaveBeenCalled()
+    expect(filesQueriesMock.getOrCreateSpaceFile).not.toHaveBeenCalled()
+    expect(filesFavoritesQueriesMock.removeFavorite).toHaveBeenCalledWith(1, 9)
   })
 
-  it('addFavorite stamps the SHARE context with the share id (space.id in the shares repo)', async () => {
-    await service.addFavorite(user, makeSpace({ inSharesRepository: true, url: 'shares/team-share/x.md', id: 8 }))
-    expect(favoritesQueriesMock.addFavorite).toHaveBeenCalledWith(1, 9, { path: 'shares/team-share/x.md', spaceId: null, shareId: 8 })
+  it('removeFavorite 404s when the file has no row (nothing could have been favorited)', async () => {
+    filesQueriesMock.getSpaceFileId.mockResolvedValue(undefined)
+    await expect(service.removeFavorite(user, makeSpace())).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
+    expect(filesFavoritesQueriesMock.removeFavorite).not.toHaveBeenCalled()
+  })
+
+  it('addFavorite 404s when the path is gone from disk', async () => {
+    vi.mocked(filesUtils.isPathExists).mockResolvedValue(false)
+    await expect(service.addFavorite(user, makeSpace())).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
+    expect(filesFavoritesQueriesMock.addFavorite).not.toHaveBeenCalled()
   })
 })

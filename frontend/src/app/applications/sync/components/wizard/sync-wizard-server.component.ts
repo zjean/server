@@ -2,8 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http'
 import { Component, inject, signal, ViewChild, WritableSignal } from '@angular/core'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowCircleLeft, faArrowCircleRight, faFolderPlus } from '@fortawesome/free-solid-svg-icons'
+import { LucideCircleArrowLeft, LucideCircleArrowRight, LucideDynamicIcon, LucideFolderPlus } from '@lucide/angular'
 import { FileTree } from '@sync-in-server/backend/src/applications/files/interfaces/file-tree.interface'
 import { USER_PERMISSION } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
@@ -20,13 +19,13 @@ import { isSynchronizable } from '../../sync.utils'
 
 @Component({
   selector: 'app-sync-wizard-server',
-  imports: [FaIconComponent, L10nTranslateDirective, AutoResizeDirective, FormsModule, L10nTranslatePipe, ReactiveFormsModule],
+  imports: [LucideDynamicIcon, L10nTranslateDirective, AutoResizeDirective, FormsModule, L10nTranslatePipe, ReactiveFormsModule],
   templateUrl: 'sync-wizard-server.component.html'
 })
 export class SyncWizardServerComponent {
   locale = inject<L10nLocale>(L10N_LOCALE)
   @ViewChild(AutoResizeDirective, { static: true }) autoResize: AutoResizeDirective
-  protected readonly icons = { faArrowCircleLeft, faArrowCircleRight, faFolderPlus }
+  protected readonly icons = { LucideCircleArrowLeft, LucideCircleArrowRight, LucideFolderPlus }
   protected infoMsg: string = null
   protected newDirectoryName: string
   protected selectedPath: SyncWizardPath
@@ -43,7 +42,7 @@ export class SyncWizardServerComponent {
     this.userService.userHavePermission(USER_PERMISSION.PERSONAL_SPACE)
       ? new SyncWizardPath({
           id: 0,
-          name: this.layout.translateString(SPACES_TITLE.PERSONAL_FILES),
+          name: this.layout.translateString(SPACES_TITLE.PERSONAL_SPACE),
           path: `${SPACES_PATH.FILES}/${SPACES_PATH.PERSONAL}`,
           icon: SPACES_ICON.PERSONAL,
           hasChildren: true,
@@ -54,7 +53,7 @@ export class SyncWizardServerComponent {
     this.userService.userHavePermission(USER_PERMISSION.SPACES)
       ? new SyncWizardPath({
           id: -1,
-          name: this.layout.translateString(SPACES_TITLE.SPACES),
+          name: this.layout.translateString(SPACES_TITLE.COLLABORATIVE_SPACES),
           path: SPACES_PATH.SPACES,
           icon: SPACES_ICON.SPACES,
           hasChildren: true,
@@ -127,9 +126,12 @@ export class SyncWizardServerComponent {
   }
 
   addDirectory() {
-    this.filesService.make('directory', this.newDirectoryName, this.currentPath, true).subscribe({
+    const directoryName = this.newDirectoryName?.trim()
+    if (!this.canCreateDir || !directoryName) return
+
+    this.filesService.make('directory', directoryName, this.currentPath, true).subscribe({
       next: () => {
-        this.browse(this.currentPath, this.newDirectoryName)
+        this.browse(this.currentPath, directoryName)
           .then(() => (this.newDirectoryName = ''))
           .catch(console.error)
       },
