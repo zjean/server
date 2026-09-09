@@ -112,7 +112,28 @@ From here it is exactly Task 2's resolve → verify → commit → PR flow, with
 1. **Source is `upstream/main`, not `origin/upstream-main`.** The read-only `upstream` remote has the real new commits; the mirror branch is stale.
 2. **The maintainer's SSH key carries `workflow` scope**, so `git push -u origin sync/upstream-...` pushes the workflow-file changes fine (the restriction is only on the Actions `GITHUB_TOKEN`, not on SSH). Resolve `.github/workflows/*` conflicts deliberately — usually keep the fork's customized version and adopt only the upstream CI changes you actually want (see PR #270 for a worked example: kept our no-publish `release.yml`, took upstream's `checkout@v6` + tag-in-main guard).
 
-Then open the replacement PR and **merge it with a merge commit** (see Task 2's "Open the replacement PR" and "Aftermath" sections — they apply verbatim). The automation is intentionally left unfixed; this manual path via the skill is the supported recovery.
+Then open the replacement PR and **merge it with a merge commit** (see Task 2's "Open the replacement PR" and "Aftermath" sections — they apply verbatim).
+
+### Finish the recovery: ADVANCE THE MIRROR
+
+**This step was missing from this skill until 2026-09-09, and omitting it is self-perpetuating.** The manual recovery merges `upstream/main` into `develop` but never moves `origin/upstream-main`, so the mirror stays pinned at whatever commit it had when the guard first fired. Every later run then diffs that stale baseline against upstream and reports workflow changes `develop` already has — and the guard is *correct* to fail, because the push it protects advances the mirror across those same commits and `GITHUB_TOKEN` cannot push them. The mirror is the bug, not the guard.
+
+So after the sync PR merges:
+
+```bash
+git fetch upstream main
+git push origin upstream/main:refs/heads/upstream-main   # fast-forward; the mirror only ever trails
+git fetch origin upstream-main && git rev-parse origin/upstream-main upstream/main  # must match
+```
+
+`upstream-main` permits this (`allow_force_pushes: true`, no required reviews, no restrictions) — CLAUDE.md previously claimed human pushes were blocked and that was wrong. A plain push suffices; no `--force` is needed.
+
+Then confirm the automation is healthy again rather than assuming:
+
+```bash
+gh workflow run "Upstream Sync" --repo zjean/server
+gh run list --repo zjean/server --workflow "Upstream Sync" --limit 1   # expect success
+```
 
 ## Task 2 — Resolve upstream-main → develop conflicts
 

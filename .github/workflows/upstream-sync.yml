@@ -55,7 +55,7 @@ jobs:
         if: steps.sync.outputs.changed == 'true'
         run: |
           if ! git diff --quiet "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/; then
-            echo "::error title=Upstream changed workflow files::The Upstream Sync GITHUB_TOKEN cannot push .github/workflows/* changes (no 'workflows' scope). This is expected. Run the sync-in-fork-maintenance skill and follow its 'Failure mode' recovery: sync manually from upstream/main (NOT the now-stale upstream-main)."
+            echo "::error title=Upstream changed workflow files::The Upstream Sync GITHUB_TOKEN cannot push .github/workflows/* changes (no 'workflows' scope). This is expected. Run the sync-in-fork-maintenance skill and follow its 'Failure mode' recovery: sync manually from upstream/main (NOT the now-stale upstream-main). THEN ADVANCE THE MIRROR — 'git push origin upstream/main:refs/heads/upstream-main' — or this guard keeps firing on the same already-merged changes forever.""
             git --no-pager diff --stat "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/
             exit 1
           fi
@@ -64,8 +64,13 @@ jobs:
         if: steps.sync.outputs.changed == 'true'
         run: git push --force-with-lease origin upstream-main
 
+      # NOT gated on steps.sync.outputs.changed. The mirror can already be current
+      # while develop is still behind — after a manual recovery sync advanced the
+      # mirror out-of-band, for instance — and gating this on "the mirror moved"
+      # turned that state into a green run that did nothing at all. The step's own
+      # `git diff --quiet origin/develop HEAD` below is the correct condition, and it
+      # already exits cleanly when there is genuinely nothing to open.
       - name: Open or update PR into develop
-        if: steps.sync.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
