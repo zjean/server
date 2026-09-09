@@ -165,14 +165,25 @@
   // 4.37, and its hover step is bg5, where it measures 4.06. A card is the one
   // place in this product where the metadata line's surface is TWO steps deeper
   // than the table's, so the tone that is correct in the table is wrong here.
+  // The 2026-09-09 type re-base took --si-text-3 from 10.5px to 12px, and at 12px
+  // mono "841.0 B · 44 minutes ago" no longer fits a 167px card: it wrapped to two
+  // lines and made card heights uneven within a row. Two changes, because one of
+  // them alone would break again on the next size change:
+  //   · this line takes the ladder's SMALLEST step. It is the densest metadata in
+  //     the product and mono is wide; 11px is the floor now, so it is still legible.
+  //   · `nowrap` makes wrapping structurally impossible rather than merely unlikely.
+  //     A metadata line that grows a second line changes the card's height, and in a
+  //     grid that misaligns every sibling in the row — so it must clip, not reflow.
   &__meta {
     font-family: var(--si-mono);
-    font-size: var(--si-text-3);
+    font-size: var(--si-text-2);
     color: var(--si-fg-muted);
     margin-top: var(--si-space-2);
     display: flex;
     align-items: center;
     gap: var(--si-space-3);
+    white-space: nowrap;
+    overflow: hidden;
   }
 
   &__sep {

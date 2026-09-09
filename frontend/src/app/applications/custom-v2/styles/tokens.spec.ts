@@ -224,13 +224,27 @@ describe('custom-v2 token file', () => {
   // "let's match the mockups exactly" pass cannot silently undo them. Each was
   // measured against its own stated floor and failed; the header carries the
   // numbers.
+  // These two were pinned to exact hexes until 2026-09-09, which conflated two
+  // different things: that the DEVIATION holds, and that the VALUE never moves.
+  // The deviations are "the ring is opaque" and "border is its own value" — neither
+  // names a colour. When the ramp lifted, both tokens had to move to keep clearing
+  // their floors, and a literal pin would have read that as the deviation being
+  // undone. They now assert the property; `palette-contrast.spec.ts` owns the
+  // measurement (3:1 on all seven surfaces for both).
   it('keeps the focus ring opaque — the design’s 60% alpha fails 3:1 on every surface', () => {
-    expect(tokens).toMatch(/--si-focus-ring:\s*#4c7ef3;/i)
+    const ring = /--si-focus-ring:\s*([^;]+);/i.exec(tokens)
+    expect(ring, '--si-focus-ring is not declared').not.toBeNull()
+    expect(ring![1].trim(), 'the ring must be an opaque hex, never an rgba() or a var()').toMatch(/^#[0-9a-f]{6}$/i)
   })
 
-  it('keeps --si-border independent of --si-line-strong, which measures 1.56 on the input fill', () => {
-    expect(tokens).toMatch(/--si-border:\s*#8a9097;/i)
+  it('keeps --si-border independent of --si-line-strong, which cannot identify a control boundary', () => {
+    const border = /--si-border:\s*([^;]+);/i.exec(tokens)
+    expect(border, '--si-border is not declared').not.toBeNull()
+    expect(border![1].trim(), '--si-border must hold its own value').toMatch(/^#[0-9a-f]{6}$/i)
     expect(tokens).not.toMatch(/--si-border:\s*var\(--si-line-strong\)/)
+    expect(border![1].trim().toLowerCase(), '--si-border must not equal --si-line-strong').not.toBe(
+      (/--si-line-strong:\s*([^;]+);/i.exec(tokens)?.[1] ?? '').trim().toLowerCase()
+    )
   })
 
   it('keeps --si-amber a real warning colour, not an accent alias', () => {
