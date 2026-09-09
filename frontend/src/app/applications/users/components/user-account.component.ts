@@ -130,12 +130,23 @@ export class UserAccountComponent implements OnInit, OnDestroy {
     this.userService.changeOnlineStatus(status)
   }
 
+  // mod(users): both of these MUST subscribe. The fork changed UserService's avatar
+  // methods to return a COLD Observable so custom-v2's settings screen could handle
+  // its own toasts (settings.component.ts:157,164), but left these two callers
+  // dropping the return value — so no request was ever sent and both controls did
+  // nothing, with no error and no type error. Restores upstream's own behaviour
+  // (which self-subscribed and notified with the 'Avatar' title); `refreshAvatar()`
+  // already runs inside the service's tap() on success, so no next handler is needed.
   genAvatar() {
-    this.userService.genAvatar()
+    this.userService.genAvatar().subscribe({
+      error: (e: HttpErrorResponse) => this.layout.sendNotification('error', 'Configuration', 'Avatar', e)
+    })
   }
 
   uploadAvatar(ev: any) {
-    this.userService.uploadAvatar(ev.target.files[0])
+    this.userService.uploadAvatar(ev.target.files[0]).subscribe({
+      error: (e: HttpErrorResponse) => this.layout.sendNotification('error', 'Configuration', 'Avatar', e)
+    })
   }
 
   async submitPassword() {
