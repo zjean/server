@@ -27,51 +27,64 @@
 // That is what `palette-contrast.spec.ts` is for.
 // Design: docs/superpowers/specs/2026-08-05-v2-background-palette-design.md
 //
-// ─── The ramp LIFTED on 2026-09-09 ──────────────────────────────────────
-// The 2026-08-05 change fixed the ramp's HUE and left its LIGHTNESS alone. The
-// app still read as too dark, and measurement said why: all seven surfaces sat
-// inside 13 L* points, every one below L* 24, and three of the six steps between
-// them were at or under the ~1 L* just-noticeable difference — so the ground was
-// both dark AND too flat to read as structure. Two steps in particular did
-// nothing: bg1->bg2 (1.50), which is the only thing separating the top bar from
-// the content plane, and bg2->band (1.44), which is the ONLY row separation the
-// file table has, since this design carries no row dividers.
+// ─── The ramp was re-cut on 2026-09-09 (twice — read both halves) ───────
+// The 2026-08-05 change fixed the ramp's HUE and left its LIGHTNESS and CHROMA
+// alone. The chrome still read as too dark, and measurement said why: all seven
+// surfaces sat inside 13 L* points, every one below L* 24, and three of the six
+// steps between them were at or under the ~1 L* just-noticeable difference. So
+// the ground was dark AND too flat to read as structure. The two dead steps were
+// the load-bearing ones: bg1->bg2 (1.50 L*) is the only thing separating the top
+// bar from the content plane, and bg2->band (1.44) is the ONLY row separation the
+// file table has, because this design carries no row dividers at all.
 //
-// The plane is now L* 21.9, up from 14.0 — 56% lighter. Steps are uniform at
-// 2.75-2.85 L*, so no two planes can read as one and none reads as skipping one.
-// Ground chroma went 0.012 -> 0.020 at the same hue: the surfaces measured
-// effectively neutral, and a pure neutral dark ground is the most clinical one
-// available, which was as much of the "unfriendly" complaint as the darkness.
+// FIRST ATTEMPT, AND WHY IT WAS WRONG. The obvious reading of "too dark" is
+// "make it lighter", so the plane went to L* 21.9 and the type ramp moved with it
+// (this file's own rule: "the type ramp moves with it, or nothing moves"). Every
+// contrast assertion passed. It was still rejected on sight, as WASHED OUT, and
+// the measurement shows exactly why:
 //
-// The lift was blocked for a month by two things, and BOTH turned out to be
-// self-imposed rather than facts about the ramp:
+//     primary  on plane   14.00 -> 11.13   lost punch
+//     incidental on plane   4.84 ->  6.27   got LOUDER
+//     spread, primary->incidental  36.2 -> 20.8 L*  hierarchy collapsed
 //
-//   1. The FOCUS RING capped the ramp. The note below used to read "the focus
-//      ring clears 3:1 only up to a surface at L≈0.348", and that is why bg5 and
-//      bg6 were held in August while the floor rose. But that ceiling is a
-//      property of choosing opaque accent-500 as the ring, not of the ramp. The
-//      ring is now accent-400-ish (#6499ff) and clears 3:1 across the whole
-//      lifted ramp at 3.33 worst case. Nothing else about deviation 1 changed:
-//      the ring is still OPAQUE, still its own token, still an outline.
+// Lifting the ground pulls the tiers toward each other from BOTH ends, because a
+// dark theme's contrast budget is WIDEST when the ground is darkest and lifting
+// spends it. Everything converging on the middle is the definition of washed out.
+// Do not re-derive this: lightness is the wrong lever for this complaint.
 //
-//   2. The CONTRAST BUDGET is widest when the ground is darkest, and lifting
-//      spends it. At the old plane the 4.5:1 floor sat at L* 66.5, leaving 30 L*
-//      of room for the tiers above it; at the new plane the floor is L* 76.5 and
-//      there is 20. Three tiers fit that at ~10 L* apart. Four do not — so the
-//      hierarchy leans harder on size and weight, which this file already
-//      mandates ("emphasis comes from size and weight, never from a new colour").
-//      `quiet` survives anyway because it never claimed 4.5 in the first place.
+// WHAT ACTUALLY FIXES IT. "Too dark" and "flat/cold" are not the same axis, and
+// only the second one was ever the real problem. The fix is SEPARATION and
+// CHROMA, at a ground that stays deep:
 //
-// What the lift bought beyond "less dark": tertiary now clears 4.5 on ALL SEVEN
-// surfaces (4.69 at worst) instead of bg0-band only, which retires the 50-call-
-// site sweep and the per-overlay tier re-points that existed to work around it.
-// Card outlines became visible too — --si-line on bg3 was a 0.6 L* difference
-// before and is 3.6 now, so grid cards sit instead of floating.
+//   · Plane at L* 16.4 — only ~2.4 above the original 14.0, i.e. still a dark UI.
+//   · Steps uniform at 2.4-2.9 L*, so no two planes read as one and none reads as
+//     skipping one. This half of the first attempt was right and is kept.
+//   · Ground chroma 0.013 -> 0.032. This is the change that does the work. The
+//     old surfaces measured effectively neutral, and a neutral dark ground is the
+//     most clinical one available. A colour starts reading as chromatic rather
+//     than grey around C 0.03 — the first attempt's 0.020 was still a grey, which
+//     is why "more chroma" did not register there.
+//   · Tier spread back to 29.6 L*, with fg at 13.59 on the plane. Type is punchy
+//     again; tertiary is back to being quiet (5.88, not 6.27).
+//   · Inks are SATURATED, not pastel. The first attempt's inks (#a0bfff, #86dca7,
+//     #ffa49d …) were pale because a lighter bed forces a lighter ink to clear
+//     4.5. A deeper bed buys the saturation back: #80b5ff, #6ecf94, #ff8c7e.
 //
-// If you move this ramp again, the FIRST thing to re-run is the composited
-// soft-fill check (see the ink note further down). It is the assertion with the
-// least headroom in the file and the only one a bare-surface measurement lies
-// about.
+// The FOCUS RING no longer caps the ramp. The note below used to read "the ring
+// clears 3:1 only up to a surface at L≈0.348", and that is why bg5/bg6 were held
+// in August. That ceiling is a property of the ring's VALUE, not of the ramp; the
+// ring moved and the cap went with it. Deviation 1 is otherwise intact — still
+// opaque, still its own token, still an outline.
+//
+// Two dividends worth keeping in mind, both consequences rather than goals:
+// --si-fg-tertiary now clears 4.5 on ALL SEVEN surfaces (4.60 at worst) instead
+// of bg0-band only, which retires the 50-call-site sweep and the per-overlay tier
+// re-points built around it; and --si-line on bg3 went from a 0.6 L* difference
+// to 4.5, so grid cards sit instead of floating.
+//
+// If you move this ramp again, re-run the COMPOSITED soft-fill check first (see
+// the ink note further down). It is the assertion with the least headroom in this
+// file and the only one a bare-surface measurement lies about.
 //
 // ─── Plain hex, on purpose ───────────────────────────────────────────────
 // The previous revision declared every colour twice (hex fallback, then oklch)
@@ -91,10 +104,11 @@
 //    against the surface. Composited over the ground that measures ~2.3: it fails
 //    WCAG 2.2 SC 1.4.11's 3:1 on EVERY surface in the system. Only the alpha was
 //    ever the problem, and that finding is unchanged by the lift.
-//    The VALUE moved on 2026-09-09. It was opaque accent-500 (#4C7EF3), which
-//    measured 4.55 down to 3.14 on the old ramp — and whose 3.14 floor on the old
-//    bg6 is exactly what capped the ramp. It is now #6499FF and measures
-//    5.27 · 4.85 · 4.44 · 4.97 · 4.05 · 3.69 · 3.33 on the lifted ramp.
+//    The VALUE moved on 2026-09-09. It was opaque accent-500 (#4C7EF3), whose
+//    3.14 floor on the old bg6 is exactly what capped the ramp. It is now
+//    #5285FA and measures 6.05 · 5.64 · 5.28 · 5.71 · 4.86 · 4.47 · 4.13 —
+//    comfortable everywhere, because a deeper ground is easier on a ring than a
+//    lifted one was.
 //    We also keep v2's `outline` + `outline-offset` implementation rather than
 //    the design's two-layer box-shadow, because that inner layer has to name the
 //    surface the control sits on — a raw colour at ~60 call sites that breaks the
@@ -107,9 +121,9 @@
 //    hovered inputs and dashed drop targets. But the input fill (bg3) is 1.10:1
 //    against the content plane — on its own it identifies nothing, and
 //    SC 1.4.11 wants 3:1 for the boundary of an interactive control.
-//    line-strong measures 1.71 on that fill, so it cannot do the job.
-//    The value moved with the ramp on 2026-09-09: #8A9097 -> #969BA2, measuring
-//    5.25 · 4.82 · 4.42 · 4.95 · 4.04 · 3.67 · 3.31 — clears the floor
+//    line-strong measures 1.81 on that fill, so it cannot do the job.
+//    The value moved with the ramp on 2026-09-09: #8A9097 -> #838B97, measuring
+//    6.09 · 5.68 · 5.32 · 5.75 · 4.89 · 4.50 · 4.16 — clears the floor
 //    everywhere, as before. Inputs therefore keep a resting boundary that the
 //    mockups draw without; that is deliberate.
 //
@@ -126,10 +140,10 @@
 // table current: if you move a surface or a tier, recompute the whole grid.
 //
 //                bg0    bg1    bg2   band    bg3    bg5    bg6
-//   fg        13.20  12.14  11.13  12.46  10.16   9.23   8.33
-//   muted      9.56   8.79   8.06   9.02   7.35   6.68   6.03
-//   tertiary   7.44   6.84   6.27   7.02   5.72   5.20   4.69
-//   quiet     [3.75] [3.45] [3.16] [3.54] [2.89] [2.62] [2.37]
+//   fg        15.58  14.53  13.59  14.71  12.52  11.51  10.64
+//   muted     11.02  10.28   9.61  10.41   8.86   8.14   7.53
+//   tertiary   6.73   6.28   5.88   6.36   5.41   4.98   4.60
+//   quiet     [3.25] [3.04] [2.84] [3.07] [2.62] [2.41] [2.22]
 //
 //   [n] = below 4.5:1, i.e. not usable for normal-size text.
 //
@@ -160,14 +174,15 @@
 //     load-bearing, since tertiary clears 4.5 everywhere anyway.
 //
 // Ink on its own soft fill (the fill composited over each bed first), worst bed
-// being bg6: accent 4.63 · success 4.62 · warning 4.60 · danger 4.61 ·
-// info 4.62 · neutral 4.61 · secondary 4.60. All clear 4.5.
+// being bg6: accent 4.63 · success 4.65 · warning 4.63 · danger 4.61 ·
+// info 4.62 · neutral 4.61 · secondary 4.61. All clear 4.5.
 //
 // THIS is the test the lift nearly failed, and the one to re-run first if the ramp
 // ever moves again. Measured against BARE surfaces, green (4.75) and amber (4.77)
-// looked like they survived the lift untouched. They do not: the `-soft` wash
-// composites over the bed, so a lifted surface lifts the wash with it, and over
-// the new bg6 they measured 3.95 and 4.05. Five of the seven inks had to move.
+// looked like they survived the first attempt's lift untouched. They did not: the
+// `-soft` wash composites over the bed, so a lifted surface lifts the wash with
+// it, and over that bg6 they measured 3.95 and 4.05. Every ink had to be re-cut
+// for the final ramp too — deeper beds, so the inks came back SATURATED.
 // `palette-contrast.spec.ts` computes the composite; a bare-surface check does not
 // and will tell you the ramp is fine when it is not.
 //
@@ -188,13 +203,13 @@
   // Panels flanking the content plane step DOWN, never up (bg1 < bg2). There is
   // no border between a panel and the body; the value change IS the edge. Which
   // is the whole reason the design bans vertical rules: they would be redundant.
-  --si-bg0: #222932; // surface-0   · app canvas, sidebar, page gutters
-  --si-bg1: #282f39; // surface-0.5 · top bar, right panel, empty-state panel
-  --si-bg2: #2e353f; // surface-1   · content plane: file table, detail body
-  --si-bg-band: #272d37; // surface-1.5 · the alternating table band (see below)
-  --si-bg3: #343b46; // surface-2   · cards, row hover, input fill, chips, code
-  --si-bg5: #3b414c; // surface-3   · dialogs, context menus, sheets, popovers
-  --si-bg6: #404852; // surface-4   · tooltips, pressed, drag-over, segmented-on
+  --si-bg0: #141e2c; // surface-0   · app canvas, sidebar, page gutters
+  --si-bg1: #192433; // surface-0.5 · top bar, right panel, empty-state panel
+  --si-bg2: #1f2939; // surface-1   · content plane: file table, detail body
+  --si-bg-band: #182332; // surface-1.5 · the alternating table band (see below)
+  --si-bg3: #252f3f; // surface-2   · cards, row hover, input fill, chips, code
+  --si-bg5: #2a3545; // surface-3   · dialogs, context menus, sheets, popovers
+  --si-bg6: #303a4b; // surface-4   · tooltips, pressed, drag-over, segmented-on
 
   // `bg4` is GONE, not renumbered. It was documented as "selected row", and in
   // this system a selected row is --si-accent-soft plus a 2px cobalt marker — not
@@ -212,13 +227,13 @@
   // them — the same declaration that lifts off a card starts denting into it, which
   // fails no build and is invisible in a screenshot at these step sizes.
   // `palette-contrast.spec.ts` asserts each one is lighter than its anchor.
-  --si-line-subtle: #404348; // table + section rules; the default and commonest
-  --si-line: #464a4f; // card outlines, menu separators
-  --si-line-strong: #595d64; // hovered input outline, dashed drop targets, frames
+  --si-line-subtle: #2e3948; // table + section rules; the default and commonest
+  --si-line: #36404f; // card outlines, menu separators
+  --si-line-strong: #454f5f; // hovered input outline, dashed drop targets, frames
 
   // NOT an alias of line-strong — see deviation 2 in the header. This is the
   // resting boundary of anything interactive whose fill cannot identify it.
-  --si-border: #969ba2;
+  --si-border: #838b97;
 
   // Kept as an alias so existing consumers compile; it has no distinct role in
   // this system and should be migrated to one of the three above.
@@ -227,17 +242,17 @@
   // ─── Text — four values, and that is the whole hierarchy budget ───────
   // New emphasis comes from size and weight, never from a new colour. See the
   // measured table in the header for where each tier may and may not be used.
-  --si-fg: #f0f3f9; // primary   · file names, titles, values
-  --si-fg-muted: #ccd1d8; // secondary · body copy, nav labels, descriptions
+  --si-fg: #f2f7fd; // primary   · file names, titles, values
+  --si-fg-muted: #cbd2dc; // secondary · body copy, nav labels, descriptions
   // Both tiers were re-derived for the lifted ramp on 2026-09-09; the previous
   // note here justified --si-fg-muted #adb4bc against the OLD ground and is gone
   // rather than amended, because none of its numbers survive the lift.
-  // muted is placed for MARGIN (6.03 at worst, on bg6) rather than at the floor,
-  // and tertiary at 4.69 — the two sit ~10 L* apart, which is the whole hierarchy
-  // the narrowed budget allows. Do not squeeze a fourth tier in between: see the
-  // budget arithmetic in the header.
-  --si-fg-tertiary: #b4b9c0; // tertiary  · metadata, sizes, timestamps (ALL seven since the lift)
-  --si-fg-ghost: #7d8188; // quiet     · disabled labels, column heads. Decorative; clears nothing.
+  // muted is placed for MARGIN (7.53 at worst, on bg6) and tertiary at 4.60. The
+  // two sit ~17 L* apart and fg sits 13 above muted — a WIDE spread, which is the
+  // whole point: the pale first attempt had them 10 apart and read as one tone.
+  // That spread is what a deep ground pays for; see the header.
+  --si-fg-tertiary: #9ca5b1; // tertiary  · metadata, sizes, timestamps (ALL seven since the lift)
+  --si-fg-ghost: #676e77; // quiet     · disabled labels, column heads. Decorative; clears nothing.
 
   // There is no fifth tier. `faint` sat between primary and secondary with no
   // counterpart in the design's four-value budget; its 31 files now say
@@ -254,11 +269,11 @@
   --si-accent: #3a66e0; // accent-600 · THE primary button fill. One per view.
   --si-accent-hover: #4c7ef3; // accent-500 · button hover, progress fill
   --si-accent-deep: #2b4eb8; // accent-700 · pressed, selected tab underline
-  --si-accent-ink: #a0bfff; // accent-400 · accent AS TYPE: links, active nav
+  --si-accent-ink: #80b5ff; // accent-400 · accent AS TYPE: links, active nav
   --si-accent-300: #b8cfff; // hover value for accent text and links
   --si-accent-100: #d8e2fe; // text on filled accent at large sizes
   --si-accent-line: rgba(76, 126, 243, 0.45);
-  --si-accent-soft: rgba(76, 126, 243, 0.1); // accent-tint · selected row, nav wash
+  --si-accent-soft: rgba(76, 126, 243, 0.14); // accent-tint · selected row, nav wash
   --si-accent-fg: #ffffff; // ink ON the accent-600 fill — 5.05:1
 
   // ─── Focus ring ──────────────────────────────────────────────────────
@@ -266,7 +281,7 @@
   // the ring can be retuned without moving the button hover fill. See deviation
   // 1: the design's 60%-alpha version fails 3:1 on all seven surfaces.
   // Measured opaque: 4.55 · 4.30 · 4.15 · 3.99 · 3.75 · 3.48 · 3.14.
-  --si-focus-ring: #6499ff;
+  --si-focus-ring: #5285fa;
 
   // ─── Nav — alias of accent (one accent everywhere) ───────────────────
   --si-nav: var(--si-accent);
@@ -275,8 +290,8 @@
 
   // ─── Chrome — the mobile title bar, transfers popover, logo tile ─────
   // Narrower in scope than the name suggests: the desktop top bar paints bg1.
-  --si-chrome-bg: #222932;
-  --si-chrome-bg-dark: #222932;
+  --si-chrome-bg: #141e2c;
+  --si-chrome-bg-dark: #141e2c;
 
   // ─── Secondary — periwinkle, and deliberately restrained ─────────────
   // Used for exactly three things: Space identity marks, public-link
@@ -287,9 +302,9 @@
   // within 2 units per channel of the design's secondary-400, so no consumer
   // churns and nothing shifts perceptibly.
   --si-violet: #b3a6ee; // secondary-400
-  --si-violet-ink: #c8bbff; // same tone as type; it is already light enough
+  --si-violet-ink: #b8aaff; // same tone as type; it is already light enough
   --si-violet-deep: #8b7be0; // secondary-500
-  --si-violet-soft: rgba(139, 123, 224, 0.14);
+  --si-violet-soft: rgba(139, 123, 224, 0.16);
   --si-violet-line: rgba(139, 123, 224, 0.3);
 
   // ─── Semantic palette — five pairs ───────────────────────────────────
@@ -298,18 +313,18 @@
   // dark to read as text sitting on that wash — so: filling a shape → base;
   // drawing a glyph or a word → -ink. Worst-case inks are in the header.
   --si-green: #57b87f; // Success · upload complete, saved, restored, sync healthy
-  --si-green-ink: #86dca7;
-  --si-green-soft: rgba(87, 184, 127, 0.14);
+  --si-green-ink: #6ecf94;
+  --si-green-soft: rgba(87, 184, 127, 0.16);
 
   // Warning. NO LONGER an accent alias — see deviation 3.
   --si-amber: #c9932f; // Warning · link expiring, quota >85%, locked by someone
-  --si-amber-ink: #ecc269;
-  --si-amber-soft: rgba(201, 147, 47, 0.14);
+  --si-amber-ink: #e6af4f;
+  --si-amber-soft: rgba(201, 147, 47, 0.16);
   --si-amber-line: rgba(201, 147, 47, 0.35);
 
   --si-rose: #c4483f; // Danger · delete, permanent removal, failed, revoke
-  --si-rose-ink: #ffa49d;
-  --si-rose-soft: rgba(196, 72, 63, 0.14);
+  --si-rose-ink: #ff8c7e;
+  --si-rose-soft: rgba(196, 72, 63, 0.16);
   --si-rose-line: rgba(196, 72, 63, 0.6);
   // Ink ON the danger fill — 4.83:1, which clears AA.
   //
@@ -322,12 +337,12 @@
   --si-rose-fg: #ffffff;
 
   --si-cyan: #3e86ae; // Info · read-only notice, indexing, neutral system message
-  --si-cyan-ink: #8fcaeb;
-  --si-cyan-soft: rgba(62, 134, 174, 0.14);
+  --si-cyan-ink: #74bbe5;
+  --si-cyan-soft: rgba(62, 134, 174, 0.16);
 
   --si-neutral: #454950; // Neutral · counts, offline, "no change". Default badge.
-  --si-neutral-ink: #c1c8d0;
-  --si-neutral-soft: rgba(184, 178, 169, 0.1);
+  --si-neutral-ink: #b2b8c0;
+  --si-neutral-soft: rgba(184, 178, 169, 0.12);
 
   // ─── Avatar tones — six, all drawn from the system ───────────────────
   // "Initials on a hue derived from the user id" — derived by picking from a set,
@@ -373,7 +388,7 @@
   // L=0.146; deriving the cooled value from a round number instead of from that
   // measurement yields rgba(2,3,6) — a near-pure black, i.e. a lightness change
   // nobody asked for.
-  --si-scrim: rgba(7, 11, 15, 0.6);
+  --si-scrim: rgba(6, 12, 22, 0.62);
 
   // ─── Layout metrics ───────────────────────────────────────────────────
   // The collapsed navigation rail. A metric rather than a colour, but it lives here
@@ -392,7 +407,7 @@
   // The veil over a tile whose file is still uploading. Lighter than --si-scrim
   // (45% vs 60%): a dialog scrim must make the page unreadable, this one must leave
   // the thumbnail recognisable while saying "not yet".
-  --si-media-veil: rgba(7, 11, 15, 0.45);
+  --si-media-veil: rgba(6, 12, 22, 0.45);
 
   // ─── Type system — IBM Plex ──────────────────────────────────────────
   // The division that governs everything: IBM Plex Sans for anything a PERSON
@@ -496,14 +511,14 @@
   //
   // Elevation never substitutes for a surface step. Overlays get both.
   --si-shadow0: none; // rows, sidebar, anything in the flow
-  --si-shadow1: 0 1px 2px rgba(14, 18, 24, 0.3); // cards on hover, sticky toolbars
-  --si-shadow2: 0 4px 12px -2px rgba(14, 18, 24, 0.38); // popovers, dropdowns, tooltips
-  --si-shadow3: 0 16px 40px -8px rgba(14, 18, 24, 0.48); // dialogs, sheets, bulk bar
+  --si-shadow1: 0 1px 2px rgba(6, 12, 22, 0.34); // cards on hover, sticky toolbars
+  --si-shadow2: 0 4px 12px -2px rgba(6, 12, 22, 0.42); // popovers, dropdowns, tooltips
+  --si-shadow3: 0 16px 40px -8px rgba(6, 12, 22, 0.52); // dialogs, sheets, bulk bar
 
   // The pressed state, for every control kind. The design's rule is "active is a
   // surface step plus a 1px inset", and NO CONTROL EVER MOVES ON PRESS — so the
   // feedback has to come from shading rather than from transform.
-  --si-shadow-press: inset 0 1px 2px rgba(14, 18, 24, 0.28);
+  --si-shadow-press: inset 0 1px 2px rgba(6, 12, 22, 0.3);
 
   // ─── File-type colour coding — ten hues, low saturation ──────────────
   // This reverses #419, which collapsed eight hues to four families because "a
@@ -521,40 +536,40 @@
   // hit in a listing — which is the one place the accent hue appears without
   // meaning "act on this". It is a container, not a control, and the 14% tile
   // keeps it clearly quieter than a button.
-  --fc-folder-bg: rgba(143, 173, 250, 0.28);
+  --fc-folder-bg: rgba(143, 173, 250, 0.20);
   --fc-folder-fg: #8fadfa;
 
-  --fc-doc-bg: rgba(124, 156, 196, 0.28); // markdown / documents
+  --fc-doc-bg: rgba(124, 156, 196, 0.20); // markdown / documents
   --fc-doc-fg: #7c9cc4;
 
-  --fc-sheet-bg: rgba(127, 174, 142, 0.28); // spreadsheets
+  --fc-sheet-bg: rgba(127, 174, 142, 0.20); // spreadsheets
   --fc-sheet-fg: #7fae8e;
 
-  --fc-image-bg: rgba(177, 146, 184, 0.28);
+  --fc-image-bg: rgba(177, 146, 184, 0.20);
   --fc-image-fg: #b192b8;
 
-  --fc-pdf-bg: rgba(192, 133, 120, 0.28);
+  --fc-pdf-bg: rgba(192, 133, 120, 0.20);
   --fc-pdf-fg: #c08578;
 
-  --fc-archive-bg: rgba(183, 154, 95, 0.28);
+  --fc-archive-bg: rgba(183, 154, 95, 0.20);
   --fc-archive-fg: #b79a5f;
 
-  --fc-code-bg: rgba(111, 168, 168, 0.28);
+  --fc-code-bg: rgba(111, 168, 168, 0.20);
   --fc-code-fg: #6fa8a8;
 
-  --fc-video-bg: rgba(154, 147, 212, 0.28);
+  --fc-video-bg: rgba(154, 147, 212, 0.20);
   --fc-video-fg: #9a93d4;
 
-  --fc-audio-bg: rgba(196, 139, 160, 0.28);
+  --fc-audio-bg: rgba(196, 139, 160, 0.20);
   --fc-audio-fg: #c48ba0;
 
   // Presentations have no colour in the design — this is the one invented value
   // in the file. They take the PDF tone because a deck and a PDF are the same
   // kind of thing to a reader: rendered pages you page through rather than edit.
-  --fc-deck-bg: rgba(192, 133, 120, 0.28);
+  --fc-deck-bg: rgba(192, 133, 120, 0.20);
   --fc-deck-fg: #c08578;
 
   // Plain text — the design's own "Plain text" tone.
-  --fc-default-bg: rgba(163, 154, 142, 0.28);
+  --fc-default-bg: rgba(163, 154, 142, 0.20);
   --fc-default-fg: #a39a8e;
 }
