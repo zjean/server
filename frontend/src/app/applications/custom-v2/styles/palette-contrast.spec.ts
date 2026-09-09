@@ -62,6 +62,13 @@ const contrast = (a: string, b: string): number => {
   return (hi + 0.05) / (lo + 0.05)
 }
 const round2 = (n: number): number => Math.round(n * 100) / 100
+// Perceptual lightness. The ladder's step assertions are stated in L* rather than
+// as contrast ratios because a ratio compresses badly at the dark end — the three
+// steps that were visually dead before the 2026-09-09 lift all passed a ratio floor.
+const lstar = (hex: string): number => {
+  const y = luminance(hex)
+  return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y
+}
 
 // A separate reader from `token()` on purpose, not a relaxation of it. `token()`
 // deliberately throws on anything but a literal 6-digit hex, which is what stops a
@@ -87,12 +94,14 @@ const compositeOverBed = (wash: { r: number; g: number; b: number; a: number }, 
 
 /* ── the system's own vocabulary ──────────────────────────────────────────── */
 
-// In ladder order. `bg-band` sits between bg2 and bg3 and `bg4` does not exist —
-// both facts are load-bearing and documented in _tokens.scss.
+// Every surface text can land on. `bg4` does not exist — that hole is load-bearing
+// and documented in _tokens.scss.
 const SURFACES = ['bg0', 'bg1', 'bg2', 'bg-band', 'bg3', 'bg5', 'bg6'] as const
-// The surfaces --si-fg-tertiary is licensed to carry TEXT on. Narrower than the
-// full ladder; the sweep that settled 50 call sites depends on exactly this list.
-const TERTIARY_TEXT_SURFACES = ['bg0', 'bg1', 'bg2', 'bg-band'] as const
+// The ELEVATION ladder, which is not the same list. `bg-band` used to sit between
+// bg2 and bg3 as a step; since 2026-09-09 it is a GROOVE below the content plane,
+// so it is measured as text-bearing (above) but excluded from every ladder
+// assertion below — a step it is not part of cannot be monotonic with the rest.
+const LADDER = ['bg0', 'bg1', 'bg2', 'bg3', 'bg5', 'bg6'] as const
 
 const AA_TEXT = 4.5 // SC 1.4.3, normal-size text
 const NON_TEXT = 3.0 // SC 1.4.11, meaningful non-text: glyphs, control boundaries
@@ -112,20 +121,37 @@ describe('palette — text tiers against every surface', () => {
     }
   })
 
-  it('keeps --si-fg-tertiary usable as text on bg0–band', () => {
-    for (const s of TERTIARY_TEXT_SURFACES) {
+  // Tertiary was a bg0–band tier before the 2026-09-09 lift, and the pair of tests
+  // that used to live here asserted that narrow licence in BOTH directions — the
+  // second one deliberately failing if tertiary ever cleared 4.5 on bg3, so that
+  // widening it had to be a decision rather than an accident. That is exactly what
+  // happened: the lift put tertiary at 4.69 on its worst surface, so the licence is
+  // now the whole ladder and the 50-call-site sweep it used to enforce is retired.
+  // The replacement is not a weaker test — it is the same rule, stated for the
+  // ramp that now exists.
+  it('keeps --si-fg-tertiary usable as text on all seven surfaces', () => {
+    for (const s of SURFACES) {
       expect(contrast(token('fg-tertiary'), token(s)), `--si-fg-tertiary on --si-${s}`).toBeGreaterThanOrEqual(AA_TEXT)
     }
   })
 
-  // The other half of the same rule, and the half that is easy to lose. If tertiary
-  // ever clears 4.5 on bg3, its licence has WIDENED — which may be fine, but it
-  // makes the header's "bg3 is the last band before tertiary fails" false and
-  // silently re-permits the call sites the sweep moved to muted. Failing here forces
-  // that to be a decision.
-  it('keeps --si-fg-tertiary BELOW the text floor on bg3 and above, so the sweep’s rule stays true', () => {
-    for (const s of ['bg3', 'bg5', 'bg6'] as const) {
-      expect(contrast(token('fg-tertiary'), token(s)), `--si-fg-tertiary on --si-${s}`).toBeLessThan(AA_TEXT)
+  // The tier ORDER is what carries the hierarchy now that all three tiers are
+  // legal everywhere — if muted ever stopped being lighter than tertiary, every
+  // secondary/tertiary pairing in the app would inverticate silently, and no
+  // contrast assertion above would notice.
+  it('keeps the three tiers in order, brightest first', () => {
+    expect(luminance(token('fg')), 'fg must be lighter than muted').toBeGreaterThan(luminance(token('fg-muted')))
+    expect(luminance(token('fg-muted')), 'muted must be lighter than tertiary').toBeGreaterThan(luminance(token('fg-tertiary')))
+    expect(luminance(token('fg-tertiary')), 'tertiary must be lighter than quiet').toBeGreaterThan(luminance(token('fg-ghost')))
+  })
+
+  // `quiet` is the one tier with no contrast promise, and that is why it survived a
+  // lift that cost the budget 10 L*. Asserted as a CEILING so nobody "fixes" it into
+  // a fourth usable tier: there is no room for one, and a decorative tier that
+  // starts looking legible is worse than one that plainly is not.
+  it('keeps --si-fg-ghost decorative — it must NOT reach the text floor', () => {
+    for (const s of SURFACES) {
+      expect(contrast(token('fg-ghost'), token(s)), `--si-fg-ghost on --si-${s}`).toBeLessThan(AA_TEXT)
     }
   })
 
@@ -196,38 +222,44 @@ describe('palette — lines must LIFT off the surface they are drawn against', (
 
 describe('palette — the surface ladder', () => {
   it('rises monotonically from bg0 to bg6', () => {
-    const ls = SURFACES.map((s) => luminance(token(s)))
+    const ls = LADDER.map((s) => luminance(token(s)))
     for (let i = 1; i < ls.length; i++) {
-      expect(ls[i], `--si-${SURFACES[i]} must be lighter than --si-${SURFACES[i - 1]}`).toBeGreaterThan(ls[i - 1])
+      expect(ls[i], `--si-${LADDER[i]} must be lighter than --si-${LADDER[i - 1]}`).toBeGreaterThan(ls[i - 1])
     }
   })
 
-  // Both bounds are measured, not guessed: the six steps in this ramp run from
-  // 1.038 (bg1→bg2) to 1.109 (bg5→bg6), so 1.15/1.02 gives real headroom on each
-  // side without being loose enough to let either failure mode back in.
+  // The design bans skipping two steps between adjacent planes. Expressed as a
+  // contrast ceiling between neighbours, which is the measurable form of it.
   it('has no step large enough to read as skipping a plane', () => {
-    // The design bans skipping two steps between adjacent planes. Expressed as a
-    // contrast ceiling between neighbours, which is the measurable form of it. The
-    // old ceiling here (1.6) had 44% of slack over the measured maximum (1.109) —
-    // loose enough that it could never fire, which is worse than no test.
-    for (let i = 1; i < SURFACES.length; i++) {
-      const step = contrast(token(SURFACES[i]), token(SURFACES[i - 1]))
-      expect(step, `the step from --si-${SURFACES[i - 1]} to --si-${SURFACES[i]}`).toBeLessThan(1.15)
+    for (let i = 1; i < LADDER.length; i++) {
+      const step = contrast(token(LADDER[i]), token(LADDER[i - 1]))
+      expect(step, `the step from --si-${LADDER[i - 1]} to --si-${LADDER[i]}`).toBeLessThan(1.15)
     }
   })
 
-  // The floor matters more than the ceiling for THIS ramp: its one recorded defect
-  // is compression, not skipping — bg3→bg5 already measures 1.077, the second-
-  // smallest step (spec §3) — so a future edit is far more likely to collapse two
-  // adjacent planes into one indistinguishable step than to skip one. A step this
-  // small still passes the ceiling above, which is exactly why it needs its own
-  // lower bound: two planes are no longer separated once their own step disappears
-  // into rounding, and nothing else in this file would notice that happening.
+  // The floor is the half that actually fired. Before the lift, three of the six
+  // steps sat at or under the ~1 L* just-noticeable difference (bg1→bg2 at 1.50 L*,
+  // bg2→band at 1.44) while still passing a ratio-based floor of 1.02 — a ratio
+  // that small cannot distinguish "tight" from "invisible" at the dark end of the
+  // ramp. So this is asserted in L* now, at 2.0, against a ramp built at 2.75-2.85.
+  // Two planes are not separated once their step disappears into rounding, and
+  // nothing else in this file would notice it happening.
   it('has no step small enough to read as the same plane twice', () => {
-    for (let i = 1; i < SURFACES.length; i++) {
-      const step = contrast(token(SURFACES[i]), token(SURFACES[i - 1]))
-      expect(step, `the step from --si-${SURFACES[i - 1]} to --si-${SURFACES[i]}`).toBeGreaterThan(1.02)
+    for (let i = 1; i < LADDER.length; i++) {
+      const step = lstar(token(LADDER[i])) - lstar(token(LADDER[i - 1]))
+      expect(step, `the step from --si-${LADDER[i - 1]} to --si-${LADDER[i]} in L*`).toBeGreaterThan(2.0)
     }
+  })
+
+  // The table band is the ONLY row separation this design has — it carries no row
+  // dividers at all. It was a 1.44 L* lift above the plane, i.e. at the JND, which
+  // meant the file table effectively had none. It is now a groove BELOW the plane:
+  // darkening buys the same separation while every text tier reads better on it
+  // rather than worse, which lifting could not do.
+  it('keeps the table band a visible groove BELOW the content plane', () => {
+    const gap = lstar(token('bg2')) - lstar(token('bg-band'))
+    expect(gap, 'the band must be darker than the plane it alternates with').toBeGreaterThan(0)
+    expect(gap, 'the band must clear the just-noticeable difference by a real margin').toBeGreaterThan(2.0)
   })
 })
 
