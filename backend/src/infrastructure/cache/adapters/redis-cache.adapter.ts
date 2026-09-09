@@ -5,6 +5,7 @@ import { createCacheKeySlug } from '../../../common/shared'
 import { configuration } from '../../../configuration/config.environment'
 import { redactRedisUrl } from '../../utils'
 import { Cache } from '../cache.service'
+import type { CacheRateLimitResult } from '../interfaces/cache-rate-limit.interface'
 
 @Injectable()
 export class RedisCacheAdapter implements Cache {
@@ -40,7 +41,7 @@ export class RedisCacheAdapter implements Cache {
 
   async keys(pattern: string): Promise<string[]> {
     const matches: string[] = []
-    for await (const keys of this.client.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+    for await (const keys of this.client.scanIterator({ MATCH: this.toGlobPattern(pattern), COUNT: 100 })) {
       matches.push(...keys)
     }
     return matches
@@ -51,6 +52,7 @@ export class RedisCacheAdapter implements Cache {
   }
 
   async mget(keys: string[]): Promise<(any | undefined)[]> {
+    if (!keys.length) return []
     return (await this.client.mGet(keys)).map((v) => this.deserialize(v))
   }
 
@@ -84,9 +86,60 @@ export class RedisCacheAdapter implements Cache {
     return Number(value)
   }
 
+  async consumeRateLimit(key: string, ttl: number, limit: number, blockDuration: number): Promise<CacheRateLimitResult> {
+    // Keep the complete state transition atomic and use Redis time across workers.
+    const result = (await this.client.eval(
+      `local time = redis.call('TIME')
+       local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+       local ttl = tonumber(ARGV[1])
+       local limit = tonumber(ARGV[2])
+       local blockDuration = tonumber(ARGV[3])
+       local value = redis.call('GET', KEYS[1])
+       local state = value and cjson.decode(value) or { hits = {}, blockExpiresAt = 0 }
+
+       -- A completed block starts a fresh window.
+       if state.blockExpiresAt > 0 and state.blockExpiresAt <= now then
+         state.hits = {}
+         state.blockExpiresAt = 0
+       end
+       -- Keep only the hits that remain in the sliding window.
+       local hits = {}
+       for _, expiresAt in ipairs(state.hits) do
+         if expiresAt > now then
+           table.insert(hits, expiresAt)
+         end
+       end
+       state.hits = hits
+       -- Requests received during a block do not extend it.
+       if state.blockExpiresAt == 0 then
+         table.insert(hits, now + ttl)
+         if #hits > limit then
+           state.blockExpiresAt = now + blockDuration
+         end
+       end
+
+       local expiration = state.blockExpiresAt
+       for _, expiresAt in ipairs(hits) do
+         expiration = math.max(expiration, expiresAt)
+       end
+       redis.call('SET', KEYS[1], cjson.encode(state), 'PXAT', expiration)
+       return { #hits, math.max(0, math.ceil(((hits[1] or now) - now) / 1000)), state.blockExpiresAt > now and 1 or 0,
+         math.max(0, math.ceil((state.blockExpiresAt - now) / 1000)) }`,
+      { keys: [key], arguments: [String(ttl), String(limit), String(blockDuration)] }
+    )) as number[]
+
+    return { totalHits: result[0], timeToExpire: result[1], isBlocked: result[2] === 1, timeToBlockExpire: result[3] }
+  }
+
   async set(key: string, data: unknown, ttl?: number): Promise<boolean> {
     const exp = this.getTTL(ttl)
-    return (await this.client.set(key, this.serialize(data), { expiration: { type: 'EX', value: exp === -1 ? undefined : exp } })) === 'OK'
+    const options = exp === this.infiniteExpiration ? {} : { expiration: { type: 'EX' as const, value: exp } }
+    try {
+      return (await this.client.set(key, this.serialize(data), options)) === 'OK'
+    } catch (e) {
+      this.logger.error({ tag: this.set.name, msg: `${e}` })
+      return false
+    }
   }
 
   async del(key: any): Promise<boolean> {
@@ -94,6 +147,7 @@ export class RedisCacheAdapter implements Cache {
   }
 
   async mdel(keys: string[]): Promise<boolean> {
+    if (!keys.length) return false
     const multi = this.client.multi()
     for (const key of keys) {
       multi.unlink(key)
@@ -137,5 +191,9 @@ export class RedisCacheAdapter implements Cache {
       return undefined
     }
     return JSON.parse(data)
+  }
+
+  private toGlobPattern(pattern: string): string {
+    return pattern.replaceAll('\\', '\\\\').replaceAll('?', '\\?').replaceAll('[', '\\[').replaceAll(']', '\\]')
   }
 }

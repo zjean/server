@@ -4,6 +4,7 @@ import {
   Copy,
   Delete,
   Get,
+  Header,
   HttpException,
   HttpStatus,
   Move,
@@ -22,6 +23,7 @@ import {
 } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../authentication/decorators/auth-token-skip.decorator'
+import { AuthRateLimitGuard } from '../../authentication/guards/auth-rate-limit.guard'
 import { FastifyAuthenticatedRequest } from '../../authentication/interfaces/auth-request.interface'
 import { ContextInterceptor } from '../../infrastructure/context/interceptors/context.interceptor'
 import { SkipSpacePermissionsCheck } from '../spaces/decorators/space-skip-permissions.decorator'
@@ -69,12 +71,15 @@ export class SyncController {
   }
 
   @Post(SYNC_ROUTE.REGISTER)
+  @Header('Cache-Control', 'no-store')
   @AuthTokenSkip()
+  @UseGuards(AuthRateLimitGuard)
   register(@Body() syncClientRegistrationDto: SyncClientRegistrationDto, @Req() req: FastifyRequest): Promise<SyncClientAuthRegistration> {
     return this.syncClientsManager.register(syncClientRegistrationDto, req.ip)
   }
 
   @Post(SYNC_ROUTE.REGISTER_AUTH)
+  @Header('Cache-Control', 'no-store')
   @UserHavePermission(USER_PERMISSION.DESKTOP_APP)
   @UseGuards(UserPermissionsGuard)
   registerWithAuth(
@@ -99,7 +104,9 @@ export class SyncController {
   }
 
   @Post(`${SYNC_ROUTE.AUTH}/:type`)
+  @Header('Cache-Control', 'no-store')
   @AuthTokenSkip()
+  @UseGuards(AuthRateLimitGuard)
   authenticate(
     @Param('type') type: CLIENT_AUTH_TYPE,
     @Body() clientAuthDto: SyncClientAuthDto,
