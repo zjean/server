@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@a
 import { Router } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
-import type { FileFavorite } from '@sync-in-server/backend/src/applications/custom-favorites/interfaces/file-favorite.interface'
+import type { FileFavorite } from '@sync-in-server/backend/src/applications/files/schemas/file-favorite.interface'
 import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FileRowComponent } from '../../components/file-row.component'
 import { SectionHeadComponent } from '../../components/section-head.component'
@@ -25,6 +25,11 @@ export class FavoritesComponent implements OnInit {
   private readonly breadcrumbs = inject(V2BreadcrumbService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
 
+  // Every favorite, INCLUDING the ones upstream marks isDisabled. Filtering those out
+  // was wrong: the classic UI is the authority here and it shows them with a
+  // "No longer accessible" badge, withholds only navigation, and keeps removal
+  // available (favorites.component.html:123, .ts:212). Hiding them left a v2-only
+  // user unable to see or clean up a stale favorite — the count just dropped.
   protected readonly favorites = this.favoritesService.favorites
   protected readonly hasAny = computed(() => this.favorites().length > 0)
 
@@ -39,28 +44,36 @@ export class FavoritesComponent implements OnInit {
   }
 
   // ─── Location, derived the same way recents derives it ────────────────────
-  // Favorites carries one addressable `navPath` rather than a pre-split path plus
-  // a computed `showedPath`, and its own slicing kept the repository prefix — so
-  // the same file read `files/product-team/Roadmap` here and
-  // `product-team/Roadmap` on recents. Both now go through the shared helpers.
+  // Upstream's FileFavorite splits the address into `path` (the repository-qualified
+  // PARENT) and `name`, which is exactly the shape recents rows have — so the
+  // address is parent + name, as in recents.component.ts's serverPath().
+  //
+  // A row upstream could not resolve to a location comes back isDisabled, and its
+  // `path` is then the raw OWNER-relative files.path rather than an addressable
+  // repository path. Those rows are dropped in `favorites` below rather than
+  // rendered as entries that cannot be opened.
+
+  protected navPath(fav: FileFavorite): string {
+    return `${fav.path}/${fav.name}`
+  }
 
   protected originKey(fav: FileFavorite): string {
-    return FILE_ORIGIN_LABELS[fileOriginFromPath(fav.navPath, this.repositories, SPACE_ALIAS.PERSONAL)]
+    return FILE_ORIGIN_LABELS[fileOriginFromPath(this.navPath(fav), this.repositories, SPACE_ALIAS.PERSONAL)]
   }
 
   protected originIcon(fav: FileFavorite): IconV2Name {
-    return FILE_ORIGIN_ICONS[fileOriginFromPath(fav.navPath, this.repositories, SPACE_ALIAS.PERSONAL)]
+    return FILE_ORIGIN_ICONS[fileOriginFromPath(this.navPath(fav), this.repositories, SPACE_ALIAS.PERSONAL)]
   }
 
-  // dropLast, because `navPath` ends in the item's own name and the row already
-  // shows that on the line above. Returns '' at a repository root, where the
+  // dropLast, because the composed path ends in the item's own name and the row
+  // already shows that on the line above. Returns '' at a repository root, where the
   // template substitutes the origin label — the previous implementation returned a
   // bare '/' there, which rendered as a stray slash.
   protected locationPath(fav: FileFavorite): string {
-    return stripRepositoryPrefix(fav.navPath, SPACE_ALIAS.PERSONAL, true)
+    return stripRepositoryPrefix(this.navPath(fav), SPACE_ALIAS.PERSONAL, true)
   }
 
-  // navPath is a Sync-in repository path:
+  // The composed path is a Sync-in repository path:
   //   files/personal/<sub>   → personal browser
   //   files/<alias>/<sub>    → space browser
   //   shares/<alias>/<sub>   → no dedicated v2 per-alias browser; for a
@@ -69,12 +82,21 @@ export class FavoritesComponent implements OnInit {
   // For a file we always open the file-detail route with the full path, exactly
   // as recents does (the FILE screen takes a repository path query param).
   protected openFavorite(fav: FileFavorite): void {
-    if (!fav.navPath) return
+    const navPath = this.navPath(fav)
+    // Defence in depth, not the primary mechanism: FileRowComponent's `disabled`
+    // input puts `[disabled]` on the row's main button, so a disabled row cannot emit
+    // (open) at all. The persistent "No longer accessible" badge is what explains it
+    // — deliberately preferred over classic's transient warning toast. This guard
+    // exists so removing `[disabled]` from the template cannot turn into a 404:
+    // `path` on such a row is the raw owner-relative files.path (literally '.' for a
+    // space root), not an addressable repository path.
+    if (fav.isDisabled) return
+    if (!fav.path || !fav.name) return
     if (!fav.isDir) {
-      this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: fav.navPath } }).catch(console.error)
+      this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: navPath } }).catch(console.error)
       return
     }
-    const segs = fav.navPath.split('/').filter(Boolean)
+    const segs = navPath.split('/').filter(Boolean)
     const [repo, alias, ...rest] = segs
     if (repo === SPACE_REPOSITORY.FILES && alias === SPACE_ALIAS.PERSONAL) {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.PERSONAL, ...rest]).catch(console.error)
@@ -89,8 +111,15 @@ export class FavoritesComponent implements OnInit {
   // browser route, and opening that in a background tab is not what the gesture
   // means here. The button-number guard now lives in FileRowComponent.
   protected openFavoriteInNewTab(fav: FileFavorite): void {
-    if (fav.isDir || !fav.navPath) return
+    if (fav.isDisabled || fav.isDir || !fav.path || !fav.name) return
     if (typeof window === 'undefined') return
-    window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(fav.navPath)}`, '_blank', 'noopener')
+    window.open(`/#/${V2_PATH}/${V2_ROUTES.FILE}?path=${encodeURIComponent(this.navPath(fav))}`, '_blank', 'noopener')
+  }
+  // Unstar from the Favorites screen itself. Addressed by file id, so it works for a
+  // disabled row as well — which is the whole point: that row cannot be reached
+  // through the file browser to unstar it there.
+  protected removeFavorite(fav: FileFavorite): void {
+    this.favoritesService.dropFromList(fav.fileId)
+    this.favoritesService.removeById(fav.fileId)
   }
 }

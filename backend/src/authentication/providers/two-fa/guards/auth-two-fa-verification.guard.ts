@@ -22,8 +22,9 @@ function AuthTwoFaVerificationGuardFactory(options: TwoFaVerificationGuardOption
       const req: FastifyAuthenticatedRequest = ctx.switchToHttp().getRequest()
       const user = await this.authProvider2FA.loadUser(req.user.id, req.ip)
       const twoFaEnabled = configuration.auth.mfa.totp.enabled && user.twoFaEnabled
+      const passwordFallbackRequired = options.passwordFallback && !twoFaEnabled
 
-      if (options.withPassword || (options.passwordFallback && !twoFaEnabled)) {
+      if (options.withPassword || passwordFallbackRequired) {
         if (!req.headers[TWO_FA_HEADER_PASSWORD]) {
           throw new HttpException('Missing TWO-FA password', HttpStatus.FORBIDDEN)
         }

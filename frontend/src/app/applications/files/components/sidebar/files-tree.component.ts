@@ -1,11 +1,20 @@
 import { IActionMapping, ITreeOptions, TREE_ACTIONS, TreeModel, TreeModule, TreeNode } from '@ali-hm/angular-tree-component'
-import { Component, EventEmitter, inject, Input, OnDestroy, OnInit, Output, ViewChild } from '@angular/core'
+import { AsyncPipe } from '@angular/common'
+import { Component, ElementRef, EventEmitter, inject, Injector, Input, OnDestroy, OnInit, Output, signal, ViewChild } from '@angular/core'
 import { toObservable } from '@angular/core/rxjs-interop'
 import { Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faFile } from '@fortawesome/free-regular-svg-icons'
-import { faAnglesRight, faArrowRotateRight, faArrowsAlt, faClone, faFolder, faQuestion, faSpinner, faTimes } from '@fortawesome/free-solid-svg-icons'
-import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
+import {
+  LucideCopy,
+  LucideDynamicIcon,
+  LucideFile,
+  LucideFiles,
+  LucideFolder,
+  LucideLoader,
+  LucideMove,
+  LucideRotateCw,
+  LucideX
+} from '@lucide/angular'
+import { FILE_OPERATION, FILE_REPOSITORY } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import type { FileTree } from '@sync-in-server/backend/src/applications/files/interfaces/file-tree.interface'
 import { SPACE_ALIAS, SPACE_ALL_OPERATIONS, SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { USER_PERMISSION } from '@sync-in-server/backend/src/applications/users/constants/user'
@@ -13,22 +22,37 @@ import { L10nTranslateDirective } from 'angular-l10n'
 import { Subscription } from 'rxjs'
 import { AutoResizeDirective } from '../../../../common/directives/auto-resize.directive'
 import { TapDirective } from '../../../../common/directives/tap.directive'
+import { ToBytesPipe } from '../../../../common/pipes/to-bytes.pipe'
 import { defaultResizeOffset } from '../../../../layout/layout.constants'
 import { LayoutService } from '../../../../layout/layout.service'
 import { StoreService } from '../../../../store/store.service'
 import { SPACES_PATH, SPACES_TITLE } from '../../../spaces/spaces.constants'
 import { UserService } from '../../../users/user.service'
+import { resolveFileLocation } from '../utils/file-location.utils'
 import { mimeDirectory } from '../../files.constants'
+import type { FileModel } from '../../models/file.model'
 import { FilesService } from '../../services/files.service'
+import { FilesSummaryComponent } from '../utils/files-summary.component'
 
 @Component({
   selector: 'app-files-tree',
-  imports: [AutoResizeDirective, TreeModule, L10nTranslateDirective, FaIconComponent, TapDirective],
+  imports: [AsyncPipe, AutoResizeDirective, TreeModule, L10nTranslateDirective, LucideDynamicIcon, TapDirective, ToBytesPipe, FilesSummaryComponent],
   templateUrl: 'files-tree.component.html'
 })
 export class FilesTreeComponent implements OnInit, OnDestroy {
   @ViewChild('tree', { static: true }) tree: any
-  @Output() selected = new EventEmitter()
+  @ViewChild('copyMovePanel')
+  set copyMovePanel(panel: ElementRef<HTMLElement> | undefined) {
+    this.copyMovePanelResizeObserver?.disconnect()
+    if (!panel) return
+    const element = panel.nativeElement
+    this.copyMovePanelResizeObserver = new ResizeObserver(() => {
+      const separator = element.nextElementSibling as HTMLElement | null
+      this.copyMoveOnHeight.set(element.offsetHeight + (separator?.tagName === 'HR' ? separator.offsetHeight : 0))
+    })
+    this.copyMovePanelResizeObserver.observe(element)
+  }
+  @Output() selected = new EventEmitter<FileTree | null>()
   @Input() showFiles = false
   @Input() allowShares = true
   @Input() allowSpaces = true
@@ -39,15 +63,14 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
   @Input() toggleNodesAtStartup = false
   protected readonly store = inject(StoreService)
   protected readonly icons = {
-    faArrowRotateRight,
-    faArrowsAlt,
-    faClone,
-    faTimes,
-    faFolder,
-    faFile,
-    faQuestion,
-    faAnglesRight,
-    faSpinner
+    LucideRotateCw,
+    LucideMove,
+    LucideCopy,
+    LucideX,
+    LucideFolder,
+    LucideFile,
+    LucideFiles,
+    LucideLoader
   }
   protected readonly options: ITreeOptions = {
     actionMapping: {
@@ -60,13 +83,14 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
     animateExpand: false,
     levelPadding: 10,
     useVirtualScroll: false,
-    nodeHeight: 30,
+    nodeHeight: 36,
     dropSlotHeight: 0,
     allowDrag: false,
     allowDrop: false,
     getChildren: (node: TreeNode) => this.getTreeNode(node)
   }
   protected nodes: any[]
+  protected copyMoveOn = false
   protected srcAllowed = true
   protected dstAllowed = true
   protected errorMsg = null
@@ -74,34 +98,15 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router)
   private readonly user = inject(UserService)
   private readonly filesService = inject(FilesService)
-  private copyMoveOnHeight = 80
-  private subscriptions: Subscription[] = []
-  private preventDblClick = false
-  private preventTimer: any
+  private readonly injector = inject(Injector)
+  private readonly copyMoveOnHeight = signal(0)
+  private copyMovePanelResizeObserver: ResizeObserver | null = null
+  private readonly subscriptions: Subscription[] = []
+  private focusTimer: ReturnType<typeof setTimeout> | undefined
+  private preventTimer: ReturnType<typeof setTimeout> | undefined
 
-  constructor() {
-    if (this.enableCopyMove) {
-      this.subscriptions.push(toObservable(this.store.filesSelection).subscribe(() => this.checkAllowed(this.selection)))
-    }
-  }
-
-  private _copyMoveOn = false
-
-  get copyMoveOn() {
-    return this._copyMoveOn
-  }
-
-  set copyMoveOn(state: boolean) {
-    if (this._copyMoveOn !== state) {
-      this._copyMoveOn = state
-      // adapt the resize offset on tree
-      if (state) {
-        this.resizeOffset += this.copyMoveOnHeight
-      } else {
-        this.resizeOffset -= this.copyMoveOnHeight
-      }
-      setTimeout(() => this.layout.resizeEvent.next(), 0)
-    }
+  protected get treeResizeOffset() {
+    return this.resizeOffset + (this.copyMoveOn ? this.copyMoveOnHeight() : 0)
   }
 
   get selection() {
@@ -110,52 +115,46 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
 
   set selection(node: TreeNode) {
     this.filesService.treeNodeSelected = node
-    if (node) {
-      if ([0, -1, -2].indexOf(node.data.id) === -1) {
-        this.selected.emit(node.data)
-      } else {
-        this.selected.emit(null)
-      }
-    }
+    this.selected.emit(node && ![0, -1, -2].includes(node.data.id) ? node.data : null)
   }
 
   ngOnInit() {
-    if (this.enableCopyMove) {
-      this.subscriptions.push(this.filesService.treeCopyMoveOn.subscribe(() => this.onCopyMove()))
-    }
     this.initRoot()
-    setTimeout(() => this.focusLastNode(), 100)
+    if (this.enableCopyMove) {
+      this.subscriptions.push(
+        toObservable(this.store.filesSelection, { injector: this.injector }).subscribe(() => this.checkAllowed(this.selection)),
+        this.filesService.treeCopyMoveOn.subscribe(() => {
+          this.onCopyMove()
+          this.filesService.consumeTreeCopyMove()
+        })
+      )
+    }
+    this.focusTimer = setTimeout(() => {
+      this.focusTimer = undefined
+      this.focusLastNode()
+    }, 100)
   }
 
   ngOnDestroy() {
+    this.copyMovePanelResizeObserver?.disconnect()
+    clearTimeout(this.focusTimer)
+    clearTimeout(this.preventTimer)
     this.subscriptions.forEach((s) => s.unsubscribe())
   }
 
   onRefresh() {
-    if (this.tree.treeModel.activeNodes.length) {
-      this.tree.treeModel.activeNodes.forEach((node: TreeNode) => {
-        node.loadNodeChildren().then(() => this.tree.treeModel.update())
+    const activeNodes: TreeNode[] = this.tree.treeModel.activeNodes
+    const nodesToRefresh: TreeNode[] = activeNodes.length ? activeNodes : this.tree.treeModel.roots
+    const selectedPath = this.selection?.data.path
+    Promise.allSettled(nodesToRefresh.map((node) => node.loadNodeChildren()))
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === 'rejected') console.error(result.reason)
+        }
+        this.tree.treeModel.update()
+        this.focusLastNode(selectedPath)
       })
-    } else {
-      if (this.user.userHavePermission(USER_PERMISSION.PERSONAL_SPACE)) {
-        this.tree.treeModel
-          .getNodeById(0)
-          .loadNodeChildren()
-          .then(() => this.tree.treeModel.update())
-      }
-      if (this.user.userHavePermission(USER_PERMISSION.SPACES)) {
-        this.tree.treeModel
-          .getNodeById(-1)
-          .loadNodeChildren()
-          .then(() => this.tree.treeModel.update())
-      }
-      if (this.allowShares && this.user.userHavePermission(USER_PERMISSION.SHARES)) {
-        this.tree.treeModel
-          .getNodeById(-2)
-          .loadNodeChildren()
-          .then(() => this.tree.treeModel.update())
-      }
-    }
+      .catch(console.error)
   }
 
   actionCancel() {
@@ -175,12 +174,32 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
     this.copyMoveOn = false
   }
 
+  getSizeLazy(file: FileModel) {
+    return this.filesService.getSizeLazy(file)
+  }
+
+  get destinationLocation() {
+    const selection = this.selection
+    if (!selection) return null
+    return resolveFileLocation(selection.data.path, {
+      repository: selection.data.inShare ? FILE_REPOSITORY.SHARE : undefined,
+      excludeLeaf: true,
+      displayRootName: this.getRepositoryRootName(selection)
+    })
+  }
+
+  private getRepositoryRootName(selection: TreeNode): string | undefined {
+    let repositoryRoot = selection
+    while (repositoryRoot.parent && ![0, -1, -2].includes(repositoryRoot.parent.data?.id)) repositoryRoot = repositoryRoot.parent
+    return [-1, -2].includes(repositoryRoot.parent?.data?.id) ? repositoryRoot.data.name : undefined
+  }
+
   private initRoot() {
     this.nodes = []
     if (this.user.userHavePermission(USER_PERMISSION.PERSONAL_SPACE)) {
       const node: FileTree | TreeNode = {
         id: 0,
-        name: this.layout.translateString(SPACES_TITLE.PERSONAL_FILES),
+        name: this.layout.translateString(SPACES_TITLE.PERSONAL_SPACE),
         path: `${SPACES_PATH.FILES}/${SPACE_ALIAS.PERSONAL}`,
         isDir: true,
         inShare: false,
@@ -197,7 +216,7 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
     if (this.allowSpaces && this.user.userHavePermission(USER_PERMISSION.SPACES)) {
       const node: FileTree | TreeNode = {
         id: -1,
-        name: this.layout.translateString(SPACES_TITLE.SPACES),
+        name: this.layout.translateString(SPACES_TITLE.COLLABORATIVE_SPACES),
         path: SPACES_PATH.SPACES,
         isDir: true,
         mime: mimeDirectory,
@@ -252,12 +271,12 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
     }
   }
 
-  private focusLastNode() {
-    if (this.selection) {
-      this.selection = this.tree.treeModel.getNodeById(this.selection.data.id)
-      if (this.selection) {
-        TREE_ACTIONS.ACTIVATE(this.tree, this.selection, null)
-      }
+  private focusLastNode(path = this.selection?.data.path) {
+    if (!path) return
+    const selection = this.tree.treeModel.getNodeBy((node: TreeNode) => node.data.path === path) || null
+    this.selection = selection
+    if (selection) {
+      TREE_ACTIONS.ACTIVATE(this.tree, selection, null)
     }
   }
 
@@ -278,13 +297,14 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
 
   private toggleExpand(tree: TreeModel, node: TreeNode, event: any) {
     TREE_ACTIONS.TOGGLE_EXPANDED(tree, node, event)
-    node.data.isExpanded = !!node.data.isExpanded
+    node.data.isExpanded = node.isExpanded
   }
 
   private onOpen(node: TreeNode) {
     if (!this.copyMoveOn && this.enableNavigateTo && node.data.enabled) {
       clearTimeout(this.preventTimer)
-      this.preventDblClick = true
+      this.preventTimer = undefined
+      this.selection = node
       const urlSegments = node.data.path.split('/')
       if (urlSegments[0] !== SPACES_PATH.SPACES) {
         urlSegments.unshift(SPACES_PATH.SPACES)
@@ -299,16 +319,15 @@ export class FilesTreeComponent implements OnInit, OnDestroy {
       return
     }
     TREE_ACTIONS.ACTIVATE(tree, node, event)
+    clearTimeout(this.preventTimer)
     this.preventTimer = setTimeout(() => {
       this.checkAllowed(node)
       this.selection = node
-      if (!this.preventDblClick) {
-        if (node.hasChildren) {
-          this.collapseChildren(node, node.parent.children)
-          this.toggleExpand(tree, node, event)
-        }
+      if (node.hasChildren) {
+        this.collapseChildren(node, node.parent.children)
+        this.toggleExpand(tree, node, event)
       }
-      this.preventDblClick = false
+      this.preventTimer = undefined
     }, 200)
   }
 

@@ -1,8 +1,17 @@
 import { KeyValuePipe } from '@angular/common'
 import { Component, inject, Input, OnDestroy, OnInit, signal, ViewChild, WritableSignal } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowDown, faArrowUp, faFilter, faFlask, faMapMarkerAlt, faRotate, faSpinner, faStop } from '@fortawesome/free-solid-svg-icons'
+import {
+  LucideArrowDown,
+  LucideArrowUp,
+  LucideDynamicIcon,
+  LucideFlaskConical,
+  LucideFunnel,
+  LucideLoader,
+  LucideMapPin,
+  LucideRefreshCw,
+  LucideSquare
+} from '@lucide/angular'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { ButtonCheckboxDirective } from 'ngx-bootstrap/buttons'
 import { BsDropdownDirective, BsDropdownMenuDirective, BsDropdownToggleDirective } from 'ngx-bootstrap/dropdown'
@@ -30,7 +39,7 @@ import { SYNC_ICON } from '../../sync.constants'
 @Component({
   selector: 'app-sync-folder-report-dialog',
   imports: [
-    FaIconComponent,
+    LucideDynamicIcon,
     L10nTranslateDirective,
     L10nTranslatePipe,
     TooltipDirective,
@@ -57,14 +66,14 @@ export class SyncPathReportDialogComponent implements OnInit, OnDestroy {
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected readonly SYNC_TRANSFER_ACTION = SYNC_TRANSFER_ACTION
   protected readonly icons = {
-    faArrowDown,
-    faArrowUp,
-    faStop,
-    faFlask,
-    faSpinner,
-    faRotate,
-    faMapMarkerAlt,
-    faFilter,
+    LucideArrowDown,
+    LucideArrowUp,
+    LucideSquare,
+    LucideFlaskConical,
+    LucideLoader,
+    LucideRefreshCw,
+    LucideMapPin,
+    LucideFunnel,
     CLIENT: SYNC_ICON.CLIENT,
     SERVER: SYNC_ICON.SERVER
   }
@@ -72,7 +81,7 @@ export class SyncPathReportDialogComponent implements OnInit, OnDestroy {
   protected tableHeaders: Record<'action' | 'file', TableHeaderConfig> = {
     action: {
       label: 'Action',
-      width: 20,
+      width: 10,
       textCenter: false,
       class: '',
       show: true,
@@ -80,7 +89,7 @@ export class SyncPathReportDialogComponent implements OnInit, OnDestroy {
     },
     file: {
       label: 'File',
-      width: 80,
+      width: 90,
       textCenter: false,
       class: '',
       show: true,

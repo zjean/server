@@ -1,17 +1,18 @@
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons'
+import type { LucideIcon } from '@lucide/angular'
+import { LucideSearch } from '@lucide/angular'
 import { AppMenu } from '../../layout/layout.interfaces'
+import { SPACES_MENU } from '../spaces/spaces.constants'
 
 export const SEARCH_PATH = {
   BASE: 'search'
 } as const
 
 export const SEARCH_TITLE = 'Search'
-export const SEARCH_ICON: IconDefinition = faMagnifyingGlass
+export const SEARCH_ICON: LucideIcon = LucideSearch
 
 export const SEARCH_MENU: AppMenu = {
   title: SEARCH_TITLE,
   link: SEARCH_PATH.BASE,
   icon: SEARCH_ICON,
-  submenus: []
+  navigationMenu: SPACES_MENU
 } as const

@@ -9,7 +9,7 @@ import { FILE_OPERATION } from '../../files/constants/operations'
 import { FileError } from '../../files/models/file-error'
 import { LockConflict } from '../../files/models/file-lock-error'
 import { FilesManager } from '../../files/services/files-manager.service'
-import { checksumFile, isPathExists, isPathIsDir, touchFile } from '../../files/utils/files'
+import { checksumFile, isInternalTemporaryEntry, isPathExists, isPathIsDir, touchFile } from '../../files/utils/files'
 import { SendFile } from '../../files/utils/send-file'
 import { ParseDiffContext } from '../../spaces/interfaces/space-diff.interface'
 import { FastifySpaceRequest } from '../../spaces/interfaces/space-request.interface'
@@ -50,14 +50,12 @@ export class SyncManager {
     try {
       await this.filesManager.saveStream(req.user, req.space, req, {
         tmpPath: tmpPath,
+        expectedUploadSize: syncUploadDto.size,
         ...(syncUploadDto.checksum && { checksumAlg: SYNC_CHECKSUM_ALG }),
         validateTmpFile: async ({ tmpPath, checksum }) => {
           const tmpStats = await fs.stat(tmpPath)
           if (tmpStats.size !== syncUploadDto.size) {
             throw new FileError(HttpStatus.BAD_REQUEST, `sizes are not identical : ${tmpStats.size} != ${syncUploadDto.size}`)
-          }
-          if (req.space.storageQuota && req.space.willExceedQuota(tmpStats.size)) {
-            throw new FileError(HttpStatus.INSUFFICIENT_STORAGE, FILE_ERROR.STORAGE_QUOTA_EXCEEDED)
           }
           if (syncUploadDto.checksum && checksum !== syncUploadDto.checksum) {
             throw new FileError(HttpStatus.BAD_REQUEST, 'checksums are not identical')
@@ -180,6 +178,10 @@ export class SyncManager {
     try {
       for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
         const realPath = path.join(entry.parentPath, entry.name)
+        if (isInternalTemporaryEntry(entry.name)) {
+          this.logger.verbose({ tag: this.parseFiles.name, msg: `ignore internal temporary entry: ${realPath}` })
+          continue
+        }
         if (!entry.isDirectory() && !entry.isFile()) {
           this.logger.log({ tag: this.parseFiles.name, msg: `ignore special file: ${realPath}` })
           continue

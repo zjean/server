@@ -189,6 +189,20 @@ simply never set `color` and there was no raw colour anywhere to find. This is t
 selector instead of a class name. **When you style a bare element in v2, set its colour explicitly even when that looks
 redundant** — inheriting is not the default there.
 
+## Favorites are UPSTREAM's now — the fork owns only the v2 UI and an NC bridge
+
+Upstream shipped favorites in 2.5.0 (`d3724ec5`), so `custom_files_favorites`, the fork's controller and its
+`/api/custom-favorites` routes are **gone**; the data was migrated into upstream's `files_favorites`. What remains
+fork-side is the `custom-v2` UI plus a ~60-line bridge in `custom-favorites` that exists for exactly two reasons
+upstream cannot serve: NC PROPPATCH carries a **path** where upstream's `addFavorite` wants a **file id**, and NC
+PROPFIND needs a cheap id-list query upstream does not expose. It needs one `mod(files):` line — both favorites
+services added to `files.module.ts`'s `exports` — **re-apply that on every sync**. Two wire facts worth knowing
+before touching either side: upstream's `FileFavorite` splits the address into `path` (repository-qualified PARENT)
+plus `name`, the same shape as `FileRecent`, and a row the user can no longer reach comes back `isDisabled: true`
+with an unaddressable owner-relative `path` — skip those rather than render them. Per-row star state now arrives as
+`isFavorite` on the browse response. Full record:
+[`docs/plans/2026-09-07-favorites-upstream-adoption-plan.md`](docs/plans/2026-09-07-favorites-upstream-adoption-plan.md).
+
 ## NC mobile compat: always read upstream NC source first
 
 The `custom-mobile-compat` module emulates a Nextcloud server for NC's stock iOS/Android clients. Its endpoints are pinned to upstream contracts that **cannot be guessed from server-side conventions** — especially the wire format, field types, and capability gates. Real precedents: an early recommendations PR shipped JSON instead of XML and used a wrong endpoint path; the carousel rendered empty until the next PR fixed both. Both mistakes would have been avoided by reading the upstream source first.
@@ -424,6 +438,17 @@ suite (the fifth and seventh from reading upstream source rather than from a bug
 Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
 `moveFiles(..., true)` / `createEmptyFile` call sites on every upstream sync.
+
+**Never pass `0` as a file id to `getOrCreateUserFile` / `getOrCreateSpaceFile`.** Upstream's `assertValidFileId`
+(added 2.5.0, commit `0148bfea`) throws on `0` *and* on `undefined`; the fork's "no client-supplied id, take the
+path-keyed branch" sentinel is `NO_CLIENT_FILE_ID = -1` (`custom-shared/constants/file-ids.ts`). Negative is
+upstream's own convention — `getProps()` sets `id: -stats.ino` — and still fails the helpers' `fileId > 0` test,
+which is the branch you want. This matters because of how it fails: `FileRowEnsurer` returns 0 on any error by
+design, so passing 0 made **versioning silently stop snapshotting entirely** while `nest build`, `ng lint` and all
+2602 unit tests stayed green. Only the e2e suite caught it, and that check is ADVISORY — so run
+`npm -w backend run test:e2e` on any sync that touches `files/`. A unit spec with a mocked `FilesQueries` cannot
+catch this; `file-row-ensurer.service.spec.ts` now imports the real `assertValidFileId` and asserts it accepts
+whatever the ensurer passes.
 
 ## Tooling note: `rtk` wrapper
 

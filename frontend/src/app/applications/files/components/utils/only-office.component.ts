@@ -19,7 +19,11 @@ export class OnlyOfficeComponent implements OnInit, OnChanges, OnDestroy {
   // cannot survive the trip: onLoad deep-clones the config through
   // JSON.parse(JSON.stringify(...)) below, and functions do not survive that.
   @Input() historyHooks?: OnlyOfficeHistoryHooks
-  @Output() loadError = new EventEmitter<{ title: string; message: string }>()
+  @Output() loadError = new EventEmitter<{ title: string; titleArgs: { editor: string }; message: string }>()
+  // Fork-owned since the 2.5.0 sync: upstream REMOVED `wasSaved` and the
+  // onDocumentStateChange wiring below, but custom-v2's office view still binds
+  // (wasSaved) to refresh after a save (office-view.component.ts). Do not delete
+  // these as "upstream leftovers" on a future sync — they have a fork consumer.
   @Output() wasSaved = new EventEmitter<string>()
   private isFirstOnChanges = true
 
@@ -94,15 +98,19 @@ export class OnlyOfficeComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   private onError(errorCode: number) {
-    const error = { title: `Unknown ${this.editorName} error`, message: `Code: ${errorCode}` }
+    const error = {
+      title: 'office_editor_unknown_error',
+      titleArgs: { editor: this.editorName },
+      message: `Code: ${errorCode}`
+    }
 
     switch (errorCode) {
       case -2:
-        error.title = `Unable to load ${this.editorName} editor`
+        error.title = 'office_editor_load_error'
         error.message = 'The document server may be unreachable or the configuration is invalid'
         break
       case -3:
-        error.title = `${this.editorName} editor failed to initialize`
+        error.title = 'office_editor_init_error'
         error.message = 'DocsAPI not available'
         break
     }

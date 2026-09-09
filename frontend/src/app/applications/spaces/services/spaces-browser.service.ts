@@ -1,7 +1,7 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { inject, Injectable } from '@angular/core'
 import { UrlSegment } from '@angular/router'
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
+import type { LucideIcon } from '@lucide/angular'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
@@ -19,7 +19,7 @@ export class SpacesBrowserService {
   private readonly layout = inject(LayoutService)
   private browseApi: string
   private breadCrumbUrl: string
-  private breadCrumbIcon: IconDefinition
+  private breadCrumbIcon: LucideIcon
   private breadCrumbFilesRepo = false
   private inShareRepo = false
   private inRootSpace = false
@@ -42,9 +42,9 @@ export class SpacesBrowserService {
 
   loadFiles(): Observable<SpaceFiles> {
     return this.http.get<SpaceFiles>(this.browseApi).pipe(
-      tap(() => {
+      tap((spaceFiles) => {
         this.layout.setBreadcrumbIcon(this.breadCrumbIcon)
-        this.layout.setBreadcrumbNav(this.breadcrumbNav())
+        this.layout.setBreadcrumbNav(this.breadcrumbNav(spaceFiles.space.name))
       }),
       catchError((e: HttpErrorResponse) => {
         return throwError(() => e)
@@ -52,11 +52,20 @@ export class SpacesBrowserService {
     )
   }
 
-  private breadcrumbNav(): BreadCrumbUrl {
+  private breadcrumbNav(spaceName: string): BreadCrumbUrl {
+    const mutateLevel: NonNullable<BreadCrumbUrl['mutateLevel']> = {}
+    if (this.inPersonalSpace && !this.breadCrumbFilesRepo && !this.inRootSpace) {
+      mutateLevel[0] = {
+        setTitle: SPACES_TITLE.PERSONAL_SPACE,
+        translateTitle: true
+      }
+    } else if (spaceName && !this.inPersonalSpace && !(this.inShareRepo && this.inRootSpace)) {
+      mutateLevel[0] = { setTitle: spaceName }
+    }
     return {
       url:
         this.inPersonalSpace && this.inRootSpace
-          ? `${this.breadCrumbUrl}/${SPACES_TITLE.SHORT_PERSONAL_FILES}`
+          ? `${this.breadCrumbUrl}/${SPACES_TITLE.PERSONAL_SPACE}`
           : this.inShareRepo && this.inRootSpace
             ? `${this.breadCrumbUrl}/${SPACES_TITLE.SHARED_WITH_ME}`
             : this.breadCrumbUrl,
@@ -70,15 +79,7 @@ export class SpacesBrowserService {
             : this.inShareRepo
               ? SPACES_PATH.SPACES_SHARES
               : SPACES_PATH.TRASH,
-      mutateLevel:
-        this.inPersonalSpace && !this.breadCrumbFilesRepo && !this.inRootSpace
-          ? {
-              0: {
-                setTitle: SPACES_TITLE.PERSONAL_FILES,
-                translateTitle: true
-              }
-            }
-          : null,
+      mutateLevel: Object.keys(mutateLevel).length ? mutateLevel : null,
       splicing: this.inPersonalSpace ? (!this.breadCrumbFilesRepo && !this.inRootSpace ? 2 : 3) : 2
     } satisfies BreadCrumbUrl
   }

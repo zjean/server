@@ -1,5 +1,14 @@
 # Favorites — Custom (fork-isolated) Design
 
+> **SUPERSEDED (2026-09-07).** Upstream shipped favorites natively in 2.5.0
+> (`d3724ec5`), so the fork's `custom_files_favorites` table, its controller and its
+> `/api/custom-favorites` routes described below **no longer exist** — the rows were
+> migrated into upstream's `files_favorites`. What remains fork-side is the
+> `custom-v2` UI plus a small NC bridge. This document is kept for the reasoning that
+> led here; for current state read
+> [`2026-09-07-favorites-upstream-adoption-plan.md`](2026-09-07-favorites-upstream-adoption-plan.md).
+
+
 **Date:** 2026-06-10
 **Scope:** Backend favorites (isolated `custom-favorites` module) + v2 UI only.
 **Why this exists:** The `upstream-contrib/favorites` PR is not being merged upstream. We

@@ -3,6 +3,12 @@ server:
   host: 0.0.0.0
   # default port : `8080`
   port: 8080
+  # publicUrl: Canonical public URL used to build links in notification emails.
+  # When unset, notification emails are sent without action links.
+  # It will become required in a future major release.
+  # e.g.: https://sync-in.domain.com
+  # optional
+  publicUrl:
   # workers: `auto` or `0` (use all cpus) | number of CPUs to use
   # default: 1
   workers: 1
@@ -30,7 +36,7 @@ logger:
   filePath:
 mysql:
   # required
-  url: 'mysql://user:MySQLPassword@localhost:3306/database'
+  url: 'mysql://root:MySQLRootPassword@localhost:3306/database'
   # default: `false`
   logQueries: false
 cache:
@@ -47,9 +53,6 @@ websocket:
   # adapter: `cluster` (Node.js Workers: default) | `redis`
   # default: `cluster`
   adapter: cluster
-  # Cors origin allowed
-  # default: `*`
-  corsOrigin: '*'
   # Redis adapter url
   # default: `redis://127.0.0.1:6379`
   redis: redis://127.0.0.1:6379
@@ -87,7 +90,7 @@ auth:
   # Key used to encrypt user secret keys in the database
   # Optional but strongly recommended
   # Warning: do not change or remove the encryption key after MFA activation, or the codes will become invalid
-  encryptionKey: 'changeEncryptionKeyWithStrongKey'
+  encryptionKey:
   # cookie sameSite setting: `lax` | `strict`
   # default: `strict`
   cookieSameSite: strict
@@ -95,14 +98,14 @@ auth:
     access:
       # Used for token and cookie signatures
       # required
-      secret: 'changeAccessWithStrongSecret'
+      secret:
       # token expiration = cookie maxAge
       # default: `30m`
       expiration: 30m
     refresh:
       # Used for token and cookie signatures
       # required
-      secret: 'changeRefreshWithStrongSecret'
+      secret:
       # token expiration = cookie maxAge
       # default: `4h`
       expiration: 4h
@@ -202,9 +205,17 @@ auth:
       # enablePasswordAuthFallback: Allow local password authentication for regular users when the LDAP service is unavailable.
       # Applies only to LDAP connection/DNS/timeout errors after all configured LDAP servers fail.
       # Always allowed for administrator users (break-glass access).
+      # Administrator accounts should have a local Sync-in password configured and kept available for break-glass recovery.
       # default: false
       enablePasswordAuthFallback: false
   oidc:
+    # OIDC authentication, including MFA, is delegated to the identity provider.
+    # Sync-in TOTP login enforcement applies only to local password authentication.
+    # Users can configure Sync-in TOTP from their profile while authenticated through OIDC; enable/reset/disable still verifies the local Sync-in password.
+    # Users are resolved by the OIDC `sub` first, then by email only when no external identity is linked yet.
+    # The first successful email match stores `sub` as the user's external identity for subsequent logins.
+    # `preferred_username` initializes the local login for a new user. A deterministic `sub`-based suffix resolves collisions.
+    # The assigned local login remains stable on subsequent authentications.
     # issuerUrl: The URL of the OIDC provider's discovery endpoint
     # e.g.:
     # - Keycloak:  https://auth.example.com/realms/my-realm
@@ -233,7 +244,7 @@ auth:
     redirectUri: https://sync-in.domain.com/api/auth/oidc/callback
     options:
       # autoCreateUser: Automatically create a local user account on first successful OIDC login.
-      # When enabled, the user `login` is derived from OIDC claims: preferred_username, then the email local-part, with `sub` as a last-resort fallback.
+      # When enabled, the user `login` is derived from `preferred_username`, or from the email local-part when that claim is absent.
       # When disabled, only existing users are allowed to authenticate via OIDC.
       # default: true
       autoCreateUser: true
@@ -264,8 +275,10 @@ auth:
       # - guest users
       # - administrator users (break-glass access)
       # - application scopes (app passwords)
-      # Regular users are allowed only when this option is enabled.
-      # Users must already exist locally and have a password set.
+      # For this local login flow, regular users are allowed only when this option is enabled and they know their local Sync-in password.
+      # Users created through OIDC can set a known local password from their profile while authenticated with OIDC.
+      # That local password is also required to enable, reset, or disable Sync-in TOTP from an OIDC browser session.
+      # Administrator accounts should have a local Sync-in password configured and kept available for break-glass recovery.
       # default: false
       enablePasswordAuth: false
       # autoSyncAvatar: Automatically download and synchronize the user avatar from the OIDC `picture` claim.
@@ -316,8 +329,8 @@ auth:
       # requireVerifiedEmail: Require the OIDC provider to mark profile emails as verified before account linking or profile synchronization.
       # Recommended when your provider exposes a reliable `email_verified` claim.
       # Some providers omit this claim unless specific scopes/mappers are configured.
-      # default: false
-      requireVerifiedEmail: false
+      # default: true
+      requireVerifiedEmail: true
       # allowPrivateIpAvatarDownload: Allow OIDC avatar downloads from private/internal IP ranges.
       # Set to true only when the OIDC provider returns trusted internal avatar URLs.
       # default: false
@@ -331,7 +344,7 @@ applications:
   files:
     # required
     dataPath: /home/sync-in
-    # maxUploadSize: Maximum upload file size.
+    # maxUploadSize: Maximum size in bytes for a file received through uploads, WebDAV, sync, remote downloads, or editor callbacks.
     # default: 5368709120 (5 GB)
     maxUploadSize: 5368709120
     contentIndexing:
@@ -376,7 +389,7 @@ applications:
         enabled: false
         # Secret used for jwt tokens, it must be the same on the onlyoffice server
         # required
-        secret: 'onlyOfficeSecret'
+        secret:
         # If no external server is configured, the local Nginx service from the Docker Compose setup is used.
         # If an external server is configured, it will be used instead.
         # Note: when using an external server (e.g.: https://onlyoffice.domain.com), make sure it is accessible from the client/browser.
@@ -391,7 +404,7 @@ applications:
         enabled: false
         # Secret used for jwt tokens, it must be the same on the Euro-Office server
         # required
-        secret: 'euroOfficeSecret'
+        secret:
         # If an external server is configured, it will be used.
         # Note: make sure it is accessible from the client/browser.
         # default: null

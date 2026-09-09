@@ -36,7 +36,8 @@ export class AuthProvider2FA {
 
   async enableTwoFactor(body: TwoFaVerifyWithPasswordDto, req: FastifyAuthenticatedRequest): Promise<TwoFaEnableResult> {
     // retrieve encrypted secret from cache
-    const secret: string = await this.cache.get(this.getCacheKey(req.user.id))
+    const cacheKey = this.getCacheKey(req.user.id)
+    const secret: string = await this.cache.get(cacheKey)
     if (!secret) {
       throw new HttpException('The secret has expired', HttpStatus.BAD_REQUEST)
     }
@@ -56,6 +57,7 @@ export class AuthProvider2FA {
       twoFaSecret: secret,
       recoveryCodes: recoveryCodes.map((code) => this.encryptSecret(code))
     })
+    await this.cache.del(cacheKey)
     this.sendEmailNotification(req, ACTION.ADD)
     return { ...auth, recoveryCodes: recoveryCodes }
   }
@@ -152,24 +154,23 @@ export class AuthProvider2FA {
       return auth
     }
     try {
+      let matchedEncryptedCode: string
       for (const encCode of encryptedCodes) {
         const decryptedCode = this.decryptSecret(encCode)
         if (code === decryptedCode) {
-          auth.success = true
-          // removed used code
-          encryptedCodes.splice(encryptedCodes.indexOf(encCode), 1)
+          matchedEncryptedCode = encCode
           break
         }
       }
-      if (auth.success) {
-        // update recovery codes
-        await this.usersManager.updateSecrets(userId, { recoveryCodes: encryptedCodes })
+      if (matchedEncryptedCode) {
+        auth.success = await this.usersManager.consumeRecoveryCode(userId, matchedEncryptedCode)
+        if (!auth.success) auth.message = 'Invalid code'
       } else {
         auth.message = 'Invalid code'
       }
     } catch (e) {
       this.logger.error({ tag: this.validateRecoveryCode.name, msg: `${e}` })
-      auth.message = e.message
+      auth.message = e.message || 'Invalid code'
     }
     return auth
   }

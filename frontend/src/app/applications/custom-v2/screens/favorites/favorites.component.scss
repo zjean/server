@@ -77,3 +77,45 @@
     padding-right: var(--si-space-8);
   }
 }
+
+// A favorite whose location upstream can no longer resolve. Amber rather than rose:
+// it is a stale pointer the user may want to clean up, not an error or a failure.
+// soft/ink is the sanctioned pairing — amber itself is a FILL token and
+// styles/tokens.spec.ts fails on a fill used as type.
+.favorites__stale {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--si-space-2);
+  height: 18px;
+  border-radius: var(--si-r1);
+  background: var(--si-amber-soft);
+  color: var(--si-amber-ink);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+// Neutral rather than amber: the star's meaning is carried by its shape, and
+// --si-amber cannot be a type colour (see above).
+.favorites__unstar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--si-r1);
+  background: transparent;
+  color: var(--si-fg-muted);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--si-bg3);
+    color: var(--si-fg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--si-focus-ring);
+    outline-offset: 1px;
+  }
+}

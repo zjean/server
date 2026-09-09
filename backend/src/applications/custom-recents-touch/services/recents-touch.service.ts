@@ -13,6 +13,7 @@ import { dirName, fileName, getMimeType } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // Recents-on-save: upsert a `files_recents` row whenever a file is added or
 // updated, so OnlyOffice/Collabora/WebDAV/upload paths surface in /v2/recents
@@ -167,7 +168,7 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
   private async ensureDbRow(user: UserModel, space: SpaceEnv, f: { mtime: number; size: number; mime: string; baseName: string }): Promise<number> {
     const dirInSpace = dirName(space.relativeUrl)
     const lookupProps: FileProps = {
-      id: 0,
+      id: NO_CLIENT_FILE_ID,
       path: dirInSpace,
       name: f.baseName,
       isDir: false,
@@ -184,7 +185,7 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
     const dbFile = dbFileFromSpace(user.id, space)
     const existing = await this.filesQueries.getSpaceFileId(lookupProps, dbFile)
     if (existing !== undefined && existing > 0) return existing
-    return this.filesQueries.getOrCreateSpaceFile(0, lookupProps, dbFile)
+    return this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, lookupProps, dbFile)
   }
 
   // UPDATE-then-INSERT upsert. files_recents has no unique constraint we

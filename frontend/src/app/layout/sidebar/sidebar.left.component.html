@@ -3,29 +3,34 @@
     <div class="menu-title">
       <div class="menu-title-content">
         <button (click)="toggleSideBar()" class="logo-toggle" type="button">
-          <img alt="" class="logo-toggle-spin-in" [src]="logoIconUrl">
+          <span aria-hidden="true" class="sync-in-favicon logo-toggle-spin-in" [class.icon-spin]="!!(store.clientSyncs | async)?.length"></span>
         </button>
-        <span class="sidebar-title">{{ dynamicTitle }}</span>
+        <div class="sidebar-brand">
+          <span class="sidebar-app-name">{{ appName }}</span>
+          <span class="sidebar-title">{{ dynamicTitle }}</span>
+        </div>
       </div>
     </div>
     <div class="apps-shortcuts">
-      @for (menu of appsMenu.submenus; track menu.title) {
-        @if (!menu.hide) {
-          <button (click)="navigateToMenu(menu)"
-                  (mouseenter)="previewMenuTitle(menu.title)"
-                  (mouseleave)="restoreMenuTitle()"
-                  [class.active]="menu.isActive"
-                  class="app-shortcut"
-                  type="button">
-            <fa-icon [animation]="menu.iconAnimated ? 'spin' : null" [icon]="menu.icon"></fa-icon>
-            @if (menu.count) {
-              <span class="menu-badge-icon">
-              @if (menu.count.value | async; as count) {
-                <span class="badge bg-{{menu.count.level}}">{{ count }}</span>
+      @for (menu of appsMenu.submenus; track $index) {
+        @if (isMenu(menu)) {
+          @if (!menu.hide) {
+            <button (click)="navigateToMenu(menu)"
+                    (mouseenter)="previewMenuTitle(menu.title)"
+                    (mouseleave)="restoreMenuTitle()"
+                    [class.active]="menu.isActive"
+                    class="app-shortcut"
+                    type="button">
+              <svg [class.icon-spin]="menu.iconAnimated" [lucideIcon]="menu.icon"></svg>
+              @if (menu.count) {
+                <span class="menu-badge-icon">
+                @if (menu.count.value | async; as count) {
+                  <span class="badge bg-{{menu.count.level}}">{{ count }}</span>
+                }
+                </span>
               }
-              </span>
-            }
-          </button>
+            </button>
+          }
         }
       }
       @if (store.userImpersonate()) {
@@ -34,31 +39,45 @@
                 (mouseleave)="restoreMenuTitle()"
                 class="app-shortcut"
                 type="button">
-          <fa-icon [icon]="icons.faUserSecret"></fa-icon>
+          <svg [lucideIcon]="icons.LucideVenetianMask"></svg>
         </button>
       }
     </div>
     <div class="menus-content">
       <div class="menus-group">
-        @for (menu of currentMenu.submenus; track menu.title) {
-          @if (!menu.hide) {
-            <ng-container [ngTemplateOutlet]="MenuApps" [ngTemplateOutletContext]="{menu: menu}"></ng-container>
+        <div class="menus-top">
+          @for (menu of navigationSubmenus; track $index; let menuIndex = $index) {
+            @if (menu.placement !== 'bottom') {
+              <ng-container [ngTemplateOutlet]="MenuEntry"
+                            [ngTemplateOutletContext]="{menus: navigationSubmenus, menu: menu, menuIndex: menuIndex}"></ng-container>
+            }
           }
-        }
-      </div>
-      <div class="sidebar-apps-footer">
-        <span>{{ appVersion }}</span>
+        </div>
+        <div class="menus-bottom">
+          @for (menu of navigationSubmenus; track $index; let menuIndex = $index) {
+            @if (menu.placement === 'bottom') {
+              <ng-container [ngTemplateOutlet]="MenuEntry"
+                            [ngTemplateOutletContext]="{menus: navigationSubmenus, menu: menu, menuIndex: menuIndex}"></ng-container>
+            }
+          }
+        </div>
       </div>
     </div>
   </div>
 </aside>
 <!--Start Templates-->
-<ng-template #MenuTemplate let-menu="menu">
-  <fa-icon [icon]="menu.icon" [animation]="menu.iconAnimated ? 'spin' : null"></fa-icon>
-  <span l10nTranslate>{{ menu.title }}</span>
-  @if (menu.hasSubmenus) {
-    <span class="ms-auto opacity-75"><fa-icon [icon]="icons.faChevronDown" size="sm"></fa-icon></span>
+<ng-template #MenuEntry let-menus="menus" let-menu="menu" let-menuIndex="menuIndex">
+  @if (isMenu(menu)) {
+    @if (!menu.hide) {
+      <ng-container [ngTemplateOutlet]="MenuApps" [ngTemplateOutletContext]="{menu: menu}"></ng-container>
+    }
+  } @else if (showMenuSeparator(menus, menuIndex, menu)) {
+    <ng-container [ngTemplateOutlet]="MenuSeparator" [ngTemplateOutletContext]="{menu: menu}"></ng-container>
   }
+</ng-template>
+<ng-template #MenuTemplate let-menu="menu">
+  <svg [lucideIcon]="menu.icon" [class.icon-spin]="menu.iconAnimated"></svg>
+  <span l10nTranslate>{{ menu.title }}</span>
   @if (menu.count) {
     <span class="menu-badge">
     @if (menu.count.value | async; as count) {
@@ -70,20 +89,32 @@
 <!--Start Apps Menu Template-->
 <ng-template #MenuApps let-menu="menu">
   <div class="menu" [class.active]="menu.isActive">
-    <a [routerLink]="menu.link">
+    <a (click)="closeSideBarOnMobile()" [routerLink]="menu.link">
       <ng-container [ngTemplateOutlet]="MenuTemplate" [ngTemplateOutletContext]="{menu: menu}"></ng-container>
     </a>
   </div>
   @if (menu.hasSubmenus) {
-    @for (submenu of menu.submenus; track submenu.title) {
-      @if (!submenu.hide) {
-        <div class="menu submenu" [class.active]="submenu.isActive">
-          <a [routerLink]="submenu.link">
-            <ng-container [ngTemplateOutlet]="MenuTemplate" [ngTemplateOutletContext]="{menu: submenu}"></ng-container>
-          </a>
-        </div>
+    @for (submenu of menu.submenus; track $index; let submenuIndex = $index) {
+      @if (isMenu(submenu)) {
+        @if (!submenu.hide) {
+          <div class="menu submenu" [class.active]="submenu.isActive">
+            <a (click)="closeSideBarOnMobile()" [routerLink]="submenu.link">
+              <ng-container [ngTemplateOutlet]="MenuTemplate" [ngTemplateOutletContext]="{menu: submenu}"></ng-container>
+            </a>
+          </div>
+        }
+      } @else if (showMenuSeparator(menu.submenus, submenuIndex, submenu)) {
+        <ng-container [ngTemplateOutlet]="MenuSeparator" [ngTemplateOutletContext]="{menu: submenu}"></ng-container>
       }
     }
   }
+</ng-template>
+<!--Start Menu Separator Template-->
+<ng-template #MenuSeparator let-menu="menu">
+  <div class="menu-separator" [class.has-label]="menu.title" [class.is-wide]="menu.wide" [attr.aria-hidden]="menu.title ? null : true">
+    @if (menu.title) {
+      <span l10nTranslate>{{ menu.title }}</span>
+    }
+  </div>
 </ng-template>
 <!--End Templates-->

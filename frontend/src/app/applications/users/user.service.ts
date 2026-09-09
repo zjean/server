@@ -46,6 +46,7 @@ import type {
   UserOnline
 } from '@sync-in-server/backend/src/applications/users/interfaces/websocket.interface'
 import { API_TWO_FA_ADMIN_RESET_USER, API_TWO_FA_DISABLE, API_TWO_FA_ENABLE } from '@sync-in-server/backend/src/authentication/constants/routes'
+import type { LoginResponseDto } from '@sync-in-server/backend/src/authentication/dto/login-response.dto'
 import type { TwoFaVerifyWithPasswordDto } from '@sync-in-server/backend/src/authentication/providers/two-fa/auth-two-fa.dtos'
 import type {
   TwoFaEnableResult,
@@ -55,11 +56,12 @@ import type {
 import { BsModalRef } from 'ngx-bootstrap/modal'
 import { Socket } from 'ngx-socket-io'
 import { catchError, map, Observable, of, tap } from 'rxjs'
-import { AppMenu } from '../../layout/layout.interfaces'
+import { AppMenu, AppMenuEntry, isAppMenu, isAppMenuSeparator } from '../../layout/layout.interfaces'
 import { LayoutService } from '../../layout/layout.service'
 import { StoreService } from '../../store/store.service'
 import { NotificationsService } from '../notifications/notifications.service'
-import { SPACES_TITLE } from '../spaces/spaces.constants'
+import { RECENTS_PATH } from '../recents/recents.constants'
+import { SPACES_MENU, SPACES_TITLE } from '../spaces/spaces.constants'
 import { UserAuth2FaVerifyDialogComponent } from './components/dialogs/user-auth-2fa-verify-dialog.component'
 import { UserType } from './interfaces/user.interface'
 import { GroupBrowseModel } from './models/group-browse.model'
@@ -67,7 +69,6 @@ import { GuestUserModel } from './models/guest.model'
 import { MemberModel } from './models/member.model'
 import { UserOnlineModel } from './models/user-online.model'
 import { myAvatarUrl } from './user.functions'
-import type { LoginResponseDto } from '@sync-in-server/backend/src/authentication/dto/login-response.dto'
 
 type Auth2FaVerifyDialogResult = false | HttpHeaders | undefined
 
@@ -80,18 +81,16 @@ export class UserService {
   private readonly notifications = inject(NotificationsService)
 
   constructor() {
-    this.webSocket.fromEvent('connect').subscribe(() => this.notifications.checkUnreadNotifications())
-    this.webSocket.fromEvent('disconnect').subscribe(() => this.store.onlineUsers.set([]))
-    this.webSocket.fromEvent(NOTIFICATIONS_WS.EVENTS.NOTIFICATION).subscribe(() => this.notifications.checkUnreadNotifications(true))
-    this.webSocket
-      .fromEvent(USERS_WS.EVENTS.ONLINE_USER)
+    this.fromWebSocketEvent('connect').subscribe(() => this.notifications.checkUnreadNotifications())
+    this.fromWebSocketEvent('disconnect').subscribe(() => this.store.onlineUsers.set([]))
+    this.fromWebSocketEvent(NOTIFICATIONS_WS.EVENTS.NOTIFICATION).subscribe(() => this.notifications.checkUnreadNotifications(true))
+    this.fromWebSocketEvent<UserOnline>(USERS_WS.EVENTS.ONLINE_USER)
       .pipe(map((u: UserOnline) => new UserOnlineModel(u)))
       .subscribe((user) => this.newOnlineUser(user))
-    this.webSocket
-      .fromEvent(USERS_WS.EVENTS.ONLINE_USERS)
+    this.fromWebSocketEvent<UserOnline[]>(USERS_WS.EVENTS.ONLINE_USERS)
       .pipe(map((users: UserOnline[]) => users.map((u) => new UserOnlineModel(u))))
       .subscribe((users) => this.setOnlineUsers(users))
-    this.webSocket.fromEvent(USERS_WS.EVENTS.ONLINE_STATUS).subscribe((event: EventUpdateOnlineStatus) => this.receiveOnlineStatus(event))
+    this.fromWebSocketEvent<EventUpdateOnlineStatus>(USERS_WS.EVENTS.ONLINE_STATUS).subscribe((event) => this.receiveOnlineStatus(event))
   }
 
   get user() {
@@ -128,6 +127,14 @@ export class UserService {
 
   disconnectWebSocket() {
     this.webSocket.disconnect()
+  }
+
+  private fromWebSocketEvent<T = unknown>(eventName: string): Observable<T> {
+    return new Observable<T>((subscriber) => {
+      const listener = (...args: unknown[]) => subscriber.next(args[0] as T)
+      this.webSocket.on(eventName, listener)
+      return () => this.webSocket.removeListener(eventName, listener)
+    })
   }
 
   setOnlineUsers(users: UserOnlineModel[]) {
@@ -258,8 +265,16 @@ export class UserService {
     )
   }
 
-  setMenusVisibility(menus: AppMenu[]) {
+  getDefaultLandingPath(): string {
+    this.setMenusVisibility([SPACES_MENU])
+    return SPACES_MENU.link || RECENTS_PATH.BASE
+  }
+
+  setMenusVisibility(menus: AppMenuEntry[]) {
     for (const menu of menus) {
+      if (isAppMenuSeparator(menu)) {
+        continue
+      }
       if (menu.id) {
         menu.hide = !this.userHavePermission(menu.id)
         if (menu.hide) continue
@@ -270,17 +285,19 @@ export class UserService {
       if (menu.submenus?.length) {
         this.setMenusVisibility(menu.submenus)
       }
-      menu.hasSubmenus = !!menu.submenus?.some((submenu) => !submenu.hide)
+      menu.hasSubmenus = !!menu.submenus?.some((submenu) => isAppMenu(submenu) && !submenu.hide)
       // updates the files menu link based on user permissions
       if (menu.title === SPACES_TITLE.FILES) {
-        for (const submenu of menu.submenus) {
-          if (!submenu.hide) {
-            menu.link = submenu.link
-            break
-          }
+        const defaultMenu = this.findFirstVisibleMenu(menu.submenus, true) ?? this.findFirstVisibleMenu(menu.submenus)
+        if (defaultMenu) {
+          menu.link = defaultMenu.link
         }
       }
     }
+  }
+
+  private findFirstVisibleMenu(menus: AppMenuEntry[] | undefined, defaultLinkCandidate = false): AppMenu | undefined {
+    return menus?.find((menu): menu is AppMenu => isAppMenu(menu) && !menu.hide && (!defaultLinkCandidate || !!menu.defaultLinkCandidate))
   }
 
   refreshAvatar() {

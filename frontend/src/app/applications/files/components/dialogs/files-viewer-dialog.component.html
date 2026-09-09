@@ -1,12 +1,12 @@
 <div class="modal-header">
   <h4 class="modal-title me-auto">
-    <fa-icon [icon]="isReadonly() ? icons.faEye : icons.faPen"></fa-icon>
+    <svg [lucideIcon]="isReadonly() ? icons.LucideEye : icons.LucidePencil"></svg>
     <span>{{ currentFile.name }}</span>
   </h4>
   @if (canToggleViewer) {
     <button (click)="toggleViewer()" class="btn btn-sm btn-primary me-2" type="button">
-      <fa-icon [icon]="isReadonly() ? icons.faPen : icons.faEye"></fa-icon>
-      <span class="d-none d-sm-inline ms-2" l10nTranslate>{{ isReadonly() ? editOfficeEditorText : 'View in PDF.js' }}</span>
+      <svg [lucideIcon]="isReadonly() ? icons.LucidePencil : icons.LucideEye"></svg>
+      <span class="d-none d-sm-inline ms-2">{{ toggleViewerText }}</span>
     </button>
   }
   <button (click)="onMinimize()" aria-label="Minimize" class="btn-minimize btn-minimize-white" [class.ms-1]="canToggleViewer" type="button"></button>

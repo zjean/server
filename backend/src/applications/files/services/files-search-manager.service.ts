@@ -4,12 +4,13 @@ import { Stats } from 'node:fs'
 import path from 'node:path'
 import { configuration } from '../../../configuration/config.environment'
 import { SharesQueries } from '../../shares/services/shares-queries.service'
+import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { UserModel } from '../../users/models/user.model'
 import { SearchFilesDto } from '../dto/file-operations.dto'
 import { FilesContentStore } from '../models/files-content-store'
 import { FileContent } from '../schemas/file-content.interface'
-import { dirName, fileName, getMimeType } from '../utils/files'
+import { dirName, fileName, getMimeType, isInternalTemporaryEntry } from '../utils/files'
 import { genRegexPositiveAndNegativeTerms, normalizeSearchLimit } from '../utils/files-search'
 import { FilesContentParser } from './files-content-parser.service'
 import { FILE_REPOSITORY } from '../constants/operations'
@@ -32,12 +33,16 @@ export class FilesSearchManager {
       throw new HttpException('Full-text search is disabled', HttpStatus.BAD_REQUEST)
     }
     const limit = normalizeSearchLimit(search.limit)
-    const [spaceIds, shareIds] = await Promise.all([this.spacesQueries.spaceIds(user.id), this.sharesQueries.shareIds(user.id, +user.isAdmin)])
-    if (search.fullText) {
-      return await this.searchFullText(user.id, spaceIds, shareIds, search.content, limit)
-    } else {
-      return await this.searchFileNames(user.id, spaceIds, shareIds, search.content, limit)
-    }
+    const [userSpaces, userShares] = await Promise.all([
+      this.spacesQueries.spaceIdentities(user.id),
+      this.sharesQueries.shareIdentities(user.id, +user.isAdmin)
+    ])
+    const spaceIds = userSpaces.map((space) => space.id)
+    const shareIds = userShares.map((share) => share.id)
+    const fileContents = await (search.fullText
+      ? this.searchFullText(user.id, spaceIds, shareIds, search.content, limit)
+      : this.searchFileNames(user.id, spaceIds, shareIds, search.content, limit))
+    return this.setDisplayRootNames(fileContents, userSpaces, userShares)
   }
 
   private async searchFullText(userId: number, spaceIds: number[], shareIds: number[], search: string, limit: number): Promise<FileContent[]> {
@@ -52,12 +57,13 @@ export class FilesSearchManager {
     try {
       return await this.filesIndexer.searchRecords(indexNames, search, limit)
     } catch (e) {
-      this.logger.error({ tag: this.searchFullText.name, msg: `${JSON.stringify(indexNames)} - ${search} : ${e}` })
+      const error = e instanceof Error ? e : new Error(`${e}`)
+      this.logger.error({ tag: this.searchFullText.name, msg: `${JSON.stringify(indexNames)} - ${search}`, err: error })
       let msg: string
-      if (/Invalid regular expression/.test(e.message)) {
+      if (/Invalid regular expression/.test(error.message)) {
         msg = 'SyntaxError (check special characters)'
       } else {
-        msg = e.message
+        msg = 'Unable to perform full-text search'
       }
       throw new HttpException(msg, HttpStatus.BAD_REQUEST)
     }
@@ -68,11 +74,13 @@ export class FilesSearchManager {
     const regexpTerms = genRegexPositiveAndNegativeTerms(search)
     for (const { paths } of await this.filesParser.allPaths([userId], spaceIds, shareIds)) {
       for (const p of paths) {
+        if (isInternalTemporaryEntry(path.basename(p.realPath))) continue
         const regexBasePath = new RegExp(`^/?${escapePath(p.realPath)}/?`)
         if (!p.isDir) {
           const f = await this.analyzeFile(p.realPath, p.pathPrefix, regexBasePath, regexpTerms)
           if (f !== null) {
             fileContents.push(f)
+            if (fileContents.length >= limit) return fileContents
           }
           continue
         }
@@ -90,6 +98,7 @@ export class FilesSearchManager {
   private async *parseFileNames(dir: string, pathPrefix: string, regexBasePath: RegExp, regexpTerms: RegExp): AsyncGenerator<FileContent> {
     try {
       for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        if (isInternalTemporaryEntry(entry.name)) continue
         const realPath = path.join(entry.parentPath, entry.name)
         const fileContent = await this.analyzeFile(realPath, pathPrefix, regexBasePath, regexpTerms)
         if (fileContent !== null) {
@@ -116,5 +125,26 @@ export class FilesSearchManager {
       size: stats.size,
       mtime: stats.mtime.getTime()
     }
+  }
+
+  private setDisplayRootNames(
+    fileContents: FileContent[],
+    userSpaces: { alias?: string; name?: string }[],
+    userShares: { alias?: string; name?: string }[]
+  ): FileContent[] {
+    if (fileContents.length === 0) return fileContents
+    const displayRootNames = new Map<string, string>()
+    for (const { alias, name } of userSpaces) {
+      if (alias && name) displayRootNames.set(`${SPACE_REPOSITORY.FILES}/${alias}`, name)
+    }
+    for (const { alias, name } of userShares) {
+      if (alias && name) displayRootNames.set(`${SPACE_REPOSITORY.SHARES}/${alias}`, name)
+    }
+    for (const fileContent of fileContents) {
+      const [repository, alias] = fileContent.path.split('/', 2)
+      const displayRootName = displayRootNames.get(`${repository}/${alias}`)
+      if (displayRootName) fileContent.displayRootName = displayRootName
+    }
+    return fileContents
   }
 }

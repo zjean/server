@@ -1,8 +1,9 @@
-import { IconDefinition } from '@fortawesome/fontawesome-svg-core'
+import type { LucideIcon } from '@lucide/angular'
 import type { CommentRecent } from '@sync-in-server/backend/src/applications/comments/interfaces/comment-recent.interface'
+import { FILE_REPOSITORY } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { resolveFileLocation } from '../../files/components/utils/file-location.utils'
 import { getAssetsMimeUrl } from '../../files/files.constants'
-import { SPACES_ICON } from '../../spaces/spaces.constants'
 import { OwnerType } from '../../users/interfaces/owner.interface'
 import { userAvatarUrl } from '../../users/user.functions'
 
@@ -11,14 +12,16 @@ export class CommentRecentModel implements CommentRecent {
   content: string
   modifiedAt: Date
   author: OwnerType
-  file: { name: string; path: string; mime: string; inTrash: number; fromSpace: number; fromShare: number }
+  file: CommentRecent['file']
 
   // Computed
   mimeUrl: string
   avatarUrl: string
-  icon: IconDefinition
+  icon: LucideIcon
   iconClass: 'primary' | 'purple'
   showedPath: string
+  repositoryTitle: string
+  inTrash: boolean
 
   constructor(props: CommentRecent) {
     Object.assign(this, props)
@@ -26,8 +29,15 @@ export class CommentRecentModel implements CommentRecent {
       this.author.avatarUrl = userAvatarUrl(this.author.login)
     }
     this.mimeUrl = getAssetsMimeUrl(this.file.mime)
-    this.icon = this.file.fromShare ? SPACES_ICON.SHARES : this.file.fromSpace ? SPACES_ICON.SPACES : SPACES_ICON.PERSONAL
-    this.iconClass = this.file.fromShare ? 'purple' : 'primary'
-    this.showedPath = [...this.file.path.split('/').slice(this.file.path.split('/')[1] === SPACE_ALIAS.PERSONAL ? 2 : 1), this.file.name].join('/')
+    const location = resolveFileLocation(this.file.path, {
+      repository: this.file.fromShare ? FILE_REPOSITORY.SHARE : this.file.fromSpace ? FILE_REPOSITORY.SPACE : SPACE_ALIAS.PERSONAL,
+      appendName: this.file.name,
+      displayRootName: this.file.displayRootName
+    })
+    this.icon = location.icon
+    this.iconClass = location.iconClass
+    this.showedPath = location.relativePath
+    this.repositoryTitle = location.repositoryTitle
+    this.inTrash = !!this.file.inTrash
   }
 }

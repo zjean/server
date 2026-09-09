@@ -59,7 +59,21 @@ jobs:
           # back, so it needs a writable data path.
           sed -i "s|dataPath: /home/|dataPath: /tmp/|" environment/environment.yaml
           # Point at the service container.
-          sed -i "s|url: 'mysql://user:MySQLPassword@localhost:3306/database'|url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+          #
+          # Matched on the `url:` KEY, not on the credential literal. The literal
+          # version broke on the 2.5.0 sync: upstream changed the sample from
+          # `user:MySQLPassword` to `root:MySQLRootPassword` (8ad87f62), the sed
+          # silently matched nothing, the URL kept pointing at :3306 where nothing
+          # listens, and the whole suite died at "Apply migrations" with
+          # ECONNREFUSED — long before a single test ran.
+          sed -i "s|^\([[:space:]]*\)url: 'mysql://.*'|\1url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'|" environment/environment.yaml
+          # Fail LOUDLY if that ever stops matching again, rather than handing the
+          # suite an unusable URL and letting it fail somewhere less obvious.
+          grep -q "url: 'mysql://sync_in:dev@127.0.0.1:3307/sync_in'" environment/environment.yaml || {
+            echo "::error title=DB url rewrite failed::The mysql url in environment.dist.yaml no longer matches the sed in this workflow. Upstream probably changed its shape; update the pattern."
+            grep -n "mysql://" environment/environment.yaml || true
+            exit 1
+          }
           # Enable OnlyOffice. NOT so documents can be edited — no document server
           # runs here. FilesModule imports OnlyOfficeModule CONDITIONALLY at
           # module-definition time, so with the flag off `app.get(OnlyOfficeManager)`
@@ -71,6 +85,55 @@ jobs:
           # Scoped to the editors.onlyoffice block by a line range, so it cannot
           # flip some other `enabled: false` elsewhere in the file.
           sed -i '/^      onlyoffice:$/,/^      eurooffice:$/ s/^        enabled: false$/        enabled: true/' environment/environment.yaml
+
+      # Upstream 2.5.0 stopped shipping placeholder secrets in the dist file
+      # (a654376c): `auth.token.access.secret` and friends are now EMPTY, and config
+      # validation rejects that, so every spec file died at import with "Invalid
+      # configuration in environment.yaml" before a single test ran.
+      #
+      # Only four need setting. `auth.token.csrf` / `ws` / `access_2fa` / `csrf_2fa`
+      # are DERIVED at runtime from access/refresh and inherit their secrets — which
+      # is why this worked while the dist file still carried placeholders.
+      #
+      # The onlyoffice secret must merely be non-empty: E2E-11 signs its own callback
+      # JWT with whatever `configuration.applications.files.editors.onlyoffice.secret`
+      # holds at runtime (versions-editors.e2e-spec.ts), so it does not need to match
+      # any particular value.
+      #
+      # Done in node rather than sed because the dist file has several other empty
+      # `secret:` keys (ldap, oidc, eurooffice) that a line-oriented match would hit.
+      #
+      # KEEP EVERY `sed` STEP ABOVE THIS ONE. yaml.dump reflows the file and drops its
+      # comments, so any line-oriented pattern added after this step would be matching
+      # against re-serialised YAML rather than the dist file's own formatting.
+      - name: Inject test secrets
+        run: |
+          node -e "
+            const yaml = require('js-yaml'), fs = require('fs');
+            const p = 'environment/environment.yaml';
+            const c = yaml.load(fs.readFileSync(p, 'utf8'));
+            c.auth.encryptionKey = 'e2e-encryption-key';
+            c.auth.token.access.secret = 'e2e-access-secret';
+            c.auth.token.refresh.secret = 'e2e-refresh-secret';
+            c.applications.files.editors.onlyoffice.secret = 'e2e-onlyoffice-secret';
+            fs.writeFileSync(p, yaml.dump(c, { lineWidth: -1 }));
+          "
+          # Same reasoning as the db-url guard: a rewrite that silently no-ops is
+          # worse than one that fails, because the symptom lands somewhere unrelated.
+          node -e "
+            const yaml = require('js-yaml'), fs = require('fs');
+            const c = yaml.load(fs.readFileSync('environment/environment.yaml', 'utf8'));
+            const missing = [
+              ['auth.encryptionKey', c.auth?.encryptionKey],
+              ['auth.token.access.secret', c.auth?.token?.access?.secret],
+              ['auth.token.refresh.secret', c.auth?.token?.refresh?.secret],
+              ['applications.files.editors.onlyoffice.secret', c.applications?.files?.editors?.onlyoffice?.secret]
+            ].filter(([, v]) => !v).map(([k]) => k);
+            if (missing.length) {
+              console.log('::error title=Secret injection failed::empty after injection: ' + missing.join(', '));
+              process.exit(1);
+            }
+          "
 
       - name: Apply migrations
         run: npm run dev:migrate

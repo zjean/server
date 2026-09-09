@@ -282,14 +282,13 @@ export class InspectorPanelComponent {
   }
 
   protected isFavorite(): boolean {
-    const f = this.file()
-    return !!f && this.favorites.isFavorite(f.id)
+    return this.favorites.isFavorite(this.file())
   }
 
   protected toggleFavorite(): void {
     const f = this.file()
     if (!f) return
-    this.favorites.toggle(f.path, f.id, !this.favorites.isFavorite(f.id))
+    this.favorites.toggle(f.path, f)
   }
 
   // Mirrors file-detail's own Share entry point, including the space alias split

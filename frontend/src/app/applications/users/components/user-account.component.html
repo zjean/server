@@ -61,7 +61,7 @@
                       <div class="col-7 col-sm-8 d-flex flex-wrap justify-content-end">
                         @if (user.isAdmin) {
                           <span class="badge bg-purple">
-                            <fa-icon [icon]="icons.faKey"></fa-icon>
+                            <svg [lucideIcon]="icons.LucideKeyRound"></svg>
                             <span l10nTranslate>Administrator</span>
                           </span>
                         } @else {
@@ -87,7 +87,7 @@
                         (click)="clipBoardLink()"
                         [title]="webdavUrl"
                         class="badge bg-primary d-inline-flex align-items-center gap-1 cursor-pointer">
-                        <fa-icon [icon]="icons.faCopy"></fa-icon>
+                        <svg [lucideIcon]="icons.LucideCopy"></svg>
                         {{ webdavUrl }}
                       </span>
                     </div>
@@ -214,19 +214,23 @@
                   }
                 </div>
                 <div class="d-flex flex-column gap-2">
-                  <div class="row g-2 align-items-center">
-                    <label for="" class="form-label col-12 col-md-6 mb-0">{{ 'current password' | translate:locale.language | capitalize }}</label>
-                    <div class="col-12 col-md-6">
-                      <app-input-password [(password)]="oldPassword"></app-input-password>
+                  @if (requiresCurrentPassword) {
+                    <div class="row g-2 align-items-center">
+                      <label for="" class="form-label col-12 col-md-6 mb-0">{{ 'current password' | translate:locale.language | capitalize }}</label>
+                      <div class="col-12 col-md-6">
+                        <app-input-password [(password)]="oldPassword"></app-input-password>
+                      </div>
                     </div>
-                  </div>
+                  }
 
                   <div class="row g-2 align-items-center">
-                    <label for="" class="form-label col-12 col-md-6 mb-0">{{ 'new password' | translate:locale.language | capitalize }}</label>
+                    <label for="" class="form-label col-12 col-md-6 mb-0">
+                      {{ (requiresCurrentPassword ? 'new password' : 'local password') | translate:locale.language | capitalize }}
+                    </label>
                     <div class="col-12 col-md-6">
                       <app-input-password [(password)]="newPassword"
-                                          [disabled]="!oldPassword?.length"
-                                          [isRequired]="!!oldPassword?.length"
+                                          [disabled]="requiresCurrentPassword && !oldPassword?.length"
+                                          [isRequired]="requiresCurrentPassword && !!oldPassword?.length"
                                           [passwordMinLength]="passwordMinLength"
                                           [showGenerator]="true">
                       </app-input-password>
@@ -235,7 +239,7 @@
 
                   <div class="row g-2">
                     <div class="col-12 col-md-6 offset-md-6">
-                      <button [disabled]="!newPassword || !oldPassword || newPassword.length < passwordMinLength"
+                      <button [disabled]="!newPassword || (requiresCurrentPassword && !oldPassword) || newPassword.length < passwordMinLength"
                               (click)="submitPassword()"
                               class="btn btn-primary text-nowrap"
                               type="button"

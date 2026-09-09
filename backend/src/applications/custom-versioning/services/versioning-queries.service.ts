@@ -4,7 +4,7 @@ import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
 import { FileDBProps } from '../../files/interfaces/file-db-props.interface'
-import { childFilesFindRegexp, files } from '../../files/schemas/files.schema'
+import { childFilesMatch, files } from '../../files/schemas/files.schema'
 import { dirName, fileName } from '../../files/utils/files'
 import { userFullNameSQL, users } from '../../users/schemas/users.schema'
 import { VersionInsert, VersionOrigin, VersionRow } from '../interfaces/version.interface'
@@ -227,7 +227,7 @@ export class VersioningQueries {
   //
   // Mirrors deleteFiles (files-queries.service.ts:193-232) exactly: the target
   // itself is matched by (scope, dirName(path), fileName(path), isDir), and for
-  // a directory its descendants are matched by (scope, childFilesFindRegexp).
+  // a directory its descendants are matched by (scope, childFilesMatch).
   // A single regexp query covers every depth, which is why purging by the
   // target id alone would silently leave every child's history orphaned.
   async resolveFileIdsForDelete(props: FileDBProps, isDir: boolean): Promise<number[]> {
@@ -256,7 +256,7 @@ export class VersioningQueries {
       for (const row of await this.db
         .select({ id: files.id })
         .from(files)
-        .where(and(...convertToWhere(files, commonProps), childFilesFindRegexp(props.path)))) {
+        .where(and(...convertToWhere(files, commonProps), childFilesMatch(props.path)))) {
         ids.add(row.id)
       }
     }

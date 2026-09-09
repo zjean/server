@@ -904,14 +904,17 @@ export function describeFileBrowserContract(p: BrowserContractParams): void {
         expect(c.folderSizeState(2)).toEqual({ status: 'idle', id: 2 })
       })
 
-      it('stars an unstarred row and unstars a starred one', () => {
+      it('hands the star toggle the row path and its file id', () => {
+        // Upstream owns the add/remove decision now: the service flips its own
+        // optimistic override and picks POST vs DELETE, so the component's job is
+        // only to name the row. Both directions therefore log the same call.
         const { c, deps } = start(['sub'])
         c.toggleFavorite(FIXTURE_FILES[0])
-        expect(deps.log.only('favorites.toggle').args).toEqual([filePath('alpha.txt', ['sub']), 1, true])
+        expect(deps.log.only('favorites.toggle').args).toEqual([filePath('alpha.txt', ['sub']), 1])
         deps.favoriteIds.add(1)
         deps.log.clear()
         c.toggleFavorite(FIXTURE_FILES[0])
-        expect(deps.log.only('favorites.toggle').args).toEqual([filePath('alpha.txt', ['sub']), 1, false])
+        expect(deps.log.only('favorites.toggle').args).toEqual([filePath('alpha.txt', ['sub']), 1])
       })
     })
 

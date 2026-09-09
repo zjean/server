@@ -2,8 +2,7 @@ import { KeyValuePipe } from '@angular/common'
 import { Component, effect, ElementRef, inject, ViewChild } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowDown, faArrowUp, faRedo, faTrashCan } from '@fortawesome/free-solid-svg-icons'
+import { LucideArrowDown, LucideArrowUp, LucideDynamicIcon, LucideRotateCw, LucideTrash2 } from '@lucide/angular'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { BsModalRef } from 'ngx-bootstrap/modal'
 import { TooltipDirective } from 'ngx-bootstrap/tooltip'
@@ -30,7 +29,7 @@ import { SyncTransfersDeleteDialogComponent } from './dialogs/sync-transfers-del
     L10nTranslatePipe,
     TooltipDirective,
     VirtualScrollComponent,
-    FaIconComponent,
+    LucideDynamicIcon,
     FilterComponent,
     KeyValuePipe
   ],
@@ -53,7 +52,7 @@ export class SyncTransfersComponent {
   protected tableHeaders: Record<'action' | 'sync' | 'file' | 'date', TableHeaderConfig> = {
     action: {
       label: 'Action',
-      width: 11,
+      width: 8,
       textCenter: false,
       class: '',
       show: true,
@@ -85,7 +84,7 @@ export class SyncTransfersComponent {
       sortable: true
     }
   }
-  protected readonly icons = { faRedo, faTrashCan, faArrowDown, faArrowUp }
+  protected readonly icons = { LucideRotateCw, LucideTrash2, LucideArrowDown, LucideArrowUp }
   private readonly router = inject(Router)
   private readonly layout = inject(LayoutService)
   private readonly syncService = inject(SyncService)

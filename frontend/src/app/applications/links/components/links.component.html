@@ -1,42 +1,39 @@
 <!--Start Top Menu-->
 <div class="app-top-menu">
-  <button (click)="loadShareLinks()"
-          class="d-none d-sm-block btn btn-default me-1"
-          [tooltip]="'Refresh' | translate:locale.language"
-          type="button">
-    <fa-icon [icon]="icons.faArrowRotateRight" [animation]="loading ? 'spin' : null"></fa-icon>
-  </button>
   <button (click)="openLinkDialog()"
           [disabled]="!selected" class="btn btn-default me-1"
           [tooltip]="'Edit link' | translate:locale.language"
           type="button">
-    <fa-icon [icon]="icons.faPen"></fa-icon>
+    <svg [lucideIcon]="icons.LucidePencil"></svg>
   </button>
   <button (click)="copyToClipboard()"
           [disabled]="!selected"
           class="btn me-1 {{linkWasCopied ? 'btn-primary' : 'btn-default'}}"
           [tooltip]="'Copy link' | translate:locale.language"
           type="button">
-    <fa-icon [icon]="linkWasCopied? icons.faClipboardCheck : icons.faClipboard"></fa-icon>
+    <svg [lucideIcon]="linkWasCopied? icons.LucideClipboardCheck : icons.LucideClipboard"></svg>
   </button>
   <button (click)="goTo()"
           [disabled]="!selected"
           class="btn btn-default"
           [tooltip]="'Go to' | translate:locale.language"
           type="button">
-    <fa-icon [icon]="icons.faMapMarkerAlt"></fa-icon>
+    <svg [lucideIcon]="icons.LucideMapPin"></svg>
   </button>
-  <div class="ms-auto">
+  <div class="d-flex align-items-center ms-auto">
     <!--Start Filter Button-->
     <div class="btn-group me-1">
       <app-input-filter class="d-none d-sm-block"></app-input-filter>
     </div>
     <!--End Filter Button-->
+    <button (click)="loadShareLinks()"
+            class="d-none d-sm-block btn btn-default me-1"
+            [tooltip]="'Refresh' | translate:locale.language"
+            type="button">
+      <svg [lucideIcon]="icons.LucideRotateCw" [class.icon-spin]="loading"></svg>
+    </button>
     <!--Start View Button-->
-    <app-navigation-view [sortParams]="sortTable.sortParam"
-                         [sortFields]="btnSortFields"
-                         (sortBy)="sortBy($event)"
-                         (switchView)="galleryMode = $event">
+    <app-navigation-view (switchView)="galleryMode = $event">
     </app-navigation-view>
     <!--End View Button-->
   </div>
@@ -44,7 +41,11 @@
 <!--End Top Menu-->
 @if (galleryMode?.enabled) {
   <!--Start Gallery Content-->
-  <div class="app-thumbs">
+  <div [style.--gallery-card-size]="galleryMode.dimensions + 'px'"
+       [style.--gallery-badge-size]="galleryMode.badgeSize + 'px'"
+       [style.--gallery-image-size]="galleryMode.image + 'px'"
+       [style.--gallery-text-size]="galleryMode.textSize + 'px'"
+       class="app-gallery">
     <app-virtual-scroll (contextmenu)="onContextMenu($event)"
                         [childHeight]="galleryMode.dimensions"
                         [childWidth]="galleryMode.dimensions"
@@ -58,14 +59,12 @@
                (appTap)="openLinkDialog()"
                [class.selected]="s.id === selected?.id"
                [class.disabled]="!s.link.isActive"
-               [style.height.px]="galleryMode.dimensions"
-               [style.width.px]="galleryMode.dimensions"
                class="card">
             <div [attr.rowIndex]="$index" class="card-body">
-              <img [src]="s.mimeUrl" [height]="galleryMode.image" [width]="galleryMode.image" alt="" draggable="true" (error)="s.fallBackMimeUrl()">
+              <img [src]="s.mimeUrl" alt="" class="gallery-image" draggable="true" (error)="s.fallBackMimeUrl()">
               <span class="label-top-right">
                 @if (s.newly) {
-                  <span [style.font-size.px]="galleryMode.textSize" class="badge bg-purple">
+                  <span class="badge bg-purple">
                     {{ s.hTimeAccessAgo }}
                   </span>
                 }
@@ -80,7 +79,7 @@
                 }
                 @if (s.link.expiresAt) {
                   <span class="badge bg-{{s.hTimeExpirationAgo >= 1 ? 'warning': 'danger'}} ms-1">
-                          <fa-icon [icon]="icons.faClock" [fixedWidth]="false"></fa-icon>
+                          <svg [lucideIcon]="icons.LucideClock"></svg>
                     @if (s.hTimeExpirationAgo >= 1) {
                       {{ s.hTimeExpirationAgo }}&nbsp;{{ (s.hTimeExpirationAgo === 1 ? 'day' : 'days') | translate:locale.language }}
                     }
@@ -92,7 +91,7 @@
               </span>
             </div>
             <div class="card-footer text-center text-truncate p-1">
-              <span [style.font-size.px]="galleryMode.textSize" class="no-pointer-events text-file-name-preserve" draggable="false">{{ s.name }}</span>
+              <span class="no-pointer-events text-file-name-preserve" draggable="false">{{ s.name }}</span>
             </div>
           </div>
         }
@@ -115,7 +114,7 @@
               l10nTranslate>
             {{ th.value.label }}
             @if (sortTable.sortParam.column === th.key) {
-              <fa-icon [icon]="sortTable.sortParam.asc ? icons.faArrowDown : icons.faArrowUp" [fixedWidth]="false"></fa-icon>
+              <svg [lucideIcon]="sortTable.sortParam.asc ? icons.LucideArrowDown : icons.LucideArrowUp"></svg>
             }
           </th>
         }
@@ -170,7 +169,7 @@
                       }
                       @if (s.link.expiresAt) {
                         <span class="badge bg-{{s.hTimeExpirationAgo >= 1 ? 'warning': 'danger'}} ms-1">
-                          <fa-icon [icon]="icons.faClock" [fixedWidth]="false"></fa-icon>
+                          <svg [lucideIcon]="icons.LucideClock"></svg>
                           @if (s.hTimeExpirationAgo >= 1) {
                             {{ s.hTimeExpirationAgo }}&nbsp;{{ (s.hTimeExpirationAgo === 1 ? 'day' : 'days') | translate:locale.language }}
                           }
@@ -178,7 +177,7 @@
                       }
                       @if (s.link.requireAuth) {
                         <span class="badge bg-gray-dark ms-1">
-                          <fa-icon [icon]="icons.faLock"></fa-icon>
+                          <svg [lucideIcon]="icons.LucideLock"></svg>
                         </span>
                       }
                     }
@@ -215,22 +214,22 @@
 <!--Start Context Menu -->
 <context-menu #MainContextMenu>
   <ng-template (execute)="loadShareLinks()" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faArrowRotateRight"></fa-icon>Refresh</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.LucideRotateCw"></svg>Refresh</span>
   </ng-template>
 </context-menu>
 <context-menu #TargetContextMenu>
   <ng-template (execute)="goTo()" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faMapMarkerAlt"></fa-icon>Go to</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.LucideMapPin"></svg>Go to</span>
   </ng-template>
   <ng-template (execute)="openLinkDialog()" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faPen"></fa-icon>Edit link</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.LucidePencil"></svg>Edit link</span>
   </ng-template>
   <ng-template (execute)="copyToClipboard()" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faClipboard"></fa-icon>Copy link</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.LucideClipboard"></svg>Copy link</span>
   </ng-template>
   <ng-template [divider]="true" contextMenuItem></ng-template>
   <ng-template (execute)="layout.showRSideBarTab(TAB_MENU.SELECTION)" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faCircleInfo"></fa-icon>Info</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.SELECTION"></svg>View selection</span>
   </ng-template>
 </context-menu>
 <!--End Context Menu-->

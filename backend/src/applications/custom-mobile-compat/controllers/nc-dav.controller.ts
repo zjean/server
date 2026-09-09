@@ -23,6 +23,7 @@ import { parseFavoriteProppatch } from '../utils/nc-favorites-xml'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
 import '../interfaces/nc-request.interface'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // NcDavController — WebDAV, trashbin, legacy redirect.
 //
@@ -379,7 +380,7 @@ export class NcDavController {
   //
   // Two paths matching Sync-in's two `files`-row insert helpers:
   //   - personal space   → spacesQueries.getOrCreateUserFile(userId, props)
-  //   - any other space  → spacesQueries.getOrCreateSpaceFile(0, props, dbFileFromSpace(userId, space))
+  //   - any other space  → spacesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, props, dbFileFromSpace(userId, space))
   //
   // Trash repository is skipped — uploads don't go there.
   async ensureDbRowForUpload(req: FastifyDAVRequest): Promise<void> {
@@ -399,7 +400,7 @@ export class NcDavController {
     // SpaceEnv; `fileProps` (path/name/size/...) overrides on merge inside
     // `getOrCreateSpaceFile`.
     const dbFile = dbFileFromSpace(user.id, space)
-    await this.spacesQueries.getOrCreateSpaceFile(0, fileProps, dbFile)
+    await this.spacesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, fileProps, dbFile)
   }
 
   // 308, not 301. `/remote.php/webdav/` is the URL ONLYOFFICE's own help pages

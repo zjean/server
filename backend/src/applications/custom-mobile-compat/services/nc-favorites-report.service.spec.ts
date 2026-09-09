@@ -46,8 +46,24 @@ function fakeReply() {
 
 const user = { id: 7, login: 'alice', fullName: 'Alice' } as UserModel
 
-function favorite(navPath: string, name: string, id = 100) {
-  return { id, name, isDir: false, mime: 'application/pdf', size: 5, mtime: Date.now(), ctime: Date.now(), isFavorite: true, navPath }
+// Shaped like upstream's FileFavorite (files/schemas/file-favorite.interface.ts):
+// `path` is the repository-qualified PARENT and `name` the entry, so the service
+// recomposes the address. Callers still pass the full nav path for readability.
+function favorite(navPath: string, name: string, id = 100, isDisabled = false) {
+  const parent = navPath.slice(0, navPath.length - name.length).replace(/\/$/, '')
+  return {
+    fileId: id,
+    id,
+    name,
+    path: parent,
+    isDir: false,
+    mime: 'application/pdf',
+    size: 5,
+    mtime: Date.now(),
+    ctime: Date.now(),
+    createdAt: new Date(),
+    isDisabled
+  }
 }
 
 describe('NcFavoritesReportService', () => {
@@ -119,6 +135,24 @@ describe('NcFavoritesReportService', () => {
       expect(captured.body).toContain('<oc:favorite>1</oc:favorite>')
       // resolved via the stored repository path (navPath), not a rebuilt one
       expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'report.pdf'])
+    })
+
+    // Upstream marks a favorite it can no longer resolve as isDisabled and leaves its
+    // `path` as the raw OWNER-relative files.path — not addressable. Emitting it would
+    // put an entry in the NC Favorites tab that the client cannot open, and would send
+    // the unaddressable path through spaceEnv on every REPORT.
+    it('omits a favorite upstream could not resolve (isDisabled), without touching spaceEnv', async () => {
+      const filePath = path.join(tmpRoot, 'stale.pdf')
+      await fs.writeFile(filePath, 'pdf')
+      favorites.getFavorites.mockResolvedValue([favorite('Archive/stale.pdf', 'stale.pdf', 100, true)])
+      spacesManager.spaceEnv.mockResolvedValue(fakeSpace(filePath, 'stale.pdf'))
+
+      const { reply, captured } = fakeReply()
+      await service.respond({ user } as never, reply)
+
+      expect(captured.status).toBe(207)
+      expect(captured.body).not.toContain('stale.pdf')
+      expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
     })
 
     it('omits a collaborative-space favorite that is not reachable under the personal home', async () => {

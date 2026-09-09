@@ -11,20 +11,25 @@ describe(NcAppPasswordService.name, () => {
   let service: NcAppPasswordService
   let listAppPasswords: Mock
   let deleteAppPassword: Mock
-  let getUserSecrets: Mock
-  let updateUserOrGuest: Mock
+  let mutateUserSecrets: Mock
+  // Secrets document the stateful mutateUserSecrets mock reads and writes, mirroring
+  // upstream's own users-manager spec helper.
+  let currentSecrets: Record<string, any>
   const fakeUser = { id: 7, login: 'alice' } as UserModel
 
   beforeAll(async () => {
     listAppPasswords = vi.fn()
     deleteAppPassword = vi.fn()
-    getUserSecrets = vi.fn()
-    updateUserOrGuest = vi.fn()
+    mutateUserSecrets = vi.fn().mockImplementation(async (_userId: number, mutate: (secrets: any) => { result: any; secrets?: any }) => {
+      const mutation = mutate(currentSecrets)
+      if (mutation.secrets !== undefined) currentSecrets = mutation.secrets
+      return mutation.result
+    })
     moduleRef = await Test.createTestingModule({
       providers: [
         NcAppPasswordService,
         { provide: UsersManager, useValue: { listAppPasswords, deleteAppPassword } },
-        { provide: UsersQueries, useValue: { getUserSecrets, updateUserOrGuest } }
+        { provide: UsersQueries, useValue: { mutateUserSecrets } }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
@@ -38,8 +43,9 @@ describe(NcAppPasswordService.name, () => {
   beforeEach(() => {
     listAppPasswords.mockReset()
     deleteAppPassword.mockReset()
-    getUserSecrets.mockReset()
-    updateUserOrGuest.mockReset()
+    currentSecrets = {}
+    // mockClear, not mockReset: the stateful implementation above must survive.
+    mutateUserSecrets.mockClear()
   })
 
   function row(name: string, ageDays: number, app: AUTH_SCOPE = AUTH_SCOPE.MOBILE_NC) {
@@ -130,29 +136,24 @@ describe(NcAppPasswordService.name, () => {
     const URL_SAFE_RE = /^[A-Za-z0-9_-]+$/
 
     it('returns URL-safe cleartext (no &, #, %, or other URL-significant chars)', async () => {
-      getUserSecrets.mockResolvedValueOnce({})
-      updateUserOrGuest.mockResolvedValueOnce(true)
       const result = await service.mintMobileAppPassword(fakeUser, 'mobile abc12345')
       expect(result.password).toMatch(URL_SAFE_RE)
       expect(result.password.length).toBeGreaterThanOrEqual(20)
     })
 
     it('produces a fresh password on each call (sanity check on randomness)', async () => {
-      getUserSecrets.mockResolvedValue({})
-      updateUserOrGuest.mockResolvedValue(true)
       const a = await service.mintMobileAppPassword(fakeUser, 'mobile aa')
       const b = await service.mintMobileAppPassword(fakeUser, 'mobile bb')
       expect(a.password).not.toBe(b.password)
     })
 
     it('persists a new MOBILE_NC row with the hashed cleartext', async () => {
-      getUserSecrets.mockResolvedValueOnce({})
-      updateUserOrGuest.mockResolvedValueOnce(true)
       await service.mintMobileAppPassword(fakeUser, 'mobile abc12345')
-      expect(updateUserOrGuest).toHaveBeenCalledTimes(1)
-      const [userId, set] = updateUserOrGuest.mock.calls[0]
-      expect(userId).toBe(fakeUser.id)
-      const newRow = set.secrets.appPasswords[0]
+      // Writes go through mutateUserSecrets so the read/check/append is serialized
+      // under the row lock upstream added in 2.5.0.
+      expect(mutateUserSecrets).toHaveBeenCalledTimes(1)
+      expect(mutateUserSecrets.mock.calls[0][0]).toBe(fakeUser.id)
+      const newRow = currentSecrets.appPasswords[0]
       expect(newRow.app).toBe(AUTH_SCOPE.MOBILE_NC)
       expect(newRow.name).toBe('mobile abc12345')
       // Stored value MUST be the bcrypt hash, not the cleartext.
@@ -160,17 +161,18 @@ describe(NcAppPasswordService.name, () => {
     })
 
     it('rejects with 400 when the slugified name collides with an existing row', async () => {
-      getUserSecrets.mockResolvedValueOnce({ appPasswords: [{ name: 'mobile abc12345', app: AUTH_SCOPE.MOBILE_NC, password: 'hash' }] })
+      currentSecrets = { appPasswords: [{ name: 'mobile abc12345', app: AUTH_SCOPE.MOBILE_NC, password: 'hash' }] }
       await expect(service.mintMobileAppPassword(fakeUser, 'mobile abc12345')).rejects.toMatchObject({
         message: 'Name already used',
         status: 400
       })
-      expect(updateUserOrGuest).not.toHaveBeenCalled()
+      // The collision is detected INSIDE the mutation callback, so the row must be
+      // left untouched even though the lock was taken.
+      expect(currentSecrets.appPasswords).toHaveLength(1)
     })
 
     it('rejects with 500 when the secrets write fails', async () => {
-      getUserSecrets.mockResolvedValueOnce({})
-      updateUserOrGuest.mockResolvedValueOnce(false)
+      mutateUserSecrets.mockRejectedValueOnce(new Error('deadlock'))
       await expect(service.mintMobileAppPassword(fakeUser, 'mobile abc12345')).rejects.toMatchObject({
         status: 500
       })

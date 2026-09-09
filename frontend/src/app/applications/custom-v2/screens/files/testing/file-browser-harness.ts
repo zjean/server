@@ -359,9 +359,13 @@ export class HarnessDeps {
       {
         provide: FavoritesService,
         useValue: {
-          isFavorite: (id: number) => this.favoriteIds.has(id),
-          toggle: (path: string, id: number, add: boolean) => log.record('favorites.toggle', path, id, add),
-          loadFavoriteIds: () => log.record('favorites.loadFavoriteIds')
+          // The real service reads the row's own `isFavorite` (authoritative, from the
+          // browse response) with an optimistic override on top; the harness keeps a
+          // plain id Set, which stands in for either.
+          isFavorite: (file: { id: number; isFavorite?: boolean } | null | undefined) =>
+            !!file && (this.favoriteIds.has(file.id) || !!file.isFavorite),
+          toggle: (path: string, file: { id: number }) => log.record('favorites.toggle', path, file.id),
+          clearOverrides: () => log.record('favorites.clearOverrides')
         }
       },
       {

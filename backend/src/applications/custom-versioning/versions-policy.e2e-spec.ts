@@ -345,8 +345,14 @@ describe('versions retention, quota and crash safety (e2e)', () => {
     it('never evicts a labeled version, accepting the overshoot instead', async () => {
       const rel = 'e2e12-labeled.txt'
       const chunk = (n: number) => `L${n}`.repeat(300)
-      await setQuota(2000)
-      e2e.config.quotaShare = 0.5
+      // Upstream 2.5.0 enforces the user's STORAGE quota on the write itself
+      // (assertCanConsume, files/utils/upload-file.ts), so a 2000-byte quota can no
+      // longer stand in for a small versions ceiling — the overwrite below would be
+      // refused with "Storage quota exceeded" before any versioning ran. The ceiling
+      // is `quota * quotaShare`, so scaling the quota up and the share down by the
+      // same factor keeps it at exactly 1000 bytes, which is what this case is about.
+      await setQuota(100_000)
+      e2e.config.quotaShare = 0.01
 
       await e2e.seed(rel, chunk(1))
       await e2e.overwrite(rel, chunk(2), 'web')
@@ -384,8 +390,14 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       const a = 'e2e12-dedup-a.txt'
       const b = 'e2e12-dedup-b.txt'
       const shared = 'D'.repeat(600)
-      await setQuota(2000)
-      e2e.config.quotaShare = 0.5
+      // Upstream 2.5.0 enforces the user's STORAGE quota on the write itself
+      // (assertCanConsume, files/utils/upload-file.ts), so a 2000-byte quota can no
+      // longer stand in for a small versions ceiling — the overwrite below would be
+      // refused with "Storage quota exceeded" before any versioning ran. The ceiling
+      // is `quota * quotaShare`, so scaling the quota up and the share down by the
+      // same factor keeps it at exactly 1000 bytes, which is what this case is about.
+      await setQuota(100_000)
+      e2e.config.quotaShare = 0.01
 
       await e2e.seed(a, shared)
       await e2e.overwrite(a, 'a moves on', 'web')

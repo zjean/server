@@ -1,7 +1,6 @@
 import type { TreeNode } from '@ali-hm/angular-tree-component'
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
+import { HttpClient, HttpErrorResponse, HttpParams, HttpResponse } from '@angular/common/http'
 import { inject, Injectable } from '@angular/core'
-import { DomSanitizer } from '@angular/platform-browser'
 import { TAR_EXTENSION, TAR_GZ_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import {
   FILE_MODE,
@@ -10,6 +9,7 @@ import {
   SEND_FILE_ERROR_MSG
 } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import {
+  API_FILES_FAVORITES,
   API_FILES_OPERATION,
   API_FILES_OPERATION_MAKE,
   API_FILES_RECENTS,
@@ -19,6 +19,7 @@ import {
   API_FILES_TASK_OPERATION_DOWNLOAD,
   API_FILES_TASKS_DOWNLOAD
 } from '@sync-in-server/backend/src/applications/files/constants/routes'
+import type { DeleteFileFavoriteDto, FileFavoriteDto } from '@sync-in-server/backend/src/applications/files/dto/file-favorite.dto'
 import type {
   CompressFileDto,
   CopyMoveFileDto,
@@ -34,24 +35,26 @@ import { COLLABORA_ONLINE_EXTENSIONS } from '@sync-in-server/backend/src/applica
 import type { FileEditorProviders } from '@sync-in-server/backend/src/applications/files/editors/file-editor-providers.interface'
 import { ONLY_OFFICE_EXTENSIONS } from '@sync-in-server/backend/src/applications/files/editors/only-office/only-office.constants'
 import type { FileContent } from '@sync-in-server/backend/src/applications/files/schemas/file-content.interface'
+import type { FileFavorite, FileFavoriteIdentity } from '@sync-in-server/backend/src/applications/files/schemas/file-favorite.interface'
 import type { FileRecent } from '@sync-in-server/backend/src/applications/files/schemas/file-recent.interface'
 import { API_SPACES_TREE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_OPERATION } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { forbiddenChars, isValidFileName } from '@sync-in-server/backend/src/common/shared'
 import { BsModalRef } from 'ngx-bootstrap/modal'
-import { EMPTY, firstValueFrom, map, Observable, Subject } from 'rxjs'
+import { BehaviorSubject, catchError, EMPTY, filter, firstValueFrom, map, Observable, of, shareReplay, Subject, switchMap, tap, timer } from 'rxjs'
 import { downloadWithAnchor } from '../../../common/utils/functions'
 import { TAB_MENU } from '../../../layout/layout.interfaces'
 import { LayoutService } from '../../../layout/layout.service'
 import { StoreService } from '../../../store/store.service'
 import { UserService } from '../../users/user.service'
 import { FilesLockDialogComponent } from '../components/dialogs/files-lock-dialog.component'
-import { FilesOverwriteDialogComponent } from '../components/dialogs/files-overwrite-dialog.component'
+import { type FilesOverwriteAction, FilesOverwriteDialogComponent } from '../components/dialogs/files-overwrite-dialog.component'
 import { FilesViewerDialogComponent } from '../components/dialogs/files-viewer-dialog.component'
 import { FilesViewerSelectDialog } from '../components/dialogs/files-viewer-select-dialog.component'
 import { fileLockPropsToString } from '../components/utils/file-lock.utils'
 import { MAX_TEXT_FILE_SIZE, SHORT_MIME } from '../files.constants'
 import { FileContentModel } from '../models/file-content.model'
+import { FileFavoriteModel } from '../models/file-favorite.model'
 import { FileRecentModel } from '../models/file-recent.model'
 import { FileModel } from '../models/file.model'
 import { FilesTasksService } from './files-tasks.service'
@@ -62,19 +65,32 @@ type ViewerHookResult = { action: 'open'; shortMime: string } | { action: 'downl
 export class FilesService {
   // Tree section
   public treeNodeSelected: TreeNode = null
-  public treeCopyMoveOn = new Subject<void>()
+  private readonly treeCopyMoveRequested = new BehaviorSubject(false)
+  public readonly treeCopyMoveOn = this.treeCopyMoveRequested.pipe(filter(Boolean))
+  // Selection section
+  public readonly fileSelectionRemove = new Subject<FileModel>()
+  public readonly fileSelectionClear = new Subject<void>()
   // Clipboard section
   public clipboardAction: 'copyPaste' | 'cutPaste' = 'copyPaste'
   // Files
   public currentRoute: string
+  private readonly editorMetadataReconciliationDelay = 2_000
   private readonly textFileSizeLimitExceededMessage = 'File size limit exceeded'
   private readonly textBinaryProbeBytes = 4096
   private readonly http = inject(HttpClient)
   private readonly layout = inject(LayoutService)
   private readonly store = inject(StoreService)
-  private readonly sanitizer = inject(DomSanitizer)
   private readonly filesTasksService = inject(FilesTasksService)
   private readonly userService = inject(UserService)
+
+  openTreeCopyMove() {
+    this.layout.showRSideBarTab(TAB_MENU.TREE, true)
+    this.treeCopyMoveRequested.next(true)
+  }
+
+  consumeTreeCopyMove() {
+    this.treeCopyMoveRequested.next(false)
+  }
 
   getTreeNode(nodePath: string, showFiles = false): Promise<FileTree[]> {
     return firstValueFrom(
@@ -120,14 +136,20 @@ export class FilesService {
 
   async copyMove(files: FileModel[], dstDirectory: string, type: FILE_OPERATION.COPY | FILE_OPERATION.MOVE): Promise<void> {
     let overwrite = false
+    let filesToProcess = files
     const dstFiles = await this.getTreeNode(dstDirectory, true)
     const exist: FileModel[] = files.filter((f: FileModel) => dstFiles.some((x) => x.name.toLowerCase() === f.name.toLowerCase()))
     if (exist.length > 0) {
-      overwrite = await this.openOverwriteDialog(exist)
-      if (!overwrite) return
+      const action = await this.openOverwriteDialog(exist)
+      if (action === 'cancel') return
+      overwrite = action === 'overwrite'
+      if (action === 'skip') {
+        filesToProcess = files.filter((file) => !exist.includes(file))
+        if (!filesToProcess.length) return
+      }
     }
     const isMove = type === FILE_OPERATION.MOVE
-    for (const file of files) {
+    for (const file of filesToProcess) {
       if (isMove) file.isBeingDeleted = true
       const op: CopyMoveFileDto = { dstDirectory: dstDirectory, overwrite: overwrite }
       this.http.request<FileTask>(type, file.taskUrl, { body: op }).subscribe({
@@ -207,29 +229,56 @@ export class FilesService {
     downloadWithAnchor(`${API_FILES_TASKS_DOWNLOAD}/${taskId}`)
   }
 
-  loadRecents(limit: number) {
+  listFavorites(): Observable<FileFavoriteModel[]> {
+    return this.http.get<FileFavorite[]>(API_FILES_FAVORITES).pipe(map((files) => files.map((file) => new FileFavoriteModel(file))))
+  }
+
+  addFavorite(file: FileModel): Observable<FileFavoriteIdentity> {
+    const body = { fileId: file.id } satisfies FileFavoriteDto
+    return this.http.post<FileFavoriteIdentity>(`${API_FILES_FAVORITES}/${file.encodedPath}`, body)
+  }
+
+  removeFavorite(fileId: number): Observable<void> {
+    const body = { fileId } satisfies DeleteFileFavoriteDto
+    return this.http.request<void>('delete', API_FILES_FAVORITES, { body })
+  }
+
+  toggleFavorite(file: FileModel): Observable<boolean> {
+    if (file.isFavorite) {
+      return this.removeFavorite(file.id).pipe(
+        tap(() => this.updateFavoriteState(file, false)),
+        map(() => false)
+      )
+    }
+    return this.addFavorite(file).pipe(
+      tap(({ fileId }) => {
+        if (file.id < 0) file.id = fileId
+        this.updateFavoriteState(file, true)
+      }),
+      map(() => true)
+    )
+  }
+
+  private updateFavoriteState(file: FileModel, isFavorite: boolean) {
+    file.isFavorite = isFavorite
+    file.updateNbBadges()
+    if (this.store.filesSelection().includes(file)) {
+      this.store.filesSelection.update((files) => [...files])
+    }
+  }
+
+  loadRecents() {
     this.http
-      .get<FileRecent[]>(API_FILES_RECENTS, { params: new HttpParams().set('limit', limit) })
+      .get<FileRecent[]>(API_FILES_RECENTS)
       .pipe(map((fs) => fs.map((f) => new FileRecentModel(f))))
       .subscribe({
-        next: (fs: FileRecentModel[]) => {
-          this.store.filesRecents.update((files) => [...fs, ...files.slice(limit)])
-        },
+        next: (fs: FileRecentModel[]) => this.store.filesRecents.set(fs),
         error: (e: HttpErrorResponse) => this.layout.sendNotification('error', 'Files', 'Unable to load', e)
       })
   }
 
   search(search: SearchFilesDto): Observable<FileContentModel[]> {
-    return this.http.request<FileContent[]>('search', API_FILES_SEARCH, { body: search }).pipe(
-      map((fs) =>
-        fs.map((f) => {
-          if (f.content) {
-            f.content = this.sanitizer.bypassSecurityTrustHtml(f.content) as string
-          }
-          return new FileContentModel(f)
-        })
-      )
-    )
+    return this.http.request<FileContent[]>('search', API_FILES_SEARCH, { body: search }).pipe(map((fs) => fs.map((f) => new FileContentModel(f))))
   }
 
   lock(file: FileModel): Observable<FileLockProps> {
@@ -249,6 +298,14 @@ export class FilesService {
     return this.http.get<{ size: number }>(`${API_FILES_OPERATION}/${FILE_OPERATION.GET_SIZE}/${file.path}`).pipe(map((r) => r.size))
   }
 
+  getSizeLazy(file: FileModel): Observable<number | undefined> {
+    return (file.dirSize ??= this.getSize(file).pipe(
+      tap((size) => file.updateSize(size)),
+      catchError(() => of(undefined)),
+      shareReplay(1)
+    ))
+  }
+
   openLockDialog(file: FileModel): void {
     this.layout.openDialog(FilesLockDialogComponent, null, {
       initialState: {
@@ -257,26 +314,26 @@ export class FilesService {
     })
   }
 
-  async openOverwriteDialog(files: File[] | FileModel[], renamedTo?: string): Promise<boolean> {
+  async openOverwriteDialog(files: File[] | FileModel[], renamedTo?: string): Promise<FilesOverwriteAction> {
     const modalRef: BsModalRef<FilesOverwriteDialogComponent> = this.layout.openDialog(FilesOverwriteDialogComponent, null, {
       initialState: { files, renamedTo } as FilesOverwriteDialogComponent
     })
-    return new Promise<boolean>((resolve) => {
+    return new Promise<FilesOverwriteAction>((resolve) => {
       let resolved = false
-      const subOverwrite = modalRef.content!.overwrite.subscribe((value: boolean) => {
+      const subAction = modalRef.content!.action.subscribe((action: FilesOverwriteAction) => {
         resolved = true
         cleanup()
-        resolve(value)
+        resolve(action)
       })
       // Triggered when the modal is closed (close button, backdrop click, ESC key, or programmatic hide)
       const subHidden = modalRef.onHidden?.subscribe(() => {
         if (!resolved) {
           cleanup()
-          resolve(false)
+          resolve('cancel')
         }
       })
       const cleanup = () => {
-        subOverwrite.unsubscribe()
+        subAction.unsubscribe()
         subHidden?.unsubscribe()
       }
     })
@@ -303,10 +360,24 @@ export class FilesService {
       await this.openViewerAfterAvailabilityCheck(file, directoryFiles, permissions).catch((e) => this.sendOpenDocumentError(file, e))
       return
     }
-    this.http.head(file.dataUrl).subscribe({
-      next: () => this.openViewerAfterAvailabilityCheck(file, directoryFiles, permissions).catch((e) => this.sendOpenDocumentError(file, e)),
+    this.http.head(file.dataUrl, { observe: 'response' }).subscribe({
+      next: (response) => {
+        this.syncFileMetadata(file, response)
+        this.openViewerAfterAvailabilityCheck(file, directoryFiles, permissions).catch((e) => this.sendOpenDocumentError(file, e))
+      },
       error: (e: HttpErrorResponse | any) => this.sendOpenDocumentError(file, e)
     })
+  }
+
+  reconcileMetadataAfterEditorClose(file: FileModel, delay = this.editorMetadataReconciliationDelay): void {
+    const fileDirectory = file.path.split('/').slice(0, -1).join('/')
+    timer(delay)
+      .pipe(
+        filter(() => this.currentRoute === fileDirectory),
+        switchMap(() => this.http.head(file.dataUrl, { observe: 'response' })),
+        catchError(() => EMPTY)
+      )
+      .subscribe((response) => this.syncFileMetadata(file, response))
   }
 
   private async openViewerAfterAvailabilityCheck(file: FileModel, directoryFiles: FileModel[], permissions: string): Promise<void> {
@@ -384,6 +455,21 @@ export class FilesService {
       e.message = e.status in SEND_FILE_ERROR_MSG ? SEND_FILE_ERROR_MSG[e.status] : e.statusText
     }
     this.layout.sendNotification('error', 'Unable to open document', file?.name, e)
+  }
+
+  private syncFileMetadata(file: FileModel, response: HttpResponse<unknown>): void {
+    const lastModified = response.headers.get('last-modified')
+    const contentLength = response.headers.get('content-length')
+    const mtime = lastModified ? Date.parse(lastModified) : NaN
+    const size = contentLength !== null ? Number(contentLength) : NaN
+    const mtimeChanged = Number.isFinite(mtime) && mtime !== Math.floor(file.mtime / 1_000) * 1_000
+    const sizeChanged = Number.isFinite(size) && size !== file.size
+    if (!mtimeChanged && !sizeChanged) return
+    if (Number.isFinite(mtime)) {
+      file.mtime = mtime
+      file.updateHTimeAgo(mtime)
+    }
+    if (Number.isFinite(size)) file.updateSize(size)
   }
 
   private async viewerHook(file: FileModel): Promise<ViewerHookResult> {

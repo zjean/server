@@ -27,6 +27,9 @@ export interface InspectorFile {
   // was given rather than asking a second endpoint per selection.
   shares?: { id: number; name?: string; alias?: string; type?: number }[]
   hasComments?: boolean
+  // Authoritative star from the browse response; FavoritesService layers any
+  // in-flight toggle on top of it so the panel and the row never disagree.
+  isFavorite?: boolean
 }
 
 // Which screens have an inspector, and what it is currently pointed at.

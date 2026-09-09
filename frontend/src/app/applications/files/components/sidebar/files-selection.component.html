@@ -1,26 +1,36 @@
 @if (files().length) {
-  @if (multiple()) {
-    <div class="fs-sm">
-      <div class="d-flex justify-content-center mt-3">
-        <button (click)="addToClipboard()" class="btn btn-sm btn-primary me-1" type="button" l10nTranslate>
-          <fa-icon [icon]="icons.faClipboardCheck"></fa-icon>
-          Send to Clipboard
-        </button>
+  @if (files().length > 1) {
+    <div class="p-2 fs-sm">
+      <app-files-summary [files]="files()" class="mb-2"></app-files-summary>
+      <div class="d-flex">
+        <select [(ngModel)]="selectedAction" class="form-select form-select-sm">
+          <option value="clipboard" l10nTranslate>Clipboard</option>
+          <option value="copyMove" l10nTranslate>Copy • Move</option>
+          <option value="download" l10nTranslate>Download</option>
+          <option value="compress" l10nTranslate>Compress</option>
+        </select>
+        <button (click)="doAction()" class="btn btn-sm btn-primary ms-1" type="button" l10nTranslate>Confirm</button>
       </div>
     </div>
-    <hr class="mx-0 mt-3 mb-1">
-  }
-  <div appAutoResize class="fs-sm" [resizeOffset]=resizeOffset()>
-    @if (multiple()) {
-      <div class="flex-column p-2 w-100">
-        @for (f of files(); track f.id) {
-          <div class="d-inline-flex w-100 align-content-center align-items-center mx-1">
-            <img [src]="f.mimeUrl" alt="" class="me-1" height="28" width="auto" (error)="f.fallBackMimeUrl()">
-            <span class="text-truncate">{{ f.name }}</span>
+    <hr class="mx-0 my-1">
+    <div appAutoResize class="sidebar-item" [resizeOffset]="170">
+      @for (f of files(); track f.id) {
+        <div class="sidebar-item-container">
+          <div class="sidebar-item-content">
+            <img [src]="f.mimeUrl" alt="" height="28" width="28" (error)="f.fallBackMimeUrl()">
+            <div class="text-truncate fs-sm">{{ f.name }}</div>
+            <button (click)="removeFromSelection(f)"
+                    class="btn btn-xs btn-default ms-auto"
+                    type="button"
+                    [attr.aria-label]="'Remove' | translate:locale.language">
+              <svg class="fs-md" [lucideIcon]="icons.LucideX"></svg>
+            </button>
           </div>
-        }
-      </div>
-    } @else {
+        </div>
+      }
+    </div>
+  } @else {
+    <div appAutoResize class="fs-sm">
       @for (f of files(); track f.id) {
         <div class="card px-1 pt-1">
           <div class="card-body align-self-center p-0 my-1">
@@ -40,19 +50,18 @@
           </div>
         </div>
         <hr class="my-1" />
-        <div class="fs-sm p-2">
+        <div class="p-2">
           <div class="d-flex mb-1">
             <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Name</div>
             <div class="word-break-all">{{ f.name }}</div>
           </div>
           <div class="d-flex mb-1">
             <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Size</div>
-              @let size = (getSizeLazy(f) | async);
-              @if (size === null) {
-                <fa-icon [icon]="icons.faSpinner" animation="spin-pulse"></fa-icon>
-              } @else {
-                {{ size }}
-              }
+            @if (f.isDir && (getSizeLazy(f) | async) === null) {
+              <svg [lucideIcon]="icons.LucideLoader" [class.icon-spin-pulse]="true"></svg>
+            } @else {
+              {{ f.hSize }}
+            }
           </div>
           <div class="d-flex mb-1">
             <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Created</div>
@@ -67,12 +76,12 @@
             @if (f.lock) {
               @if (f.lock.isExclusive) {
                 <span class="badge bg-maroon" l10nTranslate>
-                  <fa-icon [icon]="icons.faLock"></fa-icon>
+                  <svg [lucideIcon]="icons.LucideLock"></svg>
                   <span l10nTranslate>Exclusive</span>
                 </span>
               } @else {
                 <span class="badge bg-maroon" l10nTranslate>
-                  <fa-icon [icon]="icons.faUnlock"></fa-icon>
+                  <svg [lucideIcon]="icons.LucideLockOpen"></svg>
                   <span l10nTranslate>Shared</span>
                 </span>
               }
@@ -85,7 +94,7 @@
             <div class="d-flex col-7 col-sm-7">
               @if (f.shares.length || f.links.length) {
                 <span class="badge bg-primary">
-                  <fa-icon [icon]="icons.SHARES"></fa-icon>
+                  <svg [lucideIcon]="icons.SHARED"></svg>
                   {{ f.shares.length + f.links.length }}
                 </span>
               } @else {
@@ -97,7 +106,7 @@
             <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Anchored</div>
             @if (f.spaces.length) {
               <span class="badge bg-primary">
-                <fa-icon [icon]="icons.SPACES"></fa-icon>
+                <svg [lucideIcon]="icons.SPACES"></svg>
                 {{ f.spaces.length }}</span>
             } @else {
               <span class="badge bg-default" l10nTranslate>no</span>
@@ -109,11 +118,25 @@
               {{ (f.syncs.length ? 'yes' : 'no') | translate:locale.language }}
             </span>
           </div>
+          @if (canManageFavorite) {
+            <div class="d-flex align-items-center mb-1">
+              <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Favorites</div>
+              <button (click)="toggleFavorite(f)"
+                      class="badge {{f.isFavorite ? 'bg-warning' : 'bg-default'}} cursor-pointer"
+                      type="button"
+                      [attr.aria-label]="(f.isFavorite ? 'Remove from favorites' : 'Add to favorites') | translate:locale.language">
+                <svg [lucideIcon]="icons.FAVORITES"></svg>
+              </button>
+            </div>
+          }
           <div class="d-flex align-items-center mb-1">
             <div class="d-flex col-5 col-sm-5 text-bold" l10nTranslate>Comments</div>
-            <span (click)="goToComments()" class="badge {{f.hasComments ? 'bg-success' : 'bg-default'}} cursor-pointer">
-              {{ (f.hasComments ? 'yes' : 'no') | translate:locale.language }}
-            </span>
+            <button (click)="goToComments()"
+                    class="badge {{f.hasComments ? 'bg-success' : 'bg-default'}} cursor-pointer"
+                    type="button"
+                    [attr.aria-label]="'Comments' | translate:locale.language">
+              <svg [lucideIcon]="icons.LucideMessageSquareMore"></svg>
+            </button>
           </div>
         </div>
         @if (f.root) {
@@ -137,41 +160,41 @@
         }
         @if (f.lock || f.spaces.length || f.shares.length || f.links.length || f.syncs.length) {
           <hr class="mt-1 mb-2" />
-          <div class="d-flex flex-wrap align-items-center p-2 fs-sm">
+          <div class="d-flex flex-wrap align-items-center p-2">
             @if (f.lock) {
               <div (click)="openLockDialog(f)"
                    class="badge white-space-normal bg-maroon cursor-pointer mb-2">
-                <fa-icon [icon]="f.lock.isExclusive ? icons.faLock : icons.faUnlock"></fa-icon>
+                <svg [lucideIcon]="f.lock.isExclusive ? icons.LucideLock : icons.LucideLockOpen"></svg>
                 {{ f.lock | fileLockFormatPipe }}
               </div>
             }
             @for (space of f.spaces; track space.id) {
               <div (click)="goToSpace(space)" class="badge white-space-normal bg-primary cursor-pointer me-1 mb-2">
-                <fa-icon [icon]="icons.SPACES"></fa-icon>
+                <svg [lucideIcon]="icons.SPACES"></svg>
                 {{ space.name }}
               </div>
             }
             @for (share of f.shares; track share.id) {
               <div (click)="goToShare(share)" class="badge white-space-normal bg-primary cursor-pointer me-1 mb-2">
-                <fa-icon [icon]="icons.SHARES"></fa-icon>
+                <svg [lucideIcon]="icons.SHARED"></svg>
                 {{ share.name }}
               </div>
             }
             @for (link of f.links; track link.id) {
               <div (click)="goToShare(link)" class="badge white-space-normal bg-primary cursor-pointer me-1 mb-2">
-                <fa-icon [icon]="icons.LINKS"></fa-icon>
+                <svg [lucideIcon]="icons.LINKS"></svg>
                 {{ link.name }}
               </div>
             }
             @for (sync of f.syncs; track sync.id) {
               <div (click)="goToSync(sync)" class="badge white-space-normal bg-primary cursor-pointer me-1 mb-2">
-                <fa-icon [icon]="icons.SYNC"></fa-icon>
+                <svg [lucideIcon]="icons.SYNC"></svg>
                 {{ sync.clientName }}
               </div>
             }
           </div>
         }
       }
-    }
-  </div>
+    </div>
+  }
 }

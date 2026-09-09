@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
-import path from 'node:path'
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import {
   allowInsecureRequests,
@@ -41,12 +42,12 @@ import { AuthProvider } from '../auth-providers.models'
 import { applyStorageQuotaToIdentity } from '../auth-providers.utils'
 import { OAuthDesktopCallBackURI, OAuthDesktopLoopbackPorts, OAuthDesktopPortParam } from './auth-oidc-desktop.constants'
 import type { AuthProviderOIDCConfig } from './auth-oidc.config'
-import { OAuthCookie, OAuthCookieSettings, OAuthTokenEndpoint } from './auth-oidc.constants'
+import { OAuthCookie, OAuthCookieSettings, OAuthTokenEndpoint, OIDC_LOGIN_HASH_LENGTH, OIDC_LOGIN_MAX_LENGTH } from './auth-oidc.constants'
 import { HttpService } from '@nestjs/axios'
 import { DownloadFileDto } from '../../../applications/files/dto/file-operations.dto'
 import { DownloadFile } from '../../../applications/files/utils/download-file'
 import { convertTempImageToPng, imgMimeTypePrefix } from '../../../common/image'
-import { fileSize } from '../../../applications/files/utils/files'
+import { fileSize, temporaryFilePath } from '../../../applications/files/utils/files'
 
 @Injectable()
 export class AuthProviderOIDC implements AuthProvider {
@@ -176,7 +177,7 @@ export class AuthProviderOIDC implements AuthProvider {
       }
 
       // Process the user info and create/update the user
-      return await this.processUserInfo(userInfo, req.ip)
+      return await this.processUserInfo(userInfo, claims.sub, req.ip)
     } catch (error: AuthorizationResponseError | HttpException | any) {
       if (error instanceof AuthorizationResponseError) {
         this.logger.error({ tag: this.handleCallback.name, msg: `OIDC callback error: ${error.code} - ${error.error_description}` })
@@ -313,12 +314,30 @@ export class AuthProviderOIDC implements AuthProvider {
     return (this.oidcConfig.security.supportPKCE ?? true) && config.serverMetadata().supportsPKCE()
   }
 
-  private async processUserInfo(userInfo: UserInfoResponse, ip?: string): Promise<UserModel> {
+  private async processUserInfo(userInfo: UserInfoResponse, externalId: string, ip?: string): Promise<UserModel> {
     // Extract user information
     const { login, email } = this.extractLoginAndEmail(userInfo)
 
-    // Check if user exists
-    let user: UserModel = await this.usersManager.findUser(email || login, false)
+    // Resolve an already linked external identity first, then fall back to email for existing OIDC users.
+    let user: UserModel = await this.usersManager.findUserByExternalIdOrEmail(externalId, email, false)
+
+    if (user?.externalId && user.externalId !== externalId) {
+      this.logger.warn({ tag: this.processUserInfo.name, msg: `OIDC email is already linked to another external identity` })
+      throw new HttpException('OIDC identity mismatch', HttpStatus.UNAUTHORIZED)
+    }
+
+    // Enforce the local account status before binding an unlinked external identity.
+    if (user && !user.isActive) {
+      this.logger.warn({ tag: this.processUserInfo.name, msg: `OIDC login rejected for disabled user *${user.login}*` })
+      throw new HttpException('Account locked', HttpStatus.FORBIDDEN)
+    }
+
+    if (user && !user.externalId) {
+      if (!(await this.usersManager.usersQueries.bindExternalId(user.id, externalId))) {
+        throw new HttpException('Unable to link OIDC identity', HttpStatus.UNAUTHORIZED)
+      }
+      user.externalId = externalId
+    }
 
     if (!user && !this.oidcConfig.options.autoCreateUser) {
       this.logger.warn({ tag: this.processUserInfo.name, msg: `User not found and autoCreateUser is disabled` })
@@ -332,7 +351,7 @@ export class AuthProviderOIDC implements AuthProvider {
     const identity = this.createIdentity(login, email, userInfo, isAdmin)
 
     // Create or update user
-    user = await this.updateOrCreateUser(identity, user)
+    user = await this.updateOrCreateUser(identity, user, externalId)
     // Update picture url (if it exists)
     if (this.oidcConfig.options.autoSyncAvatar) {
       await this.updatePictureUrl(user, userInfo)
@@ -382,27 +401,19 @@ export class AuthProviderOIDC implements AuthProvider {
     return identity
   }
 
-  private async updateOrCreateUser(identity: Omit<CreateUserDto, 'password'> & { password?: string }, user: UserModel | null): Promise<UserModel> {
+  private async updateOrCreateUser(
+    identity: Omit<CreateUserDto, 'password'> & { password?: string },
+    user: UserModel | null,
+    externalId: string
+  ): Promise<UserModel> {
     if (user === null) {
-      // Create new user with a random password (required by the system but not used for OIDC login)
-      const userWithPassword = {
-        ...identity,
-        password: generateShortUUID(24),
-        permissions: this.oidcConfig.options.autoCreatePermissions.join(',')
-      } as CreateUserDto
-      const createdUser = await this.adminUsersManager.createUserOrGuest(userWithPassword, identity.role)
-      const freshUser = await this.usersManager.fromUserId(createdUser.id)
-      if (!freshUser) {
-        this.logger.error({ tag: this.updateOrCreateUser.name, msg: `user was not found : ${createdUser.login} (${createdUser.id})` })
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND)
-      }
-      return freshUser
+      return this.createUser(identity, externalId)
     }
 
-    // Check if user information has changed (excluding password)
+    // Check if user information has changed. The local login is initialized once and remains stable.
     const identityHasChanged: UpdateUserDto = Object.fromEntries(
       Object.keys(identity)
-        .filter((key) => key !== 'password')
+        .filter((key) => key !== 'password' && key !== 'login')
         .map((key: string) => (identity[key] !== user[key] ? [key, identity[key]] : null))
         .filter(Boolean)
     )
@@ -434,6 +445,30 @@ export class AuthProviderOIDC implements AuthProvider {
     return user
   }
 
+  private async createUser(identity: Omit<CreateUserDto, 'password'> & { password?: string }, externalId: string): Promise<UserModel> {
+    let login = identity.login
+    if (await this.usersManager.usersQueries.checkUserExists(login)) {
+      const suffix = crypto.createHash('sha256').update(externalId).digest('hex').slice(0, OIDC_LOGIN_HASH_LENGTH)
+      login = `${login.slice(0, OIDC_LOGIN_MAX_LENGTH - suffix.length - 1)}-${suffix}`
+    }
+
+    // A random password remains required by the local model but is not used for OIDC authentication.
+    const userWithPassword = {
+      ...identity,
+      login,
+      externalId,
+      password: generateShortUUID(24),
+      permissions: this.oidcConfig.options.autoCreatePermissions.join(',')
+    } as CreateUserDto & { externalId: string }
+    const createdUser = await this.adminUsersManager.createUserOrGuest(userWithPassword, identity.role)
+    const freshUser = await this.usersManager.fromUserId(createdUser.id)
+    if (!freshUser) {
+      this.logger.error({ tag: this.createUser.name, msg: `user was not found : ${createdUser.login} (${createdUser.id})` })
+      throw new HttpException('User not found', HttpStatus.NOT_FOUND)
+    }
+    return freshUser
+  }
+
   private async updatePictureUrl(user: UserModel, userInfo: UserInfoResponse): Promise<void> {
     const picture = userInfo.picture
 
@@ -456,10 +491,10 @@ export class AuthProviderOIDC implements AuthProvider {
     let pictureLastModified: string | undefined
     const downloader = new DownloadFile(this.http)
     const allowPrivateIP = this.oidcConfig.security.allowPrivateIpAvatarDownload
+    const userAvatarTmpPath = temporaryFilePath(user.tmpPath, USER_AVATAR_FILE_NAME, 'avatar')
     try {
-      const tmpPicturePath = path.join(user.tmpPath, USER_AVATAR_FILE_NAME)
       // retrieve headers
-      const { contentType, contentLength, lastModified } = await downloader.download(downloadDto, tmpPicturePath, {
+      const { contentType, contentLength, lastModified } = await downloader.download(downloadDto, userAvatarTmpPath, {
         allowPrivateIP,
         getContentInfo: true
       })
@@ -489,7 +524,6 @@ export class AuthProviderOIDC implements AuthProvider {
     }
 
     // download avatar
-    const userAvatarTmpPath = path.join(user.tmpPath, USER_AVATAR_FILE_NAME)
     try {
       await downloader.download(downloadDto, userAvatarTmpPath, { allowPrivateIP, maxSize: USER_AVATAR_MAX_UPLOAD_SIZE })
     } catch (e) {

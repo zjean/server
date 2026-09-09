@@ -10,11 +10,10 @@ import {
   hashPassword
 } from '../../../common/functions'
 import type { Entries } from '../../../common/interfaces'
-import { intersectPermissions } from '../../../common/shared'
-import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
+import { intersectPermissions, InvalidSlugError } from '../../../common/shared'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
 import { FileError } from '../../files/models/file-error'
-import { checkExternalPath, getProps, isPathExists } from '../../files/utils/files'
+import { checkExternalPath, getProps, isPathExists, removeFiles } from '../../files/utils/files'
 import { LINK_TYPE } from '../../links/constants/links'
 import type { CreateOrUpdateLinkDto } from '../../links/dto/create-or-update-link.dto'
 import type { LinkGuest } from '../../links/interfaces/link-guest.interface'
@@ -55,7 +54,6 @@ export class SharesManager {
   private readonly logger = new Logger(SharesManager.name)
 
   constructor(
-    private readonly contextManager: ContextManager,
     private readonly notificationsManager: NotificationsManager,
     private readonly filesQuotaManager: FilesQuotaManager,
     private readonly sharesQueries: SharesQueries,
@@ -128,7 +126,7 @@ export class SharesManager {
   async createShare(user: UserModel, createOrUpdateShareDto: CreateOrUpdateShareDto): Promise<ShareProps> {
     const share: Partial<Share> = {
       name: createOrUpdateShareDto.name,
-      alias: await this.sharesQueries.uniqueShareAlias(createOrUpdateShareDto.name),
+      alias: await this.uniqueShareAlias(createOrUpdateShareDto.name),
       description: createOrUpdateShareDto.description,
       externalPath: createOrUpdateShareDto.externalPath,
       enabled: createOrUpdateShareDto.enabled,
@@ -181,6 +179,13 @@ export class SharesManager {
         // compute space permissions
         const space: SpaceEnv = new SpaceEnv(spacePermissions)
         space.setPermissions(true)
+        if (!havePermission(space.envPermissions, SPACE_OPERATION.SHARE_OUTSIDE)) {
+          this.logger.warn({
+            tag: this.createShare.name,
+            msg: `is not allowed to share outside of : *${space.alias}* (${space.id})`
+          })
+          throw new HttpException('You are not allowed to do this action', HttpStatus.FORBIDDEN)
+        }
         // intersect space permissions for members
         for (const m of createOrUpdateShareDto.members) {
           m.permissions = intersectPermissions(space.envPermissions, m.permissions)
@@ -215,7 +220,9 @@ export class SharesManager {
         if (!isSpaceRoot && !isExternalSpaceRoot) {
           const fileProps: FileProps = { ...(await getProps(space.realPath, space.dbFile.path)), id: undefined }
           // get or create file id
-          share.fileId = await this.spacesQueries.getOrCreateSpaceFile(createOrUpdateShareDto.file.id, fileProps, space.dbFile)
+          share.fileId = await this.spacesQueries.getOrCreateSpaceFile(createOrUpdateShareDto.file.id, fileProps, space.dbFile, {
+            rejectIdMismatch: true
+          })
         }
       } else {
         // unexpected case
@@ -234,13 +241,15 @@ export class SharesManager {
     // asAdmin: true if the user is the owner of the parent share or if the share is requested from the administration
     const share: ShareProps = await this.getShareWithMembers(user, shareId, asAdmin)
     // check and update share info
+    let renamedShareAlias: string
     const shareDiffProps: Partial<ShareProps> = { modifiedAt: new Date() }
     const props: (keyof CreateOrUpdateShareDto)[] = ['name', 'description', 'enabled', 'storageQuota', 'storageIndexing']
     for (const prop of props) {
       if (createOrUpdateShareDto[prop] !== share[prop]) {
         shareDiffProps[prop] = createOrUpdateShareDto[prop]
         if (prop === 'name') {
-          shareDiffProps.alias = await this.sharesQueries.uniqueShareAlias(shareDiffProps.name)
+          renamedShareAlias = share.alias
+          shareDiffProps.alias = await this.uniqueShareAlias(shareDiffProps.name, shareId)
         } else if (prop === 'enabled') {
           shareDiffProps.disabledAt = shareDiffProps[prop] ? null : new Date()
         }
@@ -249,6 +258,9 @@ export class SharesManager {
     // update in db
     if (!(await this.sharesQueries.updateShare(shareId, shareDiffProps))) {
       throw new HttpException('Unable to update share', HttpStatus.INTERNAL_SERVER_ERROR)
+    }
+    if (renamedShareAlias) {
+      void this.sharesQueries.clearCachePermissions(renamedShareAlias)
     }
     // update quota in cache
     if ('storageQuota' in shareDiffProps) {
@@ -377,12 +389,14 @@ export class SharesManager {
     if (!isLinkedToShareSpaceRoot && !isLinkedToShareExternalPath) {
       // fileId is mandatory for a file in a child share
       const fileProps: FileProps = { ...(await getProps(pShareEnv.realPath, pShareEnv.dbFile.path)), id: undefined }
-      fileId = await this.spacesQueries.getOrCreateSpaceFile(createOrUpdateShareDto.file.id, fileProps, pShareEnv.dbFile)
+      fileId = await this.spacesQueries.getOrCreateSpaceFile(createOrUpdateShareDto.file.id, fileProps, pShareEnv.dbFile, {
+        rejectIdMismatch: true
+      })
     }
 
     const share: Partial<Share> = {
       name: createOrUpdateShareDto.name,
-      alias: await this.sharesQueries.uniqueShareAlias(createOrUpdateShareDto.name),
+      alias: await this.uniqueShareAlias(createOrUpdateShareDto.name),
       ownerId: user.id,
       spaceId: pShareEnv.spaceId,
       spaceRootId: pShareEnv.spaceRootId,
@@ -630,7 +644,7 @@ export class SharesManager {
       'shareDescription'
     ]
     const [updateUser, updateLink, updateShare, updateMember]: [
-      Partial<Pick<User, 'language' | 'isActive' | 'password'>>,
+      Partial<Pick<User, 'language' | 'isActive' | 'password' | 'passwordAttempts'>>,
       Partial<Pick<Link, 'name' | 'email' | 'requireAuth' | 'limitAccess' | 'expiresAt'>>,
       Partial<Pick<Share, 'alias' | 'name' | 'description'>>,
       Partial<Pick<ShareMembers, 'permissions'>>
@@ -659,10 +673,13 @@ export class SharesManager {
             break
           case 'isActive':
             updateUser.isActive = v
+            if (v) {
+              updateUser.passwordAttempts = 0
+            }
             break
           case 'shareName':
             updateShare.name = v
-            updateShare.alias = await this.sharesQueries.uniqueShareAlias(v)
+            updateShare.alias = await this.uniqueShareAlias(v, spaceOrShareId)
             break
           case 'shareDescription':
             updateShare.description = v
@@ -683,6 +700,9 @@ export class SharesManager {
     }
     try {
       await this.linksQueries.updateLinkFromSpaceOrShare(link, spaceOrShareId, updateUser, updateLink, updateShare, updateMember)
+      if ('name' in updateShare) {
+        void this.sharesQueries.clearCacheIdentities()
+      }
       this.logger.debug({
         tag: this.updateLinkFromSpaceOrShare.name,
         msg: `link (${linkId}) updated : ${JSON.stringify({
@@ -699,6 +719,7 @@ export class SharesManager {
     if (fromAPI) {
       // for security reasons
       delete updateUser.password
+      delete updateUser.passwordAttempts
       Object.assign(link, updateUser, updateLink, updateMember)
       return link
     }
@@ -740,6 +761,17 @@ export class SharesManager {
 
   async deleteLinkMembers(members: SpaceMemberDto[] | ShareMemberDto[]): Promise<void> {
     await this.deleteGuestLinks(members)
+  }
+
+  private async uniqueShareAlias(name: string, excludedShareId?: number): Promise<string> {
+    try {
+      return await this.sharesQueries.uniqueShareAlias(name, excludedShareId)
+    } catch (e) {
+      if (e instanceof InvalidSlugError) {
+        throw new HttpException(e.message, HttpStatus.BAD_REQUEST)
+      }
+      throw e
+    }
   }
 
   private async updateMembers(user: UserModel, share: Partial<Share>, oldMembers: ShareMemberDto[], currentMembers: ShareMemberDto[]) {
@@ -1105,14 +1137,19 @@ export class SharesManager {
   }
 
   private async deleteGuestLinks(guestLinks: Partial<{ id: number; linkId: number }>[]) {
+    let deletionError: unknown
     for (const guestLink of guestLinks) {
       try {
+        // Keep the database record when filesystem cleanup fails so the deletion can be retried.
+        await removeFiles(UserModel.getLinkHomePath(guestLink.id))
         await this.usersQueries.deleteGuestLink(guestLink.id)
         this.logger.log({ tag: this.deleteGuestLinks.name, msg: `guest (${guestLink.id}) (link: ${guestLink.linkId}) was removed` })
       } catch (e) {
+        deletionError ??= e
         this.logger.error({ tag: this.deleteGuestLinks.name, msg: `guest (${guestLink.id}) (link: ${guestLink.linkId}) was not removed : ${e}` })
       }
     }
+    if (deletionError) throw deletionError
   }
 
   /* MANAGE CACHE PERMISSIONS AND NOTIFY */
@@ -1141,7 +1178,6 @@ export class SharesManager {
       }
       this.notificationsManager
         .create(memberIds, notification, {
-          currentUrl: this.contextManager.headerOriginUrl(),
           author: user,
           action: action
         })
@@ -1173,7 +1209,6 @@ export class SharesManager {
           author: user,
           linkUUID: link.linkSettings.uuid,
           linkPassword: link.linkSettings.password,
-          currentUrl: this.contextManager.headerOriginUrl(),
           action: action
         } satisfies NotificationOptions
       )

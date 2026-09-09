@@ -8,6 +8,7 @@ import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
+import { NO_CLIENT_FILE_ID } from '../constants/file-ids'
 
 // Materializes a `files` DB row for a filesystem entry that does not have one
 // yet, and returns its real, positive `files.id`.
@@ -66,9 +67,10 @@ export class FileRowEnsurer {
       if (space.inPersonalSpace) {
         const existing = await this.findUserFileByPath(user.id, props, space.inTrashRepository === true)
         if (existing > 0) return existing
-        // Force id to 0 so getOrCreateUserFile does not take its lookup-by-id
-        // branch with a placeholder (negative inode) value.
-        return (await this.filesQueries.getOrCreateUserFile(user.id, { ...props, id: 0 })) || 0
+        // Force a NEGATIVE sentinel so getOrCreateUserFile does not take its
+        // lookup-by-id branch. It must not be 0: upstream's assertValidFileId
+        // rejects 0 outright. See NO_CLIENT_FILE_ID.
+        return (await this.filesQueries.getOrCreateUserFile(user.id, { ...props, id: NO_CLIENT_FILE_ID })) || 0
       }
       // Shared / external space: getSpaceFileId already does the path-keyed
       // lookup against (spaceId|spaceExternalRootId|shareExternalId, path,
@@ -76,7 +78,7 @@ export class FileRowEnsurer {
       const dbFile = dbFileFromSpace(user.id, space)
       const existing = await this.filesQueries.getSpaceFileId(props, dbFile)
       if (existing > 0) return existing
-      return (await this.filesQueries.getOrCreateSpaceFile(0, props, dbFile)) || 0
+      return (await this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, props, dbFile)) || 0
     } catch (e) {
       this.logger.warn({
         tag: this.ensureFileId.name,
@@ -92,14 +94,17 @@ export class FileRowEnsurer {
   // Matches the entry's `isDir` so a file and a directory at the same
   // (path, name) — unlikely but expressible in the schema — don't alias.
   //
-  // Matches `inTrash` for the same reason, and it matters more than it looks:
-  // trashing a file only sets `inTrash = true` (filesQueries.deleteFiles, the
-  // non-force branch) and leaves `path` and `name` untouched. Without this
-  // predicate a NEW file created at a trashed file's path would resolve to the
-  // TRASHED row — inheriting its version history, and having that history
-  // cascade-deleted when the user later empties the trash. The space branch
-  // gets this for free, because `dbFile.inTrash` flows into convertToWhere;
-  // the personal branch has to say it explicitly.
+  // Matches `inTrash` too. NOTE: the original reason for this is now historical —
+  // trashing used to leave `path` and `name` untouched and only set `inTrash = true`,
+  // so without this predicate a NEW file at a trashed file's path resolved to the
+  // TRASHED row, inheriting its version history and having that history
+  // cascade-deleted when the trash was emptied. Since upstream 2.5.0 trashing routes
+  // through filesQueries.moveFiles, which rewrites path, name AND the scope columns
+  // alongside inTrash, so the collision can no longer arise. The predicate is kept as
+  // belt-and-braces: it is free, and it is what makes this lookup independent of how
+  // trashing happens to be implemented. Do not remove it as "dead" — that reasoning
+  // is what the comment above records. The space branch gets this for free, because
+  // `dbFile.inTrash` flows into convertToWhere; the personal branch has to say it.
   //
   // Returns 0 when not found.
   private async findUserFileByPath(userId: number, file: FileProps, inTrash: boolean): Promise<number> {

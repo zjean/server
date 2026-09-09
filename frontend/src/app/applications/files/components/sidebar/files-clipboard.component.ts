@@ -1,8 +1,7 @@
 import { KeyValuePipe } from '@angular/common'
 import { Component, inject, OnDestroy } from '@angular/core'
 import { FormsModule } from '@angular/forms'
-import { FaIconComponent } from '@fortawesome/angular-fontawesome'
-import { faArrowsAlt, faClone, faDownload, faQuestion, faTimes, faTrashCan } from '@fortawesome/free-solid-svg-icons'
+import { LucideCircleQuestionMark, LucideCopy, LucideDynamicIcon, LucideHardDriveDownload, LucideMove, LucideX } from '@lucide/angular'
 import { TAR_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
 import type { CompressFileDto } from '@sync-in-server/backend/src/applications/files/dto/file-operations.dto'
@@ -18,15 +17,26 @@ import { StoreService } from '../../../../store/store.service'
 import { FileModel } from '../../models/file.model'
 import { FilesService } from '../../services/files.service'
 import { FilesCompressionDialogComponent } from '../dialogs/files-compression-dialog.component'
+import { resolveFileLocation } from '../utils/file-location.utils'
+import { FilesSummaryComponent } from '../utils/files-summary.component'
 
 @Component({
   selector: 'app-files-clipboard',
-  imports: [AutoResizeDirective, FaIconComponent, L10nTranslatePipe, TooltipModule, L10nTranslateDirective, KeyValuePipe, FormsModule],
+  imports: [
+    AutoResizeDirective,
+    LucideDynamicIcon,
+    L10nTranslatePipe,
+    TooltipModule,
+    L10nTranslateDirective,
+    KeyValuePipe,
+    FormsModule,
+    FilesSummaryComponent
+  ],
   templateUrl: 'files-clipboard.component.html'
 })
 export class FilesClipboardComponent implements OnDestroy {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
-  protected readonly icons = { faTrashCan, faTimes, faDownload, faArrowsAlt, faClone, faQuestion }
+  protected readonly icons = { LucideX, LucideHardDriveDownload, LucideMove, LucideCopy, LucideCircleQuestionMark }
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected operations = {
     copyPaste: { text: 'Copy-Paste', operation: FILE_OPERATION.COPY },
@@ -60,6 +70,12 @@ export class FilesClipboardComponent implements OnDestroy {
     } else {
       this.filesService.removeFromClipboard(file)
     }
+  }
+
+  protected fileLocation(file: FileModel): string {
+    const location = resolveFileLocation(file.path)
+    if (!location) return file.path
+    return [this.layout.translateString(location.repositoryTitle), location.relativePath].filter(Boolean).join('/')
   }
 
   doAction() {

@@ -2,11 +2,11 @@ import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import * as commonFunctions from '../../../common/functions'
 import { intersectPermissions } from '../../../common/shared'
-import { ContextManager } from '../../../infrastructure/context/services/context-manager.service'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import { LINK_TYPE } from '../../links/constants/links'
 import { LinksQueries } from '../../links/services/links-queries.service'
 import { NotificationsManager } from '../../notifications/services/notifications-manager.service'
+import { SPACE_OPERATION } from '../../spaces/constants/spaces'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import * as permissionsUtils from '../../spaces/utils/permissions'
 import { GUEST_PERMISSION } from '../../users/constants/user'
@@ -15,6 +15,8 @@ import { SHARE_ALL_OPERATIONS } from '../constants/shares'
 import { SharesManager } from './shares-manager.service'
 import { SharesQueries } from './shares-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
+import * as filesUtils from '../../files/utils/files'
+import { UserModel } from '../../users/models/user.model'
 
 // Mock classes and utility modules used by SharesManager
 vi.mock('../../spaces/models/space-env.model', () => ({
@@ -53,10 +55,6 @@ describe(SharesManager.name, () => {
   let service: SharesManager
 
   // Mocks
-  const contextManagerMock = {
-    headerOriginUrl: vi.fn()
-  }
-
   const notificationsManagerMock = {
     create: vi.fn().mockResolvedValue(undefined),
     sendEmailNotification: vi.fn().mockResolvedValue(undefined)
@@ -96,6 +94,8 @@ describe(SharesManager.name, () => {
     updateMembers: vi.fn(),
     shareExistsForOwner: vi.fn(),
     childExistsForShareOwner: vi.fn(),
+    uniqueShareAlias: vi.fn(),
+    clearCacheIdentities: vi.fn().mockResolvedValue(true),
     clearCachePermissions: vi.fn().mockResolvedValue(true)
   }
 
@@ -109,7 +109,6 @@ describe(SharesManager.name, () => {
           provide: FilesQuotaManager,
           useValue: { updateStorageQuota: () => vi.fn() }
         },
-        { provide: ContextManager, useValue: contextManagerMock },
         { provide: NotificationsManager, useValue: notificationsManagerMock },
         { provide: SpacesQueries, useValue: spacesQueriesMock },
         { provide: UsersQueries, useValue: usersQueriesMock },
@@ -165,6 +164,34 @@ describe(SharesManager.name, () => {
     it('throws Bad Request when missing required information', async () => {
       const share: any = { file: {}, parent: {} }
       await expect(service.setAllowedPermissions(user, share)).rejects.toEqual(new HttpException('Missing information', HttpStatus.BAD_REQUEST))
+    })
+  })
+
+  describe('createShare', () => {
+    it('forbids creating a share from a space without the share outside permission', async () => {
+      sharesQueriesMock.uniqueShareAlias.mockResolvedValueOnce('shared-file')
+      spacesQueriesMock.permissions.mockResolvedValueOnce({ id: 7, alias: 'space-1' })
+      vi.mocked(permissionsUtils.havePermission).mockReturnValueOnce(false)
+
+      const createShareDto: any = {
+        name: 'Shared file',
+        enabled: true,
+        externalPath: null,
+        file: {
+          id: 42,
+          ownerId: null,
+          path: 'root/file.txt',
+          space: { alias: 'space-1', root: { alias: 'root' } }
+        },
+        members: [],
+        links: []
+      }
+
+      await expect(service.createShare(user, createShareDto)).rejects.toEqual(
+        new HttpException('You are not allowed to do this action', HttpStatus.FORBIDDEN)
+      )
+      expect(permissionsUtils.havePermission).toHaveBeenCalledWith('ENV_PERMS', SPACE_OPERATION.SHARE_OUTSIDE)
+      expect(sharesQueriesMock.createShare).not.toHaveBeenCalled()
     })
   })
 
@@ -483,6 +510,31 @@ describe(SharesManager.name, () => {
     })
   })
 
+  describe('deleteLinkMembers', () => {
+    it('keeps the link user record when its home cannot be removed', async () => {
+      const cleanupError = new Error('cleanup failed')
+      vi.spyOn(UserModel, 'getLinkHomePath').mockReturnValue('/data/links/42')
+      vi.spyOn(filesUtils, 'removeFiles').mockRejectedValueOnce(cleanupError)
+
+      await expect(service.deleteLinkMembers([{ id: 42, linkId: 7 }] as any)).rejects.toBe(cleanupError)
+
+      expect(filesUtils.removeFiles).toHaveBeenCalledWith('/data/links/42')
+      expect(usersQueriesMock.deleteGuestLink).not.toHaveBeenCalled()
+    })
+
+    it('removes the link user only after its home was removed', async () => {
+      vi.spyOn(UserModel, 'getLinkHomePath').mockReturnValue('/data/links/42')
+      const removeHome = vi.spyOn(filesUtils, 'removeFiles').mockResolvedValueOnce(undefined)
+      usersQueriesMock.deleteGuestLink.mockResolvedValueOnce(undefined)
+
+      await service.deleteLinkMembers([{ id: 42, linkId: 7 }] as any)
+
+      expect(removeHome).toHaveBeenCalledWith('/data/links/42')
+      expect(usersQueriesMock.deleteGuestLink).toHaveBeenCalledWith(42)
+      expect(removeHome.mock.invocationCallOrder[0]).toBeLessThan(usersQueriesMock.deleteGuestLink.mock.invocationCallOrder[0])
+    })
+  })
+
   describe('child share wrappers', () => {
     it('getChildShare returns share link when isLink = true', async () => {
       sharesQueriesMock.childExistsForShareOwner.mockResolvedValueOnce(99)
@@ -558,6 +610,18 @@ describe(SharesManager.name, () => {
       expect(uuid).toBe('only-one')
       expect(linksQueriesMock.isUniqueUUID).toHaveBeenCalledTimes(1)
       expect(linksQueriesMock.isUniqueUUID).toHaveBeenCalledWith(user.id, 'only-one')
+    })
+  })
+
+  describe('alias generation', () => {
+    const currentShareId = 42
+    const uniqueShareAlias = (name: string): Promise<string> => (service as any).uniqueShareAlias(name, currentShareId)
+
+    it('should exclude the current share when checking its alias', async () => {
+      sharesQueriesMock.uniqueShareAlias.mockResolvedValueOnce('leba-est-chez-moi')
+
+      await expect(uniqueShareAlias('Lébà est chez moi')).resolves.toBe('leba-est-chez-moi')
+      expect(sharesQueriesMock.uniqueShareAlias).toHaveBeenCalledWith('Lébà est chez moi', currentShareId)
     })
   })
 })

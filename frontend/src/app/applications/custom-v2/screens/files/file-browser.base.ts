@@ -375,7 +375,7 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       { id: 'share', label: 'Share', icon: 'share', action: () => this.shareEntry(f) },
       {
         id: 'favorite',
-        label: this.favoritesService.isFavorite(f.id) ? 'Remove from favorites' : 'Add to favorites',
+        label: this.favoritesService.isFavorite(f) ? 'Remove from favorites' : 'Add to favorites',
         icon: 'star',
         action: () => this.toggleFavorite(f)
       },
@@ -431,7 +431,8 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
         // Both come straight off the browse response the row was built from, so
         // the ACCESS band and the Comments tab need no request of their own.
         shares: (f as FileProps & { shares?: { id: number; name?: string; alias?: string; type?: number }[] }).shares,
-        hasComments: f.hasComments
+        hasComments: f.hasComments,
+        isFavorite: f.isFavorite
       })
     })
   }
@@ -467,7 +468,6 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
       this.clearSelection()
       this.folderSize.clear()
       this.loadFiles()
-      this.favoritesService.loadFavoriteIds()
     })
     // Refresh on each task affecting this folder, not just when the active queue
     // empties — a single hung upload (e.g. a backgrounded tab pausing requests)
@@ -1002,11 +1002,24 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
   }
 
   // Star toggle. Builds the same repository path the dock-context effect uses
-  // (files/<alias>/<segs>/<name>) and hands it to FavoritesService, which
-  // optimistically flips the id Set before firing the add/remove request.
+  // (files/<alias>/<segs>/<name>) for the add, which upstream addresses by path;
+  // the remove is addressed by file id alone.
+  //
+  // The flag is flipped optimistically and rolled back on failure. On a successful
+  // ADD the server may hand back a DIFFERENT id: an unmaterialized file carries a
+  // negative id in the browse response, and upstream materializes the row and
+  // returns the real id. Adopting it matters because the subsequent DELETE is
+  // id-addressed and rejects anything below 1.
+  // The row's id is deliberately NOT rewritten when upstream materializes the file.
+  // `selection` is a Set of file ids and the reconcile effect above drops any id no
+  // longer present in filteredFiles(), so swapping a row's id mid-flight silently
+  // deselected it and collapsed the inspector — on the common path, since most
+  // personal-space files carry a negative id. FavoritesService remembers the mapping
+  // instead, which also fixes the inspector panel, whose toggle cannot reach these
+  // rows to adopt anything.
   protected toggleFavorite(file: FileProps): void {
     if (!this.repository.alias()) return
-    this.favoritesService.toggle(this.buildFullPath(file), file.id, !this.favoritesService.isFavorite(file.id))
+    this.favoritesService.toggle(this.buildFullPath(file), file)
   }
 
   protected async confirmAndDelete(file: FileProps): Promise<void> {
@@ -1467,6 +1480,8 @@ export abstract class FileBrowserBase implements OnInit, OnDestroy {
     this.http.get<SpaceFiles>(url).subscribe({
       next: (result) => {
         this.files.set(result.files)
+        // Rows now carry the server's own isFavorite — drop any optimistic override.
+        this.favoritesService.clearOverrides()
         this.permissions.set(result.permissions ?? '')
         // Published in the same turn as files/permissions, and carrying the path
         // this response was requested for — see loadedDirPath's own comment.

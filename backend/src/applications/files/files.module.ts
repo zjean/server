@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { configuration } from '../../configuration/config.environment'
 import { FilesContentStoreMySQL } from './adapters/files-content-store-mysql.service'
+import { FilesOperationsController } from './files-operations.controller'
 import { FilesTasksController } from './files-tasks.controller'
 import { FilesController } from './files.controller'
 import { FilesContentStore } from './models/files-content-store'
@@ -22,6 +23,8 @@ import { FilesTasksWatcher } from './services/tasks/files-tasks-watcher.service'
 import { FilesEventManager } from './services/files-event-manager.service'
 import { FilesQuotaManager } from './services/files-quota-manager.service'
 import { FilesTrashRetention } from './services/files-trash-retention.service'
+import { FilesFavoritesManager } from './services/files-favorites-manager.service'
+import { FilesFavoritesQueries } from './services/files-favorites-queries.service'
 
 // Euro-Office is an OnlyOffice-protocol document server, not a second protocol
 // (OnlyOfficeManager already selects it when onlyoffice is disabled —
@@ -42,7 +45,7 @@ const officeConnectorEnabled =
     ...(officeConnectorEnabled ? [OnlyOfficeModule] : []),
     ...(configuration.applications.files.editors.collabora.enabled ? [CollaboraOnlineModule] : [])
   ],
-  controllers: [FilesController, FilesTasksController],
+  controllers: [FilesOperationsController, FilesController, FilesTasksController],
   providers: [
     FilesMethods,
     FilesManager,
@@ -60,7 +63,9 @@ const officeConnectorEnabled =
     FilesSearchManager,
     FilesEventManager,
     FilesQuotaManager,
-    FilesTrashRetention
+    FilesTrashRetention,
+    FilesFavoritesQueries,
+    FilesFavoritesManager
   ],
   exports: [
     FilesManager,
@@ -69,6 +74,12 @@ const officeConnectorEnabled =
     FilesQuotaManager,
     FilesMethods,
     FilesRecents,
+    // mod(files): FilesFavoritesManager + FilesFavoritesQueries are exported so the
+    // fork's custom-favorites bridge can serve the NC mobile surface (PROPFIND star,
+    // PROPPATCH toggle, REPORT listing), which is path-addressed and needs an id-list
+    // lookup upstream's controller does not expose. Re-apply on every upstream sync.
+    FilesFavoritesManager,
+    FilesFavoritesQueries,
     // Re-export OnlyOfficeModule so consumers of FilesModule (currently the
     // custom-mobile-compat NC OnlyOffice connector) get DI access to the
     // manager + guard exported above. Same gate as `imports` — see the note on

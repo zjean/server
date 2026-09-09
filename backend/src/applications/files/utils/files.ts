@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common'
+import { HttpException, HttpStatus } from '@nestjs/common'
 import { WriteStream } from 'fs'
 import fse from 'fs-extra'
 import mime from 'mime-types'
@@ -10,9 +10,11 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { formatDateISOString } from '../../../common/functions'
 import { currentTimeStamp, isValidFileName, regExpPreventPathTraversal } from '../../../common/shared'
-import { DEFAULT_CHECKSUM_ALGORITHM, DEFAULT_HIGH_WATER_MARK, EXTRA_MIMES_TYPE } from '../constants/files'
+import { DEFAULT_CHECKSUM_ALGORITHM, DEFAULT_HIGH_WATER_MARK, EXTRA_MIMES_TYPE, TEMPORARY_FILE_PREFIX, TEMPORARY_PATH } from '../constants/files'
+import { SYNC_TEMPORARY_FILE_PREFIX } from '../../sync/constants/sync'
 import type { FileDBProps } from '../interfaces/file-db-props.interface'
 import type { FileProps } from '../interfaces/file-props.interface'
+import type { WriteFromStreamOptions, WriteUploadStreamOptions } from '../interfaces/write-stream.interface'
 import { FileError } from '../models/file-error'
 import { maxFileSizeExceededError } from './errors'
 
@@ -31,11 +33,27 @@ export function isPathInside(basePath: string, candidatePath: string, allowBaseP
   return resolvedCandidatePath.startsWith(basePathPrefix)
 }
 
+export function isInternalTemporaryEntry(name: string): boolean {
+  return name === TEMPORARY_PATH.STORAGE || name.startsWith(SYNC_TEMPORARY_FILE_PREFIX)
+}
+
+export function isInternalTemporaryPath(basePath: string, candidatePath: string): boolean {
+  const relativePath = path.relative(path.resolve(basePath), path.resolve(candidatePath))
+  if (!relativePath || path.isAbsolute(relativePath) || relativePath.startsWith(`..${path.sep}`) || relativePath === '..') return false
+  return relativePath.split(path.sep).some(isInternalTemporaryEntry)
+}
+
 export function sanitizeName(name: string): string {
   return name
-    .replace(/^\s+|[. ]+$/g, '') // trimStart + trimEnd + strip trailing dots
     .replace(/[/\\]/g, '') // remove slashes
     .replace(/\.\./g, '') // remove '..'
+    .replace(/^\s+|[. ]+$/g, '') // trimStart + trimEnd + strip trailing dots
+}
+
+export function assertValidFileId(fileId: number): void {
+  if (!Number.isSafeInteger(fileId) || fileId === 0) {
+    throw new HttpException('Invalid file id', HttpStatus.BAD_REQUEST)
+  }
 }
 
 export function checkFileName(fPath: string): string {
@@ -109,13 +127,58 @@ export function makeDir(rPath: string, recursive?: boolean): Promise<string> {
   return fs.mkdir(rPath, { recursive: recursive })
 }
 
-export async function makeTempDir(parentPath: string, prefix: string): Promise<string> {
-  await makeDir(parentPath, true)
-  return fs.mkdtemp(path.join(parentPath, prefix))
+const MAX_TEMPORARY_FILE_NAME_BYTES = 255
+
+function temporaryNameSegment(value: string, label: string): string {
+  const segment = value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+  if (!segment) throw new Error(`Invalid temporary-file ${label}`)
+  return segment
 }
 
-export function tempFilePath(parentPath: string, prefix: string): string {
-  return path.join(parentPath, `${path.basename(prefix)}${crypto.randomUUID()}`)
+function truncateUtf8(value: string, maxBytes: number): string {
+  let result = ''
+  let length = 0
+  for (const character of value) {
+    const characterLength = Buffer.byteLength(character)
+    if (length + characterLength > maxBytes) break
+    result += character
+    length += characterLength
+  }
+  return result
+}
+
+function truncateTemporaryBasename(name: string, maxBytes: number): string {
+  if (Buffer.byteLength(name) <= maxBytes) return name
+  const extension = path.extname(name)
+  const extensionLength = Buffer.byteLength(extension)
+  if (extension && extensionLength < maxBytes) {
+    const stem = path.basename(name, extension)
+    return `${truncateUtf8(stem, maxBytes - extensionLength)}${extension}`
+  }
+  return truncateUtf8(name, maxBytes)
+}
+
+export function temporaryFilePrefix(operation: string, executionId: string): string {
+  return `${TEMPORARY_FILE_PREFIX}${temporaryNameSegment(operation, 'operation')}-${temporaryNameSegment(executionId, 'execution id')}-`
+}
+
+export function temporaryFileName(targetPath: string, operation: string, executionId: string = crypto.randomUUID()): string {
+  const prefix = temporaryFilePrefix(operation, executionId)
+  const basename = sanitizeName(fileName(targetPath)) || 'file'
+  const basenameBytes = MAX_TEMPORARY_FILE_NAME_BYTES - Buffer.byteLength(prefix)
+  if (basenameBytes < 1) throw new Error('Temporary-file prefix exceeds the filesystem filename limit')
+  return `${prefix}${truncateTemporaryBasename(basename, basenameBytes)}`
+}
+
+export function temporaryFilePath(parentPath: string, targetPath: string, operation: string, executionId?: string): string {
+  return path.join(parentPath, temporaryFileName(targetPath, operation, executionId))
+}
+
+export async function makeTemporaryDirectory(parentPath: string, targetPath: string, operation: string, executionId?: string): Promise<string> {
+  await makeDir(parentPath, true)
+  const temporaryPath = temporaryFilePath(parentPath, targetPath, operation, executionId)
+  await fs.mkdir(temporaryPath)
+  return temporaryPath
 }
 
 export function getMimeType(fPath: string, isDir: boolean): string {
@@ -196,7 +259,12 @@ export async function copyFiles(srcPath: string, dstPath: string, overwrite = fa
       await fs.utimes(dstPath, stat.atime, stat.mtime)
     }
   } else {
-    await fse.copy(srcPath, dstPath, { overwrite, preserveTimestamps: preserveTimestamps })
+    const resolvedSrcPath = path.resolve(srcPath)
+    await fse.copy(srcPath, dstPath, {
+      overwrite,
+      preserveTimestamps,
+      filter: (entryPath) => path.resolve(entryPath) === resolvedSrcPath || !isInternalTemporaryEntry(path.basename(entryPath))
+    })
   }
 }
 
@@ -242,52 +310,74 @@ export function createProgressTransform(
   })
 }
 
-export function writeFromStream(
-  rPath: string,
-  stream: Readable,
-  start: number = 0,
-  maxSize?: number,
-  signal?: AbortSignal,
-  onProgress?: (bytes: number) => void
-): Promise<void> {
+export function writeFromStream(rPath: string, stream: Readable, options: WriteFromStreamOptions = {}): Promise<void> {
+  const { start = 0, signal, accountBytes } = options
   const dst: WriteStream = createWriteStream(rPath, { flags: start ? 'a' : 'w', start: start, highWaterMark: DEFAULT_HIGH_WATER_MARK })
-  if (maxSize === undefined && !onProgress) {
+  if (!accountBytes) {
     return pipeline(stream, dst, { signal })
   }
-  let received = start
-  const progress = new Transform({
+  const accounting = new Transform({
     transform(chunk, _encoding, callback) {
-      received += chunk.length
-      if (maxSize !== undefined && received > maxSize) {
-        callback(maxFileSizeExceededError())
+      try {
+        accountBytes(chunk.length)
+      } catch (error) {
+        callback(error as Error)
         return
       }
-      onProgress?.(chunk.length)
       callback(null, chunk)
     }
   })
-  return pipeline(stream, progress, dst, { signal })
+  return pipeline(stream, accounting, dst, { signal })
 }
 
-export async function writeFromStreamAndChecksum(rPath: string, stream: Readable, hasRange: number, alg: string): Promise<string> {
+export async function writeFromStreamAndChecksum(
+  rPath: string,
+  stream: Readable,
+  alg: string,
+  options: WriteFromStreamOptions = {}
+): Promise<string> {
+  const { start = 0, signal, accountBytes } = options
   const hash = crypto.createHash(alg)
-  if (hasRange) {
+  if (start) {
+    // Seed the hash with the existing prefix so the result covers the complete resumed file.
     const src = createReadStream(rPath, { highWaterMark: DEFAULT_HIGH_WATER_MARK })
-    await pipeline(src, hash, { end: false })
+    await pipeline(src, hash, { end: false, signal })
   }
-  const dst = createWriteStream(rPath, { flags: hasRange ? 'a' : 'w', highWaterMark: DEFAULT_HIGH_WATER_MARK })
+  const dst = createWriteStream(rPath, { flags: start ? 'a' : 'w', highWaterMark: DEFAULT_HIGH_WATER_MARK })
   await pipeline(
     stream,
     async function* (source) {
       for await (const chunk of source) {
+        accountBytes?.(chunk.length)
         hash.update(chunk)
         yield chunk
       }
     },
-    dst
+    dst,
+    { signal }
   )
   hash.end()
   return hash.digest('hex')
+}
+
+function uploadWriteOptions({ limiter, signal, onProgress }: WriteUploadStreamOptions): WriteFromStreamOptions {
+  return {
+    start: limiter.initialFileSize,
+    signal,
+    accountBytes: (bytes) => {
+      // Progress must only include chunks accepted by both the file-size and quota boundaries.
+      limiter.consume(bytes)
+      onProgress?.(bytes)
+    }
+  }
+}
+
+export function writeUploadFromStream(rPath: string, stream: Readable, options: WriteUploadStreamOptions): Promise<void> {
+  return writeFromStream(rPath, stream, uploadWriteOptions(options))
+}
+
+export function writeUploadFromStreamAndChecksum(rPath: string, stream: Readable, alg: string, options: WriteUploadStreamOptions): Promise<string> {
+  return writeFromStreamAndChecksum(rPath, stream, alg, uploadWriteOptions(options))
 }
 
 export function copyFileContent(srcPath: string, dstPath: string): Promise<void> {
@@ -298,7 +388,8 @@ export function copyFileContent(srcPath: string, dstPath: string): Promise<void>
 export async function walkDir(
   rPath: string,
   onEntry: (entry: Dirent, entryPath: string) => Promise<void> | void,
-  errors?: Record<string, string>
+  errors?: Record<string, string>,
+  includeEntry?: (entry: Dirent, entryPath: string) => boolean
 ): Promise<void> {
   let entries: Dirent[]
 
@@ -312,9 +403,10 @@ export async function walkDir(
 
   for (const entry of entries) {
     const entryPath = path.join(rPath, entry.name)
+    if (includeEntry && !includeEntry(entry, entryPath)) continue
     await onEntry(entry, entryPath)
     if (entry.isDirectory()) {
-      await walkDir(entryPath, onEntry, errors)
+      await walkDir(entryPath, onEntry, errors, includeEntry)
     }
   }
 }
@@ -367,15 +459,20 @@ export async function uniqueFilePathFromDir(rPath: string): Promise<string> {
   return rPath
 }
 
-export async function uniqueDatedFilePath(rPath: string): Promise<{ isDir: boolean; path: string }> {
+export async function uniqueDatedFilePath(rPath: string, knownIsDir?: boolean): Promise<{ isDir: boolean; path: string }> {
   const date = formatDateISOString(new Date())
-  if (await isPathIsDir(rPath)) {
-    return { isDir: true, path: `${rPath}-${date}` }
-  } else {
-    const extension = path.extname(rPath)
-    const nameWithoutExtension = path.basename(rPath, extension)
-    return { isDir: false, path: path.join(path.dirname(rPath), `${nameWithoutExtension}-${date}${extension}`) }
+  const isDir = knownIsDir ?? (await isPathIsDir(rPath))
+  const extension = isDir ? '' : path.extname(rPath)
+  const nameWithoutExtension = path.basename(rPath, extension)
+  const datedName = `${nameWithoutExtension}-${date}`
+  const parentDir = path.dirname(rPath)
+  let candidate = path.join(parentDir, `${datedName}${extension}`)
+  let count = 1
+  while (await isPathExists(candidate)) {
+    candidate = path.join(parentDir, `${datedName} (${count})${extension}`)
+    count++
   }
+  return { isDir, path: candidate }
 }
 
 export async function checkExternalPath(rPath: string) {

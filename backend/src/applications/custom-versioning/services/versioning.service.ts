@@ -29,6 +29,7 @@ import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFrom
 import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { versionsToExpire } from '../utils/versions-thinning'
 import { VersioningQueries } from './versioning-queries.service'
+import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 
 // File versioning. See docs/plans/2026-07-25-file-versioning-design.md.
 //
@@ -845,7 +846,7 @@ export class VersioningService {
   // which is how `files.path` stores it.
   private fileProps(space: SpaceEnv, size: number, mtimeMs: number): FileProps {
     return {
-      id: 0,
+      id: NO_CLIENT_FILE_ID,
       path: dirName(space.dbFile.path),
       name: fileName(space.dbFile.path),
       isDir: false,

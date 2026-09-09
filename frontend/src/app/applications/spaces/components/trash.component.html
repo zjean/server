@@ -1,22 +1,19 @@
 <!--Start Top Menu-->
 <div class="app-top-menu">
-  <button (click)="loadTrashBins()"
-          class="btn btn-default me-1"
-          [tooltip]="'Refresh' | translate:locale.language"
-          type="button">
-    <fa-icon [icon]="icons.faArrowRotateRight" [animation]="loading ? 'spin' : null"></fa-icon>
-  </button>
-  <div class="ms-auto">
+  <div class="d-flex align-items-center ms-auto">
     <!--Start Filter Button-->
     <div class="btn-group me-1">
       <app-input-filter class="d-none d-sm-block"></app-input-filter>
     </div>
     <!--End Filter Button-->
+    <button (click)="loadTrashBins()"
+            class="btn btn-default me-1"
+            [tooltip]="'Refresh' | translate:locale.language"
+            type="button">
+      <svg [lucideIcon]="icons.LucideRotateCw" [class.icon-spin]="loading"></svg>
+    </button>
     <!--Start View Button-->
-    <app-navigation-view [sortParams]="sortTable.sortParam"
-                         [sortFields]="btnSortFields"
-                         (sortBy)="sortBy($event)"
-                         (switchView)="galleryMode = $event">
+    <app-navigation-view (switchView)="galleryMode = $event">
     </app-navigation-view>
     <!--End View Button-->
   </div>
@@ -24,7 +21,12 @@
 <!--End Top Menu-->
 @if (galleryMode?.enabled) {
   <!--Start Gallery Content-->
-  <div class="app-thumbs">
+  <div [style.--gallery-card-size]="galleryMode.dimensions + 'px'"
+       [style.--gallery-badge-size]="galleryMode.badgeSize + 'px'"
+       [style.--gallery-image-size]="galleryMode.image + 'px'"
+       [style.--gallery-icon-size]="galleryMode.iconSize + 'px'"
+       [style.--gallery-text-size]="galleryMode.textSize + 'px'"
+       class="app-gallery">
     <app-virtual-scroll (contextmenu)="onContextMenu($event)"
                         [childHeight]="galleryMode.dimensions"
                         [childWidth]="galleryMode.dimensions"
@@ -38,32 +40,25 @@
                (appTap)="browse(t)"
                [class.disabled]="!t.enabled"
                [class.selected]="t.id === selected?.id"
-               [style.height.px]="galleryMode.dimensions"
-               [style.width.px]="galleryMode.dimensions"
                class="card">
             <div [attr.rowIndex]="$index" class="card-body">
-              <fa-icon [icon]="t.isPersonal ? icons.PERSONAL : icons.SPACES"
-                       class="circle-primary-icon"
-                       [style.min-width.px]="galleryMode.image"
-                       [style.min-height.px]="galleryMode.image"
-                       [style.font-size.px]="galleryMode.faSize">
-              </fa-icon>
+              <span class="circle-primary-icon gallery-icon">
+                <svg [lucideIcon]="t.isPersonal ? icons.PERSONAL : icons.SPACES"></svg>
+              </span>
               <span class="label-top-right">
                 @if (t.newly) {
-                  <span [style.font-size.px]="galleryMode.textSize" class="badge bg-purple">{{ t.hTimeAgo }}</span>
+                  <span class="badge bg-purple">{{ t.hTimeAgo }}</span>
                 }
               </span>
               <span class="label-bottom-right">
-                <span [style.font-size.px]="galleryMode.textSize" class="badge bg-danger">{{ t.nb }}</span>
+                <span class="badge bg-danger">{{ t.nb }}</span>
               </span>
             </div>
             <div class="card-footer text-center text-truncate p-1">
-              <span [style.font-size.px]="galleryMode.textSize" class="no-pointer-events text-file-name-preserve" draggable="false">
-                @if (t.isPersonal) {
-                  {{ t.name | translate:locale.language }}
-                } @else {
-                  {{ t.name }}
-                }
+              <span
+                class="no-pointer-events text-file-name-preserve"
+                draggable="false"
+                [textContent]="t.isPersonal ? (t.name | translate:locale.language) : t.name">
               </span>
             </div>
           </div>
@@ -87,7 +82,7 @@
               l10nTranslate>
             {{ th.value.label }}
             @if (sortTable.sortParam.column === th.key) {
-              <fa-icon [icon]="sortTable.sortParam.asc ? icons.faArrowDown : icons.faArrowUp" [fixedWidth]="false"></fa-icon>
+              <svg [lucideIcon]="sortTable.sortParam.asc ? icons.LucideArrowDown : icons.LucideArrowUp"></svg>
             }
           </th>
         }
@@ -114,13 +109,13 @@
                   @switch (th.key) {
                     @case ('name') {
                       <div class="d-flex align-items-center">
-                        <fa-icon [icon]="t.isPersonal ? icons.PERSONAL : icons.SPACES" class="circle-primary-icon"></fa-icon>
-                        <span class="no-pointer-events text-file-name-preserve" draggable="false">
-                          @if (t.isPersonal) {
-                            {{ t.name | translate:locale.language }}
-                          } @else {
-                            {{ t.name }}
-                          }
+                        <span class="circle-primary-icon">
+                          <svg [lucideIcon]="t.isPersonal ? icons.PERSONAL : icons.SPACES"></svg>
+                        </span>
+                        <span
+                          class="no-pointer-events text-file-name-preserve"
+                          draggable="false"
+                          [textContent]="t.isPersonal ? (t.name | translate:locale.language) : t.name">
                         </span>
                       </div>
                     }
@@ -146,12 +141,12 @@
 <!--Start Context Menu -->
 <context-menu #MainContextMenu>
   <ng-template (execute)="loadTrashBins()" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faArrowRotateRight"></fa-icon>Refresh</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.LucideRotateCw"></svg>Refresh</span>
   </ng-template>
 </context-menu>
 <context-menu #TargetContextMenu>
   <ng-template (execute)="layout.showRSideBarTab(TAB_MENU.SELECTION)" contextMenuItem>
-    <span l10nTranslate><fa-icon [icon]="icons.faCircleInfo"></fa-icon>Info</span>
+    <span l10nTranslate><svg [lucideIcon]="icons.SELECTION"></svg>View selection</span>
   </ng-template>
 </context-menu>
 <!--End Context Menu-->

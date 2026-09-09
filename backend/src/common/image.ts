@@ -4,37 +4,49 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import sharp from 'sharp'
 import TextToSVG from 'text-to-svg'
+import { maxFileSizeExceededError } from '../applications/files/utils/errors'
 import { moveFiles } from '../applications/files/utils/files'
 
 // Sharp settings
 sharp.cache(false)
 sharp.concurrency(Math.min(2, os.cpus()?.length || 1))
+// SVG files must only be loaded from buffers so librsvg has no base directory
+// from which it can resolve local external resources.
+sharp.block({ operation: ['VipsForeignLoadSvgFile'] })
 
 // Constants
 export const imgMimeTypePrefix = 'image/'
 export const pngMimeType = 'image/png'
 export const svgMimeType = 'image/svg+xml'
 export const webpMimeType = 'image/webp'
+export const maxThumbnailInputSize = 50 * 1024 * 1024
 const avatarSize = 512
 const fontPath = path.join(__dirname, 'fonts', 'avatar.ttf')
 const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
 let textToSvgCache: Promise<TextToSVG> | null = null
 
 export async function generateThumbnail(filePath: string, size: number): Promise<Buffer> {
-  // Probe with metadata() before doing the resize. Format detection inside
-  // sharp happens during pipeline execution; awaiting metadata() forces the
-  // format check to fail here so callers get a normal rejected promise they
-  // can map to a 4xx (instead of a stream error after headers were sent).
+  if ((await fs.stat(filePath)).size > maxThumbnailInputSize) {
+    throw maxFileSizeExceededError()
+  }
+  // SVG must arrive as a buffer: sharp.block() above forbids VipsForeignLoadSvgFile
+  // so librsvg gets no base directory for resolving local external resources.
+  // `input` is reused by the metadata() probe below for exactly the same reason —
+  // probing `filePath` would throw on every SVG.
+  const input = path.extname(filePath).toLowerCase() === '.svg' ? await fs.readFile(filePath) : filePath
+  // Fork: probe with metadata() before the resize. Format detection inside sharp
+  // happens during pipeline execution; awaiting metadata() forces the format check
+  // to fail here so callers get a normal rejected promise they can map to a 4xx
+  // (instead of a stream error after headers were sent).
   //
-  // Returning a Buffer (via toBuffer()) instead of a stream is load-bearing
-  // for HTTP delivery: a buffer has a known length, so the response can
-  // include Content-Length. NC iOS' preview cache rejects responses without
-  // Content-Length (it can't know the download is complete), which silently
-  // disables list-cell thumbnails. Same fix applies to v2's grid view — the
-  // stream-without-length path was a real bug, not just an optimization gap.
-  // The encoded bytes for a 1024-px webp are tens of KB; buffering is cheap.
-  await sharp(filePath, { failOn: 'none' }).metadata()
-  return sharp(filePath, {
+  // Fork: returning a Buffer (via toBuffer()) instead of a stream is load-bearing
+  // for HTTP delivery: a buffer has a known length, so the response can include
+  // Content-Length. NC iOS' preview cache rejects responses without Content-Length
+  // (it can't know the download is complete), which silently disables list-cell
+  // thumbnails. Same fix applies to v2's grid view. The encoded bytes for a
+  // 1024-px webp are tens of KB; buffering is cheap.
+  await sharp(input, { failOn: 'none' }).metadata()
+  return sharp(input, {
     failOn: 'none',
     sequentialRead: true, // sequential read = more efficient I/O
     limitInputPixels: 268e6 // protects against extremely large images
