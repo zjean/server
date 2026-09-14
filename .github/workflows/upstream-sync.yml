@@ -55,7 +55,7 @@ jobs:
         if: steps.sync.outputs.changed == 'true'
         run: |
           if ! git diff --quiet "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/; then
-            echo "::error title=Upstream changed workflow files::The Upstream Sync GITHUB_TOKEN cannot push .github/workflows/* changes (no 'workflows' scope). This is expected. Run the sync-in-fork-maintenance skill and follow its 'Failure mode' recovery: sync manually from upstream/main (NOT the now-stale upstream-main). THEN ADVANCE THE MIRROR — 'git push origin upstream/main:refs/heads/upstream-main' — or this guard keeps firing on the same already-merged changes forever.""
+            echo "::error title=Upstream changed workflow files::The Upstream Sync GITHUB_TOKEN cannot push .github/workflows/* changes (no 'workflows' scope). This is expected. Run the sync-in-fork-maintenance skill and follow its 'Failure mode' recovery: sync manually from upstream/main (NOT the now-stale upstream-main). THEN ADVANCE THE MIRROR — 'git push origin upstream/main:refs/heads/upstream-main' — or this guard keeps firing on the same already-merged changes forever."
             git --no-pager diff --stat "${{ steps.sync.outputs.before }}" HEAD -- .github/workflows/
             exit 1
           fi
