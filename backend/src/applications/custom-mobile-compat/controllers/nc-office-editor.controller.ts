@@ -34,7 +34,7 @@ const IOS_SPINNER_DELAY_MS = 700
 //
 // ContextInterceptor is REQUIRED, not decoration. OnlyOfficeManager builds the
 // document url, the callback url and (without an externalServer) the document
-// server url itself from `ContextManager.headerOriginUrl()`, which is populated
+// server url itself from `ContextManager.publicOriginUrl()`, which is populated
 // per-route by this interceptor and by nothing else. Without it the config comes
 // out pointing at `undefined/...` and the editor silently loads nothing.
 @Controller()

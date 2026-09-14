@@ -257,7 +257,7 @@ export class OnlyOfficeManager {
     const region = REGION_BY_LANGUAGE[lang]
     return {
       hasLock: hasLock,
-      documentServerUrl: this.externalOnlyOfficeServer || `${this.contextManager.headerOriginUrl()}${ONLY_OFFICE_INTERNAL_URI}`,
+      documentServerUrl: this.externalOnlyOfficeServer || `${this.contextManager.publicOriginUrl()}${ONLY_OFFICE_INTERNAL_URI}`,
       config: {
         type: isMobile ? 'mobile' : 'desktop',
         height: '100%',
@@ -309,7 +309,7 @@ export class OnlyOfficeManager {
   }
 
   private buildUrl(basePath: string, spaceUrl: string, token: string): string {
-    const url = new URL(`${basePath}/${spaceUrl}`, this.contextManager.headerOriginUrl())
+    const url = new URL(`${basePath}/${spaceUrl}`, this.contextManager.publicOriginUrl())
     url.searchParams.set(ONLY_OFFICE_TOKEN_QUERY_PARAM_NAME, token)
     return url.toString()
   }

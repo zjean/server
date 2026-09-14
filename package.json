@@ -1,7 +1,7 @@
 {
   "productName": "Sync-in",
   "name": "sync-in-server",
-  "version": "2.5.0-custom.1",
+  "version": "2.5.1-custom.1",
   "description": "The secure, open-source platform for file storage, sharing, collaboration, and syncing",
   "keywords": [
     "self-hosted",
@@ -86,11 +86,12 @@
     "lint:staged": "npm --ws run lint:staged",
     "test": "npm --ws run lint && npm -w backend test && npm -w frontend test",
     "start": "node dist/server/main.js",
-    "reset": "rm -Rf frontend/node_modules frontend/.angular backend/node_modules node_modules .angular; npm cache clean --force",
+    "reset": "rm -rf frontend/node_modules frontend/.angular backend/node_modules node_modules .angular",
+    "reset:hard": "npm run reset && npm cache clean --force",
     "docker:build": "docker build -t $npm_package_name .",
     "docker:buildx": "docker buildx build --platform linux/arm64,linux/amd64 --tag syncin/server:latest --tag syncin/server:${npm_package_version} --tag syncin/server:$(echo ${npm_package_version} | cut -d. -f1) . --push",
     "docker:buildx:nopush": "docker buildx build --platform linux/arm64,linux/amd64 --tag syncin/server:latest --tag syncin/server:${npm_package_version} --tag syncin/server:$(echo ${npm_package_version} | cut -d. -f1) .",
-    "docker:buildx:dev": "docker buildx build --platform linux/arm64,linux/amd64 --tag syncin/server:dev . --push",
+    "docker:buildx:push:dev": "docker buildx build --platform linux/arm64,linux/amd64 --tag syncin/server:dev . --push",
     "docker:start": "docker run --name sync-in -it --rm -e SKIP_INIT=true -p 8080:8080 -v ./environment/environment.yaml:/app/environment/environment.yaml $npm_package_name",
     "dev:db": "docker compose -f docker/docker-compose.dev.yaml up -d --wait mariadb",
     "dev:db:down": "docker compose -f docker/docker-compose.dev.yaml down",

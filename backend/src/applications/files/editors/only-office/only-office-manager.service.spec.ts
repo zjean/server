@@ -109,7 +109,7 @@ describe(OnlyOfficeManager.name, () => {
         {
           provide: ContextManager,
           useValue: {
-            headerOriginUrl: vi.fn().mockReturnValue('http://localhost:3000')
+            publicOriginUrl: vi.fn().mockReturnValue('http://localhost:3000')
           }
         },
         {

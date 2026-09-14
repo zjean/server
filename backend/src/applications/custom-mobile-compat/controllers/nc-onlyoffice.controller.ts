@@ -50,10 +50,11 @@ const TEMPLATE_EXTENSIONS = new Set(['docx', 'xlsx', 'pptx'])
 //     route table in constants/routes.ts.
 //
 // One latent gap, deliberately left alone here: /config calls
-// OnlyOfficeManager.getSettings without declaring ContextInterceptor, so
-// `headerOriginUrl()` is undefined and the urls in the config come out malformed.
-// It has never surfaced because no client calls the route. Fixing it is a
-// one-line decorator, out of scope for #369.
+// OnlyOfficeManager.getSettings without declaring ContextInterceptor, so on an
+// instance that leaves `server.publicUrl` unset `publicOriginUrl()` is undefined
+// and the urls in the config come out malformed. It has never surfaced because
+// no client calls the route. Fixing it is a one-line decorator, out of scope
+// for #369.
 @Controller()
 @AuthTokenSkip()
 @UseGuards(NcBasicAuthGuard)

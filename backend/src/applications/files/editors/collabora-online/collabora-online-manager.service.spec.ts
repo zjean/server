@@ -70,7 +70,7 @@ describe(CollaboraOnlineManager.name, () => {
         {
           provide: ContextManager,
           useValue: {
-            headerOriginUrl: vi.fn().mockReturnValue('https://domain.com')
+            publicOriginUrl: vi.fn().mockReturnValue('https://domain.com')
           }
         },
         {

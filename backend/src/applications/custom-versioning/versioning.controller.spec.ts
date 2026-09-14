@@ -65,7 +65,7 @@ describe(VersioningController.name, () => {
         // ContextInterceptor is declared on editorVersion, and Nest instantiates
         // it to build the chain even though these cases call handlers directly.
         // In production ContextModule is @Global.
-        { provide: ContextManager, useValue: { headerOriginUrl: () => 'https://files.example.test', run: (_c: any, cb: any) => cb() } }
+        { provide: ContextManager, useValue: { publicOriginUrl: () => 'https://files.example.test', run: (_c: any, cb: any) => cb() } }
       ]
     })
       // The guard is the authorization boundary and is exercised where it lives;
@@ -279,7 +279,7 @@ describe(VersioningController.name, () => {
   })
 
   // The urls in a version response must be ABSOLUTE, because the document server
-  // fetches them itself. `headerOriginUrl()` is the only origin that is right
+  // fetches them itself. `publicOriginUrl()` is the only origin that is right
   // behind the reverse proxy and it is populated by ContextInterceptor — without
   // the interceptor it returns undefined and the panel silently gets
   // `undefined/files/...`. Asserted as metadata because the failure is invisible

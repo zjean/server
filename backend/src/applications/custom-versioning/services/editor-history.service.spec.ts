@@ -94,11 +94,11 @@ describe(EditorHistoryService.name, () => {
         JwtService,
         { provide: VersioningService, useValue: versioning },
         { provide: Cache, useValue: cache },
-        // headerOriginUrl is populated by ContextInterceptor. Returning a real
+        // publicOriginUrl is populated by ContextInterceptor. Returning a real
         // origin here is what lets the URL cases assert an ABSOLUTE url; the
         // interceptor's absence in production is a separate trap, covered by the
         // controller spec.
-        { provide: ContextManager, useValue: { headerOriginUrl: () => 'https://files.example.test' } }
+        { provide: ContextManager, useValue: { publicOriginUrl: () => 'https://files.example.test' } }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])

@@ -132,11 +132,12 @@ export class VersioningController {
   // fetches those itself, from VersionsOfficeController.
   //
   // ContextInterceptor is on `editorVersion` ALONE — the only one of the three
-  // that builds a url — and there it is load-bearing: the urls handed to the
-  // document server must be absolute, and `contextManager.headerOriginUrl()`,
-  // the only thing that is correct behind the reverse proxy, is populated by
-  // that interceptor and returns undefined without it. The failure is a url
-  // reading `undefined/files/versions/...`, which surfaces as an empty panel.
+  // that builds a url — and there it is load-bearing whenever `server.publicUrl`
+  // is unset: the urls handed to the document server must be absolute, and
+  // `contextManager.publicOriginUrl()` falls back to the request origin, which
+  // only that interceptor populates. Without it, and with no configured
+  // `publicUrl`, the url reads `undefined/files/versions/...` and the panel
+  // renders empty.
 
   @Get(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.EDITOR_HISTORY}/*`)
   async editorHistory(@GetUser() user: UserModel, @GetSpace() space: SpaceEnv): Promise<EditorHistoryEntry[]> {
