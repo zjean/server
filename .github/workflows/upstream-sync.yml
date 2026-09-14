@@ -68,14 +68,21 @@ jobs:
       # while develop is still behind — after a manual recovery sync advanced the
       # mirror out-of-band, for instance — and gating this on "the mirror moved"
       # turned that state into a green run that did nothing at all. The step's own
-      # `git diff --quiet origin/develop HEAD` below is the correct condition, and it
-      # already exits cleanly when there is genuinely nothing to open.
+      # skip condition below is what decides whether there is anything to open.
+      #
+      # That condition is an ANCESTRY test, deliberately. It used to be
+      # `git diff --quiet origin/develop HEAD`, which compares TREES — and on a
+      # fork the two trees always differ, because carrying changes upstream does
+      # not have is the entire point. So the skip could never fire, and in the
+      # one state it existed to handle (develop already contains upstream-main,
+      # e.g. right after a manual recovery sync) the step fell through to
+      # `gh pr create` and died on "No commits between develop and upstream-main".
       - name: Open or update PR into develop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git fetch origin develop
-          if git diff --quiet origin/develop HEAD; then
+          if git merge-base --is-ancestor HEAD origin/develop; then
             echo "develop already contains upstream-main; skipping PR."
             exit 0
           fi
