@@ -71,7 +71,7 @@ describe(NcOfficeEditorController.name, () => {
         // ContextInterceptor is declared on the page route, and Nest instantiates
         // it to build the chain even though these cases call the handler
         // directly. In production ContextModule is @Global.
-        { provide: ContextManager, useValue: { headerOriginUrl: () => 'https://sync-in.example.test', run: (_c: never, cb: () => unknown) => cb() } }
+        { provide: ContextManager, useValue: { publicOriginUrl: () => 'https://sync-in.example.test', run: (_c: never, cb: () => unknown) => cb() } }
       ]
     }).compile()
     moduleRef.useLogger(['fatal'])
@@ -177,7 +177,7 @@ describe(NcOfficeEditorController.name, () => {
   it('declares ContextInterceptor on the page route', () => {
     // OnlyOfficeManager builds the document url, the callback url and — without
     // an externalServer — the document server url itself from
-    // ContextManager.headerOriginUrl(), which is populated per-route by this
+    // ContextManager.publicOriginUrl(), which is populated per-route by this
     // interceptor and by nothing else. Without it the config points at
     // `undefined/...` and the editor silently loads nothing.
     const interceptors = Reflect.getMetadata('__interceptors__', NcOfficeEditorController.prototype.page) ?? []

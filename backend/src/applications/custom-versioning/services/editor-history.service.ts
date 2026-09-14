@@ -201,13 +201,13 @@ export class EditorHistoryService {
   // OnlyOfficeManager.buildUrl builds one
   // (only-office-manager.service.ts:258-262).
   //
-  // Absolute because the fetch is server-to-server, and `headerOriginUrl()` —
-  // not a configured hostname — because that is what is correct behind the
-  // reverse proxy. It is populated by ContextInterceptor, so EVERY route calling
-  // into here needs that interceptor; without it this silently produces
-  // `undefined/...`.
+  // Absolute because the fetch is server-to-server. `publicOriginUrl()` returns
+  // `server.publicUrl` when it is configured and otherwise falls back to the
+  // request origin, which ContextInterceptor populates — so on an instance that
+  // leaves `publicUrl` unset, EVERY route calling into here still needs that
+  // interceptor; without it this silently produces `undefined/...`.
   private documentServerUrl(basePath: string, space: SpaceEnv, officeToken: string): string {
-    const url = new URL(`${basePath}/${encodeUrl(space.url)}`, this.contextManager.headerOriginUrl())
+    const url = new URL(`${basePath}/${encodeUrl(space.url)}`, this.contextManager.publicOriginUrl())
     url.searchParams.set(ONLY_OFFICE_TOKEN_QUERY_PARAM_NAME, officeToken)
     return url.toString()
   }

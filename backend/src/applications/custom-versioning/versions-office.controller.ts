@@ -32,13 +32,20 @@ import { VersioningService } from './services/versioning.service'
 // all. Same reasoning as VersionsAdminController being separate for its
 // role-based authorization.
 //
-// `@OnlyOfficeEnvironment()` is a composite of three things, all needed:
+// `@OnlyOfficeEnvironment()` is a composite of two things, both needed:
 //   - OnlyOfficeContext, the metadata that makes the global AuthTokenAccessGuard
 //     stand down for this route (auth-token-access.guard.ts:20-22);
 //   - UseGuards(OnlyOfficeGuard, SpaceGuard), in that order, so the token
 //     establishes the user and the space is then resolved and authorized AS that
-//     user;
-//   - ContextInterceptor, which populates the request context.
+//     user.
+//
+// It carried ContextInterceptor as a third part until upstream 2.5.1
+// (`db2f32c3`), which narrowed the interceptor to the two editor controllers
+// that actually build urls. This route needs none of it: it serves BYTES and
+// builds no url, so nothing in its call path reads the request context. The
+// fork routes that do build one — VersioningController.editorVersion and
+// NcOfficeEditorController — declare `@UseInterceptors(ContextInterceptor)`
+// themselves and are unaffected.
 //
 // Authorization is therefore exactly as strong as the live-document route's,
 // plus one more check: `getVersionStream` re-verifies through `requireVersionFor`

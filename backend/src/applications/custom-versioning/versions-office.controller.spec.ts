@@ -42,10 +42,10 @@ describe(VersionsOfficeController.name, () => {
       controllers: [VersionsOfficeController],
       providers: [
         { provide: VersioningService, useValue: versioning },
-        // ContextInterceptor is part of @OnlyOfficeEnvironment(), and Nest
-        // instantiates it to build the chain even though these cases call the
-        // handler directly. In production ContextModule is @Global.
-        { provide: ContextManager, useValue: { headerOriginUrl: () => 'https://files.example.test', run: (_c: any, cb: any) => cb() } }
+        // Kept although the composite no longer pulls ContextInterceptor in:
+        // ContextModule is @Global in production, and providing it here keeps
+        // the module compiling if a later route on this controller does need it.
+        { provide: ContextManager, useValue: { publicOriginUrl: () => 'https://files.example.test', run: (_c: any, cb: any) => cb() } }
       ]
     })
       .overrideGuard(OnlyOfficeGuard)
@@ -76,9 +76,15 @@ describe(VersionsOfficeController.name, () => {
     expect(new Reflector().get(ONLY_OFFICE_CONTEXT, VersionsOfficeController.prototype.editorContent)).toBe(true)
   })
 
-  it('carries ContextInterceptor, the third part of the composite', () => {
+  // Upstream 2.5.1 (`db2f32c3`) dropped ContextInterceptor from the composite,
+  // narrowing it to the two editor controllers that build urls. Pinned as an
+  // ABSENCE rather than deleted: this route serves bytes and builds no url, so
+  // re-adding the interceptor here would be cargo-culted from the routes that
+  // do need it (VersioningController.editorVersion, NcOfficeEditorController),
+  // both of which declare it themselves.
+  it('does not carry ContextInterceptor — it builds no url', () => {
     const interceptors = new Reflector().get(INTERCEPTORS_METADATA, VersionsOfficeController.prototype.editorContent) ?? []
-    expect(interceptors).toContain(ContextInterceptor)
+    expect(interceptors).not.toContain(ContextInterceptor)
   })
 
   // FileError does not extend HttpException, so without the filter every domain

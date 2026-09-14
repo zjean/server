@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { Observable } from 'rxjs'
-import { ContextStore } from '../interfaces/context-store.interface'
+import { configuration } from '../../../configuration/config.environment'
+import type { ContextStore } from '../interfaces/context-store.interface'
 
 @Injectable()
 export class ContextManager {
@@ -11,12 +12,12 @@ export class ContextManager {
     this.storage = new AsyncLocalStorage<ContextStore>()
   }
 
-  headerOriginUrl(): string {
-    return this.storage.getStore() ? this.storage.getStore().headerOriginUrl : undefined
-  }
-
-  get(key: keyof ContextStore): any {
-    return this.storage.getStore() ? this.storage.getStore()[key] : undefined
+  /**
+   * @deprecated Temporary compatibility helper while server.publicUrl is optional.
+   * It will be removed in the next major release when server.publicUrl becomes required.
+   */
+  publicOriginUrl(): string | undefined {
+    return configuration.server.publicUrl ?? this.storage.getStore()?.headerOriginUrl
   }
 
   run(context: ContextStore, cb: () => unknown): Observable<unknown> {
