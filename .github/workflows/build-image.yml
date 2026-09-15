@@ -63,3 +63,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # buildx attests by default, which turns one single-platform build into an
+          # index plus two untagged child manifests — three GHCR package versions per
+          # push, and the two children are what made the package unreadable (712 of
+          # 1068 versions). Nothing here consumes the attestations, so a plain manifest
+          # is both smaller and safe to prune by tag. See .github/workflows/ghcr-cleanup.yml.
+          provenance: false
+          sbom: false

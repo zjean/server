@@ -74,6 +74,18 @@ GitHub remembers the last-used strategy; double-check the dropdown on sync and p
   - Every push to `main` → `:main`, `:sha-<short>`
   - Every `v*.*.*` tag → `:<version>`, `:<major>.<minor>`, `:latest`
   - No DockerHub, no npm publish.
+- **Image retention.** `ghcr-cleanup.yml` prunes the package weekly (Mondays 04:17 UTC) and on
+  `workflow_dispatch`; the policy is `.github/scripts/ghcr-prune.sh`, which keeps every version carrying a
+  non-`sha-*` tag (releases, `:latest`, `:main`, `:develop`, `:beta`), the newest 20 `sha-*` builds, anything
+  younger than 24h, and any untagged manifest still referenced by something kept. **Do not prune untagged
+  versions blind** — before `provenance: false` landed, two of every build's three package versions were
+  attestation children of a tagged index, and deleting one corrupts the image pointing at it. The script
+  resolves each kept manifest against the registry first and aborts if a fetch fails. Dry run is its default;
+  a manual dispatch is dry by default, the schedule is not.
+- The delete needs **`delete:packages`**, which a workflow `GITHUB_TOKEN` does not carry (`packages: write`
+  is a different scope). The cleanup step prefers a `GHCR_CLEANUP_TOKEN` secret — a classic PAT with
+  `read:packages` + `delete:packages` — and falls back to `GITHUB_TOKEN`, which may 403 on this
+  user-owned package.
 
 ## SSH host alias
 
