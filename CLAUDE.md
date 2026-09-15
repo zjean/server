@@ -8,7 +8,16 @@ This is a fork of [`Sync-in/server`](https://github.com/Sync-in/server), maintai
 
 - **`develop`** — the default branch and the base for ALL day-to-day PRs (features, fixes, mods, docs, CI config, upstream syncs). Direct pushes blocked; the `test` status check must pass, the branch must be up to date with `develop`, and PR conversations must be resolved before merge. Every merge to `develop` publishes `ghcr.io/zjean/sync-in-server:beta` (plus `:develop` and `:sha-<short>`).
 - **`main`** — stable releases only. It advances exclusively via `develop → main` promotion PRs, merged with a **merge commit** (never squash — a squash would break the shared history and make every later promotion conflict). Direct pushes blocked; `test` must pass (up-to-date requirement deliberately OFF — the promotion merge commit on `main` is never an ancestor of `develop`, so a strict check would deadlock every promotion after the first).
-- **`upstream-main`** — a pure mirror of `upstream/main`, normally written only by `upstream-sync.yml`. **Human pushes are NOT blocked** (verified 2026-09-09: `allow_force_pushes: true`, no required reviews, no restrictions, `enforce_admins: false`) — an earlier version of this line claimed a PR-equivalent requirement and was wrong, which is why the mirror was left three months stale. **After any manual recovery sync you MUST advance the mirror yourself**: `git push origin upstream/main:refs/heads/upstream-main` (a fast-forward, since the mirror only ever trails upstream). Skipping it makes the sync workflow's workflow-file guard fire forever on changes `develop` already absorbed — the push it protects genuinely cannot succeed while the mirror sits behind those commits, so the guard is right and the mirror is the bug. Sync PRs open against `develop`.
+- **`upstream-main`** — a pure mirror of `upstream/main`, normally written only by `upstream-sync.yml`. **Human pushes are NOT blocked** (verified 2026-09-09: `allow_force_pushes: true`, no required reviews, no restrictions, `enforce_admins: false`) — an earlier version of this line claimed a PR-equivalent requirement and was wrong, which is why the mirror was left three months stale. **After any manual recovery sync you MUST advance the mirror yourself.** Skipping it leaves every later run diffing a stale baseline. **It is NOT always a fast-forward** — upstream force-pushes `main`, so the mirror can be sitting on an ORPHANED commit rather than merely behind (verified 2026-09-15: the mirror held `e71e239f`, and that same logical commit reached us as `016d8329` after a rewrite; a plain push was rejected as "behind its remote counterpart"). Check which case you are in, then push:
+
+```bash
+git merge-base --is-ancestor origin/upstream-main upstream/main   # succeeds → plain push is fine
+git push origin upstream/main:refs/heads/upstream-main
+```
+
+If that check fails, re-run the `Upstream Sync` workflow instead — its `reset --hard` + `--force-with-lease` handles a rewrite, and re-running also re-tests the guard. A manual `git push --force` works too (`allow_force_pushes: true`) and is safe, since the branch is a pure mirror holding nothing fork-specific.
+
+**The workflow's own PR is a notification, not a mergeable artifact.** It comes out `MERGEABLE` but `BEHIND`, and `develop` requires branches be up to date — so GitHub's "Update branch" would merge `develop` INTO `upstream-main` and contaminate the mirror. Every sync therefore needs a third branch off `develop` (the Task 2 flow), whether or not it conflicts. Close the workflow's PR as superseded. Sync PRs open against `develop`.
 
 ### Practical implications
 
@@ -54,9 +63,9 @@ GitHub remembers the last-used strategy; double-check the dropdown on sync and p
 ## Versioning and releases
 
 - Version scheme: `<upstream-base>-custom.<n>` — e.g. `2.2.1-custom.1`, `2.2.1-custom.2`, then reset on upstream bump to `2.2.2-custom.1`.
-- `package.json` `version` field holds the current value (root + backend + frontend all align).
+- The ROOT `package.json` `version` field holds the current value. `backend/package.json` and `frontend/package.json` carry **no** `version` field at all — upstream included — so there is nothing to keep in sync there (verified 2026-09-14).
 - Cutting a stable release:
-  1. On `develop`, open a PR bumping `version` in root + backend + frontend `package.json` (all three must align) and updating `CHANGELOG.md`.
+  1. On `develop`, open a PR bumping `version` in the root `package.json` (the only one that has the field) and updating `CHANGELOG.md`.
   2. Open the promotion PR: `gh pr create --repo zjean/server --base main --head develop --title "release: v<version>"`. Merge it with **Create a merge commit**.
   3. Tag the merge commit on `main`: `git fetch origin main && git tag v<version> origin/main && git push origin v<version>`.
   4. The tag fires `release.yml` (archives + draft GitHub Release; it verifies the tag is in `main`'s history) and `build-image.yml` (`:<version>`, `:<major>.<minor>`, `:latest`).

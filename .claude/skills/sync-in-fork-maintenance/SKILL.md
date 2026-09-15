@@ -1,6 +1,6 @@
 ---
 name: sync-in-fork-maintenance
-description: Maintain the zjean/server fork of Sync-in/server — trigger the upstream-sync workflow, resolve the upstream-main→develop merge conflicts it produces, and investigate what custom UI code under `frontend/src/app/applications/custom-v2/` needs to adapt when upstream changes backend contracts. Use this skill whenever the user asks to "sync upstream", "pull upstream changes", "merge upstream", "run the upstream workflow", "fix the upstream-sync PR", "resolve upstream conflicts", or "check what upstream changed / what we need to update in v2/v3". Also use when looking at an open chore:sync upstream PR that's CONFLICTING, or when a user says something broke after an upstream sync. Prefer this skill over improvising — the workflow has repo-specific gotchas (SSH host alias, `--repo zjean/server` flag, `upstream-main` is workflow-writable only, merge commits not squashes) that are easy to get wrong.
+description: Maintain the zjean/server fork of Sync-in/server — trigger the upstream-sync workflow, resolve the upstream-main→develop merge conflicts it produces, and investigate what custom UI code under `frontend/src/app/applications/custom-v2/` needs to adapt when upstream changes backend contracts. Use this skill whenever the user asks to "sync upstream", "pull upstream changes", "merge upstream", "run the upstream workflow", "fix the upstream-sync PR", "resolve upstream conflicts", or "check what upstream changed / what we need to update in v2/v3". Also use when looking at an open chore:sync upstream PR that's CONFLICTING, or when a user says something broke after an upstream sync. Prefer this skill over improvising — the workflow has repo-specific gotchas (SSH host alias, `--repo zjean/server` flag, `upstream-main` must stay a pure mirror so its PR is never the one you merge, merge commits not squashes) that are easy to get wrong.
 ---
 
 # Sync-in fork maintenance
@@ -36,7 +36,7 @@ Both `origin` and `upstream` remotes use `git@github-prive:...` **not** `git@git
 
 - **`develop`** — the default protected base for day-to-day PRs, including the upstream-sync PR. Direct pushes are blocked; everything goes through a PR. The `test` status check must pass before merge.
 - **`main`** — advances only via `develop` → `main` promotion PRs (merge commit). Direct pushes are blocked here too.
-- **`upstream-main`** — a pure mirror of `upstream/main`, writable only by the `upstream-sync.yml` workflow. Human pushes are blocked by PR-equivalent rules. **You cannot resolve conflicts by pushing to `upstream-main`** — see task 2.
+- **`upstream-main`** — a pure mirror of `upstream/main`, normally written only by `upstream-sync.yml`. Human pushes are **not** blocked (`allow_force_pushes: true`, no required reviews, no restrictions), but you still **must not resolve conflicts on it**: anything you add there stops it being a mirror, and the mirror is the baseline every future run diffs against. See task 2.
 - Feature branches auto-delete on merge.
 
 ### Merge strategy (per PR type)
@@ -77,10 +77,15 @@ gh pr list --repo zjean/server --base develop --head upstream-main --state open
 ```
 
 - **No PR** → upstream had nothing new. Report that and stop.
-- **PR open, MERGEABLE** → report PR number, URL, diff stat. Merge when ready via "Create a merge commit". Task 3 investigation still applies if backend files changed.
-- **PR open, CONFLICTING** → proceed to task 2.
+- **PR open** → proceed to task 2, whether it conflicts or not. See below.
 
 Use `gh pr view <n> --repo zjean/server --json mergeable,mergeStateStatus,additions,deletions,changedFiles,body` for the merge state. `MERGEABLE` + `BLOCKED` usually means CI is still running, not a conflict.
+
+#### The workflow's PR is a notification, not a mergeable artifact
+
+**Do not try to merge it, even when it says `MERGEABLE`.** Its head is `upstream-main`, which lags `develop` by every fork commit, so it comes back `MERGEABLE` + **`BEHIND`** — and `develop` requires branches be up to date before merge. The obvious move, GitHub's "Update branch" button, would merge `develop` **INTO** `upstream-main` and destroy the pure mirror.
+
+So every sync goes through Task 2's third branch off `develop`, conflicts or not; a conflict-free sync just skips the resolve step. Close the workflow's PR as superseded when you open the replacement (verified 2026-09-15 on #464 → #465, a clean merge that still could not be merged from `upstream-main`).
 
 ### Failure mode: the run fails at *Push upstream-main* (upstream changed a workflow file)
 
@@ -120,13 +125,22 @@ Then open the replacement PR and **merge it with a merge commit** (see Task 2's 
 
 So after the sync PR merges:
 
-```bash
-git fetch upstream main
-git push origin upstream/main:refs/heads/upstream-main   # fast-forward; the mirror only ever trails
-git fetch origin upstream-main && git rev-parse origin/upstream-main upstream/main  # must match
+**It is NOT always a fast-forward.** Upstream force-pushes `main`, so the mirror can be sitting on an ORPHANED commit rather than merely behind. Verified 2026-09-15: the mirror held `e71e239f "fix(frontend:spaces): update icon for Shared with Others"`, and that same logical commit arrived in the 2.5.1 sync as `016d8329`. The documented plain push was rejected:
+
+```
+! [rejected] ... Updates were rejected because a pushed branch tip is behind its remote counterpart
 ```
 
-`upstream-main` permits this (`allow_force_pushes: true`, no required reviews, no restrictions) — CLAUDE.md previously claimed human pushes were blocked and that was wrong. A plain push suffices; no `--force` is needed.
+So check which case you are in first:
+
+```bash
+git fetch upstream main && git fetch origin upstream-main
+git merge-base --is-ancestor origin/upstream-main upstream/main   # succeeds → plain push is fine
+git push origin upstream/main:refs/heads/upstream-main
+git rev-parse origin/upstream-main upstream/main  # must match
+```
+
+If the ancestry check FAILS, the mirror is orphaned. **Prefer re-running the workflow** — its `reset --hard upstream/main` + `push --force-with-lease` handles a rewrite, and re-running is also the cheapest way to re-test the guard. A manual `git push --force origin upstream/main:refs/heads/upstream-main` works too: `upstream-main` permits it (`allow_force_pushes: true`, no required reviews, no restrictions), and it is safe because the branch is a pure mirror holding nothing fork-specific.
 
 Then confirm the automation is healthy again rather than assuming:
 
@@ -137,7 +151,9 @@ gh run list --repo zjean/server --workflow "Upstream Sync" --limit 1   # expect 
 
 ## Task 2 — Resolve upstream-main → develop conflicts
 
-**Why this is annoying:** the workflow-opened PR has `upstream-main` as its head. If you try to resolve conflicts on `upstream-main` itself, the push is rejected (protected branch, workflow-only). Conflicts must be resolved on a third branch.
+**Why this is annoying:** the workflow-opened PR has `upstream-main` as its head, and that branch must stay a pure mirror — so neither end of it can move. You cannot resolve conflicts on it (the fix would become part of the "mirror"), and you cannot bring it up to date with `develop`, which strict branch protection requires before merge, because "Update branch" merges `develop` into it. Both roads lead to the same place: a third branch off `develop`.
+
+This applies to **every** sync, not just conflicting ones — a clean merge still cannot be merged from `upstream-main`. A conflict-free sync simply skips the resolve step below.
 
 ### Procedure
 
@@ -147,7 +163,7 @@ git fetch origin develop upstream-main
 
 # 2) Close the workflow-opened PR — it will be superseded.
 gh pr close <N> --repo zjean/server \
-  --comment "Superseded by a new PR with conflict resolution (upstream-main → develop required a merge-base branch since upstream-main is workflow-only)."
+  --comment "Superseded by a new PR with conflict resolution upstream-main must stay a pure mirror, so it can be neither resolved on nor brought up to date with develop, which strict protection requires before merge)."
 
 # 3) Branch off develop and merge upstream-main into it with --no-ff.
 git checkout -b sync/upstream-$(date +%Y-%m-%d) origin/develop
@@ -220,7 +236,7 @@ gh pr create --repo zjean/server \
   --body "$(cat <<EOF
 ## Summary
 
-Supersedes #<N> (closed — the workflow-opened upstream-main → develop PR was CONFLICTING, and upstream-main is workflow-writable only).
+Supersedes #<N> (closed — the workflow-opened upstream-main → develop PR cannot be merged from `upstream-main`, which must stay a pure mirror; see the skill's Task 2).
 
 This branch merges origin/upstream-main into a short-lived sync/upstream-YYYY-MM-DD off develop, with conflicts resolved in:
 - <list conflicted files>
