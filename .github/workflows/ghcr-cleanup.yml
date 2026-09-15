@@ -1,0 +1,52 @@
+name: GHCR Cleanup
+
+# build-image.yml publishes on every push to main/develop and on every v* tag, and
+# until now nothing removed anything: 356 builds had accumulated 1068 package versions.
+# This prunes them. The policy lives in .github/scripts/ghcr-prune.sh — read its header
+# before changing anything here.
+#
+# Token: a workflow GITHUB_TOKEN carries `packages: write`, which is NOT the
+# `delete:packages` scope the REST delete needs. If the run reports 403s, add a classic
+# PAT with read:packages + delete:packages as the GHCR_CLEANUP_TOKEN secret; the step
+# prefers it whenever it exists.
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted, delete nothing'
+        type: boolean
+        default: true
+      keep_sha:
+        description: 'How many of the newest sha-* builds to keep'
+        type: string
+        default: '20'
+
+permissions:
+  contents: read
+  packages: write
+
+# Never let two prunes interleave: both would resolve the same manifests and race each
+# other's deletes.
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prune old image versions
+        env:
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: sync-in-server
+          KEEP_SHA: ${{ inputs.keep_sha || '20' }}
+          # Scheduled runs delete; a manual run only deletes when dry_run is unchecked.
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '0' }}
+          GH_TOKEN: ${{ secrets.GHCR_CLEANUP_TOKEN || secrets.GITHUB_TOKEN }}
+        run: .github/scripts/ghcr-prune.sh
