@@ -26,7 +26,7 @@ import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
 import { SnapshotOptions, VersionOrigin, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
 import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from '../utils/paths'
-import { VERSIONS_STAGING_DIR } from '../constants/versioning'
+import { VERSIONS_BLOB_PUBLISH_GRACE_MS, VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { versionsToExpire } from '../utils/versions-thinning'
 import { VersioningQueries } from './versioning-queries.service'
 import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
@@ -858,6 +858,36 @@ export class VersioningService {
     if ((await this.queries.countByBlob(checksum, versionsRoot)) > 0) return
     const blobPath = blobPathFromRoot(versionsRoot, checksum)
     if (!blobPath) return
+    // THE REFCOUNT ABOVE IS NOT ENOUGH ON ITS OWN (#489). It is a check-then-act,
+    // and `snapshot` publishes its blob before inserting its row — so a
+    // concurrent save can have put these exact bytes in place while its row is
+    // still in flight, and a count of 0 then means "not referenced YET" rather
+    // than "not referenced". Unlinking there leaves a version that lists and
+    // 404s on download and restore, which is the mirror image of the race the
+    // ADR closed by renaming unconditionally.
+    //
+    // The blob's own mtime settles it, because a publish is a rename of the
+    // staged copy and carries that copy's write time: a blob older than the
+    // grace cannot have been published inside the grace, so no insert can still
+    // be in flight for it. A publish that has NOT yet renamed owns no file here
+    // at all, and its rename lands after this unlink — blob and row both
+    // present, which is the correct outcome.
+    //
+    // Anything younger is simply left to the nightly orphan sweep, whose own
+    // (much longer) grace makes the same test correctly. That sweep is where
+    // #489's preferred fix put every unreferenced blob; this keeps prompt
+    // reclamation for the overwhelming majority — a version dropped by
+    // thinning, retention, eviction or an admin purge is old, and so is its
+    // blob — and defers only the ones that could be racing.
+    const stats = await fs.stat(blobPath).catch(() => null)
+    if (!stats) return
+    if (Date.now() - stats.mtimeMs < VERSIONS_BLOB_PUBLISH_GRACE_MS) {
+      this.logger.verbose({
+        tag: this.removeBlobIfUnreferenced.name,
+        msg: `blob ${checksum.slice(0, 12)} in ${versionsRoot} is inside the publish window, leaving it to the orphan sweep`
+      })
+      return
+    }
     try {
       await removeFiles(blobPath)
     } catch (e) {

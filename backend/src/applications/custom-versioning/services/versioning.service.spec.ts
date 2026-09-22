@@ -49,7 +49,7 @@ import { genEtag } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { UserModel } from '../../users/models/user.model'
 import { WebDAVFile } from '../../webdav/models/webdav-file.model'
-import { VERSIONS_STAGING_DIR } from '../constants/versioning'
+import { VERSIONS_BLOB_PUBLISH_GRACE_MS, VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionInsert, VersionRow } from '../interfaces/version.interface'
 import { blobPathFromRoot } from '../utils/paths'
 import { VersioningQueries } from './versioning-queries.service'
@@ -264,6 +264,20 @@ describe(VersioningService.name, () => {
   async function ageFile(secondsAgo: number): Promise<void> {
     const t = new Date(Date.now() - secondsAgo * 1000)
     await fs.utimes(filePath, t, t)
+  }
+
+  // Backdates every blob in the store past the publish grace.
+  //
+  // The eager unlink path refuses to touch a blob that could still be
+  // mid-publish (#489): a snapshot renames its staged copy into place and only
+  // THEN inserts its row, so a blob that appeared moments ago may be one whose
+  // row has not landed yet. Every blob a test creates is by definition seconds
+  // old, so anything asserting EAGER reclamation has to say out loud that the
+  // blob has settled. A test that wants the other branch simply does not call
+  // this.
+  async function settleBlobs(): Promise<void> {
+    const when = new Date(Date.now() - VERSIONS_BLOB_PUBLISH_GRACE_MS - 60_000)
+    for (const b of await blobFiles()) await fs.utimes(b, when, when)
   }
 
   async function blobFiles(): Promise<string[]> {
@@ -1890,6 +1904,7 @@ describe(VersioningService.name, () => {
     await expect(service.deleteVersion(user, personalSpace(), id)).rejects.toThrow(FileError)
     expect(queries.rows).toHaveLength(1)
 
+    await settleBlobs()
     await service.deleteVersion(user, personalSpace(), id, true)
     expect(queries.rows).toHaveLength(0)
     expect(await blobFiles()).toHaveLength(0)
@@ -1905,6 +1920,7 @@ describe(VersioningService.name, () => {
     await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(await blobFiles()).toHaveLength(1)
+    await settleBlobs()
 
     await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
     // Still referenced by the second identical version.
@@ -1923,6 +1939,7 @@ describe(VersioningService.name, () => {
     await fs.writeFile(filePath, 'v2')
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(await blobFiles()).toHaveLength(2)
+    await settleBlobs()
 
     await service.purgeForFile(FILE_ID)
 
@@ -1963,12 +1980,70 @@ describe(VersioningService.name, () => {
     ensurer.ensureFileId.mockResolvedValue(555)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect(await blobFiles()).toHaveLength(1)
+    await settleBlobs()
 
     await service.purgeForFile(FILE_ID)
     expect(await blobFiles()).toHaveLength(1)
 
     await service.purgeForFile(555)
     expect(await blobFiles()).toHaveLength(0)
+  })
+
+  /* ------------------------------------------- blob-unlink race (#489) */
+
+  // `removeBlobIfUnreferenced` counts rows and then unlinks. `snapshot`
+  // publishes its blob and then inserts its row. Interleave them and a refcount
+  // of 0 means "not referenced YET": the unlink lands on bytes a row is about
+  // to point at, and that version lists but 404s on download and restore.
+  describe('the eager unlink cannot take a blob a concurrent save just published', () => {
+    it('leaves a blob published inside the window to the nightly sweep', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const [blob] = await blobFiles()
+
+      // Deliberately NOT settled: the blob is seconds old, exactly as one
+      // published by a save whose row has not been inserted yet.
+      await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+
+      expect(queries.rows).toHaveLength(0)
+      expect(await pathExists(blob)).toBe(true)
+    })
+
+    // Reproduces the interleaving from the issue: writer A publishes the blob,
+    // writer B drops the last OTHER row referencing it and finds a refcount of
+    // 0 because A's insert has not landed, then A inserts. With the guard, A's
+    // row still has its bytes.
+    it('survives a drop that runs between a publish and its row insert', async () => {
+      versionsConfig.minIntervalSeconds = 0
+      await ageFile(300)
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const [blob] = await blobFiles()
+      const firstId = queries.rows[0].id
+      // The blob predates the window; only the racing republish below makes it
+      // young again, which is precisely the signal the guard reads.
+      await settleBlobs()
+
+      // Writer B runs inside writer A's publish→insert gap.
+      const insert = vi.spyOn(queries, 'insertVersion').mockImplementationOnce(async (values: VersionInsert) => {
+        await service.deleteVersion(user, personalSpace(), firstId)
+        insert.mockRestore()
+        return queries.insertVersion(values)
+      })
+      await ageFile(150)
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      expect(queries.rows).toHaveLength(1)
+      expect(await pathExists(blob)).toBe(true)
+    })
+
+    it('still reclaims a settled blob promptly, rather than waiting for the sweep', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const [blob] = await blobFiles()
+      await settleBlobs()
+
+      await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+
+      expect(await pathExists(blob)).toBe(false)
+    })
   })
 
   /* ------------------------------------------------- versions-root rename (#471) */
