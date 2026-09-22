@@ -44,8 +44,12 @@
         @for (t of active(); track t.id) {
           <div class="dock-row">
             <span class="dock-row__spinner"></span>
-            <span class="dock-row__name dock-row__name--active">{{ t.name }}</span>
-            <span class="dock-row__pct">{{ percentOf(t) }}%</span>
+            <span class="dock-row__name dock-row__name--active">{{ nameOf(t) }}</span>
+            <!-- A delete or a compress reports no byte total, so a percentage would sit
+                 at 0% for the whole run and read as a stalled upload. -->
+            @if (hasProgress(t)) {
+              <span class="dock-row__pct">{{ percentOf(t) }}%</span>
+            }
             @if (canCancel(t)) {
               <app-v2-icon-btn
                 iconName="x"
@@ -65,7 +69,7 @@
               <app-v2-icon name="check" [size]="15" class="dock-row__glyph dock-row__glyph--done" />
             }
             <div class="dock-row__stack">
-              <span class="dock-row__name">{{ t.name }}</span>
+              <span class="dock-row__name">{{ nameOf(t) }}</span>
               <!-- D8 puts a `Retry` here. Nothing can retry: an upload's source is a
                    `File` handed over by the picker, and the browser does not keep it
                    once the dialog closes — `FilesUploadService` exposes cancellation

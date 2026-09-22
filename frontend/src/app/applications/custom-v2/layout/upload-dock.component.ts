@@ -2,11 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { FileTask, FileTaskStatus } from '@sync-in-server/backend/src/applications/files/models/file-task'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
+import type { FileTaskClient } from '../../files/interfaces/file-task-view.interface'
 import { FilesTasksService } from '../../files/services/files-tasks.service'
 import { ButtonComponent } from '../components/button.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { TransfersService } from '../services/transfers.service'
+import { activeTaskLabel } from '../utils/task-labels'
 
 /**
  * The upload dock (D8) — bottom-right, 360px, collapsible to one line.
@@ -57,16 +59,21 @@ export class UploadDockComponent {
   // dock takes the success pair instead. Without this a done dock read as still busy.
   protected readonly idleAndClean = computed(() => this.agg().active === 0 && this.agg().failed === 0)
 
+  // The verb and the mark both come from what is actually running — see
+  // `utils/task-labels.ts`. The dock is named for uploads but carries every task type,
+  // and it used to say "Uploading" for all of them.
+  private readonly runningLabel = computed(() => activeTaskLabel(this.active().map((t) => t.type)))
+
   protected readonly markGlyph = computed(() => {
-    if (this.agg().active > 0) return 'upload' as const
+    if (this.agg().active > 0) return this.runningLabel().glyph
     return this.agg().failed > 0 ? ('info' as const) : ('check' as const)
   })
 
   protected readonly headline = computed(() => {
     const a = this.agg()
-    if (a.active > 0) return 'v2_uploading_n_of_m'
-    if (a.failed > 0) return a.failed === 1 ? 'v2_transfer_one_failed' : 'v2_transfer_n_failed'
-    return this.ended().length === 1 ? 'v2_transfer_one_done' : 'v2_transfer_n_done'
+    if (a.active > 0) return this.runningLabel().headline
+    if (a.failed > 0) return a.failed === 1 ? 'v2_task_one_failed' : 'v2_task_n_failed'
+    return this.ended().length === 1 ? 'v2_task_one_done' : 'v2_task_n_done'
   })
 
   protected readonly headlineParams = computed(() => {
@@ -105,6 +112,23 @@ export class UploadDockComponent {
         if (active > 0) this.collapsed.set(false)
       })
     })
+  }
+
+  /**
+   * A task's label.
+   *
+   * `name` is derived server-side from the URL's last segment, which for an
+   * empty-trash task is the bin's ALIAS — so classic's task sidebar prefers the
+   * `displayName` the caller attached (`files-tasks.component.html:62`,
+   * `FilesTasksService.addTask`). Same rule here, or the dock reads `personal`.
+   */
+  protected nameOf(t: FileTask): string {
+    return (t as FileTaskClient).displayName ?? t.name
+  }
+
+  /** Whether this task reports a byte total, i.e. whether a percentage means anything. */
+  protected hasProgress(t: FileTask): boolean {
+    return !!t.props.totalSize
   }
 
   protected percentOf(t: FileTask): number {
