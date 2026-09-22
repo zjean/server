@@ -70,12 +70,7 @@ export class VersioningService {
   // throws: all failures are logged and swallowed (see the class comment).
   async snapshotBeforeOverwrite(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
     if (!this.enabled) return
-    // Guest and link homes live under files.tmpPath while the versions root
-    // resolves into usersPath, so their versions would outlive the ephemeral
-    // tree holding the live files — and every public-link upload would pay a
-    // cross-device copy. Public links are a sharing surface, not an authoring
-    // one; there is no user to show history to (ADR §8).
-    if (user.isGuest || user.isLink) return
+    if (this.mintsNoVersions(user, space)) return
 
     try {
       await this.snapshot(user, space, options)
@@ -85,6 +80,81 @@ export class VersioningService {
         tag: this.snapshotBeforeOverwrite.name,
         msg: `snapshot failed for ${space.url} (${options.origin}), the save proceeds unversioned: ${e}`
       })
+    }
+  }
+
+  // Which principals mint no versions — and why that is NOT simply "guest or
+  // link" (#517).
+  //
+  // A LINK never mints one. A public link is a sharing surface, not an
+  // authoring one (ADR §8): the principal is whoever holds the url, it is
+  // denied history entirely (#492), and there is no durable account to
+  // attribute a revision to.
+  //
+  // A GUEST is a named, authenticated collaborator, so the reason is narrower
+  // and it is a property of the ROOT rather than of the account. Guest homes
+  // live under files.tmpPath while userVersionsRoot resolves into usersPath
+  // (see the note on versionsPathFromRoot), so a version of a file in the
+  // guest's OWN home would be written outside the ephemeral tree holding the
+  // live file, and every such write would pay a cross-device copy. That holds
+  // only when the resolved root IS the acting guest's user root — for a file in
+  // a SHARED SPACE the root is 'space:<alias>' under spacesPath, which the
+  // guest's tmp home has nothing to do with.
+  //
+  // Skipping the shared-space case too was silent data loss: a guest with
+  // MODIFY overwrote a shared file and the previous content was unrecoverable
+  // for everyone, the space owner included, while the identical overwrite by an
+  // internal member was versioned — a hole in the timeline nobody in that space
+  // could see or repair (#517). The guest still cannot READ that history
+  // (#492); the capture protects the file's other members, not the guest.
+  //
+  // Tested on the resolved ROOT rather than on space.inPersonalSpace because
+  // versionsRootFromSpace returns the acting user's root from TWO branches —
+  // personal space, and a share with an external path and no owner — and the
+  // second would otherwise write a guest's blobs into a usersPath tree that
+  // does not otherwise exist. Resolving the root twice on this path costs
+  // nothing: it is a pure function over objects already in hand.
+  private mintsNoVersions(user: UserModel, space: SpaceEnv): boolean {
+    if (user.isLink) return true
+    if (!user.isGuest) return false
+    return versionsRootFromSpace(user, space) === userVersionsRoot(user.login)
+  }
+
+  // The safety capture a restore takes, and the ONE caller that must not
+  // degrade to "the write proceeds unversioned" (#472).
+  //
+  // snapshotBeforeOverwrite swallows everything, deliberately: for the seven
+  // save paths a failed snapshot costs a version, while refusing the save would
+  // cost the user their work — availability over durability (ADR §4). A restore
+  // INVERTS that trade. The snapshot is not a side benefit of the operation, it
+  // IS the feature's promise ("a restore is never destructive", ADR §9), and
+  // the bytes it captures are about to be truncated by writeFromStream.
+  //
+  // The motivating failure is not exotic: stageBlob's fs.copyFile fails ENOSPC
+  // on a full volume — and since versions count against quota, a full volume is
+  // exactly WHEN people reach for Restore. Swallowed, that returned 200 while
+  // the content the user had thirty seconds ago ceased to exist anywhere.
+  //
+  // Called INSIDE restoreVersion's lock and try/finally, so an abort still
+  // releases the lock it took and closes the pinned blob descriptor
+  // (invariant 6), and leaves the live file untouched.
+  //
+  // What it does NOT turn into a failure is `snapshot` deciding there is
+  // nothing to capture — no live file (the restore then creates one, destroying
+  // nothing) — because those return normally rather than throwing. Only a real
+  // failure aborts.
+  private async snapshotOrThrow(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
+    try {
+      await this.snapshot(user, space, options)
+    } catch (e) {
+      this.logger.error({
+        tag: this.snapshotOrThrow.name,
+        msg: `unable to capture ${space.url} before restoring it, the restore was aborted: ${e}`
+      })
+      // A FileError already carries a considered status — enforceQuotaShare's
+      // 507, say — so it is rethrown as is rather than flattened to a 500.
+      if (e instanceof FileError) throw e
+      throw new FileError(abortedRestoreStatus(e), 'Unable to save the current content before restoring, the restore was aborted')
     }
   }
 
@@ -700,7 +770,10 @@ export class VersioningService {
   // Restores a version into the live file.
   //
   // The current content is snapshotted first (origin `restore`), so a restore
-  // is never destructive — you can always get back to where you were.
+  // is never destructive — you can always get back to where you were. That
+  // promise is only as good as the snapshot, so this one path takes it through
+  // snapshotOrThrow and ABORTS on failure rather than degrading to an
+  // unversioned write (#472).
   //
   // THE LIVE FILE'S INODE MUST SURVIVE. Both editors deliberately use
   // copyFileContent rather than a move "to avoid inode changes"
@@ -753,7 +826,10 @@ export class VersioningService {
         // `version.fileId` rather than a fourth resolution of the same id: the
         // guard above accepted this row only because its fileId is the id this
         // space env resolves to, so the `files` row provably exists (#349).
-        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore', fileId: version.fileId })
+        //
+        // Throws rather than swallows: everything after this line destroys the
+        // live content. See snapshotOrThrow.
+        await this.snapshotOrThrow(user, space, { origin: 'restore', fileId: version.fileId })
         // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
         // but sourced from the pinned descriptor.
         await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))
@@ -835,8 +911,16 @@ export class VersioningService {
   /* ------------------------------------------------------------------ purge */
 
   // Purges every version of one file, blobs included.
+  //
+  // NOT GATED ON `files.versions.enabled` (#490). Only CREATION is: turning the
+  // flag off must stop new versions, never strand the ones already stored. The
+  // gate used to be here, so disabling the feature — typically *because of* a
+  // quota complaint — silently stopped reclaiming blobs on permanent delete,
+  // while the FK cascade still removed the rows that were the only remaining
+  // pointer to them. The bytes then kept counting against the user's quota with
+  // no reachable way to free them. Reaching this with no rows costs one indexed
+  // query and returns.
   async purgeForFile(fileId: number): Promise<void> {
-    if (!this.enabled) return
     await this.purgeForFileIds([fileId])
   }
 
@@ -846,8 +930,9 @@ export class VersioningService {
   // and afterwards the descendant ids are simply gone — deleteFiles removes
   // every child row in one regexp query, so there would be nothing left to
   // resolve and every child's history would leak (ADR §10).
+  //
+  // Not gated on the feature flag either — see purgeForFile.
   async purgeForPath(props: FileDBProps, isDir: boolean): Promise<void> {
-    if (!this.enabled) return
     try {
       const fileIds = await this.queries.resolveFileIdsForDelete(props, isDir)
       await this.purgeForFileIds(fileIds)
@@ -1055,4 +1140,30 @@ export class VersioningService {
       this.logger.warn({ tag: this.releaseLock.name, msg: `Failed to remove lock ${lock.key}: ${e}` })
     }
   }
+}
+
+// Which status an aborted restore answers with, given whatever `snapshot` threw.
+//
+// Three shapes, and the distinction that matters to the caller is whether
+// retrying is worth their time:
+//
+//   ENOSPC / EDQUOT -> 507. The volume or the quota is full. Retrying now will
+//     fail the same way; the user has to free something first.
+//   ER_LOCK_WAIT_TIMEOUT / ER_LOCK_DEADLOCK -> 503. mysql2 surfaces InnoDB's
+//     row-lock timeout (errno 1205) and deadlock victim (1213) as these codes.
+//     Both are TRANSIENT and say nothing about the request — the row the
+//     safety snapshot inserts was simply held by a concurrent writer — so a
+//     flat 500 would be actively misleading, and 503 is the one status a
+//     client may reasonably retry on its own. This becomes reachable once the
+//     nightly sweep takes gap locks over the same table (#471 / PR #530),
+//     which can block the safety snapshot's INSERT.
+//   anything else -> 500.
+//
+// Note this runs only on the RESTORE path. The seven save paths still swallow
+// everything (ADR §4) and never reach here.
+function abortedRestoreStatus(e: unknown): HttpStatus {
+  const code = (e as NodeJS.ErrnoException)?.code
+  if (code === 'ENOSPC' || code === 'EDQUOT') return HttpStatus.INSUFFICIENT_STORAGE
+  if (code === 'ER_LOCK_WAIT_TIMEOUT' || code === 'ER_LOCK_DEADLOCK') return HttpStatus.SERVICE_UNAVAILABLE
+  return HttpStatus.INTERNAL_SERVER_ERROR
 }

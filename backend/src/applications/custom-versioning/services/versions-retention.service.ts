@@ -63,9 +63,29 @@ export class VersionsRetention {
     private readonly versioning: VersioningService
   ) {}
 
+  // THE FLAG GATES THE SHAPING RULES, NOT THE RECLAIM RULES (#490).
+  //
+  // The whole sweep used to return early while `files.versions.enabled` was
+  // false, which stranded the store: an operator disables the feature —
+  // typically *because of* a quota complaint — and from that moment nothing
+  // reclaims anything, while `files-quota-manager`'s dirSize walk keeps
+  // charging every byte under `versions/` to the user. The only remedy left was
+  // the manual `rm -rf` + `DELETE FROM` surgery purgeRoot exists to make
+  // unnecessary.
+  //
+  // So the two GC rules — orphan blobs and dangling rows — now run either way.
+  // Neither can destroy reachable history by construction: an orphan blob is
+  // bytes no row points at (after a day's grace), and a dangling row is a row
+  // whose `files` row is already gone. They are pure reclaim.
+  //
+  // The three ROW rules stay gated. retentionDays, thinning and quotaShare
+  // shape a history that is still addressable, and applying a shaping policy to
+  // a store the operator has taken out of service would quietly delete
+  // revisions they would find missing on re-enabling. An operator who wants
+  // those bytes back while the feature is off has an explicit instrument that
+  // is now reachable: the admin purge.
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanVersions(): Promise<void> {
-    if (!this.config.enabled) return
     if (this.isRunning) {
       this.logger.warn({ tag: this.cleanVersions.name, msg: 'previous run still in progress, skipping' })
       return
@@ -95,12 +115,18 @@ export class VersionsRetention {
       // evictUntilUnderCeiling — which is what "did no row work" actually
       // means.)
       const rootsWithRows = await this.queries.distinctRoots()
-      for (const versionsRoot of rootsWithRows) {
-        // Each rule is independently guarded: a broken root must not stop the
-        // sweep for every other root.
-        await this.runRule('retentionDays', versionsRoot, () => this.enforceRetentionDays(versionsRoot))
-        await this.runRule('thinning', versionsRoot, () => this.enforceThinning(versionsRoot))
-        await this.runRule('quotaShare', versionsRoot, () => this.enforceQuotaShare(versionsRoot))
+      // Row rules, per root that actually holds versions. GATED (#524): the
+      // three shaping rules below reshape history that is still addressable, so
+      // they must not run on a store the operator has taken out of service. The
+      // read above is deliberately NOT inside this gate — see its comment.
+      if (this.config.enabled) {
+        for (const versionsRoot of rootsWithRows) {
+          // Each rule is independently guarded: a broken root must not stop the
+          // sweep for every other root.
+          await this.runRule('retentionDays', versionsRoot, () => this.enforceRetentionDays(versionsRoot))
+          await this.runRule('thinning', versionsRoot, () => this.enforceThinning(versionsRoot))
+          await this.runRule('quotaShare', versionsRoot, () => this.enforceQuotaShare(versionsRoot))
+        }
       }
       // Filesystem rules need a DIFFERENT root list. distinctRoots() reads the
       // versions table, so a root holding blobs but NO rows — precisely the

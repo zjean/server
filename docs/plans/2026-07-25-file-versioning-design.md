@@ -291,6 +291,15 @@ This section replaces the draft's claim that snapshotting "never blocks the user
 
 **Rationale (verified).** `UserModel.getHomePath(login, isGuest, isLink)` puts guests under `tmpPath/guests/<login>` and links under `tmpPath/links/<login>` (`user.model.ts:135-148`), whereas `getTrashPath(login)` calls `getHomePath(login)` **without those flags** (:154-156) and so resolves into `usersPath`. A `getVersionsPath` modeled on it would inherit the same split: versions for a guest upload would be written outside the ephemeral tree that holds the live files, outliving the guest home and accumulating unreferenced blobs. Skipping also avoids a guaranteed cross-device copy on every public-link upload. Public links are a sharing surface, not a document-authoring surface; version history there has no user to show it to.
 
+**CORRECTED (#517): the guest half of that rule was too wide, and the excess was silent data loss.** The rationale above is about the **root**, not about the account — and it only holds where the resolved root is the acting guest's **own user root**. For a file in a **shared space** `versionsRootFromSpace` returns `space:<alias>`, under `spacesPath`, which a guest's tmp home has nothing to do with. Skipping there meant a guest with MODIFY overwrote a shared file and the previous content was unrecoverable for **everyone in that space, its owner included**, while the identical overwrite by an internal member was versioned — a hole in the timeline nobody in the space could see or repair.
+
+The rule is now, in `VersioningService.mintsNoVersions`:
+
+- **link** → never mints, unchanged (whoever holds the url; nothing durable to attribute a revision to).
+- **guest** → skips only when `versionsRootFromSpace(user, space) === userVersionsRoot(user.login)`, which covers both branches that return the acting user's own root (personal space, and a share with an external path and no owner) and nothing else.
+
+Reading history stays denied to both (#492): the capture protects the file's **other** members, not the guest.
+
 ## 9. Restore — `copyFileContent`, never `moveFiles`; the inode must survive
 
 **Decision.** Restore is: acquire a lock → snapshot the *current* content as a new version with origin `restore` → replace live content with **`copyFileContent(blobPath, realPath)`** → update the `files` row (size/mtime) → emit `FileEvent` UPDATE → release the lock.
@@ -313,6 +322,12 @@ Three fixes, all now in the code:
 - **Verify the blob's size against its row before touching the live file.** `writeFromStream` truncates the destination the moment the stream opens, so a short or corrupt source has to be caught while the live content is still intact.
 
 The general lesson, worth more than the specific bug: **anything that reads a blob must pin it before running code that can evict.** Eviction and reads share no lock.
+
+**A FAILED pre-restore snapshot ABORTS the restore (#472).** The first implementation took that snapshot through `snapshotBeforeOverwrite`, which catches everything and logs *"the save proceeds unversioned"*. That is the correct trade for the seven save paths — availability over durability, §4 — and the wrong one here, because for a restore the snapshot is not a side benefit, it IS this section's promise, and the bytes it failed to capture are truncated on the next line. The motivating case is mundane: `stageBlob`'s `fs.copyFile` fails `ENOSPC` on a full volume, and since versions count against quota a full volume is exactly *when* someone reaches for Restore. The API answered **200** while the content the user had thirty seconds ago ceased to exist anywhere.
+
+Restore now calls `VersioningService.snapshotOrThrow`, which rethrows a `FileError` as it stands (so `enforceQuotaShare`'s 507 survives), maps `ENOSPC`/`EDQUOT` to **507**, InnoDB's `ER_LOCK_WAIT_TIMEOUT`/`ER_LOCK_DEADLOCK` to **503** (transient, and the one abort a client may reasonably retry unaided — reachable once the nightly sweep takes gap locks over the same table, #471), and anything else to **500**, and does so inside the lock's `try/finally` — the lock is released, the pinned descriptor closed, and the live file never touched. What is *not* a failure is `snapshot` finding nothing to capture: those paths return normally.
+
+**The link/guest half of #472 was already closed by #492**, which refuses `restoreVersion`, `setLabel` and `deleteVersion` to those principals in the service itself, above the blob descriptor — so the "a write-enabled public link can roll a shared document back, destructively" path is refused before any of the above runs.
 
 The lock is created the way non-DAV `saveStream` does it (`filesLockManager.create`, `files-manager.service.ts:127`) — restore is always an app-initiated action, never a DAV write, so it always runs under a real lock.
 
@@ -388,6 +403,21 @@ Trash coverage is the mechanism; document it rather than duplicating it. Revisit
 **Decision.** Everything gates on `files.versions.enabled`, checked **inside** `VersioningService` so that every hook site is a one-line call that no-ops when disabled. All REST endpoints return 404 when off; the NC `files_versions` capability is absent when off.
 
 **The `FileRowEnsurer` is explicitly NOT gated by this flag.** Mobile-compat's `oc:fileid` correctness depends on it regardless of whether versioning is enabled — gating it would regress NC iOS previews (see the `nc-file-row-ensurer.service.ts:14-40` comment for what breaks). E2E-13 asserts the flag-off state *and* that the ensurer still functions.
+
+**CORRECTED (#490): "everything gates on the flag" stranded the store.** Turning the flag off after the feature had been used disabled every RECLAIM path at once — `purgeForFile` / `purgeForPath` on a permanent delete, the whole nightly sweep, and both admin routes — while `files-quota-manager`'s `dirSize` walk kept charging every byte under `versions/` to the user. Since the `files` FK cascade still removed the rows that were the only pointer to those blobs, the bytes became unreachable, and the only remedy left was the `rm -rf` + `DELETE FROM` surgery `VersionsRetention.purgeRoot` exists to make unnecessary. Operators disable this flag *because of* a quota complaint, so the failure is aimed squarely at the case it is used in.
+
+**What the flag gates now: creation, and the per-file API.** Specifically:
+
+| Path | Gated? |
+|---|---|
+| `snapshotBeforeOverwrite` (creation) | **yes** |
+| the per-file REST routes, and the NC `files_versions` capability | **yes** (unchanged — ADR §13's 404 contract) |
+| `retentionDays`, `thinning`, `quotaShare` (the nightly **shaping** rules) | **yes** — they delete history that is still addressable, and applying a shaping policy to a store taken out of service would remove revisions the operator would find missing on re-enabling |
+| `orphanBlobs`, `danglingRows` (the nightly **GC** rules) | **no** — pure reclaim: bytes no row points at, and rows whose `files` row is already gone |
+| `purgeForFile` / `purgeForPath` (permanent delete) | **no** |
+| `VersionsAdminController` — storage summary and per-root purge | **no** — the operator's only instrument for a store that already exists |
+
+**Still open (maintainer):** whether version bytes should stop counting against quota while the flag is off. §7 charges them deliberately, and excluding them would need a `mod()` on the quota manager. The admin purge being reachable again gives the operator a way out that does not require that decision.
 
 ## 14. Frontend target — `custom-v2` only
 

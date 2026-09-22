@@ -136,10 +136,53 @@ describe(VersionsRetention.name, () => {
     await fs.rm(tmpRoot, { recursive: true, force: true })
   })
 
-  it('does nothing at all while the feature flag is off', async () => {
+  // #490. The flag gates the three SHAPING rules and nothing else. It used to
+  // gate the whole sweep, which stranded the store: disabling the feature —
+  // typically because of a quota complaint — stopped every reclaim path at
+  // once, while the quota walk kept charging every byte under versions/.
+  it('applies no shaping rule while the feature flag is off', async () => {
     versionsConfig.enabled = false
+    versionsConfig.retentionDays = { users: 1, spaces: 1 }
+    queries.distinctFileIdsByRoot.mockResolvedValue([100])
+
     await service.cleanVersions()
-    expect(queries.distinctRoots).not.toHaveBeenCalled()
+
+    // These three ARE the shaping rules — retentionDays, thinning and
+    // quotaShare, one probe each. They shape history that is still
+    // addressable, so applying a policy to a store the operator has taken out
+    // of service would delete revisions they would find missing on
+    // re-enabling.
+    expect(queries.unlabeledOlderThan).not.toHaveBeenCalled()
+    expect(queries.distinctFileIdsByRoot).not.toHaveBeenCalled()
+    expect(versioning.evictUntilUnderCeiling).not.toHaveBeenCalled()
+
+    // DELIBERATELY NOT ASSERTED: `distinctRoots`. It is a READ — the root list
+    // the loop iterates — not a shaping rule, and nothing it returns is acted
+    // on outside the gate here. Pinning "it was never called" would pin the
+    // gate's current SHAPE rather than its effect, and #471's rename tripwire
+    // (PR #530) consumes that same list AFTER the loop, unconditionally. With
+    // the assertion in place the only merge resolution that keeps this file
+    // green is the one that pulls `distinctRoots()` back inside the gate —
+    // which silently disables the tripwire in exactly the state this PR newly
+    // makes dangerous, since the nightly GC now runs with the flag off. So the
+    // call is free to move out; the three probes above are what the title
+    // claims and what must stay true.
+  })
+
+  it('still reclaims orphan blobs and dangling rows while the feature flag is off', async () => {
+    versionsConfig.enabled = false
+    const orphan = await seedBlob('b'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    const dangling = row({ id: 77 })
+    queries.danglingRows.mockResolvedValue([dangling])
+
+    await service.cleanVersions()
+
+    // Neither rule can destroy reachable history by construction: an orphan
+    // blob is bytes no row points at, a dangling row is a row whose `files` row
+    // is already gone. They are pure reclaim, so the flag has no say.
+    await expect(fs.stat(orphan)).rejects.toThrow()
+    expect(dropped.map((r) => r.id)).toEqual([77])
   })
 
   /* --------------------------------------------------------- retentionDays */

@@ -289,7 +289,22 @@ describe(VersioningService.name, () => {
     } as unknown as SpaceEnv
   }
 
+  // A shared space env: no root, so versionsRootFromSpace resolves to
+  // 'space:team' under spacesPath — the case #517 is about.
+  function sharedSpace(overrides: Partial<SpaceEnv> = {}): SpaceEnv {
+    return personalSpace({
+      url: 'files/team/docs/report.txt',
+      inPersonalSpace: false,
+      inFilesRepository: true,
+      inSharesRepository: false,
+      alias: 'team',
+      ...overrides
+    })
+  }
+
   const versionsDir = () => path.join(tmpRoot, 'users', 'alice', 'versions')
+
+  const spaceVersionsDir = () => path.join(tmpRoot, 'spaces', 'team', 'versions')
 
   const pathExists = (p: string) =>
     fs
@@ -316,7 +331,7 @@ describe(VersioningService.name, () => {
     await fs.utimes(filePath, t, t)
   }
 
-  async function blobFiles(): Promise<string[]> {
+  async function blobFiles(root: string = versionsDir()): Promise<string[]> {
     const found: string[] = []
     async function walk(dir: string) {
       for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -328,7 +343,7 @@ describe(VersioningService.name, () => {
         }
       }
     }
-    await walk(versionsDir())
+    await walk(root)
     return found
   }
 
@@ -551,8 +566,71 @@ describe(VersioningService.name, () => {
   it.each([
     ['guest', () => guest],
     ['link', () => linkUser]
-  ])('is a no-op for a %s user, whose home lives outside the versions root', async (_label, getUser) => {
+  ])('is a no-op for a %s user in their own home, which lives outside the versions root', async (_label, getUser) => {
     await service.snapshotBeforeOverwrite(getUser(), personalSpace(), { origin: 'web' })
+    expect(queries.rows).toHaveLength(0)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+  })
+
+  // #517. The tmpPath/usersPath mismatch the case above rests on is a property
+  // of the ROOT, and a shared space does not have it — the root is
+  // 'space:<alias>' under spacesPath. Skipping the guest anyway destroyed the
+  // previous content for every member of that space, its owner included, on a
+  // write that an internal member would have had versioned.
+  it('versions a guest’s overwrite in a SHARED space, into the space root', async () => {
+    await service.snapshotBeforeOverwrite(guest, sharedSpace(), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.rows[0]).toMatchObject({ versionsRoot: 'space:team', authorId: guest.id, size: CONTENT.length })
+    // The blob holds the destroyed bytes and lives under spacesPath, nowhere
+    // near the guest's ephemeral tmp home.
+    const blobs = await blobFiles(spaceVersionsDir())
+    expect(blobs).toHaveLength(1)
+    expect(await fs.readFile(blobs[0], 'utf8')).toBe(CONTENT)
+    expect(await blobFiles()).toHaveLength(0)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  // States the defect as the ASYMMETRY it was: the same overwrite of the same
+  // shared file, by two members of the same space, used to produce a version
+  // for one of them and silent loss for the other.
+  it('gives a guest and an internal member the same outcome on a shared file', async () => {
+    await service.snapshotBeforeOverwrite(user, sharedSpace(), { origin: 'web' })
+    const internal = queries.rows.length
+
+    queries.rows = []
+    await service.snapshotBeforeOverwrite(guest, sharedSpace(), { origin: 'web' })
+
+    expect(internal).toBe(1)
+    expect(queries.rows).toHaveLength(internal)
+    expect(queries.rows[0].versionsRoot).toBe('space:team')
+  })
+
+  // The OTHER branch of versionsRootFromSpace that returns the acting user's
+  // own root: a share with an external path and no owner. Keying the skip on
+  // space.inPersonalSpace instead of on the resolved root would have written a
+  // guest's blobs into a usersPath tree their live files never live in.
+  it('is still a no-op for a guest on a share that resolves to their own user root', async () => {
+    const externalShare = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      root: { externalPath: '/mnt/external' }
+    } as Partial<SpaceEnv>)
+
+    await service.snapshotBeforeOverwrite(guest, externalShare, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(0)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+  })
+
+  // Links stay out everywhere, root notwithstanding: a public link is a sharing
+  // surface, not an authoring one (ADR §8), and there is no durable account to
+  // attribute a revision to.
+  it('mints nothing for a link principal, even in a shared space', async () => {
+    await service.snapshotBeforeOverwrite(linkUser, sharedSpace(), { origin: 'web' })
+
     expect(queries.rows).toHaveLength(0)
     expect(ensurer.ensureFileId).not.toHaveBeenCalled()
   })
@@ -1368,6 +1446,8 @@ describe(VersioningService.name, () => {
 
   /* ------------------------------------------------------------------ disabled */
 
+  // The flag gates CREATION and the by-file API. It does NOT gate the purge
+  // paths — see the two cases in the purge section (#490).
   it('no-ops every entry point while the feature flag is off', async () => {
     versionsConfig.enabled = false
     const space = personalSpace()
@@ -1378,8 +1458,6 @@ describe(VersioningService.name, () => {
 
     expect(await service.listVersions(user, space)).toEqual([])
     expect(await service.versionsUsage(user, space)).toEqual({ used: 0, ceiling: null, count: 0 })
-    await service.purgeForFile(FILE_ID)
-    await service.purgeForPath(space.dbFile, false)
     await expect(service.restoreVersion(user, space, 1)).rejects.toThrow(FileError)
     expect(service.enabled).toBe(false)
   })
@@ -1699,6 +1777,74 @@ describe(VersioningService.name, () => {
 
     await expect(service.restoreVersion(user, personalSpace(), versionId)).resolves.toBeUndefined()
     expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+  })
+
+  /* --------------------------------------------- the restore's safety snapshot */
+
+  // #472. snapshotBeforeOverwrite swallows every failure, which is right for
+  // the seven save paths — availability over durability (ADR §4) — and wrong
+  // here: for a restore the snapshot IS the promise (ADR §9), and the bytes it
+  // was supposed to capture are truncated on the very next line. Swallowed, the
+  // API answered 200 while the content the user had thirty seconds ago ceased
+  // to exist anywhere.
+  it('aborts the restore, untouched, when the pre-restore capture fails', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    queries.insertVersion = async () => {
+      throw new Error('the versions table is unreachable')
+    }
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toThrow(FileError)
+
+    // The live content is what makes this a data-loss test rather than a status
+    // code test: an abort that still truncated would pass on the rejection
+    // alone.
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
+    // And the revision the user asked for is still there to try again with.
+    expect(queries.rows.find((r) => r.id === versionId)).toBeDefined()
+    // The abort happens inside the lock's try/finally, so nothing is stranded.
+    expect(lockManager.removeLock).toHaveBeenCalledWith('lock-1')
+  })
+
+  // The motivating failure, at its real site: stageBlob's fs.copyFile on a full
+  // volume. Versions count against quota, so a full volume is exactly when
+  // someone reaches for Restore. 507 rather than a flat 500 so the UI can say
+  // what happened.
+  it('answers 507 when the volume is full while capturing the pre-restore content', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    const full: NodeJS.ErrnoException = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })
+    vi.spyOn(fs, 'copyFile').mockRejectedValueOnce(full)
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toMatchObject({
+      httpCode: HttpStatus.INSUFFICIENT_STORAGE
+    })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
+  })
+
+  // A lock-wait timeout is transient and says nothing about the request, so it
+  // is the one abort a client may reasonably retry on its own. Reachable once
+  // the nightly sweep takes gap locks over the same table (#471 / PR #530):
+  // those can block the safety snapshot's INSERT, and mysql2 surfaces InnoDB's
+  // errno 1205 as this code. Without the branch it flattens to 500, which reads
+  // as "your restore is broken" rather than "try again".
+  it('answers 503 when the pre-restore capture loses a row lock', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    queries.insertVersion = async () => {
+      throw Object.assign(new Error('Lock wait timeout exceeded; try restarting transaction'), { code: 'ER_LOCK_WAIT_TIMEOUT', errno: 1205 })
+    }
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toMatchObject({
+      httpCode: HttpStatus.SERVICE_UNAVAILABLE
+    })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
   })
 
   it('restore holds a server lock and releases it', async () => {
@@ -2035,6 +2181,39 @@ describe(VersioningService.name, () => {
     expect(await blobFiles()).toHaveLength(2)
 
     await service.purgeForFile(FILE_ID)
+
+    expect(queries.rows).toHaveLength(0)
+    expect(await blobFiles()).toHaveLength(0)
+  })
+
+  // #490. Only CREATION is gated. Turning the flag off used to stop these two
+  // as well, so a permanent delete left the blobs behind forever: the FK
+  // cascade still removed the rows that were the only pointer to them, and the
+  // quota walk kept charging every byte. The read-back is against the table
+  // rather than listVersions, which returns [] while the flag is off and would
+  // pass for the wrong reason.
+  it('still purges a file’s versions and blobs while the feature flag is off', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await ageFile(120)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'v2')
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect(await blobFiles()).toHaveLength(2)
+
+    versionsConfig.enabled = false
+    await service.purgeForFile(FILE_ID)
+
+    expect(queries.rows).toHaveLength(0)
+    expect(await blobFiles()).toHaveLength(0)
+  })
+
+  it('still purges a deleted directory’s descendants while the feature flag is off', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    queries.resolveIds = [FILE_ID]
+    versionsConfig.enabled = false
+
+    await service.purgeForPath({ ownerId: user.id, path: 'docs', inTrash: true } as any, true)
 
     expect(queries.rows).toHaveLength(0)
     expect(await blobFiles()).toHaveLength(0)
