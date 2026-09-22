@@ -107,6 +107,9 @@ describe(VersionsRetention.name, () => {
       unlabeledByRootOldestFirst: vi.fn().mockResolvedValue([]),
       danglingRows: vi.fn().mockResolvedValue([]),
       countByBlob: vi.fn().mockResolvedValue(1),
+      // Nothing is stranded by default, so the tripwire's extra question
+      // answers "no claimant" and the sweep behaves as it always did.
+      countByBlobInRoots: vi.fn().mockResolvedValue(0),
       distinctFileIdsByRoot: vi.fn().mockResolvedValue([]),
       byFileIdNewestFirst: vi.fn().mockResolvedValue([])
     }
@@ -329,6 +332,105 @@ describe(VersionsRetention.name, () => {
     await service.cleanVersions()
 
     expect(queries.countByBlob).toHaveBeenCalledWith(digest, ROOT)
+  })
+
+  // #471: the blob sweep enumerates the DISK and refcounts by root, so a root
+  // whose rows say one name while its store sits under another loses every
+  // blob. Repointing on rename is the fix; these four pin the net under it.
+  //
+  // The signal is per BLOB, not per root: a blob this root does not reference
+  // is held back when a root that has lost its store still names those bytes.
+  it('does not sweep a blob that a root with no store still references', async () => {
+    const blob = await seedBlob('f'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    // `user:ghost` is the far side: rows recorded under a name whose store is
+    // gone. Its rows name these bytes, because the store moved with the home
+    // directory — which is exactly what an unrepointed rename produces.
+    queries.distinctRoots.mockResolvedValue(['user:ghost'])
+    queries.countByBlobInRoots.mockResolvedValue(1)
+
+    await service.cleanVersions()
+
+    expect(queries.countByBlobInRoots).toHaveBeenCalledWith('f'.repeat(64), ['user:ghost'])
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(true)
+  })
+
+  // THE CASE THE FIRST VERSION OF THIS TRIPWIRE GOT WRONG, and the one the
+  // rename actually produces after the renamed user presses Save once.
+  //
+  // That guard skipped a root only while the root had NO rows. But
+  // `versionsRootFromSpace` derives the CURRENT login, so the moment the
+  // renamed user saves anything the new root has rows, the guard reads false,
+  // and the sweep unlinks the whole pre-rename history it was written to
+  // protect. Rows under `user:alice`, store under `user:alice` on disk with
+  // rows of its own — and a blob those stranded rows still name.
+  it('does not sweep a stranded root’s blobs even though the on-disk root has rows of its own', async () => {
+    const stranded = await seedBlob('f'.repeat(64))
+    const own = await seedBlob('a'.repeat(64))
+    queries.distinctRoots.mockResolvedValue([ROOT, 'user:ghost'])
+    // Neither blob is referenced under the name the disk now carries; only the
+    // pre-rename one is named by the stranded root's rows.
+    queries.countByBlob.mockResolvedValue(0)
+    queries.countByBlobInRoots.mockImplementation(async (checksum: string) => (checksum === 'f'.repeat(64) ? 1 : 0))
+
+    await service.cleanVersions()
+
+    expect(
+      await fs
+        .access(stranded)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(true)
+    // …and it is not a blanket skip: a blob nothing anywhere names still goes.
+    expect(
+      await fs
+        .access(own)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(false)
+  })
+
+  // The rule is not neutered while a stranded root exists: bytes with no
+  // claimant anywhere are still collected, including from a root that holds
+  // rows of its own.
+  it('still sweeps an unclaimed orphan while another root has rows but no store', async () => {
+    const blob = await seedBlob('f'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    queries.countByBlobInRoots.mockResolvedValue(0)
+    queries.distinctRoots.mockResolvedValue([ROOT, 'user:ghost'])
+
+    await service.cleanVersions()
+
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(false)
+  })
+
+  // And the case rootsOnDisk() exists for in the first place: a root whose
+  // versions were all purged still gets its leftovers collected. Nothing is
+  // stranded here, so the tripwire must not even ask.
+  it('still sweeps a root with no rows when nothing is unresolvable', async () => {
+    const blob = await seedBlob('f'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    queries.distinctRoots.mockResolvedValue([])
+
+    await service.cleanVersions()
+
+    expect(queries.countByBlobInRoots).toHaveBeenCalledWith('f'.repeat(64), [])
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(false)
   })
 
   it('removes stale staging debris from a crashed snapshot', async () => {

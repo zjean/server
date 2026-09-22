@@ -29,9 +29,15 @@ export interface VersionDiff {
 // which accepts the literal `current` or a numeric id as a string.
 export type DiffTarget = 'current' | number
 
-// Absent when the snapshot had no acting user, or when the author's account has
-// since been deleted (`authorId` is ON DELETE SET NULL) — so a missing author
-// is a normal state to render, not an error.
+// WHO WROTE THIS REVISION'S BYTES — not who replaced them. The backend records
+// it on the row at write time (`contentAuthorId`, #491); it used to render the
+// person who came next.
+//
+// Absent for a file's FIRST version (nothing preceded it to name), when the
+// write had no acting user, when the account has since been deleted (ON DELETE
+// SET NULL), and for every version captured before that column existed — those
+// were deliberately not backfilled. A missing author is a normal state to
+// render, not an error.
 export interface VersionAuthor {
   login: string
   name: string

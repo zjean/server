@@ -39,7 +39,8 @@ describe(VersionsAdminService.name, () => {
   beforeEach(async () => {
     queries = {
       usageTotals: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0, roots: 0, files: 0 }),
-      usageByAllRoots: vi.fn().mockResolvedValue([])
+      usageByAllRoots: vi.fn().mockResolvedValue([]),
+      renameRoot: vi.fn().mockResolvedValue(0)
     }
     retention = {
       rootCeiling: vi.fn().mockResolvedValue(null),
@@ -148,5 +149,64 @@ describe(VersionsAdminService.name, () => {
     await expect(service.purgeRoot(root)).rejects.toMatchObject({ httpCode: HttpStatus.BAD_REQUEST })
     await expect(service.purgeRoot(root)).rejects.toBeInstanceOf(FileError)
     expect(retention.purgeRoot).not.toHaveBeenCalled()
+  })
+
+  /* ------------------------------------------------------------- repoint */
+
+  // The repair for an install that renamed a login or a space alias before the
+  // rename paths learned to repoint (#471). Everything asserted here is about
+  // it being SAFE, because it is the action an operator runs from a log line
+  // without a second source of truth about what it will do.
+  it('repoints one root at another and reports how many rows moved', async () => {
+    queries.renameRoot.mockResolvedValue(7)
+
+    const result = await service.repointRoot('user:alice', 'user:bob')
+
+    expect(queries.renameRoot).toHaveBeenCalledWith('user:alice', 'user:bob')
+    expect(result).toEqual({ fromVersionsRoot: 'user:alice', toVersionsRoot: 'user:bob', moved: 7 })
+  })
+
+  it('repoints a space root too', async () => {
+    await service.repointRoot('space:old-team', 'space:team')
+    expect(queries.renameRoot).toHaveBeenCalledWith('space:old-team', 'space:team')
+  })
+
+  // A root with nothing under it is a legitimate 0 — someone may have repaired
+  // it already, or the stale root never held history. It must not read as a
+  // failure.
+  it('reports 0 rather than failing when the stale root holds no rows', async () => {
+    queries.renameRoot.mockResolvedValue(0)
+    await expect(service.repointRoot('user:alice', 'user:bob')).resolves.toMatchObject({ moved: 0 })
+  })
+
+  // It only ever rewrites the recorded root. Nothing on this service's other
+  // path — the one that deletes — may be reachable from here.
+  it('deletes nothing', async () => {
+    await service.repointRoot('user:alice', 'user:bob')
+    expect(retention.purgeRoot).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a malformed source', 'alice', 'user:bob'],
+    ['a malformed target', 'user:alice', 'bob'],
+    ['a path traversal in the target', 'user:alice', 'user:../../etc']
+  ])('refuses %s with a 400 and moves nothing', async (_label, from, to) => {
+    await expect(service.repointRoot(from, to)).rejects.toMatchObject({ httpCode: HttpStatus.BAD_REQUEST })
+    expect(queries.renameRoot).not.toHaveBeenCalled()
+  })
+
+  // A user's blobs live under usersPath and a space's under spacesPath, so a
+  // cross-kind repoint produces rows resolving to a tree their bytes were
+  // never in — the exact breakage this endpoint repairs.
+  it('refuses to repoint across the user/space line', async () => {
+    await expect(service.repointRoot('user:alice', 'space:team')).rejects.toMatchObject({ httpCode: HttpStatus.BAD_REQUEST })
+    expect(queries.renameRoot).not.toHaveBeenCalled()
+  })
+
+  // Answering 0 to a no-op would read like "there was nothing to fix", which
+  // is the one message an operator must not get from a typo.
+  it('refuses a no-op rather than answering 0', async () => {
+    await expect(service.repointRoot('user:alice', 'user:alice')).rejects.toMatchObject({ httpCode: HttpStatus.BAD_REQUEST })
+    expect(queries.renameRoot).not.toHaveBeenCalled()
   })
 })

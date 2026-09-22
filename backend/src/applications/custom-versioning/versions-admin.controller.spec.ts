@@ -7,7 +7,7 @@ import { USER_ROLE } from '../users/constants/user'
 import { UserHaveRole } from '../users/decorators/roles.decorator'
 import { UserRolesGuard } from '../users/guards/roles.guard'
 import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
-import { PurgeVersionsRootDto } from './dto/version.dto'
+import { PurgeVersionsRootDto, RepointVersionsRootDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
 import { VersioningService } from './services/versioning.service'
 import { VersionsAdminService } from './services/versions-admin.service'
@@ -15,13 +15,14 @@ import { VersionsAdminController } from './versions-admin.controller'
 
 describe(VersionsAdminController.name, () => {
   let controller: VersionsAdminController
-  let admin: { storageSummary: Mock; purgeRoot: Mock }
+  let admin: { storageSummary: Mock; purgeRoot: Mock; repointRoot: Mock }
   let versioning: { enabled: boolean }
 
   beforeEach(async () => {
     admin = {
       storageSummary: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0, roots: 0, files: 0, topRoots: [] }),
-      purgeRoot: vi.fn().mockResolvedValue({ versionsRoot: 'user:alice', removed: 0, removedBytes: 0, keptLabeled: 0 })
+      purgeRoot: vi.fn().mockResolvedValue({ versionsRoot: 'user:alice', removed: 0, removedBytes: 0, keptLabeled: 0 }),
+      repointRoot: vi.fn().mockResolvedValue({ fromVersionsRoot: 'user:alice', toVersionsRoot: 'user:bob', moved: 0 })
     }
     versioning = { enabled: true }
 
@@ -50,6 +51,9 @@ describe(VersionsAdminController.name, () => {
 
     await controller.purge({ versionsRoot: 'user:alice' })
     expect(admin.purgeRoot).toHaveBeenCalledWith('user:alice')
+
+    await controller.repoint({ fromVersionsRoot: 'user:alice', toVersionsRoot: 'user:bob' })
+    expect(admin.repointRoot).toHaveBeenCalledWith('user:alice', 'user:bob')
   })
 
   /* ------------------------------------------------------------ feature flag */
@@ -62,9 +66,13 @@ describe(VersionsAdminController.name, () => {
 
     await expect(controller.storage()).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND, message: VERSIONS_DISABLED_MESSAGE })
     await expect(controller.purge({ versionsRoot: 'user:alice' })).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
+    await expect(controller.repoint({ fromVersionsRoot: 'user:alice', toVersionsRoot: 'user:bob' })).rejects.toMatchObject({
+      status: HttpStatus.NOT_FOUND
+    })
 
     expect(admin.storageSummary).not.toHaveBeenCalled()
     expect(admin.purgeRoot).not.toHaveBeenCalled()
+    expect(admin.repointRoot).not.toHaveBeenCalled()
   })
 
   /* ----------------------------------------------------------- authorization */
@@ -124,6 +132,30 @@ describe(VersionsAdminController.name, () => {
     // fields past the DTO into the service.
     it('strips unknown fields', async () => {
       await expect(parse({ versionsRoot: 'user:alice', includeLabeled: true })).resolves.toEqual({ versionsRoot: 'user:alice' })
+    })
+  })
+
+  // The repair DTO (#471). Both ends are required — a repoint with one side
+  // missing is not a partial repair, it is a request that cannot be satisfied.
+  describe('RepointVersionsRootDto', () => {
+    const pipe = new ValidationPipe({ transform: true, whitelist: true })
+    const parse = (body: Record<string, unknown>) => pipe.transform(body, { type: 'body', metatype: RepointVersionsRootDto })
+
+    it('accepts both roots, including at the full column width', async () => {
+      await expect(parse({ fromVersionsRoot: 'user:alice', toVersionsRoot: 'user:bob' })).resolves.toEqual({
+        fromVersionsRoot: 'user:alice',
+        toVersionsRoot: 'user:bob'
+      })
+      const longest = `space:${'x'.repeat(255)}`
+      await expect(parse({ fromVersionsRoot: longest, toVersionsRoot: 'space:team' })).resolves.toMatchObject({ fromVersionsRoot: longest })
+    })
+
+    it('rejects a missing end and one longer than any root that can exist', async () => {
+      await expect(parse({ fromVersionsRoot: 'user:alice' })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+      await expect(parse({ toVersionsRoot: 'user:bob' })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+      await expect(parse({ fromVersionsRoot: 'user:alice', toVersionsRoot: `space:${'x'.repeat(256)}` })).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST
+      })
     })
   })
 })
