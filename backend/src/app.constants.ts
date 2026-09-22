@@ -1,17 +1,15 @@
+import { diagramsEditorOrigin } from './applications/custom-diagrams/custom-diagrams.config'
 import { loadVersion } from './app.functions'
 
 export const VERSION = loadVersion()
 export const USER_AGENT = `sync-in-server/${VERSION}`
-const DRAWIO_ORIGIN = (() => {
-  const url = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
-  try {
-    return new URL(url).origin
-  } catch {
-    return url
-  }
-})()
 
-export const CONTENT_SECURITY_POLICY = (xOfficeServer: string, collaboraServer: string) => ({
+// `diagramsEditorUrl` is the CONFIGURED value (applications.files.diagrams.editorUrl),
+// passed in by the caller rather than re-read here. Both of this value's readers
+// used to compute it independently from `process.env['DRAWIO_URL']`, and if the
+// two copies had ever drifted `frame-src` would have blocked the iframe and the
+// diagram editor would have died with a console-only CSP error (#499).
+export const CONTENT_SECURITY_POLICY = (xOfficeServer: string, collaboraServer: string, diagramsEditorUrl: string) => ({
   useDefaults: false,
   directives: {
     defaultSrc: ["'self'", xOfficeServer || '', collaboraServer || ''],
@@ -24,7 +22,7 @@ export const CONTENT_SECURITY_POLICY = (xOfficeServer: string, collaboraServer: 
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", 'data:'],
     fontSrc: ["'self'"],
-    frameSrc: ["'self'", DRAWIO_ORIGIN, xOfficeServer, collaboraServer].filter(Boolean)
+    frameSrc: ["'self'", diagramsEditorOrigin(diagramsEditorUrl), xOfficeServer, collaboraServer].filter(Boolean)
   }
 })
 

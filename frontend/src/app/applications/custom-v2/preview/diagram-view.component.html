@@ -3,9 +3,15 @@
 } @else if (errorMessage()) {
   <div class="diagram-view__state diagram-view__state--error">{{ errorMessage() | translate: locale.language }}</div>
 } @else if (iframeSrc()) {
+  @if (externalEditorHost(); as host) {
+    <div class="diagram-view__notice diagram-view__notice--external" role="status">
+      <span class="diagram-view__notice-label" l10nTranslate>Third-party editor</span>
+      <span>{{ 'v2_diagram_external_editor' | translate: locale.language: { host: host } }}</span>
+    </div>
+  }
   @if (readOnly()) {
-    <div class="diagram-view__readonly" role="status">
-      <span class="diagram-view__readonly-label" l10nTranslate>Read-only</span>
+    <div class="diagram-view__notice diagram-view__notice--readonly" role="status">
+      <span class="diagram-view__notice-label" l10nTranslate>Read-only</span>
       <span l10nTranslate>You do not have permission to edit this diagram. Changes will not be saved.</span>
     </div>
   }

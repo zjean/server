@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { ACTION } from '../../common/constants'
+import { configuration } from '../../configuration/config.environment'
 import { HTTP_METHOD } from '../applications.constants'
 import { FilesManager } from '../files/services/files-manager.service'
 import { FileEvent } from '../files/events/file-events'
@@ -20,7 +21,6 @@ import type { NewDiagramDto } from './dto/new-diagram.dto'
 import type { SaveDiagramDto } from './dto/save-diagram.dto'
 
 const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
-const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
 const EMPTY_DRAWIO_XML =
   '<mxfile><diagram name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>'
 
@@ -57,7 +57,10 @@ export class CustomDiagramsService {
       // permission bits alone would report it writable and the client would mount
       // an editable canvas over a file no save can ever reach.
       isWritable: !space.inTrashRepository && haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY),
-      editorUrl: EDITOR_URL
+      // Read per request, not captured at module load: the same value feeds the
+      // CSP `frame-src` from app.bootstrap, and one source of truth is the point
+      // of moving this off `process.env` (#499).
+      editorUrl: configuration.applications.files.diagrams.editorUrl
     }
   }
 

@@ -158,6 +158,8 @@
   "Keep mine": "Keep mine",
   "Discard mine": "Discard mine",
   "Read-only": "Read-only",
+  "Third-party editor": "Third-party editor",
+  "v2_diagram_external_editor": "This diagram's full content is sent to {{ host }}, a server outside this installation.",
   "You do not have permission to edit this diagram. Changes will not be saved.": "You do not have permission to edit this diagram. Changes will not be saved.",
   "Calculate size": "Calculate size",
   "Size calculation failed": "Size calculation failed",

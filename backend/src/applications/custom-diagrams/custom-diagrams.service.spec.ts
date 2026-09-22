@@ -1,3 +1,12 @@
+// The service reads the drawio editor location out of the config system (#499).
+// Mock it: the real loader reads environment.yaml off disk at import time, and
+// `node:fs` is mocked below.
+vi.mock('../../configuration/config.environment', () => ({
+  configuration: { applications: { files: { diagrams: { editorUrl: 'https://embed.diagrams.net' } } } },
+  serverConfig: {},
+  exportConfiguration: vi.fn()
+}))
+
 import { HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'

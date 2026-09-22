@@ -16,6 +16,7 @@ import {
   ValidateIf,
   ValidateNested
 } from 'class-validator'
+import { FilesDiagramsConfig } from '../custom-diagrams/custom-diagrams.config'
 import type { SampleDocumentGroup } from './constants/samples'
 import { SAMPLE_DOCUMENT_GROUPS } from './constants/samples'
 import { CollaboraOnlineConfig } from './editors/collabora-online/collabora-online.config'
@@ -256,4 +257,12 @@ export class FilesConfig {
   @ValidateNested()
   @Type(() => FilesEditorsConfig)
   editors: FilesEditorsConfig = new FilesEditorsConfig()
+
+  // mod(files): fork-owned. The drawio editor location used to be a bare
+  // `process.env['DRAWIO_URL']` read inside custom-diagrams, invisible to this
+  // config system. See custom-diagrams/custom-diagrams.config.ts (#499).
+  @IsNotEmptyObject()
+  @ValidateNested()
+  @Type(() => FilesDiagramsConfig)
+  diagrams: FilesDiagramsConfig = new FilesDiagramsConfig()
 }

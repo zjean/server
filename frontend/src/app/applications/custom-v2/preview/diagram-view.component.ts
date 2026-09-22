@@ -69,6 +69,11 @@ export class DiagramViewComponent implements OnInit {
   // Mirrors `isWritable` for the template. The private field stays the source of
   // truth for the save path so a stray signal write cannot re-enable writing.
   protected readonly readOnly = signal(false)
+  // Host of the drawio deployment when it is NOT this server. The default
+  // editor is `embed.diagrams.net`, a third party that receives the complete
+  // XML of every diagram opened; shipping that undisclosed is the substance of
+  // #499. Null when the editor is same-origin and nothing leaves.
+  protected readonly externalEditorHost = signal<string | null>(null)
 
   private etag = ''
   private editorOrigin = '__unset__'
@@ -99,6 +104,9 @@ export class DiagramViewComponent implements OnInit {
             const url = new URL(res.editorUrl)
             if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid scheme')
             this.editorOrigin = url.origin
+            // `globalThis.location` rather than `window`: this component is
+            // SSR-guarded like the rest of v2 and must not assume a browser.
+            this.externalEditorHost.set(url.origin === globalThis.location?.origin ? null : url.host)
           } catch {
             this.errorMessage.set('Failed to load diagram.')
             this.loading.set(false)

@@ -22,6 +22,7 @@ const EDITOR_URL = 'https://embed.diagrams.net'
 
 interface DiagramViewApi {
   readOnly: () => boolean
+  externalEditorHost: () => string | null
   onMessage: (event: { origin: string; data: unknown }) => void
 }
 
@@ -44,7 +45,7 @@ class StubChangeDetectionScheduler {
   }
 }
 
-function mount(isWritable: boolean) {
+function mount(isWritable: boolean, editorUrl: string = EDITOR_URL) {
   const put = vi.fn(() => of({ etag: 'new', mtime: 1 }))
   const injector = Injector.create({
     providers: [
@@ -55,7 +56,7 @@ function mount(isWritable: boolean) {
       {
         provide: HttpClient,
         useValue: {
-          get: () => of({ xml: '<mxfile/>', etag: 'abc', mtime: 0, name: 'f.drawio', isWritable, editorUrl: EDITOR_URL }),
+          get: () => of({ xml: '<mxfile/>', etag: 'abc', mtime: 0, name: 'f.drawio', isWritable, editorUrl }),
           put
         }
       },
@@ -119,5 +120,42 @@ describe('DiagramViewComponent read-only mode', () => {
     const { component, put } = mount(true)
     component.onMessage({ origin: EDITOR_URL, data: JSON.stringify({ event: 'save', xml: '<mxfile><edited/></mxfile>' }) })
     expect(put).toHaveBeenCalledTimes(1)
+  })
+})
+
+// #499. The default editor is a third party that receives the complete XML of
+// every diagram opened, and nothing in the UI used to say so.
+describe('DiagramViewComponent third-party editor notice', () => {
+  it('names the host when the editor is not this server', () => {
+    const { component } = mount(true, 'https://embed.diagrams.net')
+    expect(component.externalEditorHost()).toBe('embed.diagrams.net')
+  })
+
+  it('names a self-hosted third-party deployment too — "not ours" is the test, not "diagrams.net"', () => {
+    const { component } = mount(true, 'https://drawio.example.internal/webapp')
+    expect(component.externalEditorHost()).toBe('drawio.example.internal')
+  })
+
+  it('says nothing when the editor is served from this origin', () => {
+    // These specs run in `environment: node`, which has no `location`; the
+    // component compares against `globalThis.location?.origin`, so give it one.
+    const g = globalThis as Record<string, unknown>
+    const saved = g['location']
+    g['location'] = { origin: 'https://files.example.com' }
+    try {
+      const { component } = mount(true, 'https://files.example.com/drawio/')
+      expect(component.externalEditorHost()).toBeNull()
+    } finally {
+      if (saved === undefined) delete g['location']
+      else g['location'] = saved
+    }
+  })
+
+  it('discloses rather than stays silent when the page origin cannot be read', () => {
+    // No `location` at all (SSR, or a hostile stripping of it): the safe answer
+    // is to say the content is leaving, not to assume it is not.
+    expect(globalThis.location).toBeUndefined()
+    const { component } = mount(true, 'https://embed.diagrams.net')
+    expect(component.externalEditorHost()).toBe('embed.diagrams.net')
   })
 })

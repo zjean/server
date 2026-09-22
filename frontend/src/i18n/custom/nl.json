@@ -158,6 +158,8 @@
   "Keep mine": "Mijn versie behouden",
   "Discard mine": "Mijn versie verwerpen",
   "Read-only": "Alleen-lezen",
+  "Third-party editor": "Externe bewerker",
+  "v2_diagram_external_editor": "De volledige inhoud van dit diagram wordt verstuurd naar {{ host }}, een server buiten deze installatie.",
   "You do not have permission to edit this diagram. Changes will not be saved.": "Je hebt geen rechten om dit diagram te bewerken. Wijzigingen worden niet opgeslagen.",
   "Calculate size": "Mapgrootte berekenen",
   "Size calculation failed": "Berekenen van grootte mislukt",
