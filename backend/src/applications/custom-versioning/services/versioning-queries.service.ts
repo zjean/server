@@ -23,10 +23,6 @@ type DBTransaction = Parameters<Parameters<DBSchema['transaction']>[0]>[0]
 export class VersioningQueries {
   constructor(@Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema) {}
 
-  async insertVersion(values: VersionInsert): Promise<number> {
-    return dbGetInsertedId(await this.db.insert(customFilesVersions).values(values))
-  }
-
   /* ------------------------------------------------- blob publish / release */
   //
   // THE THREE METHODS BELOW ARE ONE MECHANISM, and the reason they take a
@@ -68,8 +64,25 @@ export class VersioningQueries {
   // yet. Under REPEATABLE READ — MariaDB's and MySQL's default, and what this
   // deployment runs — that read takes a next-key lock on the range, so the
   // publisher's INSERT waits for the dropper to commit and then re-publishes
-  // the bytes. Under READ COMMITTED there is no gap lock and that one ordering
-  // reopens a much narrower window, with the nightly sweep as the backstop.
+  // the bytes.
+  //
+  // UNDER READ COMMITTED THIS IS NOT CLOSED, AND NOTHING REPAIRS IT. There is
+  // no gap lock, so the dropper can unlink bytes the publisher is about to
+  // name, leaving a committed row pointing at nothing — the one outcome the
+  // ADR forbids. An earlier version of this comment offered the nightly sweep
+  // as "the backstop either way", which is wrong and worth stating plainly:
+  // `danglingRows` removes rows whose FILES row is gone, not rows whose BLOB
+  // is gone, and no rule looks for the latter — deleting a row because its
+  // bytes are missing is itself destructive, so none should. The damage is
+  // bounded to that one version and surfaces as a 404 on its download,
+  // restore and diff.
+  //
+  // So the isolation level is a deployment requirement of this feature, not a
+  // performance preference. If this server is ever run against a database
+  // configured for READ COMMITTED, close the window on the publisher side
+  // some other way — a unique index on (checksum, versionsRoot, fileId, id)
+  // read with a locking point read would do it without the range-lock
+  // deadlock below, and is the direction to take, not the removed lock.
   //
   // WHAT IS DELIBERATELY *NOT* HERE: a matching locking read on the publisher
   // side. It closes the READ COMMITTED gap, and it deadlocks — two snapshots of
@@ -84,9 +97,25 @@ export class VersioningQueries {
   // `publishBlob` runs INSIDE the transaction, so it must be the cheap half of
   // the write — the copy and the hash happen before this is called, and only
   // the same-filesystem rename is in here.
-  async insertVersionPublishing(values: VersionInsert, publishBlob: () => Promise<void>): Promise<number> {
+  //
+  // `contentAuthorId` IS RESOLVED HERE, not by the caller (#491). It is derived
+  // from the newest existing row for this file, so reading it outside the
+  // transaction — which is what evaluating it as an argument does — widens the
+  // window in which two concurrent snapshots of the same file observe the same
+  // predecessor and both claim it. Reading it as the transaction's first
+  // statement narrows that window to the transaction itself.
+  //
+  // It does NOT eliminate it, and deliberately so: only a locking read would,
+  // and a locking read on the publisher side is the one thing the header above
+  // records as measured-and-removed for deadlocking two concurrent snapshots
+  // against each other. The residual is one row attributing content to the
+  // wrong one of two people who saved the same file in the same instant —
+  // strictly better than the off-by-one this column replaces, and not worth a
+  // deadlock.
+  async insertVersionPublishing(values: Omit<VersionInsert, 'contentAuthorId'>, publishBlob: () => Promise<void>): Promise<number> {
     return this.db.transaction(async (tx) => {
-      const versionId = dbGetInsertedId(await tx.insert(customFilesVersions).values(values))
+      const contentAuthorId = await this.lastAuthorIdForFile(values.fileId, tx)
+      const versionId = dbGetInsertedId(await tx.insert(customFilesVersions).values({ ...values, contentAuthorId }))
       await publishBlob()
       return versionId
     })
@@ -198,8 +227,11 @@ export class VersioningQueries {
   // unambiguously, and `mtime` in particular is client-controlled and not
   // monotonic. Not root-scoped either: a file moved between spaces has rows in
   // two roots, and its authorship chain runs through both.
-  async lastAuthorIdForFile(fileId: number): Promise<number | null> {
-    const [row] = await this.db
+  //
+  // Takes an optional transaction handle so `insertVersionPublishing` can read
+  // the predecessor inside the same transaction that inserts — see there.
+  async lastAuthorIdForFile(fileId: number, tx: DBTransaction | DBSchema = this.db): Promise<number | null> {
+    const [row] = await tx
       .select({ authorId: customFilesVersions.authorId })
       .from(customFilesVersions)
       .where(eq(customFilesVersions.fileId, fileId))
@@ -260,6 +292,30 @@ export class VersioningQueries {
       .select({ n: count() })
       .from(customFilesVersions)
       .where(and(eq(customFilesVersions.checksum, checksum), eq(customFilesVersions.versionsRoot, versionsRoot)))
+    return Number(row?.n ?? 0)
+  }
+
+  // The same refcount asked of a SET of roots at once, for the blob sweep's
+  // rename tripwire (#471).
+  //
+  // WHY A SECOND, DELIBERATELY UNSCOPED COUNT EXISTS. `countByBlob` answers
+  // "does anything in THIS root still need these bytes", which is the right
+  // question while the rows and the disk agree. After an unrepointed rename
+  // they do not: the store physically moved with the home directory, so the
+  // blobs now sitting under `user:bob` are the very bytes `user:alice`'s rows
+  // describe, and the per-root count answers 0 for every one of them. This asks
+  // the only question that distinguishes that from a genuine orphan — "is there
+  // a row in a root whose store has GONE MISSING that names these bytes" — and
+  // the caller passes exactly that set of stranded roots.
+  //
+  // Empty set is a short-circuit rather than an `IN ()`: on a healthy instance
+  // there are no stranded roots and this must cost nothing.
+  async countByBlobInRoots(checksum: string, versionsRoots: string[]): Promise<number> {
+    if (!versionsRoots.length) return 0
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.checksum, checksum), inArray(customFilesVersions.versionsRoot, versionsRoots)))
     return Number(row?.n ?? 0)
   }
 

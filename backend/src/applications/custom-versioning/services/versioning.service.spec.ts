@@ -75,8 +75,12 @@ class FakeQueries {
   // Mirrors the real method's ORDER, which is the part #489 depends on: the row
   // exists before the blob is published, and a publish failure takes the row
   // with it the way the transaction's rollback does.
-  async insertVersionPublishing(values: VersionInsert, publishBlob: () => Promise<void>): Promise<number> {
-    const id = await this.insertVersion(values)
+  //
+  // It also mirrors where `contentAuthorId` comes from (#491): the predecessor
+  // is read HERE, inside the publish, not handed in by the caller.
+  async insertVersionPublishing(values: Omit<VersionInsert, 'contentAuthorId'>, publishBlob: () => Promise<void>): Promise<number> {
+    const contentAuthorId = await this.lastAuthorIdForFile(values.fileId)
+    const id = await this.insertVersion({ ...values, contentAuthorId })
     try {
       await publishBlob()
     } catch (e) {

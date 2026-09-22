@@ -179,23 +179,25 @@ export class VersioningService {
           size: staged.size,
           mtime: Math.floor(stats.mtimeMs),
           authorId: user.id ?? null,
-          // WHO WROTE THE BYTES THIS ROW HOLDS, recorded here and never derived
-          // on read (#491). `authorId` above names the user performing THIS
-          // write, i.e. the one destroying the content — so the author of the
-          // content being captured is the author of the write before it, which is
-          // exactly the `authorId` of the newest row for this file right now.
+          // `contentAuthorId` — WHO WROTE THE BYTES THIS ROW HOLDS — is
+          // deliberately absent here: insertVersionPublishing resolves it
+          // INSIDE the transaction that inserts the row, because it is derived
+          // from the newest existing row for this file and reading it out here
+          // would only widen the window two concurrent saves race in.
           //
-          // The read-time alternative — shift the list by one — is wrong once
-          // thinning has removed rows, because the surviving row n-1 is then not
-          // the row that actually preceded n (thinning spec §8). Read at write
-          // time, the newest row IS the immediate predecessor, so the same
-          // arithmetic is sound here and permanent.
+          // The arithmetic itself (#491): `authorId` above names the user
+          // performing THIS write, i.e. the one destroying the content — so the
+          // author of the content being captured is the author of the write
+          // before it. The read-time alternative, shifting the list by one, is
+          // wrong once thinning has removed rows, because the surviving row n-1
+          // is then not the row that actually preceded n (thinning spec §8).
+          // Read at write time the newest row IS the immediate predecessor, so
+          // the same arithmetic is sound here and permanent.
           //
           // Null for a file's first version (nothing to name) and after a
           // system-originated write. After a restore it resolves to the person
           // who restored, which is correct under this column's definition: they
           // are who last put these bytes in the live file.
-          contentAuthorId: await this.queries.lastAuthorIdForFile(fileId),
           origin: options.origin,
           label: null
         },
