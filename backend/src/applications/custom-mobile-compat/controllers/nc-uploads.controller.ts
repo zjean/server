@@ -6,10 +6,11 @@ import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { HTTP_METHOD } from '../../applications.constants'
 import { isPathExists, makeDir, moveFiles } from '../../files/utils/files'
-import { SPACE_OPERATION } from '../../spaces/constants/spaces'
+import { SpaceGuard } from '../../spaces/guards/space.guard'
+import { FastifySpaceRequest } from '../../spaces/interfaces/space-request.interface'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { VersioningService } from '../../custom-versioning/services/versioning.service'
-import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
+import { canAccessToSpaceUrl } from '../../spaces/utils/permissions'
 import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService, sanitizeUploadId } from '../services/nc-chunked-uploads.service'
@@ -206,15 +207,41 @@ export class NcUploadsController {
       throw new HttpException('Destination must name a file inside /remote.php/dav/files/{user}/', HttpStatus.BAD_REQUEST)
     }
 
+    // Authorization, half one: the user-level repository gate — the same
+    // `canAccessToSpaceUrl` call NcDavController.attachSpace makes at the same
+    // point, for the same reason. It matters HERE because of the routing change
+    // above: once the assembly resolves share aliases, `shares/<alias>/…` is
+    // reachable from this controller, and a user whose USER_PERMISSION.SHARES
+    // was revoked could write into a share through a chunked upload that the
+    // equivalent `PUT /remote.php/dav/files/{user}/<alias>/x` refuses. Same for
+    // PERSONAL_SPACE and their own home.
+    if (!canAccessToSpaceUrl(req.user, urlSegments)) {
+      this.logger.warn({ tag: 'assembleAndMove', msg: `${req.user.login} may not access this repository: ${destPath}` })
+      throw new HttpException('You are not allowed to access to this repository', HttpStatus.FORBIDDEN)
+    }
+
     const space = await this.spacesManager.spaceEnv(req.user, urlSegments).catch((e: Error) => {
       throw new HttpException(`destination space is not valid: ${e.message}`, HttpStatus.BAD_REQUEST)
     })
     if (!space) throw new HttpException('destination space not found', HttpStatus.NOT_FOUND)
+    if (!space.enabled) throw new HttpException('Space is disabled', HttpStatus.FORBIDDEN)
+
+    // Authorization, half two: the space/root permission overlay, the
+    // trash-read-only rule and the quota rule — `SpaceGuard.checkPermissions`,
+    // exactly as attachSpace calls it. It is asked the PUT question, not the
+    // MOVE one: the source here is the staging directory, which is not a space
+    // at all, so SPACE_HTTP_PERMISSION.MOVE (DELETE, checked on the source) is
+    // the wrong question. PUT is the right one — the assembly is literally the
+    // write that a non-chunked upload of the same bytes would have performed,
+    // and the guard's own PUT branch picks MODIFY-vs-ADD from whether the
+    // destination already exists, which is what the hand-rolled check here used
+    // to do. Reusing it is what carries 507-on-quota and trash-is-read-only
+    // across without restating either.
+    await SpaceGuard.checkPermissions({ method: HTTP_METHOD.PUT, space } as unknown as FastifySpaceRequest, this.logger)
+
+    // Recomputed for the versioning hook below — the move is the destructive
+    // moment and only an existing file has content worth snapshotting.
     const existed = await isPathExists(space.realPath)
-    const permission = existed ? SPACE_OPERATION.MODIFY : SPACE_OPERATION.ADD
-    if (!haveSpaceEnvPermissions(space, permission)) {
-      throw new HttpException('Not allowed to write at destination', HttpStatus.FORBIDDEN)
-    }
 
     // OC-Total-Length is part of the NC chunked-upload protocol; iOS always
     // sends it on the assembly MOVE. The audit hypothesized that Android's
@@ -256,8 +283,7 @@ export class NcUploadsController {
       }
       // Versioning: NC chunked uploads bypass saveStream entirely, so without a
       // hook here every large-file overwrite from NC mobile would be
-      // unversioned. `existed` was already computed above for the permission
-      // check — the move is the destructive moment.
+      // unversioned.
       if (existed) {
         await this.versioning.snapshotBeforeOverwrite(req.user, space, { origin: 'nc-chunked' })
       }

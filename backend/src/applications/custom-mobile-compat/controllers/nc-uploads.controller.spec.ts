@@ -1,3 +1,4 @@
+import { USER_PERMISSION } from '../../users/constants/user'
 import * as filesUtils from '../../files/utils/files'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { buildUploadDirPropfindBody, NcUploadsController, parseOcTotalLength } from './nc-uploads.controller'
@@ -124,7 +125,11 @@ describe('buildUploadDirPropfindBody', () => {
 // the only unit coverage of the controller itself; the rest of this file
 // exercises the pure helpers.
 describe('NcUploadsController assembly versioning', () => {
-  const user = { id: 7, login: 'alice' } as any
+  // `havePermission` is real: assembleAndMove now runs canAccessToSpaceUrl, the
+  // same user-level repository gate NcDavController.attachSpace applies, and it
+  // asks the UserModel this question. A bare object literal makes every case
+  // here fail with a TypeError rather than exercise what it is about.
+  const user = { id: 7, login: 'alice', havePermission: () => true } as any
 
   function buildController(destinationExists: boolean) {
     const versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
@@ -132,6 +137,8 @@ describe('NcUploadsController assembly versioning', () => {
       realPath: '/data/users/alice/files/big.zip',
       dbFile: { ownerId: 7, path: 'big.zip', inTrash: false },
       envPermissions: 'a:m:d',
+      // assembleAndMove refuses a disabled space, as attachSpace does.
+      enabled: true,
       url: 'files/personal/big.zip'
     }
     const staging = {
@@ -144,6 +151,9 @@ describe('NcUploadsController assembly versioning', () => {
     const spacesManager = { spaceEnv: vi.fn().mockResolvedValue(space) }
 
     vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(destinationExists)
+    // SpaceGuard.checkPermissions asks this on its PUT branch; the real one
+    // stats a path that exists only in the mock's imagination.
+    vi.spyOn(filesUtils, 'isPathIsDir').mockResolvedValue(false)
     vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
     vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
 
@@ -196,7 +206,11 @@ describe('NcUploadsController assembly versioning', () => {
 //          and the assembly ends in `moveFiles(tmp, space.realPath, true)` —
 //          i.e. the user's whole home replaced by the uploaded file.
 describe('NcUploadsController assembly destination', () => {
-  const user = { id: 7, login: 'alice' } as any
+  // `havePermission` is real: assembleAndMove now runs canAccessToSpaceUrl, the
+  // same user-level repository gate NcDavController.attachSpace applies, and it
+  // asks the UserModel this question. A bare object literal makes every case
+  // here fail with a TypeError rather than exercise what it is about.
+  const user = { id: 7, login: 'alice', havePermission: () => true } as any
 
   function buildController() {
     const staging = {
@@ -210,12 +224,14 @@ describe('NcUploadsController assembly destination', () => {
         realPath: '/data/users/alice/files/x',
         dbFile: { ownerId: 7, path: 'x', inTrash: false },
         envPermissions: 'a:m:d',
+        enabled: true,
         url: 'files/personal/x'
       })
     }
     const versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
 
     vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(false)
+    vi.spyOn(filesUtils, 'isPathIsDir').mockResolvedValue(false)
     vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
     vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
 
@@ -328,7 +344,11 @@ describe('NcUploadsController assembly destination', () => {
 // Net effect before this: small files uploaded into a shared folder landed in
 // the share, large (chunked) ones landed in personal and appeared to vanish.
 describe('NcUploadsController assembly share-mount routing (#516)', () => {
-  const user = { id: 7, login: 'alice' } as any
+  // `havePermission` is real: assembleAndMove now runs canAccessToSpaceUrl, the
+  // same user-level repository gate NcDavController.attachSpace applies, and it
+  // asks the UserModel this question. A bare object literal makes every case
+  // here fail with a TypeError rather than exercise what it is about.
+  const user = { id: 7, login: 'alice', havePermission: () => true } as any
 
   function buildController(mounts: { alias: string }[], envPermissions = 'a:m:d') {
     const staging = {
@@ -342,6 +362,7 @@ describe('NcUploadsController assembly share-mount routing (#516)', () => {
         realPath: '/data/spaces/team/big.iso',
         dbFile: { ownerId: 9, path: 'big.iso', inTrash: false },
         envPermissions,
+        enabled: true,
         url: 'shares/TeamShare/big.iso'
       })
     }
@@ -349,6 +370,7 @@ describe('NcUploadsController assembly share-mount routing (#516)', () => {
     const shareMounts = noMounts(mounts)
 
     vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(false)
+    vi.spyOn(filesUtils, 'isPathIsDir').mockResolvedValue(false)
     vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
     vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
 
@@ -417,6 +439,90 @@ describe('NcUploadsController assembly share-mount routing (#516)', () => {
   // read the SHARE's permissions instead of the user's own home permissions.
   it('refuses the assembly when the resolved share mount grants no write', async () => {
     const { controller } = buildController([{ alias: 'TeamShare' }], '')
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/TeamShare/big.iso'), res())).rejects.toMatchObject({
+      status: 403
+    })
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // …and routing into the share is also what put this controller behind the
+  // USER-LEVEL repository gate for the first time. Before the #516 routing
+  // change, `shares/<alias>/…` was simply unreachable from here; afterwards it
+  // was reachable AND unguarded, so an account whose USER_PERMISSION.SHARES had
+  // been revoked could write into a share by chunked upload while the
+  // equivalent one-shot `PUT /remote.php/dav/files/alice/TeamShare/big.iso`
+  // answered 403.
+  //
+  // The share arm is pinned here rather than in nc-chunked-upload-authz.e2e-spec
+  // because provisioning a real donor account, share row and membership over
+  // HTTP is a large fixture for one boolean; the e2e drives the PERSONAL_SPACE
+  // arm of the SAME call at the SAME point, which is what proves the call is in
+  // the request path at all.
+  it('refuses the assembly when the account may not access the shares repository', async () => {
+    const { controller, spacesManager } = buildController([{ alias: 'TeamShare' }])
+    const noShares = { ...user, havePermission: (p: string) => p !== USER_PERMISSION.SHARES } as any
+    const req = moveReq('/remote.php/dav/files/alice/TeamShare/big.iso')
+    req.user = noShares
+
+    await expect(controller.chunkHandler('alice', 'up-1', req, res())).rejects.toMatchObject({ status: 403 })
+    // Refused BEFORE the space is resolved — the gate is the user's permission,
+    // not the share's grant, and the two are different questions.
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // `space.enabled` was not checked here at all: the NC DAV surface answered
+  // 403 'Space is disabled' and the chunked upload wrote the file.
+  it('refuses the assembly when the destination space is disabled', async () => {
+    const { controller, spacesManager } = buildController([{ alias: 'TeamShare' }])
+    spacesManager.spaceEnv.mockResolvedValue({
+      realPath: '/data/spaces/team/big.iso',
+      dbFile: { ownerId: 9, path: 'big.iso', inTrash: false },
+      envPermissions: 'a:m:d',
+      enabled: false,
+      url: 'shares/TeamShare/big.iso'
+    })
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/TeamShare/big.iso'), res())).rejects.toMatchObject({
+      status: 403
+    })
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // Quota is the rule large uploads exist to test, and it was the one the
+  // chunked path skipped: `haveSpaceEnvPermissions` answers only the operation
+  // question, so an over-quota space took the upload and answered 201 while the
+  // one-shot PUT of the same bytes answered 507.
+  it('refuses the assembly with 507 when the destination space is over quota', async () => {
+    const { controller, spacesManager } = buildController([{ alias: 'TeamShare' }])
+    spacesManager.spaceEnv.mockResolvedValue({
+      realPath: '/data/spaces/team/big.iso',
+      dbFile: { ownerId: 9, path: 'big.iso', inTrash: false },
+      envPermissions: 'a:m:d',
+      enabled: true,
+      quotaIsExceeded: true,
+      url: 'shares/TeamShare/big.iso'
+    })
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/TeamShare/big.iso'), res())).rejects.toMatchObject({
+      status: 507
+    })
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // The trash is read-only by rule, not by permission — the same distinction
+  // SpaceGuard draws, inherited here for free by reusing it.
+  it('refuses the assembly into the trash repository', async () => {
+    const { controller, spacesManager } = buildController([{ alias: 'TeamShare' }])
+    spacesManager.spaceEnv.mockResolvedValue({
+      realPath: '/data/spaces/team/big.iso',
+      dbFile: { ownerId: 9, path: 'big.iso', inTrash: true },
+      envPermissions: 'a:m:d',
+      enabled: true,
+      inTrashRepository: true,
+      url: 'shares/TeamShare/big.iso'
+    })
 
     await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/TeamShare/big.iso'), res())).rejects.toMatchObject({
       status: 403
