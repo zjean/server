@@ -39,7 +39,7 @@ export class NcMobileOidcController {
 
   @Get(NC_ROUTE.MOBILE_OIDC_LOGIN.slice(1))
   async start(@Param('token') loginToken: string, @Req() req: FastifyRequest, @Res() res: FastifyReply): Promise<void> {
-    const flow = this.flows.findByLoginToken(loginToken)
+    const flow = await this.flows.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'pending') {
       res
         .status(HttpStatus.NOT_FOUND)
@@ -73,7 +73,7 @@ export class NcMobileOidcController {
     // misconfiguration, since this controller only mounts when OIDC is on).
     const redirectUri = `${oidcCallbackOrigin(req, this.response)}${NC_ROUTE.MOBILE_OIDC_CALLBACK}`
     const auth = await this.mobileOidc.buildAuthorizationUrl(loginToken, redirectUri)
-    this.flows.markOidcPending(loginToken, { codeVerifier: auth.codeVerifier, nonce: auth.nonce })
+    await this.flows.markOidcPending(loginToken, { codeVerifier: auth.codeVerifier, nonce: auth.nonce })
     res.redirect(auth.url, HttpStatus.FOUND)
   }
 
@@ -104,7 +104,7 @@ export class NcMobileOidcController {
       })
     }
 
-    const flow = this.flows.findByLoginToken(state)
+    const flow = await this.flows.findByLoginToken(state)
     if (!flow || flow.status !== 'oidc-pending' || !flow.oidc) {
       res.status(HttpStatus.NOT_FOUND)
       return renderHtml({ title: 'Login expired', body: '<h1>Login session expired</h1><p>Please return to the app and start again.</p>' })
@@ -165,7 +165,7 @@ export class NcMobileOidcController {
     // whether they meant to pair THIS app, so the mint moves behind an explicit
     // grant. `markAuthenticated` also re-checks the browser binding, so a
     // callback replayed from another browser stops here.
-    const grantToken = this.flows.markAuthenticated(state, user, readFlowCookie(req))
+    const grantToken = await this.flows.markAuthenticated(state, user, readFlowCookie(req))
     if (!grantToken) {
       res.status(HttpStatus.CONFLICT)
       return renderHtml({

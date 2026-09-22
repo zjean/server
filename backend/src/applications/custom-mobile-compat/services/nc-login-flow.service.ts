@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import * as crypto from 'node:crypto'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 
-// In-memory LRU-ish store for in-flight NC login-v2 flows.
+// Store for in-flight NC login-v2 flows.
 //
 // A flow lives for up to 20 minutes (Nextcloud's published token lifetime).
 // Each flow goes through these states:
@@ -9,11 +10,33 @@ import * as crypto from 'node:crypto'
 //   OIDC-PENDING  → browser was redirected to the IdP; awaiting callback.
 //   READY         → browser completed auth, app-password minted; next poll
 //                   returns credentials once and the flow is consumed.
-//   DONE          → consumed; further polls return 404 forever. Eventually
-//                   evicted.
+//   DONE          → consumed; further polls return 404 forever.
 //
-// Single-process only in this MVP; multi-instance deployments need a shared
-// backend (Redis). Flagged as follow-up in the design doc.
+// STATE LIVES IN `Cache`, NOT IN THIS PROCESS (#482).
+//
+// It used to be a process-local `Map`, which made the whole feature
+// single-replica-only: a login flow is driven by two different HTTP clients —
+// the mobile app (POST /login/v2, then the poll loop) and the user's browser
+// (the flow page, then the grant POST) — over four or more separate requests.
+// Behind any load balancer those land on different replicas, so the browser
+// completed a flow that the replica serving the poll had never heard of,
+// `consumeByPollToken` returned null forever, and sign-in hung with nothing
+// logged anywhere. `Cache` is Redis-backed whenever Redis is configured, so
+// every replica now reads and writes the same flow.
+//
+// Consequences of the move, all deliberate:
+//   - Every method that touches a flow is async. The flow object a caller
+//     holds is a SNAPSHOT deserialized from the cache, not a live reference,
+//     so mutating it does nothing until it is written back — every mutator
+//     here ends in `save()`.
+//   - Expiry is the cache's TTL as well as `createdAt`; `MAX_FLOWS` and the
+//     hand-rolled `evictOldest()` are gone. That also closes the eviction DoS
+//     in #477: 5000 unauthenticated POSTs used to drop the oldest in-flight
+//     flow each, so anyone could evict every legitimate sign-in in progress.
+//   - "Exactly once" is enforced with `Cache.del`, which reports whether it
+//     was the caller that removed the key. A read-modify-write cannot do that
+//     across replicas: two concurrent grant POSTs would both see a live grant
+//     token and both mint a credential.
 
 export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'authenticated' | 'ready' | 'done'
 
@@ -45,21 +68,19 @@ export interface LoginFlow {
 }
 
 const TTL_MS = 20 * 60 * 1000 // 20 min
-const MAX_FLOWS = 5000
+// Cache keys. No `_` or `%` anywhere in the prefix: MysqlCacheAdapter.keys()
+// turns the pattern into a SQL LIKE, where both are wildcards.
+const KEY_PREFIX = 'nc-login-flow'
 
 @Injectable()
 export class NcLoginFlowService {
-  private readonly flows = new Map<string, LoginFlow>() // keyed by pollToken
-  private readonly loginToPollIndex = new Map<string, string>() // loginToken → pollToken
+  constructor(private readonly cache: Cache) {}
 
   // Start a new flow. Returns the tokens the client needs.
-  initiate(clientName?: string): LoginFlow {
-    this.evictExpired()
-    const pollToken = this.genToken()
-    const loginToken = this.genToken()
+  async initiate(clientName?: string): Promise<LoginFlow> {
     const flow: LoginFlow = {
-      pollToken,
-      loginToken,
+      pollToken: this.genToken(),
+      loginToken: this.genToken(),
       status: 'pending',
       createdAt: Date.now(),
       clientName: normaliseClientName(clientName),
@@ -69,34 +90,27 @@ export class NcLoginFlowService {
       oidc: null,
       credentials: null
     }
-    // Enforce upper bound.
-    if (this.flows.size >= MAX_FLOWS) this.evictOldest()
-    this.flows.set(pollToken, flow)
-    this.loginToPollIndex.set(loginToken, pollToken)
+    await this.cache.set(indexKey(flow.loginToken), flow.pollToken, ttlSecondsFor(flow))
+    await this.save(flow)
     return flow
   }
 
   // Look up a flow by its loginToken (as used by the browser form).
-  findByLoginToken(loginToken: string): LoginFlow | null {
-    const pollToken = this.loginToPollIndex.get(loginToken)
-    if (!pollToken) return null
-    const flow = this.flows.get(pollToken)
-    if (!flow) return null
-    if (this.isExpired(flow)) {
-      this.drop(flow)
-      return null
-    }
-    return flow
+  async findByLoginToken(loginToken: string): Promise<LoginFlow | null> {
+    const pollToken: unknown = await this.cache.get(indexKey(loginToken))
+    if (typeof pollToken !== 'string' || !pollToken) return null
+    return this.findByPollToken(pollToken)
   }
 
   // Called when the browser tab is about to be redirected to the IdP. Stores
   // PKCE + nonce so the callback can validate the IdP's response. Returns
   // false if the flow is missing or already past the pending stage.
-  markOidcPending(loginToken: string, params: { codeVerifier: string; nonce: string }): boolean {
-    const flow = this.findByLoginToken(loginToken)
+  async markOidcPending(loginToken: string, params: { codeVerifier: string; nonce: string }): Promise<boolean> {
+    const flow = await this.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'pending') return false
     flow.oidc = { codeVerifier: params.codeVerifier, nonce: params.nonce }
     flow.status = 'oidc-pending'
+    await this.save(flow)
     return true
   }
 
@@ -106,18 +120,20 @@ export class NcLoginFlowService {
   // cookie, or null if the flow is already bound to a DIFFERENT browser — in
   // which case the caller must refuse, because two browsers racing one flow is
   // either a mistake or an attack.
-  bindBrowser(loginToken: string, presentedToken: string | undefined): string | null {
-    const flow = this.findByLoginToken(loginToken)
+  async bindBrowser(loginToken: string, presentedToken: string | undefined): Promise<string | null> {
+    const flow = await this.findByLoginToken(loginToken)
     if (!flow) return null
     if (!flow.browserTokenHash) {
       const token = this.genToken()
       flow.browserTokenHash = hashToken(token)
+      await this.save(flow)
       return token
     }
     return presentedToken && this.isBoundTo(flow, presentedToken) ? presentedToken : null
   }
 
   // Does this cookie value match the browser this flow was bound to?
+  // Pure: operates on a snapshot the caller already holds.
   isBoundTo(flow: LoginFlow, presentedToken: string | undefined): boolean {
     if (!flow.browserTokenHash || !presentedToken) return false
     return timingSafeEqualHex(flow.browserTokenHash, hashToken(presentedToken))
@@ -134,94 +150,123 @@ export class NcLoginFlowService {
   //
   // Returns the single-use grant token to embed in the page, or null if the
   // flow is missing, in the wrong state, or driven by a different browser.
-  markAuthenticated(loginToken: string, user: { id: number; login: string }, presentedToken: string | undefined): string | null {
-    const flow = this.findByLoginToken(loginToken)
+  async markAuthenticated(loginToken: string, user: { id: number; login: string }, presentedToken: string | undefined): Promise<string | null> {
+    const flow = await this.findByLoginToken(loginToken)
     if (!flow) return null
     if (flow.status !== 'pending' && flow.status !== 'oidc-pending') return null
     if (!this.isBoundTo(flow, presentedToken)) return null
     flow.pendingUser = { id: user.id, login: user.login }
     flow.grantToken = this.genToken()
     flow.status = 'authenticated'
+    await this.save(flow)
+    // The single-use marker for the grant, kept in its own key so consuming it
+    // is one atomic `del` rather than a read-modify-write two replicas can both
+    // win. Its value is irrelevant; its existence is the permission.
+    await this.cache.set(grantKey(flow.pollToken), 1, ttlSecondsFor(flow))
     return flow.grantToken
   }
 
   // Consume the grant. Returns the user the grant is for, or null if anything
-  // about the request fails to line up. Single-use: the grant token is cleared
+  // about the request fails to line up. Single-use: the marker key is deleted
   // whether or not the caller goes on to mint successfully, so a replayed POST
   // cannot mint a second credential.
-  consumeGrant(loginToken: string, grantToken: string | undefined, presentedToken: string | undefined): { id: number; login: string } | null {
-    const flow = this.findByLoginToken(loginToken)
+  async consumeGrant(
+    loginToken: string,
+    grantToken: string | undefined,
+    presentedToken: string | undefined
+  ): Promise<{ id: number; login: string } | null> {
+    const flow = await this.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'authenticated' || !flow.grantToken || !flow.pendingUser) return null
     if (!this.isBoundTo(flow, presentedToken)) return null
     if (!grantToken || !timingSafeEqualHex(hashToken(flow.grantToken), hashToken(grantToken))) return null
+    // Whoever deletes the marker owns the grant. A loser of the race gets
+    // `false` and is refused, so concurrent POSTs mint at most one credential.
+    if (!(await this.cache.del(grantKey(flow.pollToken)))) return null
     const user = flow.pendingUser
     flow.grantToken = null
+    await this.save(flow)
     return user
   }
 
   // Called after a granted mint; stores the credentials so the next poll
   // returns them. Only reachable from the 'authenticated' state — the two
   // pre-grant states are deliberately no longer accepted.
-  completeWithCredentials(loginToken: string, creds: { server: string; loginName: string; appPassword: string }): boolean {
-    const flow = this.findByLoginToken(loginToken)
+  async completeWithCredentials(loginToken: string, creds: { server: string; loginName: string; appPassword: string }): Promise<boolean> {
+    const flow = await this.findByLoginToken(loginToken)
     if (!flow) return false
     if (flow.status !== 'authenticated') return false
     flow.credentials = creds
     flow.pendingUser = null
     flow.status = 'ready'
+    await this.save(flow)
     return true
   }
 
   // Called by POST /login/v2/poll. Returns the credentials exactly once.
   // Returns null on all subsequent calls and while still pending.
-  consumeByPollToken(pollToken: string): LoginFlow['credentials'] | null {
-    const flow = this.flows.get(pollToken)
+  async consumeByPollToken(pollToken: string): Promise<LoginFlow['credentials'] | null> {
+    const flow = await this.findByPollToken(pollToken)
     if (!flow) return null
-    if (this.isExpired(flow)) {
-      this.drop(flow)
-      return null
-    }
     if (flow.status !== 'ready' || !flow.credentials) return null
-    const creds = flow.credentials
-    flow.status = 'done'
-    flow.credentials = null
-    // Keep the entry around briefly so repeated polls get a deterministic 404
-    // rather than a fresh "pending" interpretation.
-    return creds
+    // Same atomic-delete gate as the grant: the replica that removes the flow
+    // is the one that gets to hand over the credentials. Dropping the entry
+    // outright (rather than parking it in 'done') is what the caller already
+    // observes — every later poll rendered 404 either way.
+    if (!(await this.cache.del(flowKey(pollToken)))) return null
+    await this.cache.del(indexKey(flow.loginToken))
+    return flow.credentials
   }
 
   // Test hook: purge state. Called between tests to avoid bleed.
-  clearForTests(): void {
-    this.flows.clear()
-    this.loginToPollIndex.clear()
+  async clearForTests(): Promise<void> {
+    const keys = await this.cache.keys(`${KEY_PREFIX}-*`)
+    if (keys.length) await this.cache.mdel(keys)
   }
 
-  private evictExpired(): void {
-    const now = Date.now()
-    for (const flow of this.flows.values()) {
-      if (now - flow.createdAt > TTL_MS) this.drop(flow)
+  private async findByPollToken(pollToken: string): Promise<LoginFlow | null> {
+    const flow: LoginFlow | undefined = await this.cache.get(flowKey(pollToken))
+    if (!flow) return null
+    // Belt and braces: the cache TTL already expires the entry, but an adapter
+    // that rounds a TTL up must not resurrect a flow past its published
+    // 20-minute lifetime.
+    if (Date.now() - flow.createdAt > TTL_MS) {
+      await this.drop(flow)
+      return null
     }
+    return flow
   }
 
-  private evictOldest(): void {
-    // Map preserves insertion order; oldest is first.
-    const first = this.flows.values().next().value
-    if (first) this.drop(first)
+  private async save(flow: LoginFlow): Promise<void> {
+    await this.cache.set(flowKey(flow.pollToken), flow, ttlSecondsFor(flow))
   }
 
-  private drop(flow: LoginFlow): void {
-    this.flows.delete(flow.pollToken)
-    this.loginToPollIndex.delete(flow.loginToken)
-  }
-
-  private isExpired(flow: LoginFlow): boolean {
-    return Date.now() - flow.createdAt > TTL_MS
+  private async drop(flow: LoginFlow): Promise<void> {
+    await this.cache.mdel([flowKey(flow.pollToken), indexKey(flow.loginToken), grantKey(flow.pollToken)])
   }
 
   private genToken(): string {
     // 32 random bytes, base64url — 43 chars, URL-safe, no padding.
     return crypto.randomBytes(32).toString('base64url')
   }
+}
+
+function flowKey(pollToken: string): string {
+  return `${KEY_PREFIX}-poll-${pollToken}`
+}
+
+function indexKey(loginToken: string): string {
+  return `${KEY_PREFIX}-login-${loginToken}`
+}
+
+function grantKey(pollToken: string): string {
+  return `${KEY_PREFIX}-grant-${pollToken}`
+}
+
+// Seconds left of the flow's 20-minute life, so a re-`set` never extends it.
+// Never 0 — `Cache.set(key, value, 0)` means "never expire".
+function ttlSecondsFor(flow: LoginFlow): number {
+  const remainingMs = TTL_MS - (Date.now() - flow.createdAt)
+  return Math.max(1, Math.ceil(remainingMs / 1000))
 }
 
 function hashToken(token: string): string {

@@ -1,11 +1,13 @@
 import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
+import { Cache } from '../../../infrastructure/cache/cache.service'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
+import { createInMemoryCache } from '../utils/nc-cache.fixture'
 import { NcMobileOidcController } from './nc-mobile-oidc.controller'
 import { Mock } from 'vitest'
 
@@ -40,9 +42,9 @@ describe(NcMobileOidcController.name, () => {
 
   // A flow whose browser-binding cookie has been established, as it would be
   // after the browser GET /login/v2/flow/<token> that precedes every OIDC hop.
-  function boundFlow() {
-    const flow = flows.initiate('Nextcloud-iOS/33.1')
-    const cookie = flows.bindBrowser(flow.loginToken, undefined) as string
+  async function boundFlow() {
+    const flow = await flows.initiate('Nextcloud-iOS/33.1')
+    const cookie = (await flows.bindBrowser(flow.loginToken, undefined)) as string
     return { flow, cookie }
   }
   function fakeRes() {
@@ -72,6 +74,8 @@ describe(NcMobileOidcController.name, () => {
       controllers: [NcMobileOidcController],
       providers: [
         NcLoginFlowService,
+        // A working in-memory Cache: the flow store lives there now (#482).
+        { provide: Cache, useValue: createInMemoryCache() },
         // Stub baseUrl() so tests are independent of local OIDC config presence.
         {
           provide: NcResponseService,
@@ -91,8 +95,8 @@ describe(NcMobileOidcController.name, () => {
     await moduleRef.close()
   })
 
-  beforeEach(() => {
-    flows.clearForTests()
+  beforeEach(async () => {
+    await flows.clearForTests()
     vi.clearAllMocks()
   })
 
@@ -105,8 +109,8 @@ describe(NcMobileOidcController.name, () => {
     })
 
     it('returns 404 HTML when the flow is not in pending state', async () => {
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+      const flow = await flows.initiate()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
       const res = fakeRes()
       await controller.start(flow.loginToken, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.NOT_FOUND)
@@ -115,7 +119,7 @@ describe(NcMobileOidcController.name, () => {
     it('refuses to start an IdP round-trip for an unbound browser', async () => {
       // The flow page sets the binding cookie; reaching this route without it
       // means someone else is driving a flow they did not open.
-      const { flow } = boundFlow()
+      const { flow } = await boundFlow()
       const res = fakeRes()
       await controller.start(flow.loginToken, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.CONFLICT)
@@ -123,7 +127,7 @@ describe(NcMobileOidcController.name, () => {
     })
 
     it('marks flow oidc-pending and redirects to the IdP', async () => {
-      const { flow, cookie } = boundFlow()
+      const { flow, cookie } = await boundFlow()
       mobileOidc.buildAuthorizationUrl.mockResolvedValueOnce({
         url: 'https://authelia.test/api/oidc/authorization?code_challenge=CC',
         codeVerifier: 'CV',
@@ -137,7 +141,7 @@ describe(NcMobileOidcController.name, () => {
       // mock at the top of this file pins the OIDC origin so this assertion
       // doesn't depend on which environment.yaml the runner picked up.
       expect(mobileOidc.buildAuthorizationUrl).toHaveBeenCalledWith(flow.loginToken, 'https://sync-in.oidc.test/custom-mobile/oidc/callback')
-      const seen = flows.findByLoginToken(flow.loginToken)
+      const seen = await flows.findByLoginToken(flow.loginToken)
       expect(seen?.status).toBe('oidc-pending')
       expect(seen?.oidc).toEqual({ codeVerifier: 'CV', nonce: 'NONCE' })
       expect(res._redirected).toBe('https://authelia.test/api/oidc/authorization?code_challenge=CC')
@@ -146,13 +150,13 @@ describe(NcMobileOidcController.name, () => {
 
   describe('callback (IdP returns)', () => {
     it('renders cancellation page when query.error is set; flow stays oidc-pending', async () => {
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+      const flow = await flows.initiate()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
       const res = fakeRes()
       const html = await controller.callback('', flow.loginToken, 'access_denied', 'User cancelled', fakeReq(), res)
       expect(html).toContain('Sign-in cancelled')
       expect(html).toContain('User cancelled')
-      const seen = flows.findByLoginToken(flow.loginToken)
+      const seen = await flows.findByLoginToken(flow.loginToken)
       expect(seen?.status).toBe('oidc-pending')
       expect(usersManager.generateAppPassword).not.toHaveBeenCalled()
     })
@@ -171,7 +175,7 @@ describe(NcMobileOidcController.name, () => {
     })
 
     it('returns 404 HTML when flow is not in oidc-pending state', async () => {
-      const flow = flows.initiate() // status = 'pending', not 'oidc-pending'
+      const flow = await flows.initiate() // status = 'pending', not 'oidc-pending'
       const res = fakeRes()
       await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
       expect(res._status).toBe(HttpStatus.NOT_FOUND)
@@ -182,8 +186,8 @@ describe(NcMobileOidcController.name, () => {
       // and a live IdP session, everything up to here can happen with zero
       // user interaction, so the IdP's say-so must not by itself produce a
       // credential for whoever started the flow.
-      const { flow, cookie } = boundFlow()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      const { flow, cookie } = await boundFlow()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
 
       const res = fakeRes()
@@ -194,7 +198,7 @@ describe(NcMobileOidcController.name, () => {
       expect(html).toContain('name="grantToken"')
       expect(appPasswords.mintMobileAppPassword).not.toHaveBeenCalled()
       // And the initiator's poll still comes away empty.
-      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+      expect(await flows.consumeByPollToken(flow.pollToken)).toBeNull()
 
       expect(mobileOidc.exchangeAndResolveUser).toHaveBeenCalledWith(
         expect.objectContaining({ expectedState: flow.loginToken, codeVerifier: 'CV', nonce: 'NONCE' })
@@ -202,18 +206,18 @@ describe(NcMobileOidcController.name, () => {
     })
 
     it('refuses to authenticate a callback replayed from a different browser', async () => {
-      const { flow } = boundFlow()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      const { flow } = await boundFlow()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
       const res = fakeRes()
       await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(undefined, 'other-browser'), res)
       expect(res._status).toBe(HttpStatus.CONFLICT)
-      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+      expect(await flows.consumeByPollToken(flow.pollToken)).toBeNull()
     })
 
     it('renders "no Sync-in account" page when user lookup returns null; no app-password minted', async () => {
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      const flow = await flows.initiate()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce(null)
 
       const res = fakeRes()
@@ -222,12 +226,12 @@ describe(NcMobileOidcController.name, () => {
       expect(html).toContain('No Sync-in account')
       expect(appPasswords.mintMobileAppPassword).not.toHaveBeenCalled()
       // Flow not marked ready
-      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+      expect(await flows.consumeByPollToken(flow.pollToken)).toBeNull()
     })
 
     it('renders sign-in-failed page when OIDC service throws', async () => {
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      const flow = await flows.initiate()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockRejectedValueOnce(new HttpException('PKCE failed', HttpStatus.BAD_REQUEST))
 
       const res = fakeRes()
@@ -249,8 +253,8 @@ describe(NcMobileOidcController.name, () => {
       // openid-client throws OAuth INVALID_RESPONSE during code exchange. This
       // test pins the contract that all IdP-provided query params are forwarded
       // on the URL we hand to `exchangeAndResolveUser`.
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      const flow = await flows.initiate()
+      await flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
       appPasswords.mintMobileAppPassword.mockResolvedValueOnce({ name: 'mobile abc12345', password: 'APPPWD' })
 

@@ -41,12 +41,12 @@ export class NcLoginV2Controller {
 
   // Step 1 — app initiates
   @Post(NC_ROUTE.LOGIN_V2.slice(1))
-  initiate(@Req() req: FastifyRequest): { poll: { token: string; endpoint: string }; login: string } {
+  async initiate(@Req() req: FastifyRequest): Promise<{ poll: { token: string; endpoint: string }; login: string }> {
     const base = this.response.baseUrl(req)
     // Capture who is asking, so the grant page can tell the user what they are
     // about to authorise. This is the only moment the requesting client talks
     // to us directly — every later step is the browser.
-    const flow = this.flows.initiate(req.headers['user-agent'])
+    const flow = await this.flows.initiate(req.headers['user-agent'])
     return {
       poll: {
         token: flow.pollToken,
@@ -89,8 +89,12 @@ export class NcLoginV2Controller {
   //     local form is included beneath when oidc.options.enablePasswordAuth is true
   //     (admins / guests / app-passwords still go through the local form)
   @Get(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
-  renderLoginPage(@Param('token') loginToken: string, @Req() req: FastifyRequest, @Res({ passthrough: true }) res: FastifyReply): string {
-    const flow = this.flows.findByLoginToken(loginToken)
+  async renderLoginPage(
+    @Param('token') loginToken: string,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<string> {
+    const flow = await this.flows.findByLoginToken(loginToken)
     if (!flow) {
       res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
@@ -110,7 +114,7 @@ export class NcLoginV2Controller {
     // cookie is what every later step (OIDC start, OIDC callback, form POST,
     // grant POST) is checked against, so one flow can never be driven half by
     // one browser and half by another.
-    const bound = this.flows.bindBrowser(loginToken, readFlowCookie(req))
+    const bound = await this.flows.bindBrowser(loginToken, readFlowCookie(req))
     if (!bound) {
       res.status(HttpStatus.CONFLICT).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
@@ -150,7 +154,7 @@ export class NcLoginV2Controller {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply
   ): Promise<string> {
-    const flow = this.flows.findByLoginToken(loginToken)
+    const flow = await this.flows.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'pending') {
       res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
@@ -212,7 +216,7 @@ export class NcLoginV2Controller {
 
     // Authenticated — NOT yet authorised. No app password is minted here any
     // more; the user has to say yes to this specific client on the next page.
-    const grantToken = this.flows.markAuthenticated(loginToken, authed, readFlowCookie(req))
+    const grantToken = await this.flows.markAuthenticated(loginToken, authed, readFlowCookie(req))
     if (!grantToken) {
       res.status(HttpStatus.CONFLICT).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
@@ -243,7 +247,7 @@ export class NcLoginV2Controller {
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) res: FastifyReply
   ): Promise<string> {
-    const granted = this.flows.consumeGrant(loginToken, body?.grantToken, readFlowCookie(req))
+    const granted = await this.flows.consumeGrant(loginToken, body?.grantToken, readFlowCookie(req))
     if (!granted) {
       res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
@@ -273,7 +277,7 @@ export class NcLoginV2Controller {
         loginName: user.login,
         appPassword: appPwd.password
       }
-      this.flows.completeWithCredentials(loginToken, creds)
+      await this.flows.completeWithCredentials(loginToken, creds)
     } catch (e) {
       const err = e as Error
       this.logger.warn({
@@ -298,7 +302,7 @@ export class NcLoginV2Controller {
     if (!token) {
       throw new HttpException('missing token', HttpStatus.BAD_REQUEST)
     }
-    const creds = this.flows.consumeByPollToken(token)
+    const creds = await this.flows.consumeByPollToken(token)
     if (!creds) {
       // NC protocol: 404 while pending + after consumption — match real NC server's
       // shape (empty `[]` JSON body). NC iOS rejects 404 + the default Nest
