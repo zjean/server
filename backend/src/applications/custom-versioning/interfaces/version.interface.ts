@@ -130,6 +130,15 @@ export interface VersionsStorageSummary {
   topRoots: VersionsRootUsage[]
 }
 
+// What the rename repair did (#471). No byte count and no removal count,
+// because it removes nothing: `moved` is rows rewritten, and 0 is a legitimate
+// answer — the stale root held no history, or someone already repaired it.
+export interface VersionsRepointResult {
+  fromVersionsRoot: string
+  toVersionsRoot: string
+  moved: number
+}
+
 export interface VersionsPurgeResult {
   versionsRoot: string
   removed: number

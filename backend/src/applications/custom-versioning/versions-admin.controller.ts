@@ -4,9 +4,9 @@ import { UserHaveRole } from '../users/decorators/roles.decorator'
 import { UserRolesGuard } from '../users/guards/roles.guard'
 import { VERSIONS_ROUTE } from './constants/routes'
 import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
-import { PurgeVersionsRootDto } from './dto/version.dto'
+import { PurgeVersionsRootDto, RepointVersionsRootDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
-import { VersionsPurgeResult, VersionsStorageSummary } from './interfaces/version.interface'
+import { VersionsPurgeResult, VersionsRepointResult, VersionsStorageSummary } from './interfaces/version.interface'
 import { VersionsAdminService } from './services/versions-admin.service'
 import { VersioningService } from './services/versioning.service'
 
@@ -27,9 +27,9 @@ import { VersioningService } from './services/versioning.service'
 // designing against on a controller whose one write action is destructive.
 // Authentication itself is the global APP_GUARD (AuthTokenAccessGuard).
 //
-// The routes carry no wildcard and their verbs ('admin/storage', 'admin/purge')
-// are distinct from every per-file verb, so they cannot be shadowed by the other
-// controller's `versions/<verb>/*` patterns.
+// The routes carry no wildcard and their verbs ('admin/storage', 'admin/purge',
+// 'admin/repoint') are distinct from every per-file verb, so they cannot be
+// shadowed by the other controller's `versions/<verb>/*` patterns.
 @Controller(VERSIONS_ROUTE.BASE)
 @UserHaveRole(USER_ROLE.ADMINISTRATOR)
 @UseGuards(UserRolesGuard)
@@ -56,6 +56,20 @@ export class VersionsAdminController {
   async purge(@Body() dto: PurgeVersionsRootDto): Promise<VersionsPurgeResult> {
     this.requireEnabled()
     return this.admin.purgeRoot(dto.versionsRoot)
+  }
+
+  // The repair for an unrepointed rename (#471), and the only action the
+  // nightly sweep's error log can point an operator at.
+  //
+  // POST, like the purge, and for a stronger reason: it is neither a resource
+  // creation nor a deletion but a rewrite of a discriminator across a set of
+  // rows, and there is no resource whose URL it is. It is also the one write on
+  // this controller that destroys nothing, which is why it carries no
+  // confirmation flag — see VersionsAdminService.repointRoot.
+  @Post(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.ADMIN}/${VERSIONS_ROUTE.REPOINT}`)
+  async repoint(@Body() dto: RepointVersionsRootDto): Promise<VersionsRepointResult> {
+    this.requireEnabled()
+    return this.admin.repointRoot(dto.fromVersionsRoot, dto.toVersionsRoot)
   }
 
   // Same contract as every other versions endpoint: 404 with the shared message
