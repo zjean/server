@@ -23,10 +23,11 @@ describe(SpacesController.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SpacesController],
       providers: [
-        // mod: SpacesManager / AdminUsersManager repoint the fork's version
-
-        // rows when a space alias or user login is renamed (#471).
-
+        // Plumbing, not a subject of this spec: a manager built by this
+        // testing module (SpacesManager / AdminUsersManager) now injects
+        // VersioningService so a space-alias or user-login rename repoints the
+        // fork's version rows (#471). A bare testing module has no @Global
+        // CustomVersioningModule to supply it.
         { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
