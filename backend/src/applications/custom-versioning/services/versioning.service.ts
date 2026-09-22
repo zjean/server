@@ -757,6 +757,46 @@ export class VersioningService {
     await this.dropVersion(version)
   }
 
+  /* ----------------------------------------------------------------- rename */
+
+  // A user login was renamed, so the home directory that holds their versions
+  // store moved with it (#471).
+  //
+  // CALLED FROM AdminUsersManager.renameUserSpace, which is an UPSTREAM file.
+  // The hook is one line there, taking plain names rather than roots, so the
+  // upstream edit needs no import from this module and stays a one-line
+  // `mod(users):` on the next sync.
+  //
+  // The rename must be part of the caller's success contract: on a throw here
+  // the caller moves the directory back and refuses the rename, because a home
+  // whose versions rows name a different root is strictly worse than a rename
+  // that did not happen — every Download and Restore 404s, new writes split the
+  // history across two roots, and the 3AM orphan sweep unlinks every blob.
+  async renameUserRoot(oldLogin: string, newLogin: string): Promise<number> {
+    return this.renameRoot(userVersionsRoot(oldLogin), userVersionsRoot(newLogin))
+  }
+
+  // The space-alias half of the same fact: SpacesManager.renameSpaceLocation
+  // moves <spacesPath>/<alias>, versions store included.
+  async renameSpaceRoot(oldAlias: string, newAlias: string): Promise<number> {
+    return this.renameRoot(spaceVersionsRoot(oldAlias), spaceVersionsRoot(newAlias))
+  }
+
+  // DELIBERATELY NOT GATED ON `this.enabled`, unlike every other entry point
+  // here. The flag decides whether new versions are MINTED; rows written while
+  // it was on outlive it, and their blobs sit in the home directory either way.
+  // Skipping the repoint while the flag is off would leave an orphaned store
+  // that the next 3AM sweep destroys the moment an operator turns versioning
+  // back on — the failure would be attributed to the flag, not to the rename
+  // that actually caused it.
+  private async renameRoot(oldVersionsRoot: string, newVersionsRoot: string): Promise<number> {
+    const moved = await this.queries.renameRoot(oldVersionsRoot, newVersionsRoot)
+    if (moved) {
+      this.logger.log({ tag: this.renameRoot.name, msg: `repointed ${moved} version(s) from ${oldVersionsRoot} to ${newVersionsRoot}` })
+    }
+    return moved
+  }
+
   /* ------------------------------------------------------------------ purge */
 
   // Purges every version of one file, blobs included.

@@ -93,6 +93,12 @@ class FakeQueries {
   async deleteById(id: number) {
     this.rows = this.rows.filter((r) => r.id !== id)
   }
+  async renameRoot(oldRoot: string, newRoot: string) {
+    if (oldRoot === newRoot) return 0
+    const moved = this.rows.filter((r) => r.versionsRoot === oldRoot)
+    for (const r of moved) r.versionsRoot = newRoot
+    return moved.length
+  }
   async countByBlob(checksum: string, versionsRoot: string) {
     return this.rows.filter((r) => r.checksum === checksum && r.versionsRoot === versionsRoot).length
   }
@@ -1963,5 +1969,57 @@ describe(VersioningService.name, () => {
 
     await service.purgeForFile(555)
     expect(await blobFiles()).toHaveLength(0)
+  })
+
+  /* ------------------------------------------------- versions-root rename (#471) */
+
+  // `versionsRoot` is derived from a MUTABLE name. Renaming a login or an alias
+  // moves the whole home directory, blob store included; the rows are the only
+  // thing that does not travel with it.
+  describe('renaming a versions root', () => {
+    it('repoints every row of a renamed user login, and leaves other roots alone', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      queries.rows.push({ ...queries.rows[0], id: 999, versionsRoot: 'user:bob' } as VersionRow)
+
+      await expect(service.renameUserRoot('alice', 'alice.smith')).resolves.toBe(1)
+
+      expect(queries.rows.map((r) => r.versionsRoot).sort()).toEqual(['user:alice.smith', 'user:bob'])
+    })
+
+    it('repoints a renamed space alias', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      queries.rows[0].versionsRoot = 'space:team'
+
+      await expect(service.renameSpaceRoot('team', 'team-2')).resolves.toBe(1)
+
+      expect(queries.rows[0].versionsRoot).toBe('space:team-2')
+    })
+
+    // The flag decides whether new versions are MINTED. Rows written while it
+    // was on outlive it, so skipping the repoint while it is off would leave an
+    // orphaned store for the next sweep to destroy the moment it is turned back
+    // on — and the blame would land on the flag, not on the rename.
+    it('repoints rows even while the feature flag is off', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      versionsConfig.enabled = false
+
+      await expect(service.renameUserRoot('alice', 'alice.smith')).resolves.toBe(1)
+
+      expect(queries.rows[0].versionsRoot).toBe('user:alice.smith')
+    })
+
+    // The caller (AdminUsersManager / SpacesManager) moves the home directory
+    // back when this throws, so the failure must propagate rather than be
+    // swallowed the way the write path's are.
+    it('propagates a failure so the caller can roll the directory move back', async () => {
+      vi.spyOn(queries, 'renameRoot').mockRejectedValueOnce(new Error('db down'))
+      await expect(service.renameUserRoot('alice', 'alice.smith')).rejects.toThrow('db down')
+    })
+
+    it('is a no-op when the name did not actually change', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      await expect(service.renameUserRoot('alice', 'alice')).resolves.toBe(0)
+      expect(queries.rows[0].versionsRoot).toBe('user:alice')
+    })
   })
 })

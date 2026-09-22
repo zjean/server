@@ -331,6 +331,27 @@ describe(VersionsRetention.name, () => {
     expect(queries.countByBlob).toHaveBeenCalledWith(digest, ROOT)
   })
 
+  // #471: the blob sweep enumerates the DISK and refcounts by root, so a root
+  // whose rows say one name while its store sits under another loses every
+  // blob. Repointing on rename is the fix; this is the tripwire behind it.
+  it('skips orphan-blob collection entirely when a root has rows but no store on disk', async () => {
+    const digest = 'f'.repeat(64)
+    const blob = await seedBlob(digest)
+    queries.countByBlob.mockResolvedValue(0)
+    // `user:alice` still resolves (seedBlob made its directory); `user:ghost`
+    // is the orphaned one, and its presence is what disarms the sweep.
+    queries.distinctRoots.mockResolvedValue([ROOT, 'user:ghost'])
+
+    await service.cleanVersions()
+
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(true)
+  })
+
   it('removes stale staging debris from a crashed snapshot', async () => {
     const stageDir = path.join(versionsDir(), VERSIONS_STAGING_DIR)
     await fs.mkdir(stageDir, { recursive: true })

@@ -71,6 +71,30 @@ export class VersioningQueries {
     await this.db.update(customFilesVersions).set(scope).where(eq(customFilesVersions.fileId, fileId))
   }
 
+  // Repoints every row of one versions root at another (#471).
+  //
+  // `versionsRoot` is derived from a MUTABLE name — a user login or a space
+  // alias — and renaming either MOVES THE WHOLE HOME DIRECTORY, the versions
+  // store inside it included. The rows are the only thing that does not travel
+  // with it, and rows that disagree with the disk are not merely unreadable:
+  // the nightly orphan sweep enumerates the DISK, finds the new name, asks for
+  // a refcount under it, gets 0 for every blob because the rows still say the
+  // old one, and unlinks the entire store.
+  //
+  // A plain UPDATE rather than a per-row loop: the rename is one logical act
+  // and the (versionsRoot, label, createdAt) index already covers the predicate.
+  //
+  // Returns how many rows moved, which the caller logs — a rename of a root
+  // that never held history is a legitimate 0, not a failure.
+  async renameRoot(oldVersionsRoot: string, newVersionsRoot: string): Promise<number> {
+    if (oldVersionsRoot === newVersionsRoot) return 0
+    const [header] = await this.db
+      .update(customFilesVersions)
+      .set({ versionsRoot: newVersionsRoot })
+      .where(eq(customFilesVersions.versionsRoot, oldVersionsRoot))
+    return Number((header as { affectedRows?: number })?.affectedRows ?? 0)
+  }
+
   async deleteById(versionId: number): Promise<void> {
     await this.db.delete(customFilesVersions).where(eq(customFilesVersions.id, versionId))
   }
