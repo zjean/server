@@ -16,8 +16,8 @@ import {
   LucideGlobe,
   LucideLoader,
   LucideMove,
-  LucideSquare,
-  LucideTrash2,
+  LucideOctagonX,
+  LucideTrash,
   LucideX
 } from '@lucide/angular'
 import { FILE_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/operations'
@@ -43,7 +43,7 @@ import { TimeAgoPipe } from '../../../../common/pipes/time-ago.pipe'
 })
 export class FilesTasksComponent implements OnDestroy {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
-  protected readonly icons = { LucideX, LucideFlag, LucideClock, LucideFile, LucideFolderClosed, LucideSquare }
+  protected readonly icons = { LucideX, LucideFlag, LucideClock, LucideFile, LucideFolderClosed, LucideOctagonX }
   protected readonly iconsStatus: Record<FileTaskStatus, LucideIcon> = {
     [FileTaskStatus.PENDING]: LucideLoader,
     [FileTaskStatus.SUCCESS]: LucideCheck,
@@ -52,7 +52,7 @@ export class FilesTasksComponent implements OnDestroy {
     [FileTaskStatus.QUEUED]: LucideClock
   }
   protected readonly iconsOperation: Partial<Record<FILE_OPERATION, LucideIcon>> = {
-    [FILE_OPERATION.DELETE]: LucideTrash2,
+    [FILE_OPERATION.DELETE]: LucideTrash,
     [FILE_OPERATION.MOVE]: LucideMove,
     [FILE_OPERATION.COPY]: LucideCopy,
     [FILE_OPERATION.DOWNLOAD]: LucideGlobe,

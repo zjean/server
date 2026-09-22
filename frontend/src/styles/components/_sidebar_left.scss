@@ -15,28 +15,20 @@
       @include no-select-utility;
       display: flex;
       align-items: center;
-      min-height: $sidebar-apps-height;
-      height: $sidebar-apps-height;
+      min-height: $navbar-height;
+      height: $navbar-height;
       min-width: $sidebar-apps-menus-width;
       font-size: $font-size-xs;
-      background: $sidebar-light-apps-menu-title-bg;
-      border-bottom: .5px solid $sidebar-light-apps-menu-title-bg;
+      background: $app-header-bg;
+      border-bottom: .5px solid $app-header-bg;
 
       .menu-title-content {
         @include text-truncate-utility;
         display: flex;
         align-items: center;
-        max-height: $sidebar-apps-height;
+        max-height: $navbar-height;
         width: 100%;
         color: $sidebar-light-apps-menu-title-color;
-      }
-
-      &:hover, &.active {
-        background: $sidebar-light-apps-menu-title-bg;
-
-        .menu-title-content {
-          color: $sidebar-light-apps-menu-title-color;
-        }
       }
 
       .logo-toggle {
@@ -49,7 +41,7 @@
         padding: 0;
         border: none;
         border-radius: 50%;
-        margin-right: .55rem;
+        margin-right: .3rem;
         margin-left: .5rem;
         background: $black;
         cursor: pointer;
@@ -61,27 +53,73 @@
       }
 
       .sidebar-brand {
+        position: relative;
+        z-index: 2;
         display: flex;
         flex-direction: column;
         justify-content: center;
         gap: 2px;
         min-width: 0;
         margin-right: auto;
-        line-height: 1.12;
+        line-height: 1.25;
       }
 
       .sidebar-app-name {
         @include text-truncate-utility;
         color: $white;
         font-size: $font-size-base;
-        font-weight: 600;
+        font-weight: 550;
       }
 
       .sidebar-title {
         @include text-truncate-utility;
+        width: max-content;
+        max-width: calc(#{$sidebar-apps-menus-width} - #{$layout-logo-container-size} - 1rem);
+        padding-right: .25rem;
         color: rgba($white, .68);
         font-size: $font-size-xs;
         font-weight: 500;
+        pointer-events: none;
+      }
+
+      .menu-title-history-button {
+        position: relative;
+        z-index: 1;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 30px;
+        height: $navbar-height;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: $sidebar-light-apps-menu-title-color;
+        font-size: $font-size-2xl;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible,
+        &:active {
+          background-color: $sidebar-light-icons-menu-hover-bg;
+          color: $white;
+        }
+      }
+
+      @include media-breakpoint-up(md) {
+        @media (hover: hover) and (pointer: fine) {
+          .menu-title-history-button {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity $transition-speed $transition-fn;
+          }
+
+          &:hover,
+          &:focus-within {
+            .menu-title-history-button {
+              opacity: 1;
+              pointer-events: auto;
+            }
+          }
+        }
       }
     }
 
@@ -89,28 +127,27 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.2rem 0;
-      padding: 0 6px 0 6px;
-      min-height: 40px;
-      max-height: 40px;
+      padding: 0 0.5rem;
+      min-height: $sidebar-apps-height;
+      max-height: $sidebar-apps-height;
       border-bottom: .5px solid transparent;
       border-right: .5px solid transparent;
 
       .app-shortcut {
-        flex: 0 0 calc(#{$sidebar-apps-height} - 7px);
+        flex: 0 0 calc(#{$sidebar-apps-height} - 6px);
         position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: calc(#{$sidebar-apps-height} - 8px);
-        height: calc(#{$sidebar-apps-height} - 9px);
+        width: calc(#{$sidebar-apps-height} - 6px);
+        height: calc(#{$sidebar-apps-height} - 8px);
         border: .5px solid transparent;
         border-radius: $btn-border-radius;
         background: transparent;
         cursor: pointer;
 
         > .lucide {
-          font-size: $font-size-xl;
+          font-size: 1.0625rem;
           stroke-width: 2.5;
         }
 
@@ -210,8 +247,8 @@
       .menu {
         display: flex;
         align-items: center;
-        min-height: $sidebar-apps-height;
-        height: $sidebar-apps-height;
+        min-height: calc(#{$sidebar-apps-height} - 2px);
+        height: calc(#{$sidebar-apps-height} - 2px);
         min-width: $sidebar-apps-menus-width;
         cursor: pointer;
 
@@ -231,10 +268,10 @@
           flex: 1 1 auto;
           width: auto;
           height: calc(#{$sidebar-apps-height} - 4px);
-          margin: 0 6px;
-          padding: 0 10px;
+          margin: 0 .5rem;
+          padding: 0 8px;
           border-radius: $btn-border-radius;
-          font-weight: 450;
+          font-weight: 500;
           max-height: none;
           @include text-truncate-utility;
           @include no-select-pointer-utility;

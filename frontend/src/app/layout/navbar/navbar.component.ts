@@ -1,6 +1,4 @@
-import { Location } from '@angular/common'
 import { Component, inject, OnDestroy } from '@angular/core'
-import { LucideChevronLeft, LucideChevronRight, LucideDynamicIcon } from '@lucide/angular'
 import { Subscription } from 'rxjs'
 import { UserType } from '../../applications/users/interfaces/user.interface'
 import { USER_ONLINE_STATUS_LIST } from '../../applications/users/user.constants'
@@ -8,19 +6,20 @@ import { StoreService } from '../../store/store.service'
 import { BreadcrumbComponent } from '../breadcrumb/breadcrumb.component'
 import { TAB_MENU } from '../layout.interfaces'
 import { LayoutService } from '../layout.service'
+import { NavbarSearchComponent } from '../../applications/search/navbar/navbar-search.component'
+import { NavbarSearchService } from './services/navbar-search.service'
 
 @Component({
   selector: 'app-navbar',
   templateUrl: 'navbar.component.html',
-  imports: [BreadcrumbComponent, LucideDynamicIcon]
+  imports: [BreadcrumbComponent, NavbarSearchComponent]
 })
 export class NavBarComponent implements OnDestroy {
   protected readonly allOnlineStatus = USER_ONLINE_STATUS_LIST
-  protected readonly icons = { LucideChevronLeft, LucideChevronRight }
+  protected readonly navbarSearch = inject(NavbarSearchService)
   protected leftSideBarIsOpen = true
   protected user: UserType
   protected userAvatar: string = null
-  private readonly location = inject(Location)
   private readonly layout = inject(LayoutService)
   private readonly store = inject(StoreService)
   private subscriptions: Subscription[] = []
@@ -41,13 +40,5 @@ export class NavBarComponent implements OnDestroy {
 
   toggleLeftSideBar() {
     this.layout.toggleLSideBar()
-  }
-
-  navigateTo(action: string) {
-    if (action === 'back') {
-      this.location.back()
-    } else {
-      this.location.forward()
-    }
   }
 }

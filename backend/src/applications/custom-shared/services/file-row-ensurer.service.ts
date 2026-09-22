@@ -68,7 +68,7 @@ export class FileRowEnsurer {
         const existing = await this.findUserFileByPath(user.id, props, space.inTrashRepository === true)
         if (existing > 0) return existing
         // Force a NEGATIVE sentinel so getOrCreateUserFile does not take its
-        // lookup-by-id branch. It must not be 0: upstream's assertValidFileId
+        // lookup-by-id branch. It must not be 0: upstream's assertValidFileReferenceId
         // rejects 0 outright. See NO_CLIENT_FILE_ID.
         return (await this.filesQueries.getOrCreateUserFile(user.id, { ...props, id: NO_CLIENT_FILE_ID })) || 0
       }

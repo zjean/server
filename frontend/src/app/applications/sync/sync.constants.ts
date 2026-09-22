@@ -1,4 +1,4 @@
-import { LucideArrowRightLeft, LucideMonitor, LucideRefreshCw, LucideServer, LucideWandSparkles } from '@lucide/angular'
+import { LucideArrowRightLeft, LucideLaptopMinimal, LucideRefreshCw, LucideServer, LucideWandSparkles } from '@lucide/angular'
 import { SYNC_BASE_ROUTE, SYNC_ROUTE } from '@sync-in-server/backend/src/applications/sync/constants/routes'
 import { USER_PERMISSION } from '@sync-in-server/backend/src/applications/users/constants/user'
 import { BehaviorSubject } from 'rxjs'
@@ -6,6 +6,7 @@ import { AppMenu } from '../../layout/layout.interfaces'
 
 export const SYNC_TITLE = {
   SYNC: 'Synchronization',
+  SYNC_SHORT: 'Sync',
   SYNCS: 'Synchronizations',
   TRANSFERS: 'Transfers',
   WIZARD: 'Wizard',
@@ -19,7 +20,7 @@ export const SYNC_ICON = {
   TRANSFERS: LucideArrowRightLeft,
   WIZARD: LucideWandSparkles,
   SERVER: LucideServer,
-  CLIENT: LucideMonitor
+  CLIENT: LucideLaptopMinimal
 } as const
 
 export const SYNC_PATH = {

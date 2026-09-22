@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing'
 import { Mock } from 'vitest'
 import { FileProps } from '../../files/interfaces/file-props.interface'
 import { FilesQueries } from '../../files/services/files-queries.service'
-import { assertValidFileId } from '../../files/utils/files'
+import { assertValidFileReferenceId } from '../../files/utils/files'
 import { NO_CLIENT_FILE_ID } from '../constants/file-ids'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
 import { dbFileFromSpace } from '../../spaces/utils/paths'
@@ -90,7 +90,7 @@ describe('FileRowEnsurer', () => {
     // doesn't take its "lookup-by-id" branch with a placeholder inode value.
     const [, props] = filesQueries.getOrCreateUserFile.mock.calls[0]
     // The sentinel handed to upstream, not a return value: 0 is rejected by
-    // assertValidFileId since 2.5.0.
+    // assertValidFileReferenceId (assertValidFileId before 2.5.2) since 2.5.0.
     expect(props.id).toBe(NO_CLIENT_FILE_ID)
   })
 
@@ -218,12 +218,12 @@ describe('FileRowEnsurer', () => {
   })
 
   // A mocked FilesQueries cannot catch this, and that is exactly why it shipped:
-  // upstream 2.5.0 added assertValidFileId to both getOrCreate* helpers, which
+  // upstream 2.5.0 added assertValidFileReferenceId to both getOrCreate* helpers, which
   // THROWS on 0. The ensurer passed 0, swallowed the throw, returned 0, and
   // versioning silently skipped every snapshot — a green build over a dead
   // feature. So assert the real validator accepts whatever the ensurer passes.
   describe("upstream's file-id contract", () => {
-    it('passes getOrCreateUserFile an id the real assertValidFileId accepts', async () => {
+    it('passes getOrCreateUserFile an id the real assertValidFileReferenceId accepts', async () => {
       db.select.mockReturnValueOnce(fakeSelect([]))
       filesQueries.getOrCreateUserFile.mockResolvedValueOnce(99)
 
@@ -231,12 +231,12 @@ describe('FileRowEnsurer', () => {
 
       expect(id).toBe(99)
       const [, props] = filesQueries.getOrCreateUserFile.mock.calls[0]
-      expect(() => assertValidFileId(props.id)).not.toThrow()
+      expect(() => assertValidFileReferenceId(props.id)).not.toThrow()
       // Must also miss the helper's own lookup-by-id branch.
       expect(props.id).toBeLessThan(0)
     })
 
-    it('passes getOrCreateSpaceFile an id the real assertValidFileId accepts', async () => {
+    it('passes getOrCreateSpaceFile an id the real assertValidFileReferenceId accepts', async () => {
       mockedDbFileFromSpace.mockReturnValueOnce({ ownerId: 7 })
       filesQueries.getSpaceFileId.mockResolvedValueOnce(0)
       filesQueries.getOrCreateSpaceFile.mockResolvedValueOnce(101)
@@ -245,7 +245,7 @@ describe('FileRowEnsurer', () => {
 
       expect(id).toBe(101)
       const [fileId] = filesQueries.getOrCreateSpaceFile.mock.calls[0]
-      expect(() => assertValidFileId(fileId)).not.toThrow()
+      expect(() => assertValidFileReferenceId(fileId)).not.toThrow()
       expect(fileId).toBeLessThan(0)
     })
   })

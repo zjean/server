@@ -1,4 +1,4 @@
-<div class="sidebar-component-title justify-content-between">
+<div class="sidebar-component-title app-top-menu-tool-bar justify-content-between">
   <div style="width: 25px"></div>
   <div>
     @switch (nbActiveTasks) {
@@ -19,11 +19,17 @@
   @if (nbTotalTasks) {
     <div class="d-flex gap-1">
       @if (hasCancellableTasks) {
-        <button type="button" (click)="cancelTasks()" [tooltip]="'Stop' | translate:locale.language" class="btn btn-default" placement="top">
-          <svg [lucideIcon]="icons.LucideSquare"></svg>
+        <button type="button"
+                (click)="cancelTasks()"
+                [tooltip]="'Stop' | translate:locale.language"
+                class="btn btn-default"
+                placement="top">
+          <svg [lucideIcon]="icons.LucideOctagonX"></svg>
         </button>
       }
-      <button type="button" (click)="removeTasks()" class="btn btn-default">
+      <button type="button"
+              (click)="removeTasks()"
+              class="btn btn-default">
         <svg [lucideIcon]="icons.LucideX"></svg>
       </button>
     </div>
@@ -53,7 +59,7 @@
           <span class="task-list__operation">
             <svg [lucideIcon]="task.ui.operationIcon"></svg>
           </span>
-          <span class="task-list__name">{{ task.name }}</span>
+          <span class="task-list__name">{{ task.displayName ?? task.name }}</span>
         </div>
         @if (task.ui.error && task.result) {
           <div class="text-danger task-list__result">
@@ -104,7 +110,7 @@
                   [tooltip]="'Stop' | translate:locale.language"
                   class="btn btn-sm btn-default task-list__cancel"
                   placement="top">
-            <svg [lucideIcon]="icons.LucideSquare"></svg>
+            <svg [lucideIcon]="icons.LucideOctagonX"></svg>
           </button>
         }
       </div>

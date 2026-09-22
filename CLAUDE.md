@@ -460,7 +460,7 @@ Any new code path that overwrites live file content needs a snapshot hook and a 
 entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
 `moveFiles(..., true)` / `createEmptyFile` call sites on every upstream sync.
 
-**Never pass `0` as a file id to `getOrCreateUserFile` / `getOrCreateSpaceFile`.** Upstream's `assertValidFileId`
+**Never pass `0` as a file id to `getOrCreateUserFile` / `getOrCreateSpaceFile`.** Upstream's `assertValidFileReferenceId`
 (added 2.5.0, commit `0148bfea`) throws on `0` *and* on `undefined`; the fork's "no client-supplied id, take the
 path-keyed branch" sentinel is `NO_CLIENT_FILE_ID = -1` (`custom-shared/constants/file-ids.ts`). Negative is
 upstream's own convention — `getProps()` sets `id: -stats.ino` — and still fails the helpers' `fileId > 0` test,
@@ -468,7 +468,7 @@ which is the branch you want. This matters because of how it fails: `FileRowEnsu
 design, so passing 0 made **versioning silently stop snapshotting entirely** while `nest build`, `ng lint` and all
 2602 unit tests stayed green. Only the e2e suite caught it, and that check is ADVISORY — so run
 `npm -w backend run test:e2e` on any sync that touches `files/`. A unit spec with a mocked `FilesQueries` cannot
-catch this; `file-row-ensurer.service.spec.ts` now imports the real `assertValidFileId` and asserts it accepts
+catch this; `file-row-ensurer.service.spec.ts` now imports the real `assertValidFileReferenceId` and asserts it accepts
 whatever the ensurer passes.
 
 ## Tooling note: `rtk` wrapper

@@ -2,29 +2,48 @@ import { fileURLToPath } from 'url'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import constants from 'node:constants'
-import os from 'node:os'
-import { Readable } from 'node:stream'
 import { Uint8ArrayReader, Uint8ArrayWriter, ZipReader } from '@zip.js/zip.js/index-native.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Pin PDF.js to a known-good release. PDF.js ships breaking changes that have
-// repeatedly broken PDF rendering when the build silently pulled "latest" — v6
-// introduced a strict viewer meta-CSP (broke the inline polyfill, fixed in #272)
-// and a QuickJS WASM scripting sandbox (needs 'wasm-unsafe-eval', fixed in #273).
-// Bump this deliberately, and re-verify the viewer + scripting sandbox load
-// (and that patchForBrowserCompat still finds its anchors) before committing.
-const PINNED_VERSION = 'v6.0.227'
-const releaseURL = `https://api.github.com/repos/mozilla/pdf.js/releases/tags/${PINNED_VERSION}`
-let pinnedDownloadURL
+// Fork: pinned AHEAD of upstream's v5.6.205. PDF.js v6 introduced a strict viewer
+// meta-CSP (broke the inline polyfill, fixed in #272) and a QuickJS WASM scripting
+// sandbox (needs 'wasm-unsafe-eval', fixed in #273); patchForBrowserCompat below is
+// what makes v6 work here. Bump deliberately, and re-verify the viewer + scripting
+// sandbox load (and that patchForBrowserCompat still finds its anchors) first.
+const pdfjsVersion = 'v6.0.227'
+const pdfjsDownloadAsset = `pdfjs-${pdfjsVersion.slice(1)}-dist.zip`
+const pdfjsReleaseURL = `https://api.github.com/repos/mozilla/pdf.js/releases/tags/${pdfjsVersion}`
 const pdfjsAssetsDirectory = path.join(__dirname, '..', 'src', 'assets', 'pdfjs')
 const pdfjsAssetsVersionFile = path.join(pdfjsAssetsDirectory, 'version')
+const pdfjsViewerFile = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
+const pdfjsRequestAttempts = 3
+const pdfjsRequestRetryDelay = 3_000
+const pdfjsRequestTimeout = 60_000
+
+async function fetchPdfjs(url, readResponse) {
+  for (let attempt = 1; attempt <= pdfjsRequestAttempts; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(pdfjsRequestTimeout) })
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText} ${url}`)
+      }
+      return await readResponse(response)
+    } catch (error) {
+      if (attempt === pdfjsRequestAttempts) {
+        throw error
+      }
+      console.warn(`pdfjs - request failed (${attempt}/${pdfjsRequestAttempts}): ${error instanceof Error ? error.message : error}; retrying in 3s`)
+      await new Promise((resolve) => setTimeout(resolve, pdfjsRequestRetryDelay))
+    }
+  }
+}
 
 async function checkPaths(paths) {
   try {
     for (const p of paths) {
-      await fs.access(p, constants.R_OK | constants.W_OK)
+      await fs.access(p, constants.R_OK)
     }
     return true
   } catch {
@@ -32,8 +51,7 @@ async function checkPaths(paths) {
   }
 }
 
-async function extractZip(zipPath, destination) {
-  const zipData = await fs.readFile(zipPath)
+async function extractZip(zipData, destination) {
   const zipReader = new ZipReader(new Uint8ArrayReader(zipData))
   const destinationPath = path.resolve(destination)
 
@@ -56,24 +74,22 @@ async function extractZip(zipPath, destination) {
   }
 }
 
-async function updatePdfjs() {
-  console.log('pdfjs - downloading pinned version:', pinnedDownloadURL)
-  const tmpZip = path.join(os.tmpdir(), 'pdfjs-pinned.zip')
-  const response = await fetch(pinnedDownloadURL)
-  if (!response.ok) {
-    console.error('pdfjs - unable to download:', response.status, response.statusText, pinnedDownloadURL)
-    return
-  }
-  await fs.writeFile(tmpZip, Readable.fromWeb(response.body))
-  console.log('pdfjs - downloaded:', tmpZip)
+async function updatePdfjs(pdfjsDownloadURL) {
+  console.log('pdfjs - update to version:', pdfjsVersion, pdfjsDownloadURL)
+  const zipData = await fetchPdfjs(pdfjsDownloadURL, async (response) => {
+    if (!response.body) {
+      throw new Error(`pdfjs - unable to download: empty response body ${pdfjsDownloadURL}`)
+    }
+    return new Uint8Array(await response.arrayBuffer())
+  })
+  console.log('pdfjs - downloaded')
   await fs.rm(pdfjsAssetsDirectory, { recursive: true, force: true })
-  await extractZip(tmpZip, pdfjsAssetsDirectory)
+  await extractZip(zipData, pdfjsAssetsDirectory)
   console.log('pdfjs - extracted:', pdfjsAssetsDirectory)
-  const viewerHtml = path.join(pdfjsAssetsDirectory, 'web', 'viewer.html')
-  if (!(await checkPaths([viewerHtml]))) {
-    console.warn(`${viewerHtml} is missing`)
+  if (!(await checkPaths([pdfjsViewerFile]))) {
+    throw new Error(`${pdfjsViewerFile} is missing`)
   }
-  await fs.writeFile(pdfjsAssetsVersionFile, PINNED_VERSION)
+  await fs.writeFile(pdfjsAssetsVersionFile, pdfjsVersion)
   console.log('pdfjs - assets update is done')
 }
 
@@ -134,42 +150,23 @@ async function patchForBrowserCompat() {
 }
 
 export async function checkPdfjs() {
-  console.log('pdfjs - pinned version:', PINNED_VERSION)
-  // Fast path: assets already at the pinned version — re-apply the compat patch
-  // (idempotent) and skip the network entirely.
-  if (await checkPaths([pdfjsAssetsDirectory, pdfjsAssetsVersionFile])) {
-    const currentVersion = (await fs.readFile(pdfjsAssetsVersionFile, { encoding: 'utf8' })).trim()
+  console.log('pdfjs - target version:', pdfjsVersion)
+  if (await checkPaths([pdfjsAssetsDirectory, pdfjsAssetsVersionFile, pdfjsViewerFile])) {
+    const currentVersion = await fs.readFile(pdfjsAssetsVersionFile, { encoding: 'utf8' })
     console.log('pdfjs - current version:', currentVersion)
-    if (currentVersion === PINNED_VERSION) {
-      console.log('pdfjs - is at pinned version')
+    if (currentVersion === pdfjsVersion) {
+      console.log('pdfjs - is up to date')
+      // Fork: the fast path skips updatePdfjs entirely, so re-apply the compat
+      // patch here. It is idempotent (POLYFILL_MARKER guard).
       await patchForBrowserCompat()
       return
     }
   }
-  // (Re)download the pinned release.
-  let response
-  try {
-    response = await fetch(releaseURL)
-  } catch (e) {
-    console.error('pdfjs -', e.message, releaseURL)
-    return
+  const data = await fetchPdfjs(pdfjsReleaseURL, (response) => response.json())
+  const asset = data.assets.find((a) => a.name === pdfjsDownloadAsset)
+  if (!asset) {
+    throw new Error(`pdfjs - unable to find asset: ${pdfjsDownloadAsset}`)
   }
-  if (!response.ok) {
-    console.error('pdfjs - unable to check version:', response.status, response.statusText, releaseURL)
-    return
-  }
-  let data
-  try {
-    data = await response.json()
-  } catch (e) {
-    console.error('pdfjs - unable to fetch release metadata:', e.message)
-    return
-  }
-  if (!data || !Array.isArray(data.assets) || data.assets.length === 0) {
-    console.error(`pdfjs - no release assets for ${PINNED_VERSION} (${releaseURL}) — is the tag correct?`, data && data.message ? `[${data.message}]` : '')
-    return
-  }
-  pinnedDownloadURL = data.assets[0]['browser_download_url']
-  await updatePdfjs()
+  await updatePdfjs(asset.browser_download_url)
   await patchForBrowserCompat()
 }

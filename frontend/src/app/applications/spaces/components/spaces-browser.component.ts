@@ -4,9 +4,9 @@ import { AfterViewInit, Component, ElementRef, inject, NgZone, OnDestroy, OnInit
 import { ActivatedRoute, Data, Router, UrlSegment } from '@angular/router'
 import {
   LucideAnchor,
+  LucideArchiveRestore,
   LucideArrowDown,
   LucideArrowUp,
-  LucideBan,
   LucideCheck,
   LucideCirclePlus,
   LucideClipboardList,
@@ -15,7 +15,9 @@ import {
   LucideEye,
   LucideFileArchive,
   LucideFileText,
+  LucideFileUp,
   LucideFolderOpen,
+  LucideFolderUp,
   LucideGlobe,
   LucideHardDriveDownload,
   LucideHardDriveUpload,
@@ -27,7 +29,8 @@ import {
   LucidePencil,
   LucidePlus,
   LucideRotateCw,
-  LucideSpellCheck
+  LucideSpellCheck,
+  LucideTrash
 } from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
 import { TAR_EXTENSION } from '@sync-in-server/backend/src/applications/files/constants/compress'
@@ -49,7 +52,6 @@ import { Subscription } from 'rxjs'
 import { take } from 'rxjs/operators'
 import { SERVICE_UNAVAILABLE_ERROR } from '../../../app.constants'
 import { BadgePermissionsComponent } from '../../../common/components/badge-permissions.component'
-import { FilterComponent } from '../../../common/components/filter.component'
 import { NavigationViewComponent, ViewMode } from '../../../common/components/navigation-view/navigation-view.component'
 import { VirtualScrollComponent } from '../../../common/components/virtual-scroll.component'
 import { InputEditDirective } from '../../../common/directives/input-edit.directive'
@@ -63,12 +65,12 @@ import { SortSettings, SortTable } from '../../../common/utils/sort-table'
 import { dragClass, tableTrSelectedClass } from '../../../layout/layout.constants'
 import { TAB_MENU } from '../../../layout/layout.interfaces'
 import { LayoutService } from '../../../layout/layout.service'
+import { NavbarSearchService } from '../../../layout/navbar/services/navbar-search.service'
 import { StoreService } from '../../../store/store.service'
 import { FAVORITES_ICON } from '../../favorites/favorites.constants'
 import { FilesCompressionDialogComponent } from '../../files/components/dialogs/files-compression-dialog.component'
 import { FilesNewDialogComponent } from '../../files/components/dialogs/files-new-dialog.component'
 import { FilesTrashDialogComponent } from '../../files/components/dialogs/files-trash-dialog.component'
-import { FilesTrashEmptyDialogComponent } from '../../files/components/dialogs/files-trash-empty-dialog.component'
 import { FileLockFormatPipe } from '../../files/components/utils/file-lock.utils'
 import { FileEvent } from '../../files/interfaces/file-event.interface'
 import { FileModel } from '../../files/models/file.model'
@@ -97,7 +99,6 @@ const keyboardNavigationKeys: ReadonlySet<string> = new Set<KeyboardNavigationKe
     LucideDynamicIcon,
     TooltipModule,
     BsDropdownModule,
-    FilterComponent,
     ToBytesPipe,
     ContextMenuModule,
     VirtualScrollComponent,
@@ -122,13 +123,15 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     scrollInto: (arg: FileModel | number) => void
     itemsPerRow: number
   }
-  @ViewChild(FilterComponent, { static: true }) inputFilter: FilterComponent
   @ViewChild(NavigationViewComponent, { static: true }) btnNavigationView: any
   @ViewChild('MainContextMenu', { static: true }) mainContextMenu: ContextMenuComponent<any>
   @ViewChild('MainReadOnlyContextMenu', { static: true }) mainReadOnlyContextMenu: ContextMenuComponent<any>
   @ViewChild('FileContextMenu', { static: true }) fileContextMenu: ContextMenuComponent<any>
+  @ViewChild('uploadFilesPicker') private uploadFilesPicker: UploadFilesDirective | undefined
+  @ViewChild('uploadFoldersPicker') private uploadFoldersPicker: UploadFilesDirective | undefined
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly layout = inject(LayoutService)
+  protected readonly navbarSearch = inject(NavbarSearchService)
   // Static
   protected readonly icons = {
     SPACES: SPACES_ICON.SPACES,
@@ -142,11 +145,14 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     LucidePlus,
     LucideCirclePlus,
     LucideFileText,
+    LucideFileUp,
+    LucideFolderUp,
     LucideGlobe,
     LucideHardDriveUpload,
     LucideHardDriveDownload,
     LucideLink,
     LucideAnchor,
+    LucideArchiveRestore,
     LucideEllipsis,
     LucidePencil,
     LucideEye,
@@ -156,7 +162,7 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     LucideFileArchive,
     LucideSpellCheck,
     LucideMove,
-    LucideBan,
+    LucideTrash,
     LucideCheck,
     LucideArrowUp,
     LucideArrowDown,
@@ -173,7 +179,6 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
   protected isFilesRepo: boolean
   protected isSharesRepo: boolean
   protected isTrashRepo: boolean
-  protected inRootSpace: boolean
   protected inSharesList: boolean
   protected hasRoots = false
   protected canShare: { inside: boolean; outside: boolean } = { inside: false, outside: false }
@@ -252,7 +257,6 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
   private baseRepoUrl: string
   private currentRoute: string
   private isPersonalSpace: boolean
-  private uploadButtonsShowed = false
   // Others
   private subscriptions: Subscription[] = []
   private focusOnSelect: string
@@ -314,7 +318,7 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     this.forbiddenResource = false
     this.locationNotFound = false
     this.serviceError = false
-    this.inputFilter.clear()
+    this.navbarSearch.clearViewFilter()
     this.resetFilesSelection()
     this.spacesBrowser.loadFiles().subscribe({
       next: (spacesFiles: SpaceFiles) => {
@@ -439,6 +443,7 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   copyMoveFiles() {
+    if (!this.selection.length) return
     this.filesService.openTreeCopyMove()
   }
 
@@ -461,20 +466,11 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   shortcutUploadFiles() {
-    if (!this.uploadButtonsShowed) {
-      const newButton = document.getElementById('newButton')
-      newButton.click()
-    }
-    setTimeout(() => document.getElementById('uploadFilesButton').click(), 100)
+    this.uploadFilesPicker?.open()
   }
 
   shortcutUploadFolders() {
-    if (!this.uploadButtonsShowed) {
-      const newButton = document.getElementById('newButton')
-      newButton.click()
-      newButton.click()
-    }
-    setTimeout(() => document.getElementById('uploadFoldersButton').click(), 100)
+    this.uploadFoldersPicker?.open()
   }
 
   shortcutRename() {
@@ -587,12 +583,6 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     })
   }
 
-  initUpload() {
-    if (!this.isTrashRepo && !this.uploadButtonsShowed) {
-      this.uploadButtonsShowed = true
-    }
-  }
-
   async onUploadFiles(ev: { files: File[] }, isDirectory = false) {
     const selectedFiles = [...ev.files]
     let exist: FileModel[] = []
@@ -635,14 +625,8 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     })
   }
 
-  openNewDialog(type: 'file' | 'directory' | 'download') {
+  openNewDialog(type: 'file' | 'directory' | 'download' = 'directory') {
     this.layout.openDialog(FilesNewDialogComponent, null, { initialState: { files: this.files, inputType: type } as FilesNewDialogComponent })
-  }
-
-  openEmptyTrashDialog() {
-    if (this.isTrashRepo && this.inRootSpace) {
-      this.layout.openDialog(FilesTrashEmptyDialogComponent, null, { initialState: { files: this.files } as FilesTrashEmptyDialogComponent })
-    }
   }
 
   openTrashDialog(permanently = false) {
@@ -666,8 +650,7 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
     this.isFilesRepo = route.repository === SPACES_PATH.FILES
     this.isSharesRepo = route.repository === SPACES_PATH.SHARES
     this.isTrashRepo = route.repository === SPACES_PATH.TRASH
-    this.inRootSpace = this.isSharesRepo ? route.routes.length === 0 : route.routes.length === 1
-    this.inSharesList = this.isSharesRepo && this.inRootSpace
+    this.inSharesList = this.isSharesRepo && route.routes.length === 0
     this.spacesBrowser.setEnvironment(route.repository, route.routes)
     this.isPersonalSpace = this.spacesBrowser.inPersonalSpace
     this.loadFiles(true)
@@ -839,7 +822,7 @@ export class SpacesBrowserComponent implements OnInit, AfterViewInit, OnDestroy 
   }
 
   private getFilteredFiles(): FileModel[] {
-    const search = this.inputFilter?.search()
+    const search = this.navbarSearch.viewFilter()
     return search ? filterArray(search, this.files, 'name') : this.files
   }
 

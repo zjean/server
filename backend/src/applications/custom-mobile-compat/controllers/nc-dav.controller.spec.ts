@@ -104,7 +104,7 @@ describe(`${NcDavController.name} — ensureDbRowForUpload`, () => {
     expect(mockedDbFileFromSpace).toHaveBeenCalledWith(7, space)
     // Then the space-aware insert is invoked with fileId=0 (caller has no
     // existing id), the FS-derived fileProps, and the dbFile skeleton.
-    // Sentinel, not 0: upstream's assertValidFileId rejects 0 since 2.5.0.
+    // Sentinel, not 0: upstream's assertValidFileReferenceId rejects 0 since 2.5.0.
     expect(spacesQueries.getOrCreateSpaceFile).toHaveBeenCalledWith(NO_CLIENT_FILE_ID, fileProps, { ownerId: 7, spaceId: 42, path: 'sub' })
     // The personal-space helper must NOT fire for shared-space writes.
     expect(spacesQueries.getOrCreateUserFile).not.toHaveBeenCalled()
