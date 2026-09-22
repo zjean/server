@@ -1,6 +1,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
+import type { Mock } from 'vitest'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
@@ -58,6 +59,23 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     return res as FastifyReply & { _status?: number; _redirected?: string; _body?: unknown; _headers: Record<string, string> }
   }
 
+  // The browser hop is now cookie-bound, so requests carry headers. `cookie`
+  // is the raw nc_login_flow value; omit it to simulate a browser that has
+  // never been bound (or a different one).
+  function fakeReq(cookie?: string): FastifyRequest {
+    const headers: Record<string, string> = { 'user-agent': 'Nextcloud-iOS/33.1' }
+    if (cookie) headers.cookie = `nc_login_flow=${encodeURIComponent(cookie)}`
+    return { headers } as unknown as FastifyRequest
+  }
+
+  // Pull the cookie value the controller just set, so a test can act as the
+  // same browser on the next call.
+  function cookieFrom(res: { _headers: Record<string, string> }): string {
+    const raw = res._headers['set-cookie'] ?? ''
+    const m = /nc_login_flow=([^;]+)/.exec(raw)
+    return m ? decodeURIComponent(m[1]) : ''
+  }
+
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({
       controllers: [NcLoginV2Controller],
@@ -92,7 +110,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
   it('renders the local username/password form when provider is not oidc', () => {
     const flow = flows.initiate()
     const res = fakeRes()
-    const html = controller.renderLoginPage(flow.loginToken, res)
+    const html = controller.renderLoginPage(flow.loginToken, fakeReq(), res)
     expect(typeof html).toBe('string')
     expect(html).toContain('Username or email')
     expect(html).toContain('name="login"')
@@ -107,7 +125,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     mockConfig.auth.oidc.options.autoRedirect = true
     const flow = flows.initiate()
     const res = fakeRes()
-    controller.renderLoginPage(flow.loginToken, res)
+    controller.renderLoginPage(flow.loginToken, fakeReq(), res)
     expect(res._status).toBe(HttpStatus.FOUND)
     expect(res._redirected).toBe(`/custom-mobile/oidc/login/${flow.loginToken}`)
   })
@@ -118,7 +136,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     mockConfig.auth.oidc.options.enablePasswordAuth = true
     const flow = flows.initiate()
     const res = fakeRes()
-    const html = controller.renderLoginPage(flow.loginToken, res)
+    const html = controller.renderLoginPage(flow.loginToken, fakeReq(), res)
     expect(html).toContain('Continue with OpenID Connect')
     expect(html).toContain(`/custom-mobile/oidc/login/${flow.loginToken}`)
     // Local form still rendered alongside the button.
@@ -132,7 +150,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     mockConfig.auth.oidc.options.enablePasswordAuth = false
     const flow = flows.initiate()
     const res = fakeRes()
-    const html = controller.renderLoginPage(flow.loginToken, res)
+    const html = controller.renderLoginPage(flow.loginToken, fakeReq(), res)
     expect(html).toContain('Continue with OpenID Connect')
     expect(html).not.toContain('name="login"')
     expect(html).not.toContain('name="password"')
@@ -142,7 +160,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     mockConfig.auth.provider = 'oidc'
     mockConfig.auth.oidc.options.autoRedirect = true
     const res = fakeRes()
-    const html = controller.renderLoginPage('does-not-exist', res)
+    const html = controller.renderLoginPage('does-not-exist', fakeReq(), res)
     expect(res._status).toBe(HttpStatus.NOT_FOUND)
     expect(html).toContain('Login expired')
     // Importantly: do NOT redirect to the OIDC login URL for unknown tokens.
@@ -164,9 +182,19 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     // 200.
     const creds = { server: 'https://x.test', loginName: 'alice', appPassword: 'APPPWD' }
 
-    it('pollCanonical → 200 + creds JSON when token comes only from query', async () => {
-      const flow = flows.initiate()
+    // A flow only reaches 'ready' via bind → authenticate → grant, so these
+    // poll-shape tests drive it there rather than short-circuiting into a
+    // state the controller can no longer produce.
+    function readyFlow() {
+      const flow = flows.initiate('Nextcloud-iOS/33.1')
+      const browserToken = flows.bindBrowser(flow.loginToken, undefined)
+      flows.markAuthenticated(flow.loginToken, { id: 7, login: 'alice' }, browserToken)
       flows.completeWithCredentials(flow.loginToken, creds)
+      return flow
+    }
+
+    it('pollCanonical → 200 + creds JSON when token comes only from query', async () => {
+      const flow = readyFlow()
       const res = fakeRes()
       await controller.pollCanonical(undefined, flow.pollToken, res)
       expect(res._status).toBe(HttpStatus.OK)
@@ -174,8 +202,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     })
 
     it('pollAlt → 200 + creds JSON when token comes only from query', async () => {
-      const flow = flows.initiate()
-      flows.completeWithCredentials(flow.loginToken, creds)
+      const flow = readyFlow()
       const res = fakeRes()
       await controller.pollAlt(undefined, flow.pollToken, res)
       expect(res._status).toBe(HttpStatus.OK)
@@ -183,8 +210,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
     })
 
     it('pollCanonical still accepts token in form-urlencoded body (existing clients)', async () => {
-      const flow = flows.initiate()
-      flows.completeWithCredentials(flow.loginToken, creds)
+      const flow = readyFlow()
       const res = fakeRes()
       await controller.pollCanonical(`token=${flow.pollToken}` as never, undefined, res)
       expect(res._status).toBe(HttpStatus.OK)
@@ -238,6 +264,135 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       expect(out.login).toMatch(/^https:\/\/sync-in\.example\.test\/login\/v2\/flow\/.+$/)
       expect(out.poll.token).toEqual(expect.any(String))
       expect(out.poll.token.length).toBeGreaterThan(0)
+    })
+  })
+
+  // The defect these cover: authentication used to BE authorisation. Whoever
+  // called POST /index.php/login/v2 held the poll token, so the moment any
+  // browser finished authenticating, that caller collected a long-lived app
+  // password — even though the person at the browser never agreed to pair
+  // anything. Splitting grant out of authentication is the fix; these pin that
+  // the split is real and cannot be stepped around.
+  describe('grant step — authentication is not authorisation', () => {
+    const USER = { id: 7, login: 'alice', isActive: true }
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      const users = moduleRef.get(UsersManager) as unknown as { findUser: Mock; logUser: Mock }
+      users.findUser.mockResolvedValue(USER)
+      users.logUser.mockResolvedValue(USER)
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { mintMobileAppPassword: Mock }
+      pwds.mintMobileAppPassword.mockResolvedValue({ password: 'minted-app-password' })
+    })
+
+    // Drive the browser half up to the grant page and return what we need.
+    async function authenticate() {
+      const flow = flows.initiate('Nextcloud-iOS/33.1')
+      const getRes = fakeRes()
+      controller.renderLoginPage(flow.loginToken, fakeReq(), getRes)
+      const cookie = cookieFrom(getRes)
+      const postRes = fakeRes()
+      const html = await controller.submitLoginPage(flow.loginToken, { login: 'alice', password: 'pw' }, fakeReq(cookie), postRes)
+      const m = /name="grantToken" value="([^"]+)"/.exec(html)
+      return { flow, cookie, html, grantToken: m ? m[1] : '' }
+    }
+
+    it('submitting valid credentials renders the grant page and mints NOTHING', async () => {
+      const { html } = await authenticate()
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { mintMobileAppPassword: Mock }
+      expect(html).toContain('Authorize this app?')
+      expect(html).toContain('alice')
+      // The client that asked is named, so the user can spot one they did not start.
+      expect(html).toContain('Nextcloud-iOS/33.1')
+      expect(pwds.mintMobileAppPassword).not.toHaveBeenCalled()
+    })
+
+    it('the poll returns nothing while the flow is authenticated but ungranted', async () => {
+      const { flow } = await authenticate()
+      // This is the whole vulnerability in one assertion: the flow initiator
+      // polls at the exact moment the victim's browser has authenticated, and
+      // must come away empty-handed.
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+    })
+
+    it('granting mints once and the poll then returns the credentials', async () => {
+      const { flow, cookie, grantToken } = await authenticate()
+      expect(grantToken).not.toBe('')
+      const res = fakeRes()
+      const html = await controller.grant(flow.loginToken, { grantToken }, fakeReq(cookie), res)
+      expect(html).toContain('minted-app-password')
+      const creds = flows.consumeByPollToken(flow.pollToken)
+      expect(creds).toMatchObject({ loginName: 'alice', appPassword: 'minted-app-password' })
+    })
+
+    // Ported from the OIDC controller spec, where the mint used to live.
+    it('prunes before minting, and emits the nc:// deep link on success', async () => {
+      const { flow, cookie, grantToken } = await authenticate()
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { pruneMobileAppPasswords: Mock; mintMobileAppPassword: Mock }
+      const html = await controller.grant(flow.loginToken, { grantToken }, fakeReq(cookie), fakeRes())
+
+      // Prune before mint keeps the MOBILE_NC row count bounded — without it,
+      // repeated attempts pile up rows and every later auth bcrypt-loops them.
+      expect(pwds.pruneMobileAppPasswords).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }))
+      expect(pwds.mintMobileAppPassword).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }), expect.stringMatching(/^mobile /))
+      expect(pwds.pruneMobileAppPasswords.mock.invocationCallOrder[0]).toBeLessThan(pwds.mintMobileAppPassword.mock.invocationCallOrder[0])
+
+      // The success page hands off to the app without waiting for a poll. The
+      // URL is HTML-escaped; the browser un-escapes on the meta refresh.
+      expect(html).toContain('nc://login/server:https%3A%2F%2Fsync-in.example.test')
+      expect(html).toContain('user:alice')
+      expect(html).toContain('password:minted-app-password')
+      expect(html).toMatch(/<meta[^>]*http-equiv="refresh"[^>]*nc:\/\/login/)
+    })
+
+    it('renders sign-in-failed HTML when the mint throws, leaving the flow un-ready for a retry', async () => {
+      const { flow, cookie, grantToken } = await authenticate()
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { mintMobileAppPassword: Mock }
+      pwds.mintMobileAppPassword.mockRejectedValueOnce(new Error('Name already used'))
+      const res = fakeRes()
+      const html = await controller.grant(flow.loginToken, { grantToken }, fakeReq(cookie), res)
+      expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+      expect(html).toContain('Sign-in failed')
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+    })
+
+    it('a grant from a different browser is refused and mints nothing', async () => {
+      const { flow, grantToken } = await authenticate()
+      const res = fakeRes()
+      // Correct grant token, wrong browser — e.g. the token leaked via a
+      // referrer or a shared screenshot.
+      await controller.grant(flow.loginToken, { grantToken }, fakeReq('some-other-browser'), res)
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { mintMobileAppPassword: Mock }
+      expect(res._status).toBe(HttpStatus.NOT_FOUND)
+      expect(pwds.mintMobileAppPassword).not.toHaveBeenCalled()
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+    })
+
+    it('a grant with a wrong grant token is refused', async () => {
+      const { flow, cookie } = await authenticate()
+      const res = fakeRes()
+      await controller.grant(flow.loginToken, { grantToken: 'not-the-token' }, fakeReq(cookie), res)
+      expect(res._status).toBe(HttpStatus.NOT_FOUND)
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+    })
+
+    it('the grant token is single-use', async () => {
+      const { flow, cookie, grantToken } = await authenticate()
+      await controller.grant(flow.loginToken, { grantToken }, fakeReq(cookie), fakeRes())
+      const replay = fakeRes()
+      await controller.grant(flow.loginToken, { grantToken }, fakeReq(cookie), replay)
+      expect(replay._status).toBe(HttpStatus.NOT_FOUND)
+      const pwds = moduleRef.get(NcAppPasswordService) as unknown as { mintMobileAppPassword: Mock }
+      expect(pwds.mintMobileAppPassword).toHaveBeenCalledTimes(1)
+    })
+
+    it('a second browser cannot take over a flow another browser already bound', () => {
+      const flow = flows.initiate('Nextcloud-iOS/33.1')
+      controller.renderLoginPage(flow.loginToken, fakeReq(), fakeRes())
+      const attacker = fakeRes()
+      const html = controller.renderLoginPage(flow.loginToken, fakeReq(), attacker)
+      expect(attacker._status).toBe(HttpStatus.CONFLICT)
+      expect(html).toContain('already in progress')
     })
   })
 })

@@ -42,14 +42,16 @@ function basic(login: string, password: string): string {
 describe(NcBasicAuthGuard.name, () => {
   let guard: NcBasicAuthGuard
   let usersQueries: { from: Mock }
-  let usersManager: { validateAppPassword: Mock }
+  let usersManager: { validateAppPassword: Mock; validateUserAccess: Mock }
   let cache: { get: Mock; set: Mock }
   let logger: { warn: Mock; error: Mock; info: Mock }
   let module: TestingModule
 
   beforeEach(async () => {
     usersQueries = { from: vi.fn() }
-    usersManager = { validateAppPassword: vi.fn() }
+    // validateUserAccess resolves by default = 'account is allowed'. It throws
+    // for locked/deactivated/guest-link accounts, which the guard must honour.
+    usersManager = { validateAppPassword: vi.fn(), validateUserAccess: vi.fn().mockResolvedValue(undefined) }
     cache = { get: vi.fn().mockResolvedValue(undefined), set: vi.fn().mockResolvedValue(true) }
     logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
@@ -145,6 +147,50 @@ describe(NcBasicAuthGuard.name, () => {
     req.headers['x-forwarded-for'] = '203.0.113.9, 10.0.0.1'
     await guard.canActivate(ctx)
     expect(usersManager.validateAppPassword).toHaveBeenCalledWith(expect.anything(), 'p', '203.0.113.9', expect.any(String))
+  })
+
+  // The defect: this guard reaches validateAppPassword directly, and that
+  // method only checks haveRole(USER) — it knows nothing about isActive, the
+  // guest-link role, or the password-attempt lockout. Every other credential
+  // path in the app gets those via logUser → validateUserAccess. Without this
+  // gate, deactivating an account left its paired phones syncing indefinitely.
+  describe('account-level gate (validateUserAccess)', () => {
+    beforeEach(() => {
+      usersQueries.from.mockResolvedValue({ id: 7, login: 'alice', password: 'hash' })
+      usersManager.validateAppPassword.mockResolvedValue(true)
+    })
+
+    it('refuses a deactivated account even when the app password is valid', async () => {
+      usersManager.validateUserAccess.mockRejectedValue(new HttpException('Account locked', HttpStatus.FORBIDDEN))
+      const { ctx, res } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).rejects.toMatchObject({ status: HttpStatus.UNAUTHORIZED })
+      // 401 + challenge, not 403, so NC clients re-prompt rather than treating
+      // it as a permanent per-resource denial.
+      expect(res.headers['WWW-Authenticate']).toMatch(/^Basic realm=/)
+    })
+
+    it('does not spend bcrypt work on an account it is going to refuse', async () => {
+      usersManager.validateUserAccess.mockRejectedValue(new HttpException('Account locked', HttpStatus.FORBIDDEN))
+      const { ctx } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(HttpException)
+      expect(usersManager.validateAppPassword).not.toHaveBeenCalled()
+    })
+
+    it('does not negative-cache the refusal, so re-activating takes effect at once', async () => {
+      usersManager.validateUserAccess.mockRejectedValue(new HttpException('Account locked', HttpStatus.FORBIDDEN))
+      const { ctx } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(HttpException)
+      // A cached negative would keep a re-enabled account locked out for the
+      // remaining 900s TTL — the same class of bug as the revocation lag.
+      expect(cache.set).not.toHaveBeenCalled()
+    })
+
+    it('lets an allowed account through to the password check', async () => {
+      const { ctx, req } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).resolves.toBe(true)
+      expect(usersManager.validateUserAccess).toHaveBeenCalled()
+      expect((req.user as { login: string }).login).toBe('alice')
+    })
   })
 })
 

@@ -72,26 +72,70 @@ export class NcMobileOidcService {
     const subject = oidcConfig.security.skipSubjectCheck ? skipSubjectCheck : claims.sub
     const userInfo = await fetchUserInfo(config, tokens.access_token, subject)
 
-    // Lowercase email defensively — DB collation is `_ci` so this is mostly
-    // belt-and-suspenders, but it also keeps the warn log readable.
+    // Resolve the Sync-in account the way upstream's own OIDC provider does
+    // (auth-provider-oidc.service.ts::processUserInfo). Mobile is lookup-only
+    // — no auto-create — but every identity check upstream performs applies
+    // here too, and previously none of them did.
+    //
+    // What this replaced, and why each part had to go:
+    //
+    //   * A bare `findUser(email)` with no `externalId` binding. `externalId`
+    //     pins a Sync-in account to one IdP subject; without it, anyone whose
+    //     IdP profile carries a victim's email address resolves onto the
+    //     victim's account. That is the whole reason upstream binds.
+    //   * A `preferred_username` fallback upstream never performs. `findUser`
+    //     matches the `login` column as well as `email`, so an IdP principal
+    //     whose `preferred_username` equalled a Sync-in *login* landed on that
+    //     account.
+    //   * No `isActive` check, so a deactivated account could still be paired.
+    //
+    // `skipSubjectCheck` above only relaxes the userinfo-endpoint subject
+    // assertion; `claims.sub` is still the verified ID-token subject, so it is
+    // the right value to bind on.
+    const externalId = claims.sub
     const email = userInfo.email?.trim().toLowerCase()
-    const preferred = userInfo.preferred_username?.trim().toLowerCase()
-    if (!email && !preferred) {
-      throw new HttpException('OIDC profile has neither email nor preferred_username', HttpStatus.BAD_REQUEST)
+
+    // Matching an account by an UNVERIFIED email is the takeover vector this
+    // whole block exists to close, so honour the same config gate upstream
+    // uses on its create path.
+    if (email && configuration.auth.oidc?.security?.requireVerifiedEmail && (userInfo as { email_verified?: boolean }).email_verified !== true) {
+      throw new HttpException('OIDC email must be verified', HttpStatus.BAD_REQUEST)
     }
 
-    // Two-step lookup: by email first (typical case — Sync-in user was
-    // created with their real email), then by login (covers IdPs that return
-    // a different email than what's in Sync-in's user table, or no email at
-    // all). Mobile is lookup-only — no auto-create.
-    let user: UserModel | null = email ? ((await this.usersManager.findUser(email, false)) ?? null) : null
-    if (!user && preferred && preferred !== email) {
-      user = (await this.usersManager.findUser(preferred, false)) ?? null
+    // `''` rather than undefined: the lookup is a prepared statement with an
+    // email placeholder, and an absent email must simply never match a row —
+    // not bind as NULL and not blow up. An account already bound to this
+    // subject still resolves, because the query ORs on externalId and orders
+    // the externalId match first.
+    const user: UserModel | null = (await this.usersManager.findUserByExternalIdOrEmail(externalId, email ?? '', false)) ?? null
+
+    if (user?.externalId && user.externalId !== externalId) {
+      this.logger.warn({
+        tag: this.exchangeAndResolveUser.name,
+        msg: `OIDC identity mismatch for *${user.login}* — bound to a different subject`
+      })
+      throw new HttpException('OIDC identity mismatch', HttpStatus.UNAUTHORIZED)
     }
+
+    if (user && !user.isActive) {
+      this.logger.warn({ tag: this.exchangeAndResolveUser.name, msg: `user account *${user.login}* is locked` })
+      throw new HttpException('Account locked', HttpStatus.FORBIDDEN)
+    }
+
+    // First OIDC login for an account matched by email: pin it, so every later
+    // login (web or mobile) goes down the externalId branch instead of the
+    // email one. Mirrors upstream.
+    if (user && !user.externalId) {
+      if (!(await this.usersManager.usersQueries.bindExternalId(user.id, externalId))) {
+        throw new HttpException('Unable to link OIDC identity', HttpStatus.UNAUTHORIZED)
+      }
+      user.externalId = externalId
+    }
+
     if (!user) {
       this.logger.warn({
         tag: this.exchangeAndResolveUser.name,
-        msg: `no Sync-in account matched OIDC profile — email=${email ?? '<absent>'} preferred_username=${preferred ?? '<absent>'} sub=${userInfo.sub}`
+        msg: `no Sync-in account matched OIDC profile — email=${email ?? '<absent>'} sub=${externalId}`
       })
     }
     return user

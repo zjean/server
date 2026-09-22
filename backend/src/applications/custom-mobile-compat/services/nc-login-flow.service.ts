@@ -15,13 +15,28 @@ import * as crypto from 'node:crypto'
 // Single-process only in this MVP; multi-instance deployments need a shared
 // backend (Redis). Flagged as follow-up in the design doc.
 
-export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'ready' | 'done'
+export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'authenticated' | 'ready' | 'done'
 
 export interface LoginFlow {
   pollToken: string
   loginToken: string
   status: LoginFlowStatus
   createdAt: number
+  // Free-text description of the client that called POST /index.php/login/v2,
+  // taken from its User-Agent. Shown on the grant page so the person clicking
+  // "Grant access" can see WHAT they are authorising — which is the difference
+  // between an informed decision and a silent one.
+  clientName: string
+  // sha256 of the browser-binding cookie value, set the first time a browser
+  // opens the flow page. Every later browser step must present the matching
+  // cookie, so a flow cannot be driven half by one browser and half by another.
+  browserTokenHash: string | null
+  // Minted alongside 'authenticated'. The grant POST must echo it. Unguessable,
+  // single-use, and never leaves the authenticated browser's page.
+  grantToken: string | null
+  // Who proved their identity, pending explicit grant. NOT credentials — no app
+  // password exists until the grant POST.
+  pendingUser: { id: number; login: string } | null
   // Populated when the OIDC dance is initiated; carries PKCE + nonce across the
   // browser round-trip so the callback can validate the IdP response.
   oidc: { codeVerifier: string; nonce: string } | null
@@ -38,7 +53,7 @@ export class NcLoginFlowService {
   private readonly loginToPollIndex = new Map<string, string>() // loginToken → pollToken
 
   // Start a new flow. Returns the tokens the client needs.
-  initiate(): LoginFlow {
+  initiate(clientName?: string): LoginFlow {
     this.evictExpired()
     const pollToken = this.genToken()
     const loginToken = this.genToken()
@@ -47,6 +62,10 @@ export class NcLoginFlowService {
       loginToken,
       status: 'pending',
       createdAt: Date.now(),
+      clientName: normaliseClientName(clientName),
+      browserTokenHash: null,
+      grantToken: null,
+      pendingUser: null,
       oidc: null,
       credentials: null
     }
@@ -81,15 +100,74 @@ export class NcLoginFlowService {
     return true
   }
 
-  // Called by the browser POST /login/v2/flow/{loginToken} after a successful
-  // login; stores the minted credentials on the flow so the next poll returns
-  // them. Accepts both 'pending' (local form) and 'oidc-pending' (IdP
-  // callback) flows.
+  // Bind the flow to the browser that is driving it.
+  //
+  // Called on the first GET of the flow page. Returns the token to put in the
+  // cookie, or null if the flow is already bound to a DIFFERENT browser — in
+  // which case the caller must refuse, because two browsers racing one flow is
+  // either a mistake or an attack.
+  bindBrowser(loginToken: string, presentedToken: string | undefined): string | null {
+    const flow = this.findByLoginToken(loginToken)
+    if (!flow) return null
+    if (!flow.browserTokenHash) {
+      const token = this.genToken()
+      flow.browserTokenHash = hashToken(token)
+      return token
+    }
+    return presentedToken && this.isBoundTo(flow, presentedToken) ? presentedToken : null
+  }
+
+  // Does this cookie value match the browser this flow was bound to?
+  isBoundTo(flow: LoginFlow, presentedToken: string | undefined): boolean {
+    if (!flow.browserTokenHash || !presentedToken) return false
+    return timingSafeEqualHex(flow.browserTokenHash, hashToken(presentedToken))
+  }
+
+  // The identity is proven; the authorisation is NOT yet given.
+  //
+  // This is the step that used to mint an app password directly. Splitting it
+  // in two is the point: authentication happens when the user proves who they
+  // are, authorisation happens when they say yes to THIS client. An
+  // attacker-initiated flow can now reach 'authenticated' on the victim's
+  // browser — because the victim really did authenticate — and still yield
+  // nothing, because the victim never presses Grant.
+  //
+  // Returns the single-use grant token to embed in the page, or null if the
+  // flow is missing, in the wrong state, or driven by a different browser.
+  markAuthenticated(loginToken: string, user: { id: number; login: string }, presentedToken: string | undefined): string | null {
+    const flow = this.findByLoginToken(loginToken)
+    if (!flow) return null
+    if (flow.status !== 'pending' && flow.status !== 'oidc-pending') return null
+    if (!this.isBoundTo(flow, presentedToken)) return null
+    flow.pendingUser = { id: user.id, login: user.login }
+    flow.grantToken = this.genToken()
+    flow.status = 'authenticated'
+    return flow.grantToken
+  }
+
+  // Consume the grant. Returns the user the grant is for, or null if anything
+  // about the request fails to line up. Single-use: the grant token is cleared
+  // whether or not the caller goes on to mint successfully, so a replayed POST
+  // cannot mint a second credential.
+  consumeGrant(loginToken: string, grantToken: string | undefined, presentedToken: string | undefined): { id: number; login: string } | null {
+    const flow = this.findByLoginToken(loginToken)
+    if (!flow || flow.status !== 'authenticated' || !flow.grantToken || !flow.pendingUser) return null
+    if (!this.isBoundTo(flow, presentedToken)) return null
+    if (!grantToken || !timingSafeEqualHex(hashToken(flow.grantToken), hashToken(grantToken))) return null
+    const user = flow.pendingUser
+    flow.grantToken = null
+    return user
+  }
+
+  // Called after a granted mint; stores the credentials so the next poll
+  // returns them. Only reachable from the 'authenticated' state — the two
+  // pre-grant states are deliberately no longer accepted.
   completeWithCredentials(loginToken: string, creds: { server: string; loginName: string; appPassword: string }): boolean {
     const flow = this.findByLoginToken(loginToken)
     if (!flow) return false
-    if (flow.status !== 'pending' && flow.status !== 'oidc-pending') return false
+    if (flow.status !== 'authenticated') return false
     flow.credentials = creds
+    flow.pendingUser = null
     flow.status = 'ready'
     return true
   }
@@ -144,4 +222,24 @@ export class NcLoginFlowService {
     // 32 random bytes, base64url — 43 chars, URL-safe, no padding.
     return crypto.randomBytes(32).toString('base64url')
   }
+}
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex')
+}
+
+// Both operands are sha256 hex of the same fixed length, so length never
+// differs in practice — but timingSafeEqual throws on a mismatch, so guard it.
+function timingSafeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'))
+}
+
+// The User-Agent is attacker-controlled and gets rendered on the grant page.
+// It is escaped at render time, but bound the length here too so a pathological
+// header cannot dominate the page the user is meant to read.
+function normaliseClientName(raw: string | undefined): string {
+  const trimmed = (raw ?? '').trim()
+  if (!trimmed) return 'an unidentified application'
+  return trimmed.length > 120 ? `${trimmed.slice(0, 117)}...` : trimmed
 }

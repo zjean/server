@@ -87,6 +87,31 @@ export class NcBasicAuthGuard implements CanActivate {
     const user = new UserModel(userRow)
     const ip = this.clientIp(req)
 
+    // Account-level gate, BEFORE any password work.
+    //
+    // `validateAppPassword` only checks `haveRole(USER_ROLE.USER)` — it knows
+    // nothing about `isActive`, the guest-link role, or the password-attempt
+    // lockout. Every other credential path in the app reaches those checks via
+    // `logUser`, whose first line is `validateUserAccess`. This guard calls
+    // `validateAppPassword` directly, so without this it never ran: a
+    // deactivated account kept full NC access (DAV read/write, chunked upload,
+    // versions) for as long as the app password existed.
+    //
+    // Deliberately NOT negative-cached: the cache is keyed on the credential
+    // pair with a 900s TTL, so caching a lockout would keep a re-activated
+    // account locked out for the remainder of it. The lookup above is the only
+    // cost, and it has already happened.
+    //
+    // Translated to 401 rather than passed through as 403 so NC clients
+    // re-prompt for credentials instead of treating it as a permanent
+    // per-resource denial.
+    try {
+      await this.usersManager.validateUserAccess(user)
+    } catch (e) {
+      this.logger.warn({ tag: 'nc-auth', msg: `access refused: ${login} ${ip} (${(e as Error).message})` })
+      this.unauthorized(res, 'account not allowed')
+    }
+
     // Only AUTH_SCOPE.MOBILE_NC app-passwords work — main password rejected.
     const ok = await this.usersManager.validateAppPassword(user, password, ip, AUTH_SCOPE.MOBILE_NC)
     if (!ok) {

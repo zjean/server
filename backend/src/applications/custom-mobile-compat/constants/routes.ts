@@ -15,6 +15,10 @@ export const NC_ROUTE = {
   LOGIN_V2_POLL: '/index.php/login/v2/poll',
   LOGIN_V2_POLL_ALT: '/login/v2/poll',
   LOGIN_V2_FLOW: '/login/v2/flow/:token',
+  // Explicit authorisation step. Authentication lands on a grant page; only a
+  // POST here mints an app password. Upstream NC has the same split
+  // (ClientFlowLoginV2Controller::grantPage + generateAppPassword).
+  LOGIN_V2_GRANT: '/login/v2/grant/:token',
 
   // Mobile OIDC delegation (only mounted when auth.provider === 'oidc')
   MOBILE_OIDC_LOGIN: '/custom-mobile/oidc/login/:token',

@@ -3,7 +3,7 @@ import * as fsp from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { Readable } from 'node:stream'
-import { NcChunkedUploadsService } from './nc-chunked-uploads.service'
+import { NcChunkedUploadsService, sanitizeUploadId } from './nc-chunked-uploads.service'
 
 describe(NcChunkedUploadsService.name, () => {
   let svc: NcChunkedUploadsService
@@ -200,5 +200,48 @@ describe(NcChunkedUploadsService.name, () => {
     it('is a no-op when the dir does not exist', async () => {
       await expect(svc.remove(USER, 'never-created')).resolves.toBeUndefined()
     })
+  })
+})
+
+// `uploadId` is a route param and reaches the filesystem from two places: the
+// staging paths in this service (which always sanitised it) and the assembly
+// tmp path in nc-uploads.controller (which did not). That asymmetry was an
+// authenticated arbitrary-file-truncation primitive: a `..`-laden id escaped
+// the user's tree, recursive mkdir materialised the odd intermediate directory
+// so the kernel's `..` resolution succeeded, and the destination was opened
+// with 'w'. These pin the sanitiser that both sides now share.
+describe('sanitizeUploadId', () => {
+  it('neutralises a plain dot-dot traversal', () => {
+    expect(sanitizeUploadId('../../../../etc/evil')).not.toContain('..')
+    expect(sanitizeUploadId('../../../../etc/evil')).not.toContain('/')
+  })
+
+  it('neutralises the percent-decoded form the router hands us', () => {
+    // find-my-way decodes %2F → / and %2E → . in path params, so by the time a
+    // handler sees the id the encoding is already gone. Sanitising the encoded
+    // spelling instead of the decoded one would be a no-op.
+    const decoded = decodeURIComponent('%2E%2E%2F%2E%2E%2Fetc%2Fevil')
+    expect(decoded).toBe('../../etc/evil')
+    expect(sanitizeUploadId(decoded)).not.toContain('..')
+    expect(sanitizeUploadId(decoded)).not.toContain('/')
+  })
+
+  it('neutralises backslash separators too', () => {
+    expect(sanitizeUploadId('..\\..\\windows')).not.toContain('\\')
+    expect(sanitizeUploadId('..\\..\\windows')).not.toContain('..')
+  })
+
+  it('collapses runs of dots, not just pairs', () => {
+    expect(sanitizeUploadId('....//....//x')).not.toContain('.')
+  })
+
+  it('leaves a real NC upload id untouched', () => {
+    // Stock clients send a numeric-ish id; mangling it would break uploads.
+    expect(sanitizeUploadId('web-file-upload-abc123-1700000000')).toBe('web-file-upload-abc123-1700000000')
+    expect(sanitizeUploadId('2147483647')).toBe('2147483647')
+  })
+
+  it('keeps a single dot, which is legal inside an id', () => {
+    expect(sanitizeUploadId('upload.1')).toBe('upload.1')
   })
 })
