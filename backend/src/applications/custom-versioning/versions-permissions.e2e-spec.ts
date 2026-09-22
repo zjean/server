@@ -9,6 +9,7 @@ import path from 'node:path'
 import { SpaceModel } from '../spaces/models/space.model'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
 import { MEMBER_TYPE } from '../users/constants/member'
+import { USER_ROLE } from '../users/constants/user'
 import { SPACE_OPERATION, SPACE_PERMS_SEP, SPACE_ROLE } from '../spaces/constants/spaces'
 import { setupVersionsE2E, type VersionsActor, type VersionsE2EContext } from './utils/versions-e2e.fixture'
 import type { VersionsApi } from './utils/versions-e2e.fixture'
@@ -162,14 +163,95 @@ describe('versions permissions (e2e)', () => {
     // path for someone with no access, so it answers before any versioning code
     // runs. 404 rather than 403 is deliberate — a 403 would confirm the file
     // exists.
-    it('cannot reach the endpoints at all', async () => {
-      for (const res of [await outsiderApi.list(rel), await outsiderApi.usage(rel)]) {
-        expect([403, 404]).toContain(res.status)
-      }
+    //
+    // ASSERTED AS EXACTLY 404, not as `[403, 404]`. The disjunction this replaces
+    // pinned nothing: it is satisfied by either guard answering, so the guest
+    // block below could not have leant on it. The exact status is the whole
+    // point of that contrast, and it is derivable rather than guessed — the
+    // fixture's `addUser` grants every USER_PERMISSION, so `canAccessToSpaceUrl`
+    // passes on `files/<alias>` (the SPACES permission) and the 403 branch of
+    // SpaceGuard is never taken; `spacesQueries.permissions` then finds no row
+    // for a non-member, `spaceEnv` returns null, and the guard throws
+    // 'Space not found' with 404. Note that happens BEFORE the per-method
+    // permission check, which is why the writes below answer 404 and not the
+    // read-only member's 403.
+    it('cannot reach the endpoints at all — 404, from path resolution', async () => {
       const [version] = (await ownerApi.list(rel)).body
-      expect([403, 404]).toContain((await outsiderApi.content(version.id, rel)).status)
-      expect([403, 404]).toContain((await outsiderApi.restore(version.id, rel)).status)
-      expect([403, 404]).toContain((await outsiderApi.remove(version.id, rel)).status)
+      // Keyed by route so a failure names the one that diverged rather than
+      // printing two anonymous arrays.
+      expect({
+        list: (await outsiderApi.list(rel)).status,
+        usage: (await outsiderApi.usage(rel)).status,
+        content: (await outsiderApi.content(version.id, rel)).status,
+        diff: (await outsiderApi.diff(version.id, rel)).status,
+        editorHistory: (await outsiderApi.editorHistory(rel)).status,
+        restore: (await outsiderApi.restore(version.id, rel)).status,
+        label: (await outsiderApi.label(version.id, rel, 'nope')).status,
+        remove: (await outsiderApi.remove(version.id, rel)).status
+      }).toEqual({ list: 404, usage: 404, content: 404, diff: 404, editorHistory: 404, restore: 404, label: 404, remove: 404 })
+    })
+  })
+
+  /* ------------------------------------------- an external (guest) principal */
+
+  // #492. The whole controller is gated on the USER role, so a principal below
+  // it is refused before any path is resolved. The live file carries none of
+  // what these endpoints serve — who edited it and when, and the BYTES of
+  // earlier revisions, including content the sharer removed before sharing —
+  // which is why "GET matches reading the live file" stops applying here.
+  //
+  // WHY A GUEST AND NOT A LINK, when a link is what the issue is about: a LINK
+  // account cannot be driven end-to-end from here. `validateUserAccess` refuses
+  // USER_ROLE.LINK at the login route outright; a link session exists only via
+  // `GET /api/app/link/access/:uuid` against a reserved-UUID share. The gate
+  // itself is one numeric comparison — `role <= USER_ROLE.USER` — so GUEST (2)
+  // and LINK (3) fall on the same side of it, and the unit specs pin both.
+  describe('a guest principal', () => {
+    let guestApi: VersionsApi
+
+    beforeAll(async () => {
+      const guest = await e2e.addUser({ role: USER_ROLE.GUEST })
+      guestApi = e2e.makeApiFor({ cookie: guest.cookie, csrf: guest.csrf }, `files/${spaceAlias}`)
+    })
+
+    // Asserted as EXACTLY 403, and contrasted with the outsider's EXACTLY 404 on
+    // the same urls above, because that difference is the evidence the role guard
+    // is in the request path at all: a guest is no more a member of this space
+    // than the outsider is, so with the @UserHaveRole pair removed SpaceGuard
+    // would refuse them for the same unrelated reason and answer the same 404.
+    // The contrast only carries that weight because the outsider case now pins
+    // one status instead of accepting either — with a disjunction there, both
+    // cases would have stayed green through the gate's removal.
+    it('is refused every read, by the role guard rather than by path resolution', async () => {
+      const [version] = (await ownerApi.list(rel)).body
+
+      expect((await guestApi.list(rel)).status).toBe(403)
+      expect((await guestApi.usage(rel)).status).toBe(403)
+      expect((await guestApi.content(version.id, rel)).status).toBe(403)
+      expect((await guestApi.diff(version.id, rel)).status).toBe(403)
+      expect((await guestApi.editorHistory(rel)).status).toBe(403)
+    })
+
+    // The writes are denied twice over: this controller's role guard, and
+    // `requireInternalPrincipal` inside the service — which is what covers the
+    // two controllers that do not sit behind the guard, NcVersionsController
+    // reaching all three of these (MOVE / PROPPATCH / DELETE). Only the guard
+    // half is observable from here; the backstop half is pinned in
+    // versioning.service.spec.ts.
+    it('is refused every write too, and the history is still standing afterwards', async () => {
+      const [version] = (await ownerApi.list(rel)).body
+
+      expect((await guestApi.restore(version.id, rel)).status).toBe(403)
+      expect((await guestApi.label(version.id, rel, 'nope')).status).toBe(403)
+      expect((await guestApi.remove(version.id, rel)).status).toBe(403)
+
+      // A status code alone cannot tell "refused" from "refused after
+      // destroying something" — so read the history back, as the owner.
+      const list = await ownerApi.list(rel)
+      expect(list.status).toBe(200)
+      expect(list.body).toHaveLength(1)
+      expect(list.body[0].label).toBeNull()
+      expect(await fs.readFile(path.join(SpaceModel.getFilesPath(spaceAlias), rel), 'utf8')).toBe(REPLACEMENT)
     })
   })
 

@@ -24,7 +24,10 @@ import { GetSpace } from '../spaces/decorators/space.decorator'
 import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { SpaceGuard } from '../spaces/guards/space.guard'
 import { SpaceEnv } from '../spaces/models/space-env.model'
+import { USER_ROLE } from '../users/constants/user'
+import { UserHaveRole } from '../users/decorators/roles.decorator'
 import { GetUser } from '../users/decorators/user.decorator'
+import { UserRolesGuard } from '../users/guards/roles.guard'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_ROUTE } from './constants/routes'
 import { VERSIONS_DISABLED_MESSAGE, VERSIONS_MAX_DIFF_BYTES, VERSIONS_TEXTUAL_MIMES } from './constants/versioning'
@@ -47,8 +50,29 @@ import { DiffTooLargeError, unifiedDiff } from './utils/unified-diff'
 // GET carries no required permission (SPACE_HTTP_PERMISSION.GET is null), which
 // is deliberate and matches reading the live file: a read-only space member can
 // list and download history but not restore, label or delete it.
+//
+// That equivalence with "reading the live file" holds only for INTERNAL
+// principals, which is why the whole controller is additionally gated on the
+// USER role (#492). A public share link is handed to whoever has the url, and
+// the live file carries none of what this controller serves: who edited it and
+// when (`listVersions` returns `author: { login, fullName }` per row), nor the
+// CONTENT of earlier revisions, which `download` and `diff` hand out — including
+// content the sharer deliberately removed before sharing.
+//
+// `haveRole(USER_ROLE.USER)` is a single `role <= USER_ROLE.USER` comparison, so
+// it refuses GUEST (2) and LINK (3) alike. This is the read half of a rule whose
+// write half the service already states: snapshots are skipped for guest and
+// link principals (ADR §8 — "a public link is a sharing surface, not an
+// authoring one"). They mint no history; they do not read it either.
+//
+// Both decorators sit at CLASS level for the same reason VersionsAdminController
+// puts them there: UserRolesGuard reads the role with
+// getAllAndOverride([handler, class]), so a route added here later inherits the
+// gate instead of shipping open to link visitors. UserRolesGuard is listed
+// BEFORE SpaceGuard so the refusal happens before any path is resolved.
 @Controller(VERSIONS_ROUTE.BASE)
-@UseGuards(SpaceGuard)
+@UserHaveRole(USER_ROLE.USER)
+@UseGuards(UserRolesGuard, SpaceGuard)
 // Without this the service's FileError / LockConflict — permission denied,
 // version not found, the named-delete 409, a locked file — all arrive as 500s,
 // because neither type extends HttpException. See the filter for the full list.

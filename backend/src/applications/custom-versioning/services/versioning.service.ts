@@ -520,11 +520,54 @@ export class VersioningService {
 
   /* ------------------------------------------------------------------ reads */
 
-  // History for the file the resolved space env points at. Read access is
-  // implied by having resolved the space env at all — the space guard already
-  // enforced it — so there is no extra permission check here, matching how the
-  // rest of the codebase treats a resolved env.
+  // Version history is for INTERNAL principals only (#492).
+  //
+  // Resolving a space env is NOT enough here, which is the one place the reads
+  // below depart from "a resolved env means you may read". A share link is
+  // handed to whoever holds the url, and the live file carries none of what
+  // these methods serve: who edited it and when (`listVersions` attaches
+  // `author: { login, fullName }` to every row), nor the bytes of earlier
+  // revisions — including content the sharer deliberately removed before
+  // sharing.
+  //
+  // This is the read half of the rule `snapshotBeforeOverwrite` already states
+  // on the write side: guest and link principals mint no versions (ADR §8 — "a
+  // public link is a sharing surface, not an authoring one"). They do not read
+  // them either.
+  //
+  // VersioningController refuses these principals at its class-level
+  // UserRolesGuard, so this is the backstop for the two controllers that do NOT
+  // sit behind it: VersionsOfficeController (document-server token auth) and
+  // NcVersionsController (NC basic auth). Both declare
+  // VersioningExceptionsFilter, so this FileError becomes a 403 rather than a
+  // 500.
+  //
+  // CALLED FROM EVERY PUBLIC BY-USER ENTRY POINT, reads and writes alike — the
+  // three reads below, and restoreVersion / setLabel / deleteVersion. The writes
+  // are NOT covered "because the controller gates them": that reasoning is
+  // exactly what this backstop exists to not depend on, and NcVersionsController
+  // reaches all three of them (MOVE / PROPPATCH / DELETE). They are refused
+  // there today only because `validateAppPassword`'s first check happens to be
+  // `haveRole(USER_ROLE.USER)` — relax the NC surface to admit guests, or
+  // resolve a revision by direct query instead of routing through listVersions,
+  // and without this line guest WRITES would silently re-open.
+  //
+  // Placement is load-bearing in each caller: above anything that acquires a
+  // resource (invariant 6), and above every `!this.enabled` early return — which
+  // is what makes the specs real throw-assertions rather than passes that only
+  // hold while the feature flag is off.
+  private requireInternalPrincipal(user: UserModel): void {
+    if (user.isGuest || user.isLink) {
+      throw new FileError(HttpStatus.FORBIDDEN, 'Version history is not available for this account')
+    }
+  }
+
+  // History for the file the resolved space env points at. Beyond the principal
+  // check above, read access is implied by having resolved the space env at all
+  // — the space guard already enforced it — so there is no further permission
+  // check here, matching how the rest of the codebase treats a resolved env.
   async listVersions(user: UserModel, space: SpaceEnv): Promise<VersionProps[]> {
+    this.requireInternalPrincipal(user)
     if (!this.enabled) return []
     const fileId = await this.resolveFileId(user, space)
     if (!fileId) return []
@@ -571,6 +614,9 @@ export class VersioningService {
   // a stream and simply drops it leaks a descriptor, which is worth knowing when
   // adding a fourth.
   async getVersionStream(user: UserModel, space: SpaceEnv, versionId: number): Promise<{ stream: Readable; version: VersionRow }> {
+    // Before anything is opened: a rejection after the descriptor exists would
+    // leak it (invariant 6).
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionFor(user, space, versionId)
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
     const handle = blobPath ? await fs.open(blobPath, 'r').catch(() => null) : null
@@ -594,6 +640,7 @@ export class VersioningService {
   }
 
   async versionsUsage(user: UserModel, space: SpaceEnv): Promise<VersionsUsage> {
+    this.requireInternalPrincipal(user)
     const versionsRoot = versionsRootFromSpace(user, space)
     if (!this.enabled || !versionsRoot) return { used: 0, ceiling: null, count: 0 }
     const { used, count } = await this.queries.usageByRoot(versionsRoot)
@@ -638,6 +685,9 @@ export class VersioningService {
   // descriptor keeps the bytes alive across an unlink, so eviction can no
   // longer pull them away mid-restore.
   async restoreVersion(user: UserModel, space: SpaceEnv, versionId: number): Promise<void> {
+    // Before the version is even resolved, and before the blob below is opened:
+    // same reason as getVersionStream's, plus this one takes a server lock.
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
 
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
@@ -690,6 +740,7 @@ export class VersioningService {
   }
 
   async setLabel(user: UserModel, space: SpaceEnv, versionId: number, label: string | null): Promise<void> {
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
     await this.queries.setLabel(version.id, label?.trim() ? label.trim() : null)
   }
@@ -698,6 +749,7 @@ export class VersioningService {
   // revision is exempt from every automatic pruning rule, so removing one is
   // always a deliberate act.
   async deleteVersion(user: UserModel, space: SpaceEnv, versionId: number, confirmLabeled = false): Promise<void> {
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
     if (version.label && !confirmLabeled) {
       throw new FileError(HttpStatus.CONFLICT, 'This version is named, confirmation is required to delete it')
