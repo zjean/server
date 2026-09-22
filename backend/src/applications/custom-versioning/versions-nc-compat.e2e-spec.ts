@@ -214,13 +214,29 @@ describe('versions NC compatibility (e2e)', () => {
     // storage filename. The v2 UI keys on the row id and still shows both.
     it('collapses two versions that share a unix second into one NC entry, keeping the newest', async () => {
       const rel = 'nc10-collapse.txt'
-      // No mtime spacing here: both overwrites land in the same second.
+      // Both generations are given a controlled mtime inside ONE chosen unix
+      // second instead of racing the wall clock. Two back-to-back overwrites
+      // usually do land in the same second, but a run that straddles a boundary
+      // mints two distinct revisions and fails the collapse this case exists to
+      // assert — an observed flake, not a theoretical one. The two mtimes stay
+      // sub-second DISTINCT, so ‘the newest row wins’ below is still a real
+      // claim about ordering rather than an artefact of identical timestamps.
+      const second = Math.floor(Date.now() / 1000) * 1000 - 1000
+      const stampLive = async (ms: number) => {
+        const at = new Date(ms)
+        await fs.utimes(e2e.filesPath(rel), at, at)
+      }
       await e2e.seed(rel, 'collapse gen 0')
+      await stampLive(second + 100)
       await e2e.overwrite(rel, 'collapse gen 1', 'web')
+      await stampLive(second + 900)
       await e2e.overwrite(rel, 'collapse gen 2', 'web')
       const rows = await e2e.versionsOf(rel)
       expect(rows).toHaveLength(2)
-      expect(Math.floor(rows[0].mtime / 1000)).toBe(Math.floor(rows[1].mtime / 1000))
+      // Both in the second we chose, and newest-first is by creation order, not
+      // by mtime — listVersions orders on createdAt.
+      expect(rows.map((r) => Math.floor(r.mtime / 1000))).toEqual([second / 1000, second / 1000])
+      expect(rows[0].mtime).toBeGreaterThan(rows[1].mtime)
 
       const res = await nc('PROPFIND', versionsUrl(rows[0].fileId), { headers: { depth: '1' } })
       const responses = [...res.body.matchAll(/<d:response>([\s\S]*?)<\/d:response>/g)].map((m) => m[1])
