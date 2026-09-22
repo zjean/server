@@ -475,6 +475,9 @@ Upstream left versioning TODOs and may ship their own implementation. The contai
 | `infrastructure/database/utils.ts` | `getTablesWithFileIdColumn` — the reflection §20 depends on |
 | `infrastructure/database/schema.ts` | `custom_files_versions` export |
 | `files/services/files-event-manager.service.ts` | the replaced `todo` comment (:20) |
+| `users/services/admin-users-manager.service.ts` | `mod(users)` — constructor injects `VersioningService`, and `renameUserSpace` calls `renameUserRoot(oldLogin, newLogin)` INSIDE the `try` whose `catch` moves the home directory back (:389 region). The placement is the contract: a throw must refuse the rename, because rows naming a root whose store has moved make every download and restore 404 and hand the 3AM orphan sweep an entire history to unlink (#471). |
+| `spaces/services/spaces-manager.service.ts` | `mod(spaces)` — the space-alias half of the same fact: constructor injects `VersioningService`, and `renameSpaceLocation` calls `renameSpaceRoot(oldAlias, newAlias)` after `moveFiles`, inside the same try/restore (:755 region). |
+| eight upstream `*.spec.ts` files | `comments.controller`, `spaces.controller`, `spaces-browser.service`, `space.guard`, `admin-users.controller`, `users.controller`, `users-manager.service`, `files-methods.service` — each builds one of the two managers above in a bare testing module and therefore provides a `VersioningService` stub. Pure plumbing; if a sync drops one, that spec fails to instantiate rather than failing silently. |
 
 Fork-owned, no `mod()` needed: `custom-mobile-compat/controllers/nc-uploads.controller.ts` (:212).
 

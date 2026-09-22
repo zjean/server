@@ -72,16 +72,66 @@ class FakeQueries {
     this.rows.push({ createdAt: new Date(), label: null, ...values, id } as VersionRow)
     return id
   }
+  // Mirrors the real method's ORDER, which is the part #489 depends on: the row
+  // exists before the blob is published, and a publish failure takes the row
+  // with it the way the transaction's rollback does.
+  //
+  // It also mirrors where `contentAuthorId` comes from (#491): the predecessor
+  // is read HERE, inside the publish, not handed in by the caller.
+  async insertVersionPublishing(values: Omit<VersionInsert, 'contentAuthorId'>, publishBlob: () => Promise<void>): Promise<number> {
+    const contentAuthorId = await this.lastAuthorIdForFile(values.fileId)
+    const id = await this.insertVersion({ ...values, contentAuthorId })
+    try {
+      await publishBlob()
+    } catch (e) {
+      await this.deleteById(id)
+      throw e
+    }
+    return id
+  }
+  // Mirrors the real method's ATOMICITY: the refcount is read after the delete
+  // and the unlink runs on that same observation, with no window between them
+  // for a racing insert to slip into.
+  async deleteByIdReleasingBlob(versionId: number, checksum: string, versionsRoot: string, unlinkBlob: () => Promise<void>) {
+    const row = this.rows.find((r) => r.id === versionId)
+    await this.deleteById(versionId)
+    if ((await this.countByBlob(checksum ?? row?.checksum, versionsRoot)) === 0) await unlinkBlob()
+  }
+  async deleteByFileIdsReleasingBlobs(
+    fileIds: number[],
+    blobs: { checksum: string; versionsRoot: string }[],
+    unlinkBlob: (checksum: string, versionsRoot: string) => Promise<void>
+  ) {
+    await this.deleteByFileIds(fileIds)
+    for (const blob of blobs) {
+      if ((await this.countByBlob(blob.checksum, blob.versionsRoot)) === 0) await unlinkBlob(blob.checksum, blob.versionsRoot)
+    }
+  }
   async newestForTuple(fileId: number, authorId: number | null, origin: string) {
     return [...this.rows]
       .filter((r) => r.fileId === fileId && (r.authorId ?? null) === authorId && r.origin === origin)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)[0]
   }
+  // Mirrors the real query's TWO joins (#491): `author*` resolves the row's
+  // CONTENT author, `supersededBy*` the user who replaced that content.
   async listByFileId(fileId: number) {
+    const who = (id: number | null | undefined) =>
+      ({ 7: { login: 'alice', fullName: 'Alice A' }, 8: { login: 'bob', fullName: 'Bob Brown' } })[id] ?? { login: null, fullName: null }
     return this.rows
       .filter((r) => r.fileId === fileId)
-      .map((r) => ({ ...r, authorLogin: r.authorId ? 'alice' : null, authorFullName: r.authorId ? 'Alice A' : null }))
+      .map((r) => ({
+        ...r,
+        authorLogin: who(r.contentAuthorId).login,
+        authorFullName: who(r.contentAuthorId).fullName,
+        supersededByLogin: who(r.authorId).login,
+        supersededByFullName: who(r.authorId).fullName
+      }))
       .sort((a, b) => b.id - a.id)
+  }
+  // The `authorId` of the LAST row inserted for this file — the write that
+  // produced the content the next snapshot will supersede.
+  async lastAuthorIdForFile(fileId: number) {
+    return [...this.rows].filter((r) => r.fileId === fileId).sort((a, b) => b.id - a.id)[0]?.authorId ?? null
   }
   async getById(id: number) {
     return this.rows.find((r) => r.id === id)
@@ -92,6 +142,12 @@ class FakeQueries {
   }
   async deleteById(id: number) {
     this.rows = this.rows.filter((r) => r.id !== id)
+  }
+  async renameRoot(oldRoot: string, newRoot: string) {
+    if (oldRoot === newRoot) return 0
+    const moved = this.rows.filter((r) => r.versionsRoot === oldRoot)
+    for (const r of moved) r.versionsRoot = newRoot
+    return moved.length
   }
   async countByBlob(checksum: string, versionsRoot: string) {
     return this.rows.filter((r) => r.checksum === checksum && r.versionsRoot === versionsRoot).length
@@ -1417,6 +1473,59 @@ describe(VersioningService.name, () => {
 
     const list = await service.listVersions(user, personalSpace())
     expect(list.map((v) => v.origin)).toEqual(['webdav', 'web'])
+    // The newest row holds the content alice wrote in the FIRST save, so alice
+    // is its author; the oldest row holds content nobody recorded, so it has
+    // none (#491). Before the fix both rows claimed alice, including the one
+    // she only destroyed.
+    expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
+    expect(list[1].author).toBeUndefined()
+    // And both name her as the person who replaced their content.
+    expect(list.map((v) => v.supersededBy?.login)).toEqual(['alice', 'alice'])
+  })
+
+  // #491: a row's `created` describes the content it HOLDS, while `authorId`
+  // names whoever REPLACED that content. Rendering `authorId` attributed every
+  // revision to the next person to touch the file — in a two-person space, the
+  // revision alice wrote was labelled bob.
+  it('attributes a version to whoever WROTE its content, not to whoever destroyed it', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const bob = { id: 8, login: 'bob', isGuest: false, isLink: false } as unknown as UserModel
+
+    // alice writes v1 over the original, then bob writes v2 over alice's.
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by alice')
+    await ageFile(150)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by bob')
+    await ageFile(30)
+    await service.snapshotBeforeOverwrite(bob, personalSpace(), { origin: 'web' })
+
+    const list = await service.listVersions(user, personalSpace())
+    // Newest first: the row bob minted holds alice's bytes.
+    expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
+    expect(list[0].supersededBy?.login).toBe('bob')
+  })
+
+  // The chain is read at WRITE time on purpose: by the time the list is
+  // rendered, thinning may have removed the row that actually preceded a given
+  // one, so a read-time shift by one would silently start naming the wrong
+  // person (thinning spec §8).
+  it('keeps the recorded author after the preceding row is thinned away', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const bob = { id: 8, login: 'bob', isGuest: false, isLink: false } as unknown as UserModel
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by alice')
+    await ageFile(150)
+    await service.snapshotBeforeOverwrite(bob, personalSpace(), { origin: 'web' })
+
+    // Whatever removed it — thinning, retention, an admin purge — the surviving
+    // row must not change its story.
+    await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+
+    const list = await service.listVersions(user, personalSpace())
+    expect(list).toHaveLength(1)
     expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
   })
 
@@ -1984,6 +2093,13 @@ describe(VersioningService.name, () => {
   // the live file a link visitor can already read carries nothing of the kind.
   it('never hands an author identity to a guest or a link principal', async () => {
     versionsConfig.minIntervalSeconds = 0
+    // Two saves, so the newest row has a recorded CONTENT author to leak (#491):
+    // a file's first version names nobody, which would make this pass for the
+    // wrong reason.
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'v2')
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect((await service.listVersions(user, personalSpace()))[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
 
@@ -2142,5 +2258,133 @@ describe(VersioningService.name, () => {
 
     await service.purgeForFile(555)
     expect(await blobFiles()).toHaveLength(0)
+  })
+
+  /* ------------------------------------------- blob-unlink race (#489) */
+
+  // `removeBlobIfUnreferenced` used to count rows and then unlink, while
+  // `snapshot` published its blob and then inserted its row. Interleaved, a
+  // refcount of 0 means "not referenced YET": the unlink lands on bytes a row
+  // is about to point at, and that version lists but 404s.
+  //
+  // The fix is an ordering one, and these assert both halves of it. The mutual
+  // exclusion itself is a database lock, asserted end to end in
+  // versions-lifecycle.e2e-spec.ts / versions-write-paths.e2e-spec.ts against a
+  // real MariaDB; what a unit test can pin is the CONTRACT those locks are
+  // wrapped around.
+  describe('the eager unlink cannot take a blob a concurrent save just published', () => {
+    it('inserts the row BEFORE the blob is published, so a dropper can never see the blob alone', async () => {
+      let rowsWhenBlobAppeared = -1
+      const insert = vi.spyOn(queries, 'insertVersionPublishing').mockImplementationOnce((values, publish) =>
+        FakeQueries.prototype.insertVersionPublishing.call(queries, values, async () => {
+          await publish()
+          rowsWhenBlobAppeared = queries.rows.length
+        })
+      )
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      expect(rowsWhenBlobAppeared).toBe(1)
+      expect(await blobFiles()).toHaveLength(1)
+      insert.mockRestore()
+    })
+
+    // The other half of the inversion. "Row first" is only safe because the row
+    // does not survive a publish that fails — otherwise the ADR's rule (never
+    // leave a committed row pointing at nothing) would be the price of closing
+    // this race.
+    it('leaves no row behind when publishing the blob fails', async () => {
+      vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('ENOSPC'))
+
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+
+      expect(queries.rows).toHaveLength(0)
+      expect(await blobFiles()).toHaveLength(0)
+    })
+
+    // The drop side: the refcount observation and the unlink are one step, so a
+    // row that exists when the count is taken always keeps its bytes.
+    it('never unlinks while any row still references the blob', async () => {
+      versionsConfig.minIntervalSeconds = 0
+      await ageFile(300)
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      await ageFile(150)
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const [blob] = await blobFiles()
+      expect(queries.rows).toHaveLength(2)
+
+      await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+      expect(await pathExists(blob)).toBe(true)
+
+      await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+      expect(await pathExists(blob)).toBe(false)
+    })
+
+    // The unlink is driven by the queries layer, which decides under a lock. A
+    // drop path that resolved the blob and removed it itself would be exactly
+    // the check-then-act this issue is about, so the callback must be the ONLY
+    // way bytes go.
+    it('removes nothing when the queries layer does not authorize it', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      const [blob] = await blobFiles()
+      vi.spyOn(queries, 'deleteByIdReleasingBlob').mockImplementationOnce(async (versionId) => queries.deleteById(versionId))
+
+      await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+
+      expect(queries.rows).toHaveLength(0)
+      expect(await pathExists(blob)).toBe(true)
+    })
+  })
+
+  /* ------------------------------------------------- versions-root rename (#471) */
+
+  // `versionsRoot` is derived from a MUTABLE name. Renaming a login or an alias
+  // moves the whole home directory, blob store included; the rows are the only
+  // thing that does not travel with it.
+  describe('renaming a versions root', () => {
+    it('repoints every row of a renamed user login, and leaves other roots alone', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      queries.rows.push({ ...queries.rows[0], id: 999, versionsRoot: 'user:bob' } as VersionRow)
+
+      await expect(service.renameUserRoot('alice', 'alice.smith')).resolves.toBe(1)
+
+      expect(queries.rows.map((r) => r.versionsRoot).sort()).toEqual(['user:alice.smith', 'user:bob'])
+    })
+
+    it('repoints a renamed space alias', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      queries.rows[0].versionsRoot = 'space:team'
+
+      await expect(service.renameSpaceRoot('team', 'team-2')).resolves.toBe(1)
+
+      expect(queries.rows[0].versionsRoot).toBe('space:team-2')
+    })
+
+    // The flag decides whether new versions are MINTED. Rows written while it
+    // was on outlive it, so skipping the repoint while it is off would leave an
+    // orphaned store for the next sweep to destroy the moment it is turned back
+    // on — and the blame would land on the flag, not on the rename.
+    it('repoints rows even while the feature flag is off', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      versionsConfig.enabled = false
+
+      await expect(service.renameUserRoot('alice', 'alice.smith')).resolves.toBe(1)
+
+      expect(queries.rows[0].versionsRoot).toBe('user:alice.smith')
+    })
+
+    // The caller (AdminUsersManager / SpacesManager) moves the home directory
+    // back when this throws, so the failure must propagate rather than be
+    // swallowed the way the write path's are.
+    it('propagates a failure so the caller can roll the directory move back', async () => {
+      vi.spyOn(queries, 'renameRoot').mockRejectedValueOnce(new Error('db down'))
+      await expect(service.renameUserRoot('alice', 'alice.smith')).rejects.toThrow('db down')
+    })
+
+    it('is a no-op when the name did not actually change', async () => {
+      await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+      await expect(service.renameUserRoot('alice', 'alice')).resolves.toBe(0)
+      expect(queries.rows[0].versionsRoot).toBe('user:alice')
+    })
   })
 })

@@ -56,7 +56,17 @@ describe('versions lifecycle (e2e)', () => {
       // newest version holds 'revision two', not 'revision three'.
       expect(versions.map((v) => v.size)).toEqual(['revision two — longer', 'revision one'].map((s) => Buffer.byteLength(s)))
       expect(versions.every((v) => v.origin === 'web')).toBe(true)
-      expect(versions.every((v) => v.author?.login === e2e.user.login)).toBe(true)
+      // AUTHORSHIP RUNS ONE ROW BEHIND THE WRITES (#491). A row's author is
+      // whoever WROTE the bytes it holds, recorded at write time from the
+      // previous write's actor — not whoever replaced them, which is what this
+      // used to assert and what attributed every revision to the next person to
+      // touch the file. The oldest row here holds the bytes `seed` wrote
+      // straight to disk, before any version existed and with nobody recorded,
+      // so it reports no author at all. The newest holds 'revision two', which
+      // this user demonstrably wrote.
+      expect(versions.map((v) => v.author?.login)).toEqual([e2e.user.login, undefined])
+      // The actor is still on every row, under the name that now means it.
+      expect(versions.every((v) => v.supersededBy?.login === e2e.user.login)).toBe(true)
 
       // The live file is the newest content; history is everything before it.
       expect(await fs.readFile(e2e.filesPath(rel), 'utf8')).toBe('revision three')

@@ -43,6 +43,24 @@ export class PurgeVersionsRootDto {
   versionsRoot: string
 }
 
+export class RepointVersionsRootDto {
+  // The repair for an unrepointed rename (#471): rewrite the root recorded on
+  // a set of rows so they address the store where their blobs actually live.
+  //
+  // Both ends are plain root strings with the same column-width cap as the
+  // purge DTO, and for the same reason: the stale root is a string an operator
+  // read out of the nightly error log, and a root that exists must always be
+  // nameable. The prefix rule is NOT restated here either — parseVersionsRoot
+  // owns it, and the service checks both ends against it.
+  @IsString()
+  @MaxLength(VERSIONS_ROOT_MAX_LENGTH)
+  fromVersionsRoot: string
+
+  @IsString()
+  @MaxLength(VERSIONS_ROOT_MAX_LENGTH)
+  toVersionsRoot: string
+}
+
 export class EditorVersionDto {
   // The caller's own TOKEN_TYPE.ONLY_OFFICE JWT, which the service echoes into
   // the `url` it hands the editor — because that url is fetched by the DOCUMENT

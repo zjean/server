@@ -38,7 +38,11 @@ export const VERSIONS_ROUTE = {
   // per-file routes above, every one of which has a distinct static verb.
   ADMIN: 'admin',
   STORAGE: 'storage',
-  PURGE: 'purge'
+  PURGE: 'purge',
+  // The repair for an unrepointed rename (#471). It rewrites the recorded root
+  // of a set of rows and deletes nothing, which is why it sits beside the purge
+  // rather than behind a stronger confirmation.
+  REPOINT: 'repoint'
 } as const
 
 const NS = `${VERSIONS_ROUTE.BASE}/${VERSIONS_ROUTE.VERSIONS}`
@@ -60,3 +64,4 @@ const ADMIN_NS = `${NS}/${VERSIONS_ROUTE.ADMIN}`
 
 export const API_VERSIONS_ADMIN_STORAGE = `${ADMIN_NS}/${VERSIONS_ROUTE.STORAGE}`
 export const API_VERSIONS_ADMIN_PURGE = `${ADMIN_NS}/${VERSIONS_ROUTE.PURGE}`
+export const API_VERSIONS_ADMIN_REPOINT = `${ADMIN_NS}/${VERSIONS_ROUTE.REPOINT}`
