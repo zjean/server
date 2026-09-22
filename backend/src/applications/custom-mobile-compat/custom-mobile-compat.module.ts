@@ -30,6 +30,7 @@ import { NcUploadsController } from './controllers/nc-uploads.controller'
 import { NcVersionsController } from './controllers/nc-versions.controller'
 import { NcVersionsService } from './services/nc-versions.service'
 import { NcBasicAuthGuard } from './guards/nc-basic-auth.guard'
+import { NcRateLimitGuard } from './guards/nc-rate-limit.guard'
 import { NcActivityService } from './services/nc-activity.service'
 import { NcAppPasswordService } from './services/nc-app-password.service'
 import { NcChunkedUploadsService } from './services/nc-chunked-uploads.service'
@@ -140,6 +141,9 @@ const officeEditorEnabled =
   ],
   providers: [
     NcBasicAuthGuard,
+    // Per-IP limiter for the unauthenticated NC routes (#477). Inert on any
+    // handler that does not carry @NcRateLimit.
+    NcRateLimitGuard,
     NcAppPasswordService,
     NcActivityService,
     NcLoginFlowService,

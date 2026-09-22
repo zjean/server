@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { and, asc, count, countDistinct, desc, eq, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/mysql-core'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -10,6 +11,10 @@ import { userFullNameSQL, users } from '../../users/schemas/users.schema'
 import { VersionInsert, VersionOrigin, VersionRow } from '../interfaces/version.interface'
 import { customFilesVersions } from '../schemas/files-versions.schema'
 
+// The handle drizzle hands a transaction callback. Derived rather than named so
+// it cannot drift from the DBSchema this class is injected with.
+type DBTransaction = Parameters<Parameters<DBSchema['transaction']>[0]>[0]
+
 // All SQL for custom_files_versions lives here, keeping VersioningService about
 // orchestration only — the same split upstream uses (FilesQueries /
 // FilesManager) and custom-favorites uses (FavoritesQueries /
@@ -18,8 +23,144 @@ import { customFilesVersions } from '../schemas/files-versions.schema'
 export class VersioningQueries {
   constructor(@Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema) {}
 
-  async insertVersion(values: VersionInsert): Promise<number> {
-    return dbGetInsertedId(await this.db.insert(customFilesVersions).values(values))
+  /* ------------------------------------------------- blob publish / release */
+  //
+  // THE THREE METHODS BELOW ARE ONE MECHANISM, and the reason they take a
+  // callback instead of returning a decision is the whole point: the
+  // filesystem step has to happen while the database still holds the state the
+  // decision was made from (#489).
+  //
+  // The race they close: `removeBlobIfUnreferenced` used to count rows and then
+  // unlink, while a snapshot published its blob and then inserted its row.
+  // Interleaved, a refcount of 0 means "not referenced YET" — the unlink lands
+  // on bytes a row is about to point at, and that version lists but 404s on
+  // download and restore.
+  //
+  // It is closed by two changes that only work together:
+  //
+  //   1. THE ROW GOES IN BEFORE THE BLOB, inside a transaction. On its own this
+  //      would violate the ADR's "blob first, row second" rule, whose reason is
+  //      that a crash between the two must never leave a committed row pointing
+  //      at nothing. A transaction preserves exactly that: the row is committed
+  //      only after the rename returned, and a failure or a crash in between
+  //      rolls it back. The residual case is the reverse — a commit that fails
+  //      after a successful rename — which leaves an orphan blob, the harmless
+  //      direction the nightly sweep already owns.
+  //
+  //      What the inversion buys is that a blob can no longer be on disk while
+  //      its row is invisible: by the time the rename runs, the row exists and
+  //      is exclusively locked by this transaction.
+  //
+  //   2. THE DROPPER'S DELETE, REFCOUNT AND UNLINK ARE ONE TRANSACTION, and the
+  //      refcount is a LOCKING read. A plain SELECT would answer from the
+  //      transaction's REPEATABLE READ snapshot and miss a row committed after
+  //      it started; `for('update')` reads the latest committed version AND
+  //      blocks on rows another transaction is still writing. So a publisher
+  //      that has inserted — committed or not — is always either seen or waited
+  //      for.
+  //
+  // The remaining order is publisher-second: the dropper's locking read runs
+  // over a (checksum, versionsRoot) range the publisher has not inserted into
+  // yet. Under REPEATABLE READ — MariaDB's and MySQL's default, and what this
+  // deployment runs — that read takes a next-key lock on the range, so the
+  // publisher's INSERT waits for the dropper to commit and then re-publishes
+  // the bytes.
+  //
+  // UNDER READ COMMITTED THIS IS NOT CLOSED, AND NOTHING REPAIRS IT. There is
+  // no gap lock, so the dropper can unlink bytes the publisher is about to
+  // name, leaving a committed row pointing at nothing — the one outcome the
+  // ADR forbids. An earlier version of this comment offered the nightly sweep
+  // as "the backstop either way", which is wrong and worth stating plainly:
+  // `danglingRows` removes rows whose FILES row is gone, not rows whose BLOB
+  // is gone, and no rule looks for the latter — deleting a row because its
+  // bytes are missing is itself destructive, so none should. The damage is
+  // bounded to that one version and surfaces as a 404 on its download,
+  // restore and diff.
+  //
+  // So the isolation level is a deployment requirement of this feature, not a
+  // performance preference. If this server is ever run against a database
+  // configured for READ COMMITTED, close the window on the publisher side
+  // some other way — a unique index on (checksum, versionsRoot, fileId, id)
+  // read with a locking point read would do it without the range-lock
+  // deadlock below, and is the direction to take, not the removed lock.
+  //
+  // WHAT IS DELIBERATELY *NOT* HERE: a matching locking read on the publisher
+  // side. It closes the READ COMMITTED gap, and it deadlocks — two snapshots of
+  // different content take gap locks on the same index gap (neither conflicts),
+  // then each blocks on the other's gap lock trying to insert into it. Measured,
+  // not theorised: it produced two `Innodb_deadlocks` per e2e run and silently
+  // cost those saves their version, because `snapshotBeforeOverwrite` swallows
+  // everything by design.
+
+  // Inserts a version row and publishes its blob as one atomic step.
+  //
+  // `publishBlob` runs INSIDE the transaction, so it must be the cheap half of
+  // the write — the copy and the hash happen before this is called, and only
+  // the same-filesystem rename is in here.
+  //
+  // `contentAuthorId` IS RESOLVED HERE, not by the caller (#491). It is derived
+  // from the newest existing row for this file, so reading it outside the
+  // transaction — which is what evaluating it as an argument does — widens the
+  // window in which two concurrent snapshots of the same file observe the same
+  // predecessor and both claim it. Reading it as the transaction's first
+  // statement narrows that window to the transaction itself.
+  //
+  // It does NOT eliminate it, and deliberately so: only a locking read would,
+  // and a locking read on the publisher side is the one thing the header above
+  // records as measured-and-removed for deadlocking two concurrent snapshots
+  // against each other. The residual is one row attributing content to the
+  // wrong one of two people who saved the same file in the same instant —
+  // strictly better than the off-by-one this column replaces, and not worth a
+  // deadlock.
+  async insertVersionPublishing(values: Omit<VersionInsert, 'contentAuthorId'>, publishBlob: () => Promise<void>): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      const contentAuthorId = await this.lastAuthorIdForFile(values.fileId, tx)
+      const versionId = dbGetInsertedId(await tx.insert(customFilesVersions).values({ ...values, contentAuthorId }))
+      await publishBlob()
+      return versionId
+    })
+  }
+
+  // Deletes one row and, still holding the lock, unlinks its blob if nothing
+  // else references it.
+  async deleteByIdReleasingBlob(versionId: number, checksum: string, versionsRoot: string, unlinkBlob: () => Promise<void>): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(customFilesVersions).where(eq(customFilesVersions.id, versionId))
+      if (await this.blobIsUnreferenced(tx, checksum, versionsRoot)) await unlinkBlob()
+    })
+  }
+
+  // The purge equivalent: every row of a set of files goes, then each distinct
+  // blob they referenced is released if nothing else points at it.
+  //
+  // The bulk DELETE is inside the transaction for the same reason the single
+  // one is — it is the delete that holds the locks the checks depend on, so
+  // splitting them would reopen #489 on the purge path.
+  async deleteByFileIdsReleasingBlobs(
+    fileIds: number[],
+    blobs: { checksum: string; versionsRoot: string }[],
+    unlinkBlob: (checksum: string, versionsRoot: string) => Promise<void>
+  ): Promise<void> {
+    if (!fileIds.length) return
+    await this.db.transaction(async (tx) => {
+      await tx.delete(customFilesVersions).where(inArray(customFilesVersions.fileId, fileIds))
+      for (const blob of blobs) {
+        if (await this.blobIsUnreferenced(tx, blob.checksum, blob.versionsRoot)) await unlinkBlob(blob.checksum, blob.versionsRoot)
+      }
+    })
+  }
+
+  // Refcount is per (checksum, versionsRoot) because blobs are physically per
+  // root — the same digest in two roots is two files, and counting them as one
+  // would delete a blob another root still needs.
+  private async blobIsUnreferenced(tx: DBTransaction, checksum: string, versionsRoot: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: customFilesVersions.id })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.checksum, checksum), eq(customFilesVersions.versionsRoot, versionsRoot)))
+      .limit(1)
+      .for('update')
+    return rows.length === 0
   }
 
   // Newest version for the coalescing tuple. Returns the row so the caller can
@@ -41,18 +182,62 @@ export class VersioningQueries {
     return row
   }
 
-  // History for a file, newest first, with the author joined for display.
-  async listByFileId(fileId: number): Promise<(VersionRow & { authorLogin: string | null; authorFullName: string | null })[]> {
+  // History for a file, newest first, with BOTH author identities joined.
+  //
+  // Two joins because the row carries two different people and each has a
+  // reader (#491):
+  //   - `contentAuthorId` wrote the bytes this row holds. That is the author a
+  //     version list must show, and showing `authorId` instead is what
+  //     attributed every revision to whoever came next.
+  //   - `authorId` replaced them. Only the NEWEST row's value is interesting,
+  //     and it is interesting precisely because it names the author of the
+  //     content that is live right now — which is what the OnlyOffice history
+  //     panel labels its "current" entry with.
+  async listByFileId(fileId: number): Promise<
+    (VersionRow & {
+      authorLogin: string | null
+      authorFullName: string | null
+      supersededByLogin: string | null
+      supersededByFullName: string | null
+    })[]
+  > {
+    const contentAuthor = alias(users, 'contentAuthor')
     return this.db
       .select({
         ...columnsOf(),
-        authorLogin: users.login,
-        authorFullName: userFullNameSQL(users)
+        authorLogin: contentAuthor.login,
+        authorFullName: userFullNameSQL(contentAuthor),
+        supersededByLogin: users.login,
+        supersededByFullName: userFullNameSQL(users)
       })
       .from(customFilesVersions)
+      .leftJoin(contentAuthor, eq(contentAuthor.id, customFilesVersions.contentAuthorId))
       .leftJoin(users, eq(users.id, customFilesVersions.authorId))
       .where(eq(customFilesVersions.fileId, fileId))
       .orderBy(desc(customFilesVersions.createdAt), desc(customFilesVersions.id))
+  }
+
+  // The `authorId` of the LAST row inserted for this file — i.e. whoever
+  // performed the write that produced the content a snapshot is about to
+  // supersede (#491). Null when the file has no history yet, or when that
+  // write had no acting user.
+  //
+  // Ordered by `id`, not by `createdAt` or `mtime`. The question is strictly
+  // "which row was written most recently", the primary key answers it
+  // unambiguously, and `mtime` in particular is client-controlled and not
+  // monotonic. Not root-scoped either: a file moved between spaces has rows in
+  // two roots, and its authorship chain runs through both.
+  //
+  // Takes an optional transaction handle so `insertVersionPublishing` can read
+  // the predecessor inside the same transaction that inserts — see there.
+  async lastAuthorIdForFile(fileId: number, tx: DBTransaction | DBSchema = this.db): Promise<number | null> {
+    const [row] = await tx
+      .select({ authorId: customFilesVersions.authorId })
+      .from(customFilesVersions)
+      .where(eq(customFilesVersions.fileId, fileId))
+      .orderBy(desc(customFilesVersions.id))
+      .limit(1)
+    return row?.authorId ?? null
   }
 
   async getById(versionId: number): Promise<VersionRow | undefined> {
@@ -71,6 +256,30 @@ export class VersioningQueries {
     await this.db.update(customFilesVersions).set(scope).where(eq(customFilesVersions.fileId, fileId))
   }
 
+  // Repoints every row of one versions root at another (#471).
+  //
+  // `versionsRoot` is derived from a MUTABLE name — a user login or a space
+  // alias — and renaming either MOVES THE WHOLE HOME DIRECTORY, the versions
+  // store inside it included. The rows are the only thing that does not travel
+  // with it, and rows that disagree with the disk are not merely unreadable:
+  // the nightly orphan sweep enumerates the DISK, finds the new name, asks for
+  // a refcount under it, gets 0 for every blob because the rows still say the
+  // old one, and unlinks the entire store.
+  //
+  // A plain UPDATE rather than a per-row loop: the rename is one logical act
+  // and the (versionsRoot, label, createdAt) index already covers the predicate.
+  //
+  // Returns how many rows moved, which the caller logs — a rename of a root
+  // that never held history is a legitimate 0, not a failure.
+  async renameRoot(oldVersionsRoot: string, newVersionsRoot: string): Promise<number> {
+    if (oldVersionsRoot === newVersionsRoot) return 0
+    const [header] = await this.db
+      .update(customFilesVersions)
+      .set({ versionsRoot: newVersionsRoot })
+      .where(eq(customFilesVersions.versionsRoot, oldVersionsRoot))
+    return Number((header as { affectedRows?: number })?.affectedRows ?? 0)
+  }
+
   async deleteById(versionId: number): Promise<void> {
     await this.db.delete(customFilesVersions).where(eq(customFilesVersions.id, versionId))
   }
@@ -83,6 +292,30 @@ export class VersioningQueries {
       .select({ n: count() })
       .from(customFilesVersions)
       .where(and(eq(customFilesVersions.checksum, checksum), eq(customFilesVersions.versionsRoot, versionsRoot)))
+    return Number(row?.n ?? 0)
+  }
+
+  // The same refcount asked of a SET of roots at once, for the blob sweep's
+  // rename tripwire (#471).
+  //
+  // WHY A SECOND, DELIBERATELY UNSCOPED COUNT EXISTS. `countByBlob` answers
+  // "does anything in THIS root still need these bytes", which is the right
+  // question while the rows and the disk agree. After an unrepointed rename
+  // they do not: the store physically moved with the home directory, so the
+  // blobs now sitting under `user:bob` are the very bytes `user:alice`'s rows
+  // describe, and the per-root count answers 0 for every one of them. This asks
+  // the only question that distinguishes that from a genuine orphan — "is there
+  // a row in a root whose store has GONE MISSING that names these bytes" — and
+  // the caller passes exactly that set of stranded roots.
+  //
+  // Empty set is a short-circuit rather than an `IN ()`: on a healthy instance
+  // there are no stranded roots and this must cost nothing.
+  async countByBlobInRoots(checksum: string, versionsRoots: string[]): Promise<number> {
+    if (!versionsRoots.length) return 0
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.checksum, checksum), inArray(customFilesVersions.versionsRoot, versionsRoots)))
     return Number(row?.n ?? 0)
   }
 
@@ -357,6 +590,7 @@ function columnsOf() {
     mtime: customFilesVersions.mtime,
     createdAt: customFilesVersions.createdAt,
     authorId: customFilesVersions.authorId,
+    contentAuthorId: customFilesVersions.contentAuthorId,
     origin: customFilesVersions.origin,
     label: customFilesVersions.label
   }

@@ -95,8 +95,32 @@ export const customFilesVersions = mysqlTable(
     createdAt: datetime('createdAt', { mode: 'date' })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
-    // Nullable for system-originated snapshots (no acting user).
+    // WHO REPLACED THE CONTENT THIS ROW HOLDS — not who wrote it. A row is
+    // minted by the write that destroyed its bytes, so this names the
+    // destroyer. Nullable for system-originated snapshots (no acting user).
+    //
+    // It is the coalescing tuple's second element and the newest row's value is
+    // what names the author of the LIVE content, so it stays exactly as it is.
+    // For display, see `contentAuthorId`.
     authorId: bigint('authorId', { mode: 'number', unsigned: true }).references(() => users.id, { onDelete: 'set null' }),
+    // WHO WROTE THE CONTENT THIS ROW HOLDS (#491) — i.e. who last put these
+    // bytes in the live file, which for a restore is the person who restored
+    // them. This is the author a version list must show; `authorId` showed the
+    // person who came next, so every row was attributed to the wrong user.
+    //
+    // RECORDED AT WRITE TIME, from the `authorId` of the newest row for this
+    // file at the instant of insert — which is, by construction, the write that
+    // produced the content now being superseded. It deliberately is NOT derived
+    // on read by shifting the list by one: thinning removes rows, so row n-1 is
+    // not necessarily the row that actually preceded n, and the shift would
+    // start lying silently as soon as history is thinned (thinning spec §8).
+    //
+    // Null means "unknown", and is honest in three cases: a file's first
+    // version has no predecessor to name, the previous write was
+    // system-originated, and every row written BEFORE this column existed —
+    // those were not backfilled, because the only available backfill is exactly
+    // the read-time shift the paragraph above rules out.
+    contentAuthorId: bigint('contentAuthorId', { mode: 'number', unsigned: true }).references(() => users.id, { onDelete: 'set null' }),
     // Which write path produced this snapshot. One value per destructive entry
     // point enumerated in ADR §4 — `web-patch` and `sync-make` exist because
     // saveMultipart's PATCH branch and mkFile(overwrite=true) are separate

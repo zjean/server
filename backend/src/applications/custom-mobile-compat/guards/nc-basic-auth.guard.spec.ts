@@ -1,8 +1,10 @@
 import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
+import { ThrottlerException } from '@nestjs/throttler'
 import { PinoLogger } from 'nestjs-pino'
 import { Cache } from '../../../infrastructure/cache/cache.service'
 import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
+import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcBasicAuthGuard, parseBasicAuth } from './nc-basic-auth.guard'
@@ -44,7 +46,7 @@ describe(NcBasicAuthGuard.name, () => {
   let guard: NcBasicAuthGuard
   let usersQueries: { from: Mock }
   let usersManager: { validateAppPassword: Mock; validateUserAccess: Mock }
-  let cache: { get: Mock; set: Mock }
+  let cache: { get: Mock; set: Mock; consumeRateLimit: Mock }
   let logger: { warn: Mock; error: Mock; info: Mock }
   let module: TestingModule
 
@@ -53,7 +55,11 @@ describe(NcBasicAuthGuard.name, () => {
     // validateUserAccess resolves by default = 'account is allowed'. It throws
     // for locked/deactivated/guest-link accounts, which the guard must honour.
     usersManager = { validateAppPassword: vi.fn(), validateUserAccess: vi.fn().mockResolvedValue(undefined) }
-    cache = { get: vi.fn().mockResolvedValue(undefined), set: vi.fn().mockResolvedValue(true) }
+    cache = {
+      get: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn().mockResolvedValue(true),
+      consumeRateLimit: vi.fn().mockResolvedValue({ totalHits: 1, timeToExpire: 60, isBlocked: false, timeToBlockExpire: 0 })
+    }
     logger = { warn: vi.fn(), error: vi.fn(), info: vi.fn() }
 
     module = await Test.createTestingModule({
@@ -191,6 +197,87 @@ describe(NcBasicAuthGuard.name, () => {
       await expect(guard.canActivate(ctx)).resolves.toBe(true)
       expect(usersManager.validateUserAccess).toHaveBeenCalled()
       expect((req.user as { login: string }).login).toBe('alice')
+    })
+  })
+
+  // #477.1 — unauthenticated bcrypt CPU exhaustion.
+  //
+  // `validateAppPassword` bcrypt(10)s the presented password against up to
+  // MAX_MOBILE_PASSWORDS stored hashes, and the guard's failure cache is keyed
+  // on the credential PAIR — so an attacker who never repeats a password never
+  // hits it and never pays for the previous attempt. This guard was a copy of
+  // AuthBasicStrategy minus exactly its per-IP limiter.
+  describe('per-IP rate limit on cache misses', () => {
+    beforeEach(() => {
+      usersQueries.from.mockResolvedValue({ id: 7, login: 'alice', isActive: true })
+      usersManager.validateAppPassword.mockResolvedValue(true)
+    })
+
+    it('consumes one unit of the per-IP budget before doing any password work', async () => {
+      const { ctx } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).resolves.toBe(true)
+      expect(cache.consumeRateLimit).toHaveBeenCalledWith(
+        expect.any(String),
+        NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.ttl,
+        NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.limit,
+        NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration
+      )
+    })
+
+    it('refuses a blocked caller WITHOUT reaching bcrypt or the DB, and says when to come back', async () => {
+      cache.consumeRateLimit.mockResolvedValue({ totalHits: 61, timeToExpire: 60, isBlocked: true, timeToBlockExpire: 60 })
+      const { ctx, res } = makeContext(basic('alice', 'anything'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
+      expect(usersQueries.from).not.toHaveBeenCalled()
+      expect(usersManager.validateAppPassword).not.toHaveBeenCalled()
+      // ThrottlerGuard sets Retry-After before throwing this exception; a
+      // guard that throws it directly has to do so itself. On the DAV surface
+      // it is the one part of a 429 a stock NC client can act on.
+      expect(res.headers['Retry-After']).toBe('60')
+    })
+
+    it('falls back to the configured block when the remaining time rounds to zero', async () => {
+      cache.consumeRateLimit.mockResolvedValue({ totalHits: 61, timeToExpire: 60, isBlocked: true, timeToBlockExpire: 0 })
+      const { ctx, res } = makeContext(basic('alice', 'anything'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
+      // `Retry-After: 0` reads as "retry immediately", which is the opposite
+      // of what a block means.
+      expect(res.headers['Retry-After']).toBe(String(NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration / 1000))
+    })
+
+    it('never reads X-Forwarded-For itself — the bucket is whatever Fastify resolved', async () => {
+      // The guard reads X-Forwarded-For to LOG a useful address. Reading it
+      // HERE would hand every attacker an unlimited supply of fresh budgets,
+      // one per header value, whatever the deployment looks like.
+      //
+      // What this does NOT prove: `req.ip` is itself derived from the
+      // forwarded chain when `server.trustProxy` is truthy (its default), so
+      // a deployment with no reverse proxy in front remains re-bucketable —
+      // the same deployment contract upstream's own per-IP limiters carry.
+      const { ctx } = makeContext(basic('alice', 'good-app-password'))
+      const spoofed = makeContext(basic('bob', 'good-app-password'))
+      spoofed.req.headers['x-forwarded-for'] = '203.0.113.9'
+      await guard.canActivate(ctx)
+      await guard.canActivate(spoofed.ctx)
+      const [[keyA], [keyB]] = cache.consumeRateLimit.mock.calls
+      expect(keyA).toBe(keyB)
+    })
+
+    it('spends nothing when the credentials hit the positive cache', async () => {
+      // Every NC request is authenticated and the client floods PROPFINDs
+      // during sync; metering the cached path would throttle honest clients
+      // long before it inconvenienced an attacker.
+      cache.get.mockResolvedValue({ id: 7, login: 'alice' })
+      const { ctx } = makeContext(basic('alice', 'good-app-password'))
+      await expect(guard.canActivate(ctx)).resolves.toBe(true)
+      expect(cache.consumeRateLimit).not.toHaveBeenCalled()
+    })
+
+    it('spends nothing when the credentials hit the negative cache', async () => {
+      cache.get.mockResolvedValue(null)
+      const { ctx } = makeContext(basic('alice', 'wrong'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(HttpException)
+      expect(cache.consumeRateLimit).not.toHaveBeenCalled()
     })
   })
 })

@@ -1,7 +1,13 @@
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { FileError } from '../../files/models/file-error'
 import { VERSIONS_ADMIN_TOP_ROOTS } from '../constants/versioning'
-import { VersionsPurgeResult, VersionsRootUsage, VersionsStorageSummary } from '../interfaces/version.interface'
+import {
+  VersionsPurgeResult,
+  VersionsRepointResult,
+  VersionsRootKind,
+  VersionsRootUsage,
+  VersionsStorageSummary
+} from '../interfaces/version.interface'
 import { parseVersionsRoot } from '../utils/paths'
 import { VersioningQueries } from './versioning-queries.service'
 import { VersionsRetention } from './versions-retention.service'
@@ -23,6 +29,8 @@ import { VersionsRetention } from './versions-retention.service'
 // belongs one layer down.
 @Injectable()
 export class VersionsAdminService {
+  private readonly logger = new Logger(VersionsAdminService.name)
+
   constructor(
     private readonly queries: VersioningQueries,
     private readonly retention: VersionsRetention
@@ -54,6 +62,46 @@ export class VersionsAdminService {
     return { ...totals, topRoots }
   }
 
+  // Repoints every version row of one root at another (#471).
+  //
+  // WHY AN OPERATOR ENDPOINT EXISTS AT ALL. Both rename paths now repoint
+  // their rows, so this is not needed for a rename performed by this code. It
+  // is needed for every install that renamed a login or a space alias BEFORE
+  // that shipped: their rows still name a root whose store has gone, so every
+  // download and restore under it 404s, and the nightly sweep's error log
+  // tells them so every night. Without this they would have exactly two
+  // options — an UPDATE against the production database by hand, or living
+  // with unreadable history — and the first is precisely the kind of surgery
+  // this admin surface exists to make unnecessary.
+  //
+  // IT REPOINTS AND NOTHING ELSE. No blob is touched, no row is deleted, and
+  // no file is moved: the only effect is which store the rows say their bytes
+  // live in. That makes a mistaken call recoverable by calling it again the
+  // other way round, which is the property worth having on a repair an
+  // operator runs from a log line at 3AM.
+  //
+  // Both ends are validated against parseVersionsRoot — the same parser that
+  // turns a root into a filesystem path — and the KIND must match. A user's
+  // blobs live under `usersPath/<login>/versions` and a space's under
+  // `spacesPath/<alias>/versions`; repointing across that line would produce
+  // rows that resolve to a path their bytes were never in, i.e. the exact
+  // breakage this repairs. A no-op (same root both ends) is refused rather
+  // than answered 0, because it can only be a mistake and a silent 0 reads
+  // like "there was nothing to fix".
+  async repointRoot(fromVersionsRoot: string, toVersionsRoot: string): Promise<VersionsRepointResult> {
+    const from = this.requireRoot(fromVersionsRoot)
+    const to = this.requireRoot(toVersionsRoot)
+    if (from.kind !== to.kind) {
+      throw new FileError(HttpStatus.BAD_REQUEST, `cannot repoint a ${from.kind} root at a ${to.kind} root: their stores are in different trees`)
+    }
+    if (fromVersionsRoot === toVersionsRoot) {
+      throw new FileError(HttpStatus.BAD_REQUEST, 'the source and target versions roots are the same')
+    }
+    const moved = await this.queries.renameRoot(fromVersionsRoot, toVersionsRoot)
+    this.logger.log({ tag: this.repointRoot.name, msg: `repointed ${moved} version(s) from ${fromVersionsRoot} to ${toVersionsRoot}` })
+    return { fromVersionsRoot, toVersionsRoot, moved }
+  }
+
   // Purges one root's unnamed history. See VersionsRetention.purgeRoot for why
   // it goes through the retention path and why named versions survive.
   //
@@ -66,10 +114,18 @@ export class VersionsAdminService {
     // — blob paths are built from each ROW's recorded root — so this is defence
     // in depth rather than the only barrier, which is the right amount for a
     // destructive endpoint that takes a free-text identifier.
-    if (!parseVersionsRoot(versionsRoot)) {
-      throw new FileError(HttpStatus.BAD_REQUEST, `'${versionsRoot}' is not a versions root ('user:<login>' or 'space:<alias>')`)
-    }
+    this.requireRoot(versionsRoot)
     const { removed, removedBytes, keptLabeled } = await this.retention.purgeRoot(versionsRoot)
     return { versionsRoot, removed, removedBytes, keptLabeled }
+  }
+
+  // One rejection for every operator endpoint that takes a root, so the two
+  // cannot drift into disagreeing about what a valid root is.
+  private requireRoot(versionsRoot: string): { kind: VersionsRootKind; name: string } {
+    const parsed = parseVersionsRoot(versionsRoot)
+    if (!parsed) {
+      throw new FileError(HttpStatus.BAD_REQUEST, `'${versionsRoot}' is not a versions root ('user:<login>' or 'space:<alias>')`)
+    }
+    return parsed
   }
 }

@@ -1,19 +1,23 @@
+import { clearLoginFlows, createInMemoryCache, type InMemoryCache } from '../utils/nc-cache.fixture'
 import { NcLoginFlowService } from './nc-login-flow.service'
 
+// The store is the cache (#482), so every case here drives the service through
+// a real in-memory Cache double rather than a mock. The point of the double is
+// that it actually stores: a service that kept its state in a process-local
+// Map would still pass a `vi.fn()` mock, which is how the single-replica bug
+// survived the original suite.
 describe(NcLoginFlowService.name, () => {
   let svc: NcLoginFlowService
+  let cache: InMemoryCache
 
   beforeEach(() => {
-    svc = new NcLoginFlowService()
+    cache = createInMemoryCache()
+    svc = new NcLoginFlowService(cache)
   })
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
-  it('initiate returns unique poll + login tokens', () => {
-    const a = svc.initiate()
-    const b = svc.initiate()
+  it('initiate returns unique poll + login tokens', async () => {
+    const a = await svc.initiate()
+    const b = await svc.initiate()
     expect(a.pollToken).toEqual(expect.any(String))
     expect(a.loginToken).toEqual(expect.any(String))
     expect(a.pollToken).not.toEqual(a.loginToken)
@@ -23,169 +27,234 @@ describe(NcLoginFlowService.name, () => {
     expect(a.credentials).toBeNull()
   })
 
-  it('findByLoginToken returns null for an unknown token', () => {
-    expect(svc.findByLoginToken('does-not-exist')).toBeNull()
+  it('findByLoginToken returns null for an unknown token', async () => {
+    await expect(svc.findByLoginToken('does-not-exist')).resolves.toBeNull()
   })
 
-  it('findByLoginToken returns the flow for a known token', () => {
-    const flow = svc.initiate()
-    expect(svc.findByLoginToken(flow.loginToken)).toBe(flow)
+  it('findByLoginToken returns the flow for a known token', async () => {
+    const flow = await svc.initiate()
+    await expect(svc.findByLoginToken(flow.loginToken)).resolves.toEqual(flow)
   })
 
   // Drive a flow to 'authenticated' the way the controllers do.
-  function authenticated(svcRef: NcLoginFlowService) {
-    const flow = svcRef.initiate('Nextcloud-iOS/33.1')
-    const browserToken = svcRef.bindBrowser(flow.loginToken, undefined) as string
-    const grantToken = svcRef.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, browserToken) as string
+  async function authenticated(svcRef: NcLoginFlowService) {
+    const flow = await svcRef.initiate('Nextcloud-iOS/33.1')
+    const browserToken = (await svcRef.bindBrowser(flow.loginToken, undefined)) as string
+    const grantToken = (await svcRef.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, browserToken)) as string
     return { flow, browserToken, grantToken }
   }
 
-  it('completeWithCredentials requires an AUTHENTICATED state, not merely a live flow', () => {
-    const flow = svc.initiate()
+  // #482 — the whole reason this store moved off a process-local Map.
+  //
+  // A login flow is driven by two HTTP clients over four+ requests: the mobile
+  // app initiates and polls, the browser authenticates and grants. Behind a
+  // load balancer those land on different replicas. Two services sharing one
+  // cache IS that deployment, so a regression to per-process state fails here
+  // and nowhere else.
+  describe('replica safety', () => {
+    it('a flow completed on one replica is polled successfully from another', async () => {
+      const replicaA = new NcLoginFlowService(cache)
+      const replicaB = new NcLoginFlowService(cache)
+      const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
+
+      // The app calls POST /login/v2 — replica A answers.
+      const flow = await replicaA.initiate('Nextcloud-Android/3.29')
+      // The browser opens the flow page and authenticates — replica B answers.
+      const browserToken = (await replicaB.bindBrowser(flow.loginToken, undefined)) as string
+      const grantToken = (await replicaB.markAuthenticated(flow.loginToken, { id: 7, login: 'u' }, browserToken)) as string
+      await expect(replicaB.consumeGrant(flow.loginToken, grantToken, browserToken)).resolves.toEqual({ id: 7, login: 'u' })
+      await expect(replicaB.completeWithCredentials(flow.loginToken, creds)).resolves.toBe(true)
+
+      // The app's poll lands back on replica A, which never saw any of that.
+      await expect(replicaA.consumeByPollToken(flow.pollToken)).resolves.toEqual(creds)
+    })
+
+    it('the browser binding survives the hop to another replica', async () => {
+      const replicaA = new NcLoginFlowService(cache)
+      const replicaB = new NcLoginFlowService(cache)
+      const flow = await replicaA.initiate()
+      const browserToken = (await replicaA.bindBrowser(flow.loginToken, undefined)) as string
+      // Same browser, different replica: accepted.
+      await expect(replicaB.bindBrowser(flow.loginToken, browserToken)).resolves.toBe(browserToken)
+      // Different browser, different replica: still refused.
+      await expect(replicaB.bindBrowser(flow.loginToken, 'someone-elses-cookie')).resolves.toBeNull()
+    })
+
+    it('two replicas racing the same grant mint at most one credential', async () => {
+      const replicaA = new NcLoginFlowService(cache)
+      const replicaB = new NcLoginFlowService(cache)
+      const { flow, browserToken, grantToken } = await authenticated(svc)
+      const [first, second] = await Promise.all([
+        replicaA.consumeGrant(flow.loginToken, grantToken, browserToken),
+        replicaB.consumeGrant(flow.loginToken, grantToken, browserToken)
+      ])
+      expect([first, second].filter(Boolean)).toHaveLength(1)
+    })
+
+    it('two replicas racing the same poll hand over the credentials once', async () => {
+      const replicaA = new NcLoginFlowService(cache)
+      const replicaB = new NcLoginFlowService(cache)
+      const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
+      const { flow, browserToken, grantToken } = await authenticated(svc)
+      await svc.consumeGrant(flow.loginToken, grantToken, browserToken)
+      await svc.completeWithCredentials(flow.loginToken, creds)
+      const [first, second] = await Promise.all([replicaA.consumeByPollToken(flow.pollToken), replicaB.consumeByPollToken(flow.pollToken)])
+      expect([first, second].filter(Boolean)).toEqual([creds])
+    })
+  })
+
+  it('completeWithCredentials requires an AUTHENTICATED state, not merely a live flow', async () => {
+    const flow = await svc.initiate()
     const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
     // A freshly-initiated flow must not be completable: that was the hole —
     // credentials could be attached before anyone had authorised anything.
-    expect(svc.completeWithCredentials(flow.loginToken, creds)).toBe(false)
+    await expect(svc.completeWithCredentials(flow.loginToken, creds)).resolves.toBe(false)
 
-    const a = authenticated(svc)
-    expect(svc.completeWithCredentials(a.flow.loginToken, creds)).toBe(true)
+    const a = await authenticated(svc)
+    await expect(svc.completeWithCredentials(a.flow.loginToken, creds)).resolves.toBe(true)
     // second call should fail — flow is now 'ready', not 'authenticated'
-    expect(svc.completeWithCredentials(a.flow.loginToken, creds)).toBe(false)
+    await expect(svc.completeWithCredentials(a.flow.loginToken, creds)).resolves.toBe(false)
   })
 
-  it('completeWithCredentials returns false for unknown loginToken', () => {
-    expect(svc.completeWithCredentials('nope', { server: 's', loginName: 'l', appPassword: 'p' })).toBe(false)
+  it('completeWithCredentials returns false for unknown loginToken', async () => {
+    await expect(svc.completeWithCredentials('nope', { server: 's', loginName: 'l', appPassword: 'p' })).resolves.toBe(false)
   })
 
-  it('consumeByPollToken returns credentials exactly once then null', () => {
-    const { flow } = authenticated(svc)
+  it('consumeByPollToken returns credentials exactly once then null', async () => {
+    const { flow } = await authenticated(svc)
     const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull() // authenticated, not granted
-    svc.completeWithCredentials(flow.loginToken, creds)
-    const first = svc.consumeByPollToken(flow.pollToken)
-    expect(first).toEqual(creds)
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull() // authenticated, not granted
+    await svc.completeWithCredentials(flow.loginToken, creds)
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toEqual(creds)
     // subsequent polls return null
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
   })
 
-  it('consumeByPollToken returns null for an unknown poll token', () => {
-    expect(svc.consumeByPollToken('missing')).toBeNull()
+  it('consumeByPollToken returns null for an unknown poll token', async () => {
+    await expect(svc.consumeByPollToken('missing')).resolves.toBeNull()
   })
 
-  it('evicts expired flows automatically (findByLoginToken)', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-04-23T12:00:00Z'))
-    const flow = svc.initiate()
-    // advance past the 20-minute TTL (21 minutes).
-    vi.setSystemTime(new Date('2026-04-23T12:21:00Z'))
-    expect(svc.findByLoginToken(flow.loginToken)).toBeNull()
+  it('evicts expired flows automatically (findByLoginToken)', async () => {
+    const flow = await svc.initiate()
+    cache.advance(21 * 60 * 1000) // past the 20-minute TTL
+    await expect(svc.findByLoginToken(flow.loginToken)).resolves.toBeNull()
   })
 
-  it('evicts expired flows automatically (consumeByPollToken)', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-04-23T12:00:00Z'))
-    const flow = svc.initiate()
-    svc.completeWithCredentials(flow.loginToken, { server: 's', loginName: 'l', appPassword: 'p' })
-    vi.setSystemTime(new Date('2026-04-23T12:21:00Z'))
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
+  it('evicts expired flows automatically (consumeByPollToken)', async () => {
+    const { flow, browserToken, grantToken } = await authenticated(svc)
+    await svc.consumeGrant(flow.loginToken, grantToken, browserToken)
+    await svc.completeWithCredentials(flow.loginToken, { server: 's', loginName: 'l', appPassword: 'p' })
+    cache.advance(21 * 60 * 1000)
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
   })
 
-  it('keeps the store bounded when many flows are created', () => {
-    // Create a generous number without hard-coding the MAX. We just assert
-    // that after the internal cap is hit, the store doesn't grow unboundedly
-    // and older entries are dropped in favor of newer ones.
-    const createdLoginTokens: string[] = []
-    for (let i = 0; i < 6000; i++) {
-      createdLoginTokens.push(svc.initiate().loginToken)
-    }
-    // Earliest tokens should have been evicted.
-    expect(svc.findByLoginToken(createdLoginTokens[0])).toBeNull()
-    // Most recent token should still be present.
-    expect(svc.findByLoginToken(createdLoginTokens[createdLoginTokens.length - 1])).not.toBeNull()
+  it('a re-saved flow does not have its 20-minute life extended', async () => {
+    // Every mutator writes the flow back, so a TTL computed as "20 minutes from
+    // now" would let a flow that keeps being touched live forever.
+    const flow = await svc.initiate()
+    cache.advance(19 * 60 * 1000)
+    await svc.bindBrowser(flow.loginToken, undefined)
+    cache.advance(2 * 60 * 1000) // 21 minutes since initiate()
+    await expect(svc.findByLoginToken(flow.loginToken)).resolves.toBeNull()
   })
 
-  it('clearForTests purges all state', () => {
-    const flow = svc.initiate()
-    svc.clearForTests()
-    expect(svc.findByLoginToken(flow.loginToken)).toBeNull()
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
+  it('expired flows leave nothing behind in the cache', async () => {
+    // The old Map had a hand-rolled MAX_FLOWS + evictOldest, which #477 called
+    // out as a DoS: 5000 unauthenticated POSTs dropped every in-flight flow.
+    // Bounding is the cache's TTL now, so the store must actually drain.
+    for (let i = 0; i < 50; i++) await svc.initiate()
+    expect(cache.size()).toBeGreaterThan(0)
+    cache.advance(21 * 60 * 1000)
+    expect(cache.size()).toBe(0)
   })
 
-  it('initiate sets oidc to null', () => {
-    const flow = svc.initiate()
+  it('the spec helper purges all state, and the service exposes no such hook', async () => {
+    // `clearForTests()` used to be a public method on the injectable. It is a
+    // test concern doing an O(keyspace) `keys()` scan, so it moved to the
+    // fixture; this asserts both halves — the helper works, and the
+    // production surface no longer carries it.
+    const flow = await svc.initiate()
+    expect((svc as unknown as Record<string, unknown>).clearForTests).toBeUndefined()
+    await clearLoginFlows(cache)
+    await expect(svc.findByLoginToken(flow.loginToken)).resolves.toBeNull()
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
+  })
+
+  it('initiate sets oidc to null', async () => {
+    const flow = await svc.initiate()
     expect(flow.oidc).toBeNull()
   })
 
-  it('markOidcPending stores codeVerifier+nonce and flips status', () => {
-    const flow = svc.initiate()
-    expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })).toBe(true)
-    const seen = svc.findByLoginToken(flow.loginToken)
+  it('markOidcPending stores codeVerifier+nonce and flips status', async () => {
+    const flow = await svc.initiate()
+    await expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })).resolves.toBe(true)
+    const seen = await svc.findByLoginToken(flow.loginToken)
     expect(seen?.status).toBe('oidc-pending')
     expect(seen?.oidc).toEqual({ codeVerifier: 'cv', nonce: 'n' })
   })
 
-  it('markOidcPending refuses non-pending flows', () => {
-    const flow = svc.initiate()
-    svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+  it('markOidcPending refuses non-pending flows', async () => {
+    const flow = await svc.initiate()
+    await svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
     // already 'oidc-pending' — second call must fail
-    expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'x', nonce: 'y' })).toBe(false)
+    await expect(svc.markOidcPending(flow.loginToken, { codeVerifier: 'x', nonce: 'y' })).resolves.toBe(false)
   })
 
-  it('markOidcPending returns false for unknown loginToken', () => {
-    expect(svc.markOidcPending('nope', { codeVerifier: 'cv', nonce: 'n' })).toBe(false)
+  it('markOidcPending returns false for unknown loginToken', async () => {
+    await expect(svc.markOidcPending('nope', { codeVerifier: 'cv', nonce: 'n' })).resolves.toBe(false)
   })
 
-  it('completeWithCredentials REFUSES an oidc-pending flow — the IdP proving identity is not a grant', () => {
-    const flow = svc.initiate()
-    const browserToken = svc.bindBrowser(flow.loginToken, undefined) as string
-    svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
+  it('completeWithCredentials REFUSES an oidc-pending flow — the IdP proving identity is not a grant', async () => {
+    const flow = await svc.initiate()
+    const browserToken = (await svc.bindBrowser(flow.loginToken, undefined)) as string
+    await svc.markOidcPending(flow.loginToken, { codeVerifier: 'cv', nonce: 'n' })
     const creds = { server: 'https://x', loginName: 'u', appPassword: 'p' }
-    expect(svc.completeWithCredentials(flow.loginToken, creds)).toBe(false)
-    expect(svc.consumeByPollToken(flow.pollToken)).toBeNull()
+    await expect(svc.completeWithCredentials(flow.loginToken, creds)).resolves.toBe(false)
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
 
     // It becomes completable only after the user is marked authenticated and
     // the grant is consumed.
-    const grantToken = svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, browserToken) as string
-    expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).toEqual({ id: 1, login: 'u' })
-    expect(svc.completeWithCredentials(flow.loginToken, creds)).toBe(true)
-    expect(svc.consumeByPollToken(flow.pollToken)).toEqual(creds)
+    const grantToken = (await svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, browserToken)) as string
+    await expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).resolves.toEqual({ id: 1, login: 'u' })
+    await expect(svc.completeWithCredentials(flow.loginToken, creds)).resolves.toBe(true)
+    await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toEqual(creds)
   })
 
   describe('browser binding', () => {
-    it('binds on first sight and accepts the same browser afterwards', () => {
-      const flow = svc.initiate()
-      const token = svc.bindBrowser(flow.loginToken, undefined) as string
+    it('binds on first sight and accepts the same browser afterwards', async () => {
+      const flow = await svc.initiate()
+      const token = (await svc.bindBrowser(flow.loginToken, undefined)) as string
       expect(token).toEqual(expect.any(String))
-      expect(svc.bindBrowser(flow.loginToken, token)).toBe(token)
+      await expect(svc.bindBrowser(flow.loginToken, token)).resolves.toBe(token)
     })
 
-    it('refuses a second browser', () => {
-      const flow = svc.initiate()
-      svc.bindBrowser(flow.loginToken, undefined)
-      expect(svc.bindBrowser(flow.loginToken, undefined)).toBeNull()
-      expect(svc.bindBrowser(flow.loginToken, 'someone-elses-cookie')).toBeNull()
+    it('refuses a second browser', async () => {
+      const flow = await svc.initiate()
+      await svc.bindBrowser(flow.loginToken, undefined)
+      await expect(svc.bindBrowser(flow.loginToken, undefined)).resolves.toBeNull()
+      await expect(svc.bindBrowser(flow.loginToken, 'someone-elses-cookie')).resolves.toBeNull()
     })
 
-    it('markAuthenticated and consumeGrant both require the bound browser', () => {
-      const flow = svc.initiate()
-      const token = svc.bindBrowser(flow.loginToken, undefined) as string
-      expect(svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, 'wrong')).toBeNull()
-      const grantToken = svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, token) as string
-      expect(svc.consumeGrant(flow.loginToken, grantToken, 'wrong')).toBeNull()
-      expect(svc.consumeGrant(flow.loginToken, grantToken, token)).toEqual({ id: 1, login: 'u' })
+    it('markAuthenticated and consumeGrant both require the bound browser', async () => {
+      const flow = await svc.initiate()
+      const token = (await svc.bindBrowser(flow.loginToken, undefined)) as string
+      await expect(svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, 'wrong')).resolves.toBeNull()
+      const grantToken = (await svc.markAuthenticated(flow.loginToken, { id: 1, login: 'u' }, token)) as string
+      await expect(svc.consumeGrant(flow.loginToken, grantToken, 'wrong')).resolves.toBeNull()
+      await expect(svc.consumeGrant(flow.loginToken, grantToken, token)).resolves.toEqual({ id: 1, login: 'u' })
     })
 
-    it('a grant is single-use', () => {
-      const { flow, browserToken, grantToken } = authenticated(svc)
-      expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).not.toBeNull()
-      expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).toBeNull()
+    it('a grant is single-use', async () => {
+      const { flow, browserToken, grantToken } = await authenticated(svc)
+      await expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).resolves.not.toBeNull()
+      await expect(svc.consumeGrant(flow.loginToken, grantToken, browserToken)).resolves.toBeNull()
     })
 
-    it('records the initiating client name for the grant page', () => {
-      expect(svc.initiate('Nextcloud-Android/3.29').clientName).toBe('Nextcloud-Android/3.29')
-      expect(svc.initiate(undefined).clientName).toBe('an unidentified application')
-      expect(svc.initiate('x'.repeat(500)).clientName.length).toBeLessThanOrEqual(120)
+    it('records the initiating client name for the grant page', async () => {
+      expect((await svc.initiate('Nextcloud-Android/3.29')).clientName).toBe('Nextcloud-Android/3.29')
+      expect((await svc.initiate(undefined)).clientName).toBe('an unidentified application')
+      expect((await svc.initiate('x'.repeat(500))).clientName.length).toBeLessThanOrEqual(120)
     })
   })
 })
