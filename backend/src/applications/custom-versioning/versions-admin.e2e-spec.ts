@@ -1,7 +1,6 @@
 import { HttpStatus } from '@nestjs/common'
 import { USER_ROLE } from '../users/constants/user'
 import { API_VERSIONS_ADMIN_PURGE, API_VERSIONS_ADMIN_STORAGE } from './constants/routes'
-import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
 import type { VersionsPurgeResult, VersionsStorageSummary } from './interfaces/version.interface'
 import { setupVersionsE2E, type VersionsActor, type VersionsE2EContext } from './utils/versions-e2e.fixture'
 
@@ -193,10 +192,14 @@ describe('versions admin surface (e2e)', () => {
 
     /* ------------------------------------------------------------ feature flag */
 
-    // ADR §13: the same 404 and the same message as every other versions route
-    // while the feature is off, so the panel can say "versioning is disabled
-    // here" instead of rendering an empty table over a working instance.
-    it('404s with the shared message while versioning is off, and purges nothing', async () => {
+    // THESE TWO ROUTES DELIBERATELY DO NOT FOLLOW ADR §13 (#490). Every
+    // per-file endpoint 404s with VERSIONS_DISABLED_MESSAGE while the feature
+    // is off, and should — there is no history to offer a user. These are the
+    // operator's only instrument for the store that already exists, and the
+    // flag goes off precisely when it is needed: an operator disabling
+    // versioning over a quota complaint, with the bytes still charged by the
+    // quota walk. 404ing here left `rm -rf` + `DELETE FROM` as the only remedy.
+    it('serves the storage summary and actually purges while versioning is off', async () => {
       const rel = 'admin-flag-off.txt'
       await seedHistory(rel)
       // Read back through the QUERIES, not through versionsOf: listVersions is
@@ -208,12 +211,15 @@ describe('versions admin surface (e2e)', () => {
       e2e.config.enabled = false
 
       const storage = await get(operator)
-      expect(storage.statusCode).toBe(HttpStatus.NOT_FOUND)
-      expect(storage.json().message).toBe(VERSIONS_DISABLED_MESSAGE)
+      expect(storage.statusCode).toBe(HttpStatus.OK)
 
       const purged = await purge(operator, root())
-      expect(purged.statusCode).toBe(HttpStatus.NOT_FOUND)
-      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(before.count)
+      expect(purged.statusCode).toBe(HttpStatus.CREATED)
+      expect((purged.json() as VersionsPurgeResult).removed).toBeGreaterThan(0)
+      // The reclaim is what matters, not the status: a 201 over a no-op would
+      // leave the operator exactly as stuck as the 404 did.
+      const after = await e2e.versioningQueries.usageByRoot(root())
+      expect(after.count).toBeLessThan(before.count)
     })
   })
 })

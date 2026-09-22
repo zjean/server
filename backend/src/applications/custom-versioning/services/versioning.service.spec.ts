@@ -1390,6 +1390,8 @@ describe(VersioningService.name, () => {
 
   /* ------------------------------------------------------------------ disabled */
 
+  // The flag gates CREATION and the by-file API. It does NOT gate the purge
+  // paths — see the two cases in the purge section (#490).
   it('no-ops every entry point while the feature flag is off', async () => {
     versionsConfig.enabled = false
     const space = personalSpace()
@@ -1400,8 +1402,6 @@ describe(VersioningService.name, () => {
 
     expect(await service.listVersions(user, space)).toEqual([])
     expect(await service.versionsUsage(user, space)).toEqual({ used: 0, ceiling: null, count: 0 })
-    await service.purgeForFile(FILE_ID)
-    await service.purgeForPath(space.dbFile, false)
     await expect(service.restoreVersion(user, space, 1)).rejects.toThrow(FileError)
     expect(service.enabled).toBe(false)
   })
@@ -2044,6 +2044,39 @@ describe(VersioningService.name, () => {
     expect(await blobFiles()).toHaveLength(2)
 
     await service.purgeForFile(FILE_ID)
+
+    expect(queries.rows).toHaveLength(0)
+    expect(await blobFiles()).toHaveLength(0)
+  })
+
+  // #490. Only CREATION is gated. Turning the flag off used to stop these two
+  // as well, so a permanent delete left the blobs behind forever: the FK
+  // cascade still removed the rows that were the only pointer to them, and the
+  // quota walk kept charging every byte. The read-back is against the table
+  // rather than listVersions, which returns [] while the flag is off and would
+  // pass for the wrong reason.
+  it('still purges a file’s versions and blobs while the feature flag is off', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await ageFile(120)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'v2')
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect(await blobFiles()).toHaveLength(2)
+
+    versionsConfig.enabled = false
+    await service.purgeForFile(FILE_ID)
+
+    expect(queries.rows).toHaveLength(0)
+    expect(await blobFiles()).toHaveLength(0)
+  })
+
+  it('still purges a deleted directory’s descendants while the feature flag is off', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    queries.resolveIds = [FILE_ID]
+    versionsConfig.enabled = false
+
+    await service.purgeForPath({ ownerId: user.id, path: 'docs', inTrash: true } as any, true)
 
     expect(queries.rows).toHaveLength(0)
     expect(await blobFiles()).toHaveLength(0)

@@ -6,31 +6,23 @@ import { Mock } from 'vitest'
 import { USER_ROLE } from '../users/constants/user'
 import { UserHaveRole } from '../users/decorators/roles.decorator'
 import { UserRolesGuard } from '../users/guards/roles.guard'
-import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
 import { PurgeVersionsRootDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
-import { VersioningService } from './services/versioning.service'
 import { VersionsAdminService } from './services/versions-admin.service'
 import { VersionsAdminController } from './versions-admin.controller'
 
 describe(VersionsAdminController.name, () => {
   let controller: VersionsAdminController
   let admin: { storageSummary: Mock; purgeRoot: Mock }
-  let versioning: { enabled: boolean }
 
   beforeEach(async () => {
     admin = {
       storageSummary: vi.fn().mockResolvedValue({ used: 0, labeledBytes: 0, count: 0, roots: 0, files: 0, topRoots: [] }),
       purgeRoot: vi.fn().mockResolvedValue({ versionsRoot: 'user:alice', removed: 0, removedBytes: 0, keptLabeled: 0 })
     }
-    versioning = { enabled: true }
-
     const moduleRef = await Test.createTestingModule({
       controllers: [VersionsAdminController],
-      providers: [
-        { provide: VersionsAdminService, useValue: admin },
-        { provide: VersioningService, useValue: versioning }
-      ]
+      providers: [{ provide: VersionsAdminService, useValue: admin }]
     })
       // The guard is exercised directly below rather than through the handlers.
       .overrideGuard(UserRolesGuard)
@@ -54,17 +46,19 @@ describe(VersionsAdminController.name, () => {
 
   /* ------------------------------------------------------------ feature flag */
 
-  // Same contract as every other versions endpoint (ADR §13), and with the same
-  // shared message, so the panel can say "versioning is off here" instead of
-  // rendering an empty table.
-  it('404s with the shared message while the feature is off, and does no work', async () => {
-    versioning.enabled = false
+  // #490. These two routes used to 404 with VERSIONS_DISABLED_MESSAGE while
+  // `files.versions.enabled` was false, like every per-file endpoint (ADR §13).
+  // That stranded the store: the flag goes off precisely when an operator is
+  // chasing quota, and 404ing here left `rm -rf` + `DELETE FROM` as the only
+  // way to reclaim bytes the quota walk still charges. The controller no longer
+  // reads the flag at all, which is what this asserts — it takes no
+  // VersioningService, so there is nothing left to consult.
+  it('serves the operator surface regardless of the feature flag', async () => {
+    await expect(controller.storage()).resolves.toBeDefined()
+    await expect(controller.purge({ versionsRoot: 'user:alice' })).resolves.toBeDefined()
 
-    await expect(controller.storage()).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND, message: VERSIONS_DISABLED_MESSAGE })
-    await expect(controller.purge({ versionsRoot: 'user:alice' })).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
-
-    expect(admin.storageSummary).not.toHaveBeenCalled()
-    expect(admin.purgeRoot).not.toHaveBeenCalled()
+    expect(admin.storageSummary).toHaveBeenCalled()
+    expect(admin.purgeRoot).toHaveBeenCalledWith('user:alice')
   })
 
   /* ----------------------------------------------------------- authorization */

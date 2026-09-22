@@ -133,10 +133,40 @@ describe(VersionsRetention.name, () => {
     await fs.rm(tmpRoot, { recursive: true, force: true })
   })
 
-  it('does nothing at all while the feature flag is off', async () => {
+  // #490. The flag gates the three SHAPING rules and nothing else. It used to
+  // gate the whole sweep, which stranded the store: disabling the feature —
+  // typically because of a quota complaint — stopped every reclaim path at
+  // once, while the quota walk kept charging every byte under versions/.
+  it('applies no shaping rule while the feature flag is off', async () => {
     versionsConfig.enabled = false
+    versionsConfig.retentionDays = { users: 1, spaces: 1 }
+    queries.distinctFileIdsByRoot.mockResolvedValue([100])
+
     await service.cleanVersions()
+
+    // Those three shape history that is still addressable; applying a policy to
+    // a store the operator has taken out of service would delete revisions they
+    // would find missing on re-enabling.
     expect(queries.distinctRoots).not.toHaveBeenCalled()
+    expect(queries.unlabeledOlderThan).not.toHaveBeenCalled()
+    expect(queries.distinctFileIdsByRoot).not.toHaveBeenCalled()
+    expect(versioning.evictUntilUnderCeiling).not.toHaveBeenCalled()
+  })
+
+  it('still reclaims orphan blobs and dangling rows while the feature flag is off', async () => {
+    versionsConfig.enabled = false
+    const orphan = await seedBlob('b'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    const dangling = row({ id: 77 })
+    queries.danglingRows.mockResolvedValue([dangling])
+
+    await service.cleanVersions()
+
+    // Neither rule can destroy reachable history by construction: an orphan
+    // blob is bytes no row points at, a dangling row is a row whose `files` row
+    // is already gone. They are pure reclaim, so the flag has no say.
+    await expect(fs.stat(orphan)).rejects.toThrow()
+    expect(dropped.map((r) => r.id)).toEqual([77])
   })
 
   /* --------------------------------------------------------- retentionDays */

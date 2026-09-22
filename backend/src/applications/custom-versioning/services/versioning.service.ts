@@ -840,8 +840,16 @@ export class VersioningService {
   /* ------------------------------------------------------------------ purge */
 
   // Purges every version of one file, blobs included.
+  //
+  // NOT GATED ON `files.versions.enabled` (#490). Only CREATION is: turning the
+  // flag off must stop new versions, never strand the ones already stored. The
+  // gate used to be here, so disabling the feature — typically *because of* a
+  // quota complaint — silently stopped reclaiming blobs on permanent delete,
+  // while the FK cascade still removed the rows that were the only remaining
+  // pointer to them. The bytes then kept counting against the user's quota with
+  // no reachable way to free them. Reaching this with no rows costs one indexed
+  // query and returns.
   async purgeForFile(fileId: number): Promise<void> {
-    if (!this.enabled) return
     await this.purgeForFileIds([fileId])
   }
 
@@ -851,8 +859,9 @@ export class VersioningService {
   // and afterwards the descendant ids are simply gone — deleteFiles removes
   // every child row in one regexp query, so there would be nothing left to
   // resolve and every child's history would leak (ADR §10).
+  //
+  // Not gated on the feature flag either — see purgeForFile.
   async purgeForPath(props: FileDBProps, isDir: boolean): Promise<void> {
-    if (!this.enabled) return
     try {
       const fileIds = await this.queries.resolveFileIdsForDelete(props, isDir)
       await this.purgeForFileIds(fileIds)

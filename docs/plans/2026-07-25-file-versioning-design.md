@@ -404,6 +404,21 @@ Trash coverage is the mechanism; document it rather than duplicating it. Revisit
 
 **The `FileRowEnsurer` is explicitly NOT gated by this flag.** Mobile-compat's `oc:fileid` correctness depends on it regardless of whether versioning is enabled — gating it would regress NC iOS previews (see the `nc-file-row-ensurer.service.ts:14-40` comment for what breaks). E2E-13 asserts the flag-off state *and* that the ensurer still functions.
 
+**CORRECTED (#490): "everything gates on the flag" stranded the store.** Turning the flag off after the feature had been used disabled every RECLAIM path at once — `purgeForFile` / `purgeForPath` on a permanent delete, the whole nightly sweep, and both admin routes — while `files-quota-manager`'s `dirSize` walk kept charging every byte under `versions/` to the user. Since the `files` FK cascade still removed the rows that were the only pointer to those blobs, the bytes became unreachable, and the only remedy left was the `rm -rf` + `DELETE FROM` surgery `VersionsRetention.purgeRoot` exists to make unnecessary. Operators disable this flag *because of* a quota complaint, so the failure is aimed squarely at the case it is used in.
+
+**What the flag gates now: creation, and the per-file API.** Specifically:
+
+| Path | Gated? |
+|---|---|
+| `snapshotBeforeOverwrite` (creation) | **yes** |
+| the per-file REST routes, and the NC `files_versions` capability | **yes** (unchanged — ADR §13's 404 contract) |
+| `retentionDays`, `thinning`, `quotaShare` (the nightly **shaping** rules) | **yes** — they delete history that is still addressable, and applying a shaping policy to a store taken out of service would remove revisions the operator would find missing on re-enabling |
+| `orphanBlobs`, `danglingRows` (the nightly **GC** rules) | **no** — pure reclaim: bytes no row points at, and rows whose `files` row is already gone |
+| `purgeForFile` / `purgeForPath` (permanent delete) | **no** |
+| `VersionsAdminController` — storage summary and per-root purge | **no** — the operator's only instrument for a store that already exists |
+
+**Still open (maintainer):** whether version bytes should stop counting against quota while the flag is off. §7 charges them deliberately, and excluding them would need a `mod()` on the quota manager. The admin purge being reachable again gives the operator a way out that does not require that decision.
+
 ## 14. Frontend target — `custom-v2` only
 
 **Decision.** Version history ships **only** in `frontend/src/app/applications/custom-v2/`. No file under `frontend/src/app/applications/files/` is modified.
