@@ -156,11 +156,37 @@ The destructive moment differs per path, and each hook targets it exactly (§B3 
 
 **AMENDED (#474): there are EIGHT, and the eighth is the fork's own.** `/api/diagrams/save` shipped after this table
 was written and was never added to it: no snapshot, no lock check, and no gate keeping it pointed at a diagram, so it
-also doubled as a read-any-file / replace-any-file primitive. Its origin is `web` — it is an interactive browser write
-and takes the interactive coalescing window — rather than a new enum value, which would have cost a migration for no
-behavioural difference. It writes with `writeFromStream` onto the live path (flag `'w'`, start 0), so the inode
-survives, and it holds a `createOrRefresh` server lock across the etag compare *and* the write, which is stronger than
-the non-DAV `saveStream` branch: the compare is a real CAS rather than a narrowed race.
+also doubled as a read-any-file / replace-any-file primitive. It writes with `writeFromStream` onto the live path
+(flag `'w'`, start 0), so the inode survives invariant 2. Three things about it are easy to state too strongly, and
+the first version of this paragraph stated all three too strongly:
+
+- **The snapshot is not a crash safety net.** The pre-write `snapshotBeforeOverwrite` makes the superseded content
+  recoverable *only when `files.versions.enabled` is true and `isCoalesced` did not suppress this particular save* —
+  i.e. not in the shipped default (`enabled: false`), and not for most of a drawio autosave burst even when enabled.
+  The write truncates the live file in place before the first byte lands, so a disk-full or a kill mid-write leaves a
+  truncated diagram. The previous rename-over-inode implementation did survive that one case; it was traded away for
+  invariant 2, knowingly, and the payload is whole in memory and size-checked beforehand so a staging copy would
+  validate nothing. `copyFileContent` — the helper both editors' save paths use — has the identical exposure, so this
+  is a property of §4 as a whole, not of the diagram path.
+- **The lock is mutual exclusion against OTHER principals only.** Holding `createOrRefresh` across the compare and the
+  write is what stops a WebDAV client or an editor session clobbering the file mid-save, and that is a real gain over
+  the non-DAV `saveStream` branch. It is **not** a CAS for the caller's own concurrent saves: `createOrRefresh` returns
+  `[false, existingLock]` when the existing lock is the same user's, so two tabs both enter the critical section, both
+  match the etag, both write, and the loser gets a `200` carrying an etag that no longer describes the file. The race
+  is narrowed, not closed — and the window is *wider* than the old code's, since the snapshot (blob copy, hash, insert)
+  now sits inside it. A genuine same-user CAS needs a compare-and-swap in the store; the lock manager has no same-owner
+  barrier and `create` would reject the ordinary "same user, two windows" case outright.
+- **`origin: 'web'` is a cost decision, not a semantic match.** By §5.1's own rule drawio under `autosave=1` belongs
+  with the editors: its cadence is set by the client's timer, not by a human pressing Save. It gets `web` because
+  `origin` is a `mysqlEnum` and a ninth value is a schema migration, and because what that costs is a version *rate*
+  rather than correctness — the 60 s scalar against the editors' 300 s, so ~5x the rows for the same hour of editing,
+  all of it bounded by §5.3 thinning. The real bill is operator tuning: `web` has no entry in
+  `minIntervalSecondsByOrigin`, so the diagram rate cannot be lowered without lowering it for every ordinary browser
+  upload. Revisit with the next migration that touches this table.
+
+`CustomDiagramsService.createNew` is deliberately **not** a ninth entry. It writes the empty-diagram skeleton with
+`fs.writeFile`, but `mkFile(overwrite=false)` throws `Resource already exists` before that line, so no live content is
+ever superseded. The exemption is one argument wide: flipping `overwrite` makes it destructive.
 
 **Resumed chunks are never snapshotted.** In the direct branch, `writeFromStream` uses flag `'a'` when `start > 0` (`files/utils/files.ts:253`), and `saveStream` validates `startRange === fileSize` (`files-manager.service.ts:147-150`). A `startRange > 0` request therefore sees `fExists === true` while the live file **already holds partial new content** — snapshotting there would capture a half-written frankenfile. The gate is `fExists && !isDir && startRange === 0`.
 
