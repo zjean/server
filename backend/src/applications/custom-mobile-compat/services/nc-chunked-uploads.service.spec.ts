@@ -1,3 +1,21 @@
+// Every fs.WriteStream the service opens is recorded, so the abort case can
+// assert the descriptor was actually released rather than merely that the
+// promise rejected. vi.spyOn cannot do this — the `node:fs` namespace object is
+// read-only — so the module is wrapped instead, keeping every other export real.
+const writeStreamSpy = vi.hoisted(() => ({ created: [] as import('node:fs').WriteStream[] }))
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    default: actual,
+    createWriteStream: (...args: Parameters<typeof actual.createWriteStream>) => {
+      const ws = actual.createWriteStream(...args)
+      writeStreamSpy.created.push(ws)
+      return ws
+    }
+  }
+})
+
 import * as fs from 'node:fs'
 import * as fsp from 'node:fs/promises'
 import * as os from 'node:os'
@@ -74,6 +92,42 @@ describe(NcChunkedUploadsService.name, () => {
       expect(n).toBe(payload.length)
       const on_disk = await fsp.readFile(svc.chunkPath(USER, UPLOAD, '0'))
       expect(on_disk.equals(payload)).toBe(true)
+    })
+
+    // The abort-mid-upload case is the NORMAL one on mobile, and `src.pipe(out)`
+    // does not destroy `out` when `src` errors: the descriptor stayed open for
+    // the life of the process and a short chunk was left on disk, which would
+    // then poison Android's resume arithmetic (listChunksWithStats sums chunk
+    // sizes to derive `nextByte`).
+    describe('when the client aborts mid-chunk', () => {
+      beforeEach(() => {
+        writeStreamSpy.created.length = 0
+      })
+
+      it('rejects, destroys the write stream, and removes the partial file', async () => {
+        // The failure is driven from inside `_read` rather than off a timer:
+        // one chunk goes through, the next read aborts. A timer made this case
+        // load-dependent and it surfaced as an intermittent unhandled error in
+        // the full suite.
+        let pushed = false
+        const src = new Readable({
+          read() {
+            if (!pushed) {
+              pushed = true
+              this.push(Buffer.from('half a chunk'))
+              return
+            }
+            this.destroy(new Error('client aborted'))
+          }
+        })
+
+        await expect(svc.writeChunk(USER, UPLOAD, '0', src)).rejects.toThrow('client aborted')
+
+        expect(writeStreamSpy.created).toHaveLength(1)
+        expect(writeStreamSpy.created[0].destroyed).toBe(true)
+        expect(writeStreamSpy.created[0].closed).toBe(true)
+        expect(fs.existsSync(svc.chunkPath(USER, UPLOAD, '0'))).toBe(false)
+      })
     })
   })
 
@@ -160,6 +214,22 @@ describe(NcChunkedUploadsService.name, () => {
       const dest = path.join(tmpRoot, 'out', 'empty.bin')
       await expect(svc.concatenate(USER, UPLOAD, dest)).rejects.toThrow('no chunks to assemble')
     })
+
+    // #485's open question: when `pipeline` rejects it destroys `out`, and the
+    // `finally` then attaches handlers and calls `out.end()` on an already
+    // destroyed writable. If `end()` stayed silent the promise would never
+    // settle and the MOVE would hang forever. It does not — but that was
+    // unverified, so pin it with a timeout rather than re-derive it.
+    it('rejects (does not hang) when the destination cannot be written', async () => {
+      await svc.ensureDir(USER, UPLOAD)
+      await fsp.writeFile(svc.chunkPath(USER, UPLOAD, '0'), 'AAA')
+      // A directory where the destination file should go: mkdir(dirname) still
+      // succeeds, and the open() behind createWriteStream fails with EISDIR.
+      const dest = path.join(tmpRoot, 'out', 'blocked.bin')
+      await fsp.mkdir(dest, { recursive: true })
+
+      await expect(svc.concatenate(USER, UPLOAD, dest)).rejects.toThrow()
+    }, 5000)
 
     it('produces a byte-identical result for chunks larger than the write-stream high-water mark', async () => {
       // The previous implementation buffered each chunk fully in memory via

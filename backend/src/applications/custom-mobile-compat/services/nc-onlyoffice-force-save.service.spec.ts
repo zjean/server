@@ -44,6 +44,7 @@ describe('NcOnlyOfficeForceSaveService', () => {
     vi.clearAllMocks()
     mockConfig.applications.files.editors.onlyoffice.enabled = true
     mockConfig.applications.files.editors.onlyoffice.externalServer = 'https://docs.example.test'
+    mockConfig.applications.files.editors.onlyoffice.verifySSL = false
     mockConfig.applications.files.editors.eurooffice.enabled = false
     mockConfig.applications.files.editors.eurooffice.externalServer = 'https://euro.example.test'
 
@@ -94,6 +95,30 @@ describe('NcOnlyOfficeForceSaveService', () => {
       })
     )
     expect(out).toEqual({ ok: true })
+  })
+
+  // The sense of this flag is the whole point of the assertion: `rejectUnauthorized`
+  // must EQUAL `verifySSL` (upstream only-office-manager.service.ts:89). Asserting
+  // only one direction would pass against the inverted expression too, so both are
+  // pinned here.
+  describe('TLS verification', () => {
+    beforeEach(() => {
+      cacheMock.get.mockResolvedValue('doc-key-1')
+      jwtMock.signAsync.mockResolvedValue('signed-jwt')
+      axiosRefMock.mockResolvedValue({ data: {} })
+    })
+
+    it('does NOT reject unauthorized certificates when verifySSL is false (the shipped default)', async () => {
+      mockConfig.applications.files.editors.onlyoffice.verifySSL = false
+      await service.forceSave(fakeSpace)
+      expect(axiosRefMock.mock.calls[0][0].httpsAgent.options.rejectUnauthorized).toBe(false)
+    })
+
+    it('rejects unauthorized certificates when verifySSL is true', async () => {
+      mockConfig.applications.files.editors.onlyoffice.verifySSL = true
+      await service.forceSave(fakeSpace)
+      expect(axiosRefMock.mock.calls[0][0].httpsAgent.options.rejectUnauthorized).toBe(true)
+    })
   })
 
   it('returns ok=false with the network error message when the doc server is unreachable', async () => {
