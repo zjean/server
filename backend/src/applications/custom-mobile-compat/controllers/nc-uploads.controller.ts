@@ -14,6 +14,7 @@ import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService, sanitizeUploadId } from '../services/nc-chunked-uploads.service'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { destinationHasDotSegments } from '../utils/nc-destination'
 import { PROPSTAT_OK, renderMultistatus } from '../utils/nc-xml'
 
 // NC chunked-upload controller.
@@ -170,7 +171,12 @@ export class NcUploadsController {
     if (!destination) throw new HttpException('Destination header required for MOVE', HttpStatus.BAD_REQUEST)
 
     const destPath = parseDestination(destination, req.user.login)
-    if (!destPath) throw new HttpException('Destination must point at /remote.php/dav/files/{user}/...', HttpStatus.BAD_REQUEST)
+    if (!destPath) {
+      throw new HttpException(
+        'Destination must point at /remote.php/dav/files/{user}/... and must not contain "." or ".." segments',
+        HttpStatus.BAD_REQUEST
+      )
+    }
 
     // Resolve destination space + check ADD permission (or MODIFY if overwriting).
     const resolved = this.resolver.resolve(req.user, { mode: 'files', subpath: destPath })
@@ -254,7 +260,13 @@ export class NcUploadsController {
 //   https://host/remote.php/dav/files/<user>/photos/a.jpg → photos/a.jpg
 //   /remote.php/dav/files/<user>/photos/a.jpg             → photos/a.jpg
 // Returns null if the destination isn't a /remote.php/dav/files/<user>/... URL.
+// Returns null ALSO when the destination carries a `.`/`..` segment: the #483
+// decision is reject-don't-resolve, and `new URL()` below would quietly apply
+// RFC 3986 remove_dot_segments (treating `%2e` as a dot) before anyone
+// downstream could refuse it — so the same request 400'd in path-relative form
+// and resolved in absolute form. See utils/nc-destination.ts.
 function parseDestination(dest: string, login: string): string | null {
+  if (destinationHasDotSegments(dest)) return null
   let urlPath = dest
   try {
     const u = new URL(dest)

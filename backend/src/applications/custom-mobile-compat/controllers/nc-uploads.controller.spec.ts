@@ -260,13 +260,44 @@ describe('NcUploadsController assembly destination', () => {
     expect(filesUtils.moveFiles).not.toHaveBeenCalled()
   })
 
-  it('refuses a Destination that is the bare home root (#483)', async () => {
+  // `…/files/alice/` (one trailing slash) is caught by the PRE-EXISTING
+  // `if (!destPath)` — parseDestination returns '' for it — so it proves
+  // nothing about the `!resolved.relativePath` guard. The shape that guard
+  // exists for is the DOUBLE slash: destPath is '/', which is truthy, so it
+  // reached resolve(), came back with relativePath '' (the space ROOT), and
+  // the assembly's `moveFiles(tmp, space.realPath, true)` replaced the user's
+  // whole home with the uploaded file.
+  it('refuses a Destination that resolves to the home root (#483)', async () => {
     const { controller, spacesManager } = buildController()
 
-    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/'), res())).rejects.toMatchObject({
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice//'), res())).rejects.toMatchObject({
       status: 400
     })
     expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
     expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // parseDestination ran `new URL(dest).pathname` for the absolute form, and
+  // WHATWG URL parsing erases dot segments (treating `%2e` as a dot) — so the
+  // refusal above applied only to the path-relative form.
+  it.each([
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/../b', 'plain ".."'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/./b', 'plain "."'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/%2e%2e/b', 'lowercase "%2e%2e"'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/%2E%2E/b', 'uppercase "%2E%2E"']
+  ])('refuses an ABSOLUTE Destination carrying %s (%s)', async (destination) => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq(destination), res())).rejects.toMatchObject({ status: 400 })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  it('still assembles an ordinary ABSOLUTE Destination', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await controller.chunkHandler('alice', 'up-1', moveReq('https://cloud.example.org/remote.php/dav/files/alice/photos/a.jpg'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'photos', 'a.jpg'])
   })
 })

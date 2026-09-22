@@ -452,6 +452,57 @@ describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, (
     await expect400(moveReq('/remote.php/dav/trashbin/bob/'))
   })
 
+  // The refusal above was only half-applied: `new URL(dest).pathname` runs RFC
+  // 3986 remove_dot_segments (treating `%2e` as a dot), so an ABSOLUTE
+  // Destination had its dot segments erased before anything could refuse them
+  // — the byte-identical request 400'd in relative form and resolved
+  // sabre-style in absolute form. Not exploitable (the collapse happens before
+  // the prefix check, so `…/bob/../alice/x` then fails `startsWith`), but the
+  // decision was reject, not resolve.
+  it.each([
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/../b', 'plain ".."'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/./b', 'plain "."'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/%2e%2e/b', 'lowercase "%2e%2e"'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/%2E%2E/b', 'uppercase "%2E%2E"'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a%2F..%2Fb', 'encoded separators']
+  ])('refuses a MOVE whose ABSOLUTE Destination carries %s (%s)', async (destination) => {
+    await expect400(moveReq(destination))
+  })
+
+  // Same shape, aimed OUTSIDE the user's tree. This one 400s either way, but
+  // for the WRONG reason before the fix: `..` collapsed into
+  // `/remote.php/dav/files/alice/secret.txt`, which then failed the
+  // `startsWith(/remote.php/dav/files/bob/)` prefix test. Assert the reason,
+  // not just the status.
+  it('refuses an absolute Destination that climbs out of the home tree as a dot segment, not as a bad prefix', async () => {
+    const req = moveReq('https://cloud.example.org/remote.php/dav/files/bob/../alice/secret.txt')
+    await expect(attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      message: expect.stringContaining('must not contain "." or ".." segments')
+    })
+    expect(req.dav?.copyMove).toBeUndefined()
+  })
+
+  // All four refusals used to report "Destination must point at
+  // /remote.php/dav/{files,trashbin}/{user}/...", which is wrong for the three
+  // that DO point there.
+  it.each([
+    ['/remote.php/dav/files/bob/a/../b', 'must not contain "." or ".." segments'],
+    ['/remote.php/dav/files/bob/', 'must name a file or folder, not the space root'],
+    ['/remote.php/dav/caldav/bob/x', 'must point at /remote.php/dav/{files,trashbin}/{user}/...']
+  ])('reports a distinct reason for %s', async (destination, fragment) => {
+    await expect(attach(moveReq(destination), { mode: 'files', subpath: 'Documents/report.pdf' })).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      message: expect.stringContaining(fragment)
+    })
+  })
+
+  it('still accepts an ordinary ABSOLUTE MOVE destination', async () => {
+    const req = moveReq('https://cloud.example.org/remote.php/dav/files/bob/Archive/report.pdf')
+    await attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })
+    expect(req.dav.copyMove).toEqual({ destination: 'personal/Archive/report.pdf', overwrite: true, isMove: true })
+  })
+
   it('still accepts an ordinary MOVE destination', async () => {
     const req = moveReq('/remote.php/dav/files/bob/Archive/report.pdf')
     await attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })
