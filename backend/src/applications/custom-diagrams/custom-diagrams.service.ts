@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -9,23 +9,27 @@ import { VersioningService } from '../custom-versioning/services/versioning.serv
 import { FileError } from '../files/models/file-error'
 import { LockConflict } from '../files/models/file-lock-error'
 import { FilesLockManager } from '../files/services/files-lock-manager.service'
+import { configuration } from '../../configuration/config.environment'
+import { HTTP_METHOD } from '../applications.constants'
 import { FilesManager } from '../files/services/files-manager.service'
 import { FileEvent } from '../files/events/file-events'
 import { getProps, writeFromStream } from '../files/utils/files'
 import { SPACE_OPERATION } from '../spaces/constants/spaces'
-import { SpacesManager } from '../spaces/services/spaces-manager.service'
-import { haveSpaceEnvPermissions } from '../spaces/utils/permissions'
-import type { FileLock } from '../files/interfaces/file-lock.interface'
+import { SpaceGuard } from '../spaces/guards/space.guard'
+import type { FastifySpaceRequest } from '../spaces/interfaces/space-request.interface'
 import type { SpaceEnv } from '../spaces/models/space-env.model'
+import { SpacesManager } from '../spaces/services/spaces-manager.service'
+import type { FileLock } from '../files/interfaces/file-lock.interface'
 import { UserModel } from '../users/models/user.model'
 import { DEPTH } from '../webdav/constants/webdav'
+import { canAccessToSpaceUrl, haveSpaceEnvPermissions } from '../spaces/utils/permissions'
+import { PATH_TO_SPACE_SEGMENTS } from '../spaces/utils/routes'
 import { isDiagramExt } from './constants/diagrams'
 import type { LoadDiagramResponse } from './dto/load-diagram-response.dto'
 import type { NewDiagramDto } from './dto/new-diagram.dto'
 import type { SaveDiagramDto } from './dto/save-diagram.dto'
 
 const MAX_DIAGRAM_BYTES = 10 * 1024 * 1024
-const EDITOR_URL = process.env['DRAWIO_URL'] ?? 'https://embed.diagrams.net'
 const EMPTY_DRAWIO_XML =
   '<mxfile><diagram name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>'
 
@@ -39,6 +43,8 @@ function contentEtag(xml: string): string {
 
 @Injectable()
 export class CustomDiagramsService {
+  private readonly logger = new Logger(CustomDiagramsService.name)
+
   constructor(
     private readonly spacesManager: SpacesManager,
     private readonly filesManager: FilesManager,
@@ -47,7 +53,7 @@ export class CustomDiagramsService {
   ) {}
 
   async load(user: UserModel, path: string): Promise<LoadDiagramResponse> {
-    const space = await this.resolveSpace(user, path)
+    const space = await this.resolveSpace(user, path, HTTP_METHOD.GET)
     if (!existsSync(space.realPath)) throw new HttpException('file not found on disk', HttpStatus.NOT_FOUND)
     const stat = await getProps(space.realPath)
     if (stat.size > MAX_DIAGRAM_BYTES) throw new HttpException('file too large', HttpStatus.PAYLOAD_TOO_LARGE)
@@ -57,17 +63,25 @@ export class CustomDiagramsService {
       etag: contentEtag(xml),
       mtime: stat.mtime,
       name: stat.name,
-      isWritable: haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY),
-      editorUrl: EDITOR_URL
+      // The trash is read-only for every principal (SpaceGuard.checkPermissions),
+      // but a personal-space trash path carries SPACE_ALL_OPERATIONS, so the
+      // permission bits alone would report it writable and the client would mount
+      // an editable canvas over a file no save can ever reach.
+      isWritable: !space.inTrashRepository && haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY),
+      // Read per request, not captured at module load: the same value feeds the
+      // CSP `frame-src` from app.bootstrap, and one source of truth is the point
+      // of moving this off `process.env` (#499).
+      editorUrl: configuration.applications.files.diagrams.editorUrl
     }
   }
 
   async save(user: UserModel, dto: SaveDiagramDto): Promise<{ etag: string; mtime: number }> {
-    const space = await this.resolveSpace(user, dto.path)
+    // PUT: `checkPermissions` resolves this to MODIFY when the target exists and
+    // to ADD when it does not, and additionally refuses a trash path and an
+    // exceeded quota — none of which the bare MODIFY test that used to live here
+    // could see.
+    const space = await this.resolveSpace(user, dto.path, HTTP_METHOD.PUT)
     if (!existsSync(space.realPath)) throw new HttpException('file not found on disk', HttpStatus.NOT_FOUND)
-    if (!haveSpaceEnvPermissions(space, SPACE_OPERATION.MODIFY)) {
-      throw new HttpException('no write permission', HttpStatus.FORBIDDEN)
-    }
     if (Buffer.byteLength(dto.xml, 'utf-8') > MAX_DIAGRAM_BYTES) {
       throw new HttpException('xml payload too large', HttpStatus.PAYLOAD_TOO_LARGE)
     }
@@ -204,36 +218,36 @@ export class CustomDiagramsService {
   }
 
   async createNew(user: UserModel, dto: NewDiagramDto): Promise<{ path: string }> {
-    if (!isDiagramExt(dto.name)) {
-      throw new HttpException('not a diagram file', HttpStatus.BAD_REQUEST)
-    }
-    const segments = [...dto.dirPath.split('/').filter(Boolean), dto.name]
-    const space = await this.spacesManager.spaceEnv(user, segments)
-    if (!space) throw new HttpException('space not found or access denied', HttpStatus.FORBIDDEN)
+    // `NewDiagramDto.name` is validated as a non-empty string and nothing else,
+    // so it arrives able to carry separators and `..`. Run it through the same
+    // sanitiser the path half already gets and keep only the LAST segment — a
+    // name is a name, and `dirPath` is the only thing allowed to say where.
+    const name = PATH_TO_SPACE_SEGMENTS(dto.name).pop() ?? ''
+    if (!name) throw new HttpException('invalid file name', HttpStatus.BAD_REQUEST)
+    // The same extension gate `resolveSpace` applies to load/save. Without it
+    // this route is a generic "create an arbitrary file" primitive, and the
+    // file it creates would then be loadable and writable through /load and
+    // /save (see constants/diagrams.ts).
+    if (!isDiagramExt(name)) throw new HttpException('not a diagram file', HttpStatus.BAD_REQUEST)
+    const segments = [...PATH_TO_SPACE_SEGMENTS(dto.dirPath), name]
+    // POST maps to ADD. `mkFile` never checks permissions itself — upstream only
+    // ever calls it from behind SpaceGuard — so without this the route created
+    // files for read-only members (#473).
+    const space = await this.authorize(user, segments, HTTP_METHOD.POST)
+    // `mkFile` throws `FileError`/`LockConflict`, both of which extend Error and
+    // not HttpException — and this controller carries no `@UseFilters`, so an
+    // escaping one is a 500. The commonest case is the most ordinary: creating a
+    // diagram whose name is already taken is `FileError(400, 'Resource already
+    // exists')`. Same translation and wording as
+    // `files-methods.service.ts::handleError`.
     try {
-      /* `mkFile` speaks FileError/LockConflict, and BOTH extend Error rather
-         than HttpException. This controller carries no `@UseFilters` and the
-         app registers no global filter (only `VersioningExceptionsFilter` and
-         `WebDAVExceptionsFilter`, both route-scoped), so an untranslated one
-         reaches Nest's default handler as a 500 with an opaque body. Creating a
-         diagram whose name is already taken is a 400 — `mkFile` even says so —
-         and it came back a 500. */
       await this.filesManager.mkFile(user, space, false, true, false)
-
-      /* NOT A DESTRUCTIVE WRITE, and the reason is one line up, not here.
-         `mkFile(overwrite=false)` throws `Resource already exists` before this
-         is reached, so there is never live content under this path to
-         supersede — which is why this call site needs no snapshot hook and no
-         lock of its own (mkFile's `checkLocks=true` already ran one). That
-         exemption is load-bearing enough to be written down: CLAUDE.md's
-         write-path grep list now names `writeFile` too, and this is the comment
-         that closes the hit. If the `overwrite=false` argument ever changes,
-         this becomes the NINTH destructive path and needs the full save()
-         treatment. */
-      await writeFile(space.realPath, EMPTY_DRAWIO_XML, 'utf-8')
     } catch (e) {
-      this.rethrowAsHttp(e)
+      if (e instanceof LockConflict) throw new HttpException('The file is locked', HttpStatus.LOCKED)
+      if (e instanceof FileError) throw new HttpException(e.message.split(',')[0], e.httpCode)
+      throw e
     }
+    await writeFile(space.realPath, EMPTY_DRAWIO_XML, 'utf-8')
     FileEvent.emit('event', { user, space, action: ACTION.ADD, rPath: space.realPath })
     return { path: segments.join('/') }
   }
@@ -263,15 +277,61 @@ export class CustomDiagramsService {
     throw e
   }
 
-  // Both routes resolve through here, which is the one place an extension gate
-  // cannot be forgotten. See constants/diagrams.ts for why it has to exist.
-  private async resolveSpace(user: UserModel, path: string) {
-    const segments = path.split('/').filter(Boolean)
+  // Both `load` and `save` resolve through here, which is the one place an
+  // extension gate cannot be forgotten.
+  //
+  // THE ORDER OF THESE THREE STEPS IS LOAD-BEARING, and each ordering is pinned
+  // by a test:
+  //  1. repository access FIRST, because it is the only check that touches no
+  //     resolver — a path that sanitises to `etc/passwd` must come back 403
+  //     rather than leaking a 400 that says "…but that is not a diagram";
+  //  2. the extension gate SECOND, before `spacesManager.spaceEnv` is ever
+  //     called, so a non-diagram path is refused without any space resolution
+  //     (`#525` pins `expect(spacesManager.spaceEnv).not.toHaveBeenCalled()`);
+  //  3. the full guard equivalent last.
+  private async resolveSpace(user: UserModel, path: string, method: string): Promise<SpaceEnv> {
+    const segments = PATH_TO_SPACE_SEGMENTS(path)
+    this.assertRepositoryAccess(user, segments)
     if (!isDiagramExt(segments[segments.length - 1] ?? '')) {
       throw new HttpException('not a diagram file', HttpStatus.BAD_REQUEST)
     }
-    const space = await this.spacesManager.spaceEnv(user, segments)
-    if (!space) throw new HttpException('space not found or access denied', HttpStatus.FORBIDDEN)
+    return this.authorize(user, segments, method)
+  }
+
+  // The checks SpaceGuard would have run if these routes carried the path in the
+  // URL instead of in a query parameter / body. Kept in the service rather than
+  // duplicated as a fork-owned guard so that it reuses upstream's own decision
+  // function — `SpaceGuard.checkPermissions` is a static for exactly this reason
+  // — and so a later change to upstream's permission rules reaches this module
+  // too. Equivalent to `@UseGuards(SpaceGuard)`: repository access, space
+  // enabled, the per-method operation, the trash gate and the quota gate.
+  private async authorize(user: UserModel, segments: string[], method: string): Promise<SpaceEnv> {
+    this.assertRepositoryAccess(user, segments)
+    let space: SpaceEnv
+    try {
+      // The guard wraps this call for a reason: `spacesManager.spaceEnv` throws
+      // a bare `Error` for an unresolvable path (`spaces-manager.service.ts`),
+      // and `realPathFromSpace` throws a `FileError`. Neither is an
+      // HttpException, so letting one escape turns a malformed path into a 500
+      // — `GET /api/diagrams/load?path=files` did exactly that.
+      space = await this.spacesManager.spaceEnv(user, segments)
+    } catch (e) {
+      this.logger.warn({ tag: this.authorize.name, msg: `${e}` })
+      throw new HttpException('Space path is not valid', HttpStatus.BAD_REQUEST)
+    }
+    // 404, not 403, matching the guard: `spaceEnv` returns null for a space that
+    // does not exist OR that this user cannot see, and the guard does not
+    // distinguish the two either.
+    if (!space) throw new HttpException('Space not found', HttpStatus.NOT_FOUND)
+    if (!space.enabled) throw new HttpException('Space is disabled', HttpStatus.FORBIDDEN)
+    await SpaceGuard.checkPermissions({ method, space } as FastifySpaceRequest, this.logger)
     return space
+  }
+
+  private assertRepositoryAccess(user: UserModel, segments: string[]): void {
+    if (!canAccessToSpaceUrl(user, segments)) {
+      this.logger.warn(`${user.login} is not allowed to access to this repository : ${segments.join('/')}`)
+      throw new HttpException('You are not allowed to access to this repository', HttpStatus.FORBIDDEN)
+    }
   }
 }

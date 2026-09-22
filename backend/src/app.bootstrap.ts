@@ -90,7 +90,8 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
         ? configuration.applications.files.editors.onlyoffice
         : configuration.applications.files.editors.eurooffice
       ).externalServer,
-      configuration.applications.files.editors.collabora.externalServer
+      configuration.applications.files.editors.collabora.externalServer,
+      configuration.applications.files.diagrams.editorUrl
     ),
     // Helmet defaults to `same-origin`, which places popups opened by
     // cross-origin iframes (drawio at embed.diagrams.net) in a separate

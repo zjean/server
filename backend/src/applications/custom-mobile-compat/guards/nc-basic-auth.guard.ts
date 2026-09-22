@@ -1,14 +1,19 @@
 import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { ThrottlerException } from '@nestjs/throttler'
 import { instanceToPlain, plainToInstance } from 'class-transformer'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { PinoLogger } from 'nestjs-pino'
+import { AUTH_RATE_LIMIT_ERROR_MESSAGE } from '../../../authentication/constants/auth'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { genHash } from '../../files/utils/files'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
+import { NC_RATE_LIMIT_OPTIONS, NC_RATE_LIMIT_SCOPE } from '../constants/rate-limit'
 import { NC_AUTH_REALM } from '../constants/routes'
+import { setRetryAfter } from './nc-rate-limit.guard'
 
 // NcBasicAuthGuard
 //
@@ -23,7 +28,11 @@ import { NC_AUTH_REALM } from '../constants/routes'
 @Injectable()
 export class NcBasicAuthGuard implements CanActivate {
   private static readonly CACHE_TTL_SECONDS = 900
-  private static readonly CACHE_PREFIX = 'auth-nc-mobile'
+  // Shared with UsersManager.deleteAppPassword, which scans this prefix to
+  // evict a revoked credential it has no cleartext for (#476). Changing the
+  // literal in one place only would silently un-revoke every NC device.
+  private static readonly CACHE_PREFIX = CACHE_AUTH_NC_MOBILE_PREFIX
+  private static readonly RATE_LIMIT_PREFIX = 'nc-rate-limit-basic'
 
   constructor(
     private readonly usersQueries: UsersQueries,
@@ -75,6 +84,81 @@ export class NcBasicAuthGuard implements CanActivate {
       // rehydrate into UserModel so prototype methods like havePermission() work.
       req.user = plainToInstance(UserModel, cached)
       return true
+    }
+
+    // Per-IP limit on credentials that MISS the cache, i.e. the ones that go
+    // on to cost a DB lookup and up to MAX_MOBILE_PASSWORDS bcrypt(10) rounds
+    // (#477). The equivalent of AuthBasicStrategy's WebDAV limiter, which this
+    // guard is otherwise a copy of and which had no counterpart here.
+    //
+    // It has to be per IP rather than per credential, because the guard's
+    // failure cache is already keyed on the credential PAIR: an attacker
+    // sending a unique password every request never hits that cache and so
+    // never pays for the previous attempt. Tracking the IP also catches
+    // password-spraying, which by construction never repeats a pair.
+    //
+    // Placed after the cache check so an established client syncing at full
+    // tilt — every request of which is authenticated — spends nothing, and
+    // before the DB lookup so the cheap half of the work is covered too.
+    //
+    // Bucketed on `req.ip` — NOT on the raw X-Forwarded-For this module reads
+    // for LOGGING. Read carefully, because the two are not the same claim:
+    //
+    //   - The HEADER is never read here, so a caller cannot name its own
+    //     bucket by adding one when the deployment does not expect it.
+    //   - The VALUE still depends on `server.trustProxy` (app.bootstrap.ts,
+    //     default `1`). With `trustProxy` truthy and NO reverse proxy in
+    //     front, Fastify derives `req.ip` from the caller's own
+    //     X-Forwarded-For, so an attacker rotating that header gets a fresh
+    //     bucket per value and walks past this limiter.
+    //
+    // That is not specific to this guard: upstream's AuthBasicStrategy and
+    // AuthRateLimitGuard key on the same `req.ip`, and `auth.md` already
+    // states the client address follows `server.trustProxy`. The deployment
+    // contract is therefore: either front the app with a reverse proxy that
+    // overwrites X-Forwarded-For, or set `server.trustProxy: false`. A
+    // `trustProxy` that does not describe the deployment silently weakens
+    // every per-IP limit in the app, this one included.
+    const rateLimit = await this.cache.consumeRateLimit(
+      `${NcBasicAuthGuard.RATE_LIMIT_PREFIX}${NC_RATE_LIMIT_SCOPE}-${genHash((req.ip as string | undefined) ?? 'unknown', 'sha256')}`,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.ttl,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.limit,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration
+    )
+    // 429 on the DAV surface, checked against stock-client source rather than
+    // assumed. A blocked caller here gets `ThrottlerException` — 429, JSON
+    // body, no `WWW-Authenticate` — which both clients treat as a transient,
+    // per-operation error, and neither can turn into a re-auth prompt:
+    //
+    //   - iOS. The ONLY writer of the account-error lists,
+    //     NextcloudKit `Sources/NextcloudKit/NKCommon.swift`
+    //     `appendServerErrorAccount`, branches on 503 / 401 / 403-with-ToS
+    //     and has no `else`, so 429 persists nothing. The logout path
+    //     (`NCAccount.checkRemoteUser` → `deleteAccount`) is additionally
+    //     gated on `statusCode == 401`. 429 is a display string only
+    //     (`NKError.swift`, "Too many requests"). Throttled uploads are
+    //     re-queued on the 5-minute timer in `NCNetworkingProcess.swift`,
+    //     whose exclusion is `NSURLErrorUserAuthenticationRequired`, not 429.
+    //   - Android. `RemoteOperationResult` has no 429 case, so it becomes
+    //     `UNHANDLED_HTTP_CODE`; the credential wipe in `RemoteOperation.java`
+    //     is `ResultCode.UNAUTHORIZED == result.getCode()`, exact equality, as
+    //     is every re-auth trigger in the app.
+    //
+    // Read at nextcloud/NextcloudKit 1f07840c, nextcloud/ios d8eee779,
+    // nextcloud/android-library 20bcd79a (the exact commits those projects
+    // pin each other to). The same check rules out the obvious alternatives:
+    // 503 is the WORST code here — iOS parks the account in
+    // `groupDefaultsUnavailable` and `NKInterceptor.adapt` then fails every
+    // later request for it client-side until a foreground-only `status.php`
+    // poll clears it — and 401 is the logout trigger itself.
+    //
+    // Two constraints this leaves on the response, both satisfied above:
+    // keep the body JSON without an `ocs.meta.statuscode` (NKError reads that
+    // path first and coerces a 2xx value to "success"), and keep the budget
+    // generous, because neither client backs off on 429.
+    if (rateLimit.isBlocked) {
+      setRetryAfter(res, rateLimit.timeToBlockExpire, NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration)
+      throw new ThrottlerException(AUTH_RATE_LIMIT_ERROR_MESSAGE)
     }
 
     // Look up user by login or email.

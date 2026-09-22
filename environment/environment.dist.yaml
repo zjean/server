@@ -421,6 +421,29 @@ applications:
         # Note: when using an external server (e.g.: https://collabora.domain.com), make sure it is accessible from the client/browser.
         # default: null
         externalServer:
+    # Diagram editor (drawio / diagrams.net) backing the `.drawio` viewer.
+    #
+    # WARNING about the default. `embed.diagrams.net` is a THIRD-PARTY service
+    # operated by JGraph. The complete XML of every diagram a user opens is
+    # posted into that page over `postMessage`, and that code can send it
+    # anywhere. For a self-hosted file server this is a meaningful default —
+    # point `editorUrl` at your own drawio deployment to keep diagram content on
+    # your own infrastructure.
+    #
+    # The value is also what lands in the CSP `frame-src`, so a wrong value
+    # blocks the iframe and the feature dies with a console-only CSP error.
+    #
+    # This block must stay in this file: `config.loader` validates every
+    # SYNCIN_* variable name against THIS file, so a path missing here is
+    # silently discarded with an "Ignoring unknown environment variable"
+    # warning. Note the env var is SYNCIN_APPLICATIONS_FILES_DIAGRAMS_EDITORURL
+    # — a camelCase key is a SINGLE segment, never ..._EDITOR_URL.
+    #
+    # It replaces the former bare `DRAWIO_URL` environment variable, which was
+    # read straight from process.env and bypassed this file entirely.
+    diagrams:
+      # default: https://embed.diagrams.net
+      editorUrl: https://embed.diagrams.net
     # File versioning. See docs/plans/2026-07-25-file-versioning-design.md.
     #
     # This block must stay in this file even though every value below is also a

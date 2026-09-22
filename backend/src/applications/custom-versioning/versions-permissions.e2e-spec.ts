@@ -6,10 +6,14 @@
 import 'reflect-metadata'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { SpaceModel } from '../spaces/models/space.model'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
 import { MEMBER_TYPE } from '../users/constants/member'
 import { USER_ROLE } from '../users/constants/user'
+import { UserModel } from '../users/models/user.model'
+import { AdminUsersQueries } from '../users/services/admin-users-queries.service'
+import { UsersQueries } from '../users/services/users-queries.service'
 import { SPACE_OPERATION, SPACE_PERMS_SEP, SPACE_ROLE } from '../spaces/constants/spaces'
 import { setupVersionsE2E, type VersionsActor, type VersionsE2EContext } from './utils/versions-e2e.fixture'
 import type { VersionsApi } from './utils/versions-e2e.fixture'
@@ -252,6 +256,134 @@ describe('versions permissions (e2e)', () => {
       expect(list.body).toHaveLength(1)
       expect(list.body[0].label).toBeNull()
       expect(await fs.readFile(path.join(SpaceModel.getFilesPath(spaceAlias), rel), 'utf8')).toBe(REPLACEMENT)
+    })
+  })
+
+  /* ------------------------- a guest WRITING in a shared space (#517) */
+
+  // The central claim of #517, over real HTTP-adjacent plumbing rather than a
+  // fake ensurer.
+  //
+  // WHY THIS CANNOT BE A UNIT TEST. The unit specs drive `snapshotBeforeOverwrite`
+  // with a stubbed `FileRowEnsurer`, so they pin the PREDICATE (`mintsNoVersions`)
+  // and nothing downstream of it. The real guest path continues into
+  // `FileRowEnsurer.getOrCreateSpaceFile` -> upstream's
+  // `assertValidFileReferenceId`, and that exact seam has failed silently
+  // before: passing `0` there made versioning stop snapshotting ENTIRELY while
+  // `nest build`, `ng lint` and every unit test stayed green, because the
+  // ensurer returns 0 on any error by design. Only the e2e suite caught it.
+  // Un-skipping a principal is precisely the change that could trip it again,
+  // for a principal no other e2e writes as.
+  //
+  // WHY THE WRITE IS DRIVEN AT SERVICE LEVEL rather than through the versions
+  // API: the versions controller is role-gated at USER (#492), so a guest is
+  // 403 on every route above — which is the point. `filesManager.saveStream`
+  // is the same entry point the fixture's own `overwrite()` uses and the one
+  // a guest's browser PUT actually lands on.
+  describe('a guest with MODIFY in a shared space', () => {
+    let guest: VersionsActor
+    let guestSpaceAlias: string
+    const guestRel = 'e2e517-guest-write.txt'
+    const BEFORE = 'the content the guest is about to destroy'
+    const AFTER = 'what the guest wrote over it'
+
+    beforeAll(async () => {
+      guest = await e2e.addUser({ role: USER_ROLE.GUEST })
+      // A guest is reachable as a space member ONLY through a manager. The
+      // members whitelist (`usersQueries.usersWhitelist`) admits guests via
+      // "all guests managed by the current user" and deliberately excludes
+      // them from the ungrouped-users branch that lets the plain extra users
+      // above be added. Without this, `updateMembers` filters the guest out
+      // with a warning and `spaceEnv` then resolves to null — which looks
+      // exactly like the feature being broken.
+      //
+      // Written through AdminUsersQueries rather than AdminUsersManager: the
+      // manager-facing `updateUserOrGuest` reads the guest back first, and
+      // that read selects FROM `users_guests`, so a guest with no manager row
+      // yet is invisible to the very call that would give it one.
+      await e2e.app.get(AdminUsersQueries).updateGuestManagers(guest.user.id, { add: [e2e.user.id], delete: [] })
+      // usersWhitelist is cached for 30 minutes and the manager link was just
+      // written underneath it. Cleared here rather than relied on: user
+      // creation clears it with a fire-and-forget `void`.
+      await e2e.app.get(UsersQueries).clearWhiteListCaches('*')
+
+      const spacesManager = e2e.app.get(SpacesManager)
+      // The guest is a member AT CREATION, not by a later updateSpace: space
+      // permission changes are cached and a fresh grant is not necessarily
+      // visible to the next request.
+      const space = await spacesManager.createSpace(e2e.user, {
+        name: `versions-e2e-guest-${Date.now()}`,
+        enabled: true,
+        storageQuota: null,
+        storageIndexing: false,
+        roots: [],
+        managers: [{ id: e2e.user.id, type: MEMBER_TYPE.USER, spaceRole: SPACE_ROLE.IS_MANAGER, permissions: '' }],
+        members: [
+          {
+            id: guest.user.id,
+            type: MEMBER_TYPE.GUEST,
+            spaceRole: SPACE_ROLE.IS_MEMBER,
+            permissions: [SPACE_OPERATION.ADD, SPACE_OPERATION.MODIFY, SPACE_OPERATION.DELETE].sort().join(SPACE_PERMS_SEP)
+          }
+        ],
+        links: []
+      } as never)
+      guestSpaceAlias = space.alias
+
+      const spaceFiles = SpaceModel.getFilesPath(guestSpaceAlias)
+      await fs.mkdir(spaceFiles, { recursive: true })
+      await fs.writeFile(path.join(spaceFiles, guestRel), BEFORE)
+    })
+
+    it('mints a version under space:<alias>, holding the bytes it replaced', async () => {
+      // If this ever stops being true the test proves nothing: the whole
+      // question is what happens for a principal whose isGuest is set.
+      expect(guest.user.isGuest).toBe(true)
+
+      const spacesManager = e2e.app.get(SpacesManager)
+      const guestSpace = await spacesManager.spaceEnv(guest.user, ['files', guestSpaceAlias, guestRel])
+      expect(guestSpace).toBeTruthy()
+      // The premise of the fix, asserted rather than assumed: this env resolves
+      // to the SPACE's root, not to the guest's own user root — which is what
+      // makes the tmpPath/usersPath objection inapplicable here.
+      expect(guestSpace.alias).toBe(guestSpaceAlias)
+
+      await e2e.filesManager.saveStream(
+        guest.user,
+        guestSpace,
+        { method: 'PUT', headers: {}, raw: Readable.from([AFTER]) } as never,
+        { versionOrigin: 'web' } as never
+      )
+
+      // Read back through VersioningQueries, never listVersions: that one is
+      // gated on the feature flag AND denied to a guest, so it would answer
+      // the wrong question either way. Scoped to a root this case owns, since
+      // e2e files run in parallel worker threads against one database.
+      const versionsRoot = `space:${guestSpaceAlias}`
+      const fileIds = await e2e.versioningQueries.distinctFileIdsByRoot(versionsRoot)
+      expect(fileIds).toHaveLength(1)
+
+      const rows = await e2e.versioningQueries.byFileIdNewestFirst(versionsRoot, fileIds[0])
+      expect(rows).toHaveLength(1)
+      expect(rows[0].versionsRoot).toBe(versionsRoot)
+      expect(rows[0].authorId).toBe(guest.user.id)
+      expect(rows[0].size).toBe(BEFORE.length)
+
+      // A row is not a version. The blob has to be there, under the SPACE's
+      // store, and it has to hold the bytes the guest destroyed.
+      const blob = path.join(SpaceModel.getHomePath(guestSpaceAlias), 'versions', rows[0].checksum.slice(0, 2), rows[0].checksum)
+      expect(await fs.readFile(blob, 'utf8')).toBe(BEFORE)
+      // And the live file really was overwritten — otherwise "the previous
+      // content survives" would be true for an uninteresting reason.
+      expect(await fs.readFile(path.join(SpaceModel.getFilesPath(guestSpaceAlias), guestRel), 'utf8')).toBe(AFTER)
+
+      // Nothing landed in the guest's own user versions root. That tree lives
+      // under usersPath while a guest's live files live under tmpPath, which is
+      // the asymmetry the blanket skip existed to avoid; keying the skip on the
+      // resolved root instead of on the account must not reintroduce it.
+      const guestOwnStore = path.join(UserModel.getHomePath(guest.user.login), 'versions')
+      const stray = await fs.readdir(guestOwnStore, { recursive: true }).catch(() => [] as string[])
+      expect(stray.filter((n) => typeof n === 'string' && /^[0-9a-f]{2}\/[0-9a-f]{64}$/.test(n as string))).toEqual([])
     })
   })
 

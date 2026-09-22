@@ -1,11 +1,11 @@
 import { HttpService } from '@nestjs/axios'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
-import nodeFs, { type Dirent } from 'node:fs'
-import fs from 'node:fs/promises'
+import { type Dirent } from 'node:fs'
+import fs, { type FileHandle } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/auth-request.interface'
-import { generateThumbnail, webpMimeType } from '../../../common/image'
+import { generateThumbnail, maxThumbnailFallbackSize, sniffUndecodableImageFormatFromHandle, webpMimeType } from '../../../common/image'
 import { SERVER_NAME } from '../../../common/shared'
 import { configuration } from '../../../configuration/config.environment'
 import { HTTP_METHOD } from '../../applications.constants'
@@ -209,15 +209,25 @@ export class FilesManager {
         await this.versioning.snapshotBeforeOverwrite(user, space, { origin: this.versionOrigin(options) })
       }
       let checksum: string
+      /* Fork (#518): count the bytes this request body actually delivered.
+         `onProgress` already fires once per accepted chunk, so this needs no
+         change in the upstream write helpers. */
+      let bytesReceived = 0
+      const countBytes = (bytes: number) => {
+        bytesReceived += bytes
+      }
       if (options?.checksumAlg) {
         checksum = await writeUploadFromStreamAndChecksum(options?.tmpPath || space.realPath, req.raw, options.checksumAlg, {
-          limiter: fileLimiter
+          limiter: fileLimiter,
+          onProgress: countBytes
         })
       } else {
         await writeUploadFromStream(options?.tmpPath || space.realPath, req.raw, {
-          limiter: fileLimiter
+          limiter: fileLimiter,
+          onProgress: countBytes
         })
       }
+      await this.assertDeclaredBodyWasWritten(space, { contentLength, bytesReceived, fExists, startRange, tmpPath: options?.tmpPath })
       if (options?.tmpPath) {
         await options.validateTmpFile?.({ tmpPath: options.tmpPath, realPath: space.realPath, checksum })
         try {
@@ -260,6 +270,78 @@ export class FilesManager {
         }
       }
     }
+  }
+
+  /* Fork (#518): belt-and-braces for the #475 failure class — a body drained
+     before saveStream read it, producing a 0-byte file and a cheerful 201.
+     #513 fixed that at source (the content-type parsers no longer drain
+     req.raw); this makes any future regression of the same shape fail loudly
+     instead of silently storing an empty file.
+
+     Deliberately ONE-DIRECTIONAL: only a SHORT body is an error here. An
+     over-long body is already the limiter's job (maxFileSize / quota), and
+     treating "more than declared" as fatal would make this the second
+     authority on the same question.
+
+     It is also skipped whenever Content-Length is absent — chunked transfer
+     encoding, HTTP/2 without the header — because then nothing was declared
+     and there is nothing to disagree with.
+
+     Why comparing against the BODY length rather than the resulting file size
+     is the check that survives every caller: for a resumed `Content-Range`
+     PUT, Content-Length is the length of THAT range, not of the final file,
+     and for the tmpPath branch the final file does not exist yet. Bytes-off-
+     the-wire is the one quantity all four callers (browser upload, sync
+     client, WebDAV PUT, NC text editor) declare the same way. */
+  private async assertDeclaredBodyWasWritten(
+    space: SpaceEnv,
+    ctx: { contentLength: number | undefined; bytesReceived: number; fExists: boolean; startRange: number; tmpPath?: string }
+  ): Promise<void> {
+    if (ctx.contentLength === undefined || ctx.bytesReceived >= ctx.contentLength) {
+      return
+    }
+    this.logger.error({
+      tag: this.saveStream.name,
+      msg: `incomplete upload for ${space.realPath} : wrote ${ctx.bytesReceived} of ${ctx.contentLength} declared bytes`
+    })
+    /* Do not leave the short write in place as if it had succeeded — but only
+       undo what THIS request did, never what an earlier one staged:
+         - the staging file: removed when this request owned all of it
+           (startRange 0 truncates it with flag 'w' — utils/files.ts:373), and
+           otherwise TRUNCATED BACK to startRange, which is exactly the state
+           the client's next `Content-Range` retry of this same chunk expects.
+           Removing it outright would throw away every byte a multi-request
+           upload had staged and force a restart from zero; leaving it long
+           would be worse still, because saveStream's own offset check
+           ("start offset does not match the current file size") then rejects
+           the retry and the transfer is wedged. Either way the live file is
+           untouched — nothing has been moved over it yet.
+         - a file we CREATED here, i.e. a fresh direct write at offset 0.
+       A short write over an EXISTING file cannot be undone from here (the
+       inode was truncated at the first byte, by design — see the versioning
+       hook above, which has already snapshotted it when versioning is on).
+       Deleting the user's file to tidy up would be worse than leaving the
+       truncated one; the 4xx is what tells the client to retry. */
+    if (ctx.tmpPath && ctx.startRange > 0) {
+      await fs.truncate(ctx.tmpPath, ctx.startRange).catch((e: Error) =>
+        this.logger.error({
+          tag: this.saveStream.name,
+          msg: `unable to roll the incomplete tmp file ${ctx.tmpPath} back to ${ctx.startRange} bytes : ${e}`
+        })
+      )
+    } else if (ctx.tmpPath) {
+      await removeFiles(ctx.tmpPath).catch((e: Error) =>
+        this.logger.error({ tag: this.saveStream.name, msg: `unable to remove incomplete tmp file ${ctx.tmpPath} : ${e}` })
+      )
+    } else if (!ctx.fExists && ctx.startRange === 0) {
+      await removeFiles(space.realPath).catch((e: Error) =>
+        this.logger.error({ tag: this.saveStream.name, msg: `unable to remove incomplete file ${space.realPath} : ${e}` })
+      )
+    }
+    // FileError (not Error) so the translation layers turn this into a 4xx:
+    // a plain Error escapes as a 500. No comma in the message —
+    // FilesMethods.handleError truncates at the first one.
+    throw new FileError(HttpStatus.BAD_REQUEST, `Incomplete upload: received ${ctx.bytesReceived} of ${ctx.contentLength} declared bytes`)
   }
 
   async saveMultipart(user: UserModel, space: SpaceEnv, req: FastifySpaceRequest) {
@@ -918,17 +1000,83 @@ export class FilesManager {
       // 404'ing, stream the original bytes so the client (browser, NC iOS
       // 17+ which decodes JXL/HEIC/AVIF natively) can render the image at
       // its real resolution. Trades bandwidth for "thumbnail renders" on
-      // the long tail of formats sharp doesn't handle. We stat the file
-      // for Content-Length — same NC-iOS-cache reason as the happy path.
-      this.logger.warn({
-        tag: this.generateThumbnail.name,
-        msg: `sharp decode failed for ${space.realPath}, falling back to original: ${(e as Error).message}`
-      })
-      const stats = await fs.stat(space.realPath)
-      return {
-        stream: nodeFs.createReadStream(space.realPath),
-        contentType: mimeType.replace('-', '/'),
-        contentLength: stats.size
+      // the long tail of formats sharp doesn't handle.
+      //
+      // #503 bounds that trade on two axes, because as first shipped it was
+      // unbounded in both and the classic + v2 grids inherited it unasked:
+      //
+      //  - WHAT: only a magic-byte-confirmed member of the allow-list falls
+      //    back (HEIC/HEIF/AVIF/JXL/BMP/ICO — see sniffMagic, which derives
+      //    that set from what this build of sharp cannot decode AND a client
+      //    still can). "Any non-FileError" also caught a disguised SVG in a
+      //    `.png` (the mime here is EXTENSION-derived) and served its source
+      //    verbatim. The list must stay a superset of the browser-renderable
+      //    undecodables: a narrower one silently downgrades a folder of .bmp
+      //    or .ico from previews to generic file icons.
+      //  - HOW MUCH: maxThumbnailFallbackSize, an order of magnitude under
+      //    the 50 MB decode cap. One grid render is one fallback PER TILE.
+      //
+      // Both refusals are FileError(BAD_REQUEST) — the code this endpoint
+      // returned before the fallback existed, and the one NcExtrasController
+      // already maps to NC's "no preview, draw the icon" 404.
+      // Invariant 3/6: pin the descriptor FIRST, sniff and size THROUGH it, and
+      // own it until it travels with the stream. An earlier cut sniffed the
+      // path and then opened it, which is the same shape as statting the path
+      // and then opening it: a write landing in between made the advertised
+      // contentType (and length) describe a file the body no longer was.
+      // fstat and a positional read on the open handle cannot disagree with
+      // the bytes we go on to serve. `autoClose` (default true) closes THROUGH
+      // FileHandle.close(), so ownership travels with the stream once we hand
+      // it over; every throw path before that must close it here.
+      let handle: FileHandle
+      try {
+        handle = await fs.open(space.realPath, 'r')
+      } catch (openError) {
+        // The file went away (or became unreadable) between the decode attempt
+        // and here. Same refusal as an unrecognised format — the path-based
+        // sniff returned null in this case too, so the response is unchanged.
+        this.logger.warn({
+          tag: this.generateThumbnail.name,
+          msg: `sharp decode failed for ${space.realPath} and the original could not be opened for the fallback: ${openError}`
+        })
+        throw new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+      }
+      try {
+        const fallbackMime = await sniffUndecodableImageFormatFromHandle(handle)
+        if (!fallbackMime) {
+          this.logger.warn({
+            tag: this.generateThumbnail.name,
+            msg: `sharp decode failed for ${space.realPath} and the bytes are no known undecodable image format: ${(e as Error).message}`
+          })
+          throw new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+        }
+        const stats = await handle.stat()
+        if (stats.size > maxThumbnailFallbackSize) {
+          this.logger.warn({
+            tag: this.generateThumbnail.name,
+            msg: `sharp decode failed for ${space.realPath} and ${fallbackMime} original is ${stats.size} bytes, above the ${maxThumbnailFallbackSize} fallback cap`
+          })
+          throw new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+        }
+        this.logger.warn({
+          tag: this.generateThumbnail.name,
+          msg: `sharp decode failed for ${space.realPath}, falling back to the ${fallbackMime} original (${stats.size} bytes): ${(e as Error).message}`
+        })
+        return {
+          // `start: 0` is explicit, not decorative: createReadStream on a
+          // FileHandle begins at the handle's CURRENT position, and the sniff
+          // above read through it. (That read passes an explicit position, so
+          // the position is in fact untouched — but the guarantee is worth
+          // stating at the call site rather than in a Node changelog.)
+          stream: handle.createReadStream({ start: 0 }),
+          // The SNIFFED mime, not the extension-derived one: a HEIC saved as
+          // `.jpg` must not go out as image/jpeg or no client will decode it.
+          contentType: fallbackMime,
+          contentLength: stats.size
+        }
+      } catch (fallbackError) {
+        await handle.close().catch(() => undefined)
+        throw fallbackError
       }
     }
   }

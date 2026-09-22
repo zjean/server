@@ -243,12 +243,15 @@ describe(EditorHistoryService.name, () => {
     expect('user' in entry).toBe(false)
   })
 
-  // The live entry's author IS knowable, and it is the NEWEST row's.
+  // The live entry's author IS knowable, and it is the NEWEST row's
+  // `supersededBy`.
   //
   // `snapshot` records `authorId = user.id` for the user performing the
-  // OVERWRITE (versioning.service.ts:168) — the row holds the bytes that were
-  // replaced, but it names the person who replaced them. So the newest row names
-  // whoever wrote the content that is live NOW.
+  // OVERWRITE — the row holds the bytes that were replaced, but it names the
+  // person who replaced them, and VersionProps surfaces that as
+  // `supersededBy`. So the newest row names whoever wrote the content that is
+  // live NOW. Reading `author` here instead would take the row's own CONTENT
+  // author, i.e. the person before last (#491).
   //
   // This inverts the previous reading, which omitted `user` here on the premise
   // that a row's author is the author of the SUPERSEDED content. The visible cost
@@ -256,16 +259,22 @@ describe(EditorHistoryService.name, () => {
   // version.user.name || this.textAnonymous` (web-apps,
   // documenteditor/main/app/controller/Main.js:764) — i.e. the one row the user
   // is certain to recognise, inside their own editing session.
-  it('names the live entry from the NEWEST row author, who is who wrote the live bytes', async () => {
+  it('names the live entry from the NEWEST row supersededBy, who is who wrote the live bytes', async () => {
     // listVersions hands rows back newest-first, so this is newest then oldest.
     versioning.listVersions.mockResolvedValue(
-      rows({ author: { login: 'bob', fullName: 'Bob Brown' } }, { author: { login: 'carol', fullName: 'Carol Clark' } })
+      rows(
+        { author: { login: 'dave', fullName: 'Dave Dun' }, supersededBy: { login: 'bob', fullName: 'Bob Brown' } },
+        { author: { login: 'carol', fullName: 'Carol Clark' } }
+      )
     )
 
     const history = await service.history(user, space())
 
     // Ordinal 1 is the OLDEST row, and the live entry is last.
     expect(history[0].user).toEqual({ id: 'carol', name: 'Carol Clark' })
+    // The newest ROW is attributed to the author of ITS content...
+    expect(history.at(-2).user).toEqual({ id: 'dave', name: 'Dave Dun' })
+    // ...while the LIVE entry is attributed to whoever replaced it.
     expect(history.at(-1).user).toEqual({ id: 'bob', name: 'Bob Brown' })
   })
 
@@ -276,7 +285,7 @@ describe(EditorHistoryService.name, () => {
   // author of a write they may not have made is a false claim, and "Anonymous"
   // is the honest rendering of "we do not know".
   it('omits `user` on the live entry when the newest row has no author', async () => {
-    versioning.listVersions.mockResolvedValue(rows({ author: undefined }, { author: { login: 'carol', fullName: 'Carol Clark' } }))
+    versioning.listVersions.mockResolvedValue(rows({ supersededBy: undefined }, { author: { login: 'carol', fullName: 'Carol Clark' } }))
 
     const history = await service.history(user, space())
 

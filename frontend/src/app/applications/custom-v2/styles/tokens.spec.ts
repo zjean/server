@@ -26,9 +26,9 @@ const EXEMPT: Record<string, { count: number; why: string }> = {
     count: 2,
     why: 'the canvas an embedded document or video composites onto. A PDF is authored against white and letterbox bars belong black, whatever the app theme is.'
   },
-  'preview/diagram-view.component.ts': {
+  'utils/diagram-embed.ts': {
     count: 2,
-    why: 'colours inside a generated print document, which is not app DOM. A diagram printed on a dark ground wastes ink and loses stroke contrast on paper.'
+    why: 'colours inside a generated print document, which is not app DOM. A diagram printed on a dark ground wastes ink and loses stroke contrast on paper. Moved here from preview/diagram-view.component.ts by #498, which took the print-document builders out of the component so they could be tested.'
   }
 }
 
