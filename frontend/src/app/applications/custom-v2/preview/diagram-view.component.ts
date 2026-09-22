@@ -361,12 +361,25 @@ export class DiagramViewComponent implements OnInit {
         },
         error: (e) => {
           this.saving = false
-          this.queuedXml = null
           if (e?.status === 409) {
-            this.latestXmlWhileConflicted = xml
+            // `queuedXml` is what the user drew WHILE this save was in flight,
+            // so it is strictly newer than `xml` — the payload that just lost.
+            // Recording the loser here (and dropping the queue) meant "Keep
+            // mine" re-sent a stale canvas: the newest shapes were still
+            // visible, so nothing looked wrong, but they were not in the file
+            // and drawio's autosave only fires on the NEXT change. Close the
+            // tab and they were gone.
+            //
+            // The queue is still cleared, deliberately: `keepMine` resumes
+            // through `doSave`, whose success branch drains `queuedXml` — a
+            // leftover entry there would re-save the same stale payload on top
+            // of the resolution.
+            this.latestXmlWhileConflicted = this.queuedXml ?? xml
+            this.queuedXml = null
             this.recoverFromConflict()
             return
           }
+          this.queuedXml = null
           this.postToEditor({ action: 'status', message: 'Save failed.' })
         }
       })

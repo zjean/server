@@ -456,9 +456,15 @@ suite (the fifth and seventh from reading upstream source rather than from a bug
    cover all seven write paths — that hook also runs on the editors' own saves, and dropping the key mid-session splits
    the co-editing session and leaves `NcOnlyOfficeForceSaveService` with no key to force-save.
 
-Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The seven existing
-entry points are tabulated in the plan's §7.9; grep for new `writeFromStream` / `copyFileContent` /
-`moveFiles(..., true)` / `createEmptyFile` call sites on every upstream sync.
+Any new code path that overwrites live file content needs a snapshot hook and a test before merge. The entry points are
+tabulated in the ADR's §4 and the plan's §7.9 — **eight** since #474 added `CustomDiagramsService.save`, which is the
+proof the rule is not theoretical: a fork-owned route shipped without a hook, without a lock and without an extension
+gate, and nothing failed. Grep for new `writeFromStream` / `copyFileContent` / `moveFiles(..., true)` /
+`createEmptyFile` / `writeFile` call sites on every upstream sync, and on every fork-owned feature that writes.
+`writeFile` is on that list as of #474 and it is the noisy one — most hits are exempt, and an exempt hit is only exempt
+because something **upstream of it in the same function** guarantees there is no live content to supersede
+(`CustomDiagramsService.createNew` is the worked example: `mkFile(overwrite=false)` throws `Resource already exists`
+first). Write that reason at the call site, so the next grep resolves in one read rather than one audit.
 
 **Never pass `0` as a file id to `getOrCreateUserFile` / `getOrCreateSpaceFile`.** Upstream's `assertValidFileReferenceId`
 (added 2.5.0, commit `0148bfea`) throws on `0` *and* on `undefined`; the fork's "no client-supplied id, take the
