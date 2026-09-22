@@ -15,6 +15,7 @@ import { UsersQueries } from './services/users-queries.service'
 import { UsersController } from './users.controller'
 import { generateUserTest } from './utils/test'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(UsersController.name, () => {
   let module: TestingModule
@@ -28,6 +29,12 @@ describe(UsersController.name, () => {
       imports: [await ConfigModule.forRoot({ load: [exportConfiguration], isGlobal: true })],
       controllers: [UsersController],
       providers: [
+        // Plumbing, not a subject of this spec: a manager built by this
+        // testing module (SpacesManager / AdminUsersManager) now injects
+        // VersioningService so a space-alias or user-login rename repoints the
+        // fork's version rows (#471). A bare testing module has no @Global
+        // CustomVersioningModule to supply it.
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
           provide: Cache,

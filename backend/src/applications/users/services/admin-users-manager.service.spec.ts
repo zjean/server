@@ -10,6 +10,7 @@ import { UserModel } from '../models/user.model'
 import { AdminUsersManager } from './admin-users-manager.service'
 import { AdminUsersQueries } from './admin-users-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 import { Mock } from 'vitest'
 import * as _fs from '../../files/utils/files'
 
@@ -43,6 +44,9 @@ describe(AdminUsersManager.name, () => {
 
   // deep mocks
   let authManagerMock: { setCookies: Mock }
+  // The fork's version store lives inside the home directory a login rename
+  // moves, and its rows address it by login (#471).
+  let versioningMock: { renameUserRoot: Mock }
   let adminQueriesMock: {
     listUsers: Mock
     usersQueries: {
@@ -86,6 +90,7 @@ describe(AdminUsersManager.name, () => {
 
   beforeAll(async () => {
     authManagerMock = { setCookies: vi.fn() }
+    versioningMock = { renameUserRoot: vi.fn().mockResolvedValue(0) }
 
     adminQueriesMock = {
       listUsers: vi.fn(),
@@ -124,7 +129,8 @@ describe(AdminUsersManager.name, () => {
           provide: FilesQuotaManager,
           useValue: { updateStorageQuota: () => vi.fn() }
         },
-        { provide: AdminUsersQueries, useValue: adminQueriesMock }
+        { provide: AdminUsersQueries, useValue: adminQueriesMock },
+        { provide: VersioningService, useValue: versioningMock }
       ]
     }).compile()
 
@@ -578,6 +584,36 @@ describe(AdminUsersManager.name, () => {
       fs.isPathExists.mockResolvedValueOnce(true)
       fs.removeFiles.mockRejectedValueOnce(new Error('fs error'))
       await expectHttp(service.deleteUserSpace('bob'))
+    })
+  })
+
+  describe('renameUserSpace and the version store (#471)', () => {
+    const renameTo = async (login: string) => {
+      const current = { ...baseUser }
+      setUser(current)
+      // updateUserOrGuest re-reads the user to build its response.
+      setUser({ ...current, login })
+      adminQueriesMock.usersQueries.checkUserExists.mockResolvedValueOnce(false)
+      fs.isPathExists.mockResolvedValueOnce(true) // current home exists
+      fs.isPathExists.mockResolvedValueOnce(false) // new home free
+      fs.moveFiles.mockResolvedValue(undefined)
+      adminQueriesMock.usersQueries.updateUserOrGuest.mockResolvedValueOnce(true)
+      return service.updateUserOrGuest(current.id, { login } as any)
+    }
+
+    it('repoints the version rows at the new login', async () => {
+      await renameTo('john.doe')
+      expect(versioningMock.renameUserRoot).toHaveBeenCalledWith('john', 'john.doe')
+    })
+
+    // Rows that keep naming the old login make every Download and Restore 404
+    // and get the whole store unlinked by the nightly sweep, so a home that
+    // moved without them is worse than a rename that did not happen.
+    it('moves the home back and refuses the rename when the repoint fails', async () => {
+      versioningMock.renameUserRoot.mockRejectedValueOnce(new Error('db down'))
+      await expectHttp(renameTo('john.doe'))
+      expect(fs.moveFiles).toHaveBeenCalledTimes(2)
+      expect(adminQueriesMock.usersQueries.updateUserOrGuest).not.toHaveBeenCalled()
     })
   })
 

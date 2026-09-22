@@ -1,14 +1,12 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Post, UseFilters, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, UseFilters, UseGuards } from '@nestjs/common'
 import { USER_ROLE } from '../users/constants/user'
 import { UserHaveRole } from '../users/decorators/roles.decorator'
 import { UserRolesGuard } from '../users/guards/roles.guard'
 import { VERSIONS_ROUTE } from './constants/routes'
-import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
-import { PurgeVersionsRootDto } from './dto/version.dto'
+import { PurgeVersionsRootDto, RepointVersionsRootDto } from './dto/version.dto'
 import { VersioningExceptionsFilter } from './filters/versioning-exception.filter'
-import { VersionsPurgeResult, VersionsStorageSummary } from './interfaces/version.interface'
+import { VersionsPurgeResult, VersionsRepointResult, VersionsStorageSummary } from './interfaces/version.interface'
 import { VersionsAdminService } from './services/versions-admin.service'
-import { VersioningService } from './services/versioning.service'
 
 // Instance-wide version storage endpoints for operators (#342).
 //
@@ -27,9 +25,21 @@ import { VersioningService } from './services/versioning.service'
 // designing against on a controller whose one write action is destructive.
 // Authentication itself is the global APP_GUARD (AuthTokenAccessGuard).
 //
-// The routes carry no wildcard and their verbs ('admin/storage', 'admin/purge')
-// are distinct from every per-file verb, so they cannot be shadowed by the other
-// controller's `versions/<verb>/*` patterns.
+// The routes carry no wildcard and their verbs ('admin/storage', 'admin/purge',
+// 'admin/repoint') are distinct from every per-file verb, so they cannot be
+// shadowed by the other controller's `versions/<verb>/*` patterns.
+//
+// THESE THREE ROUTES DELIBERATELY IGNORE `files.versions.enabled` (#490). Every
+// per-file endpoint 404s with VERSIONS_DISABLED_MESSAGE while the feature is
+// off (ADR §13) and should: there is no history to offer a user. These are not
+// that. They are the operator's only instrument for the store that already
+// exists, and the flag goes off *precisely* in the situation where it is
+// needed — an operator disabling versioning because of a quota complaint, with
+// the bytes still charged by the quota walk. 404ing here left `rm -rf` plus
+// `DELETE FROM` as the only remedy, which is the surgery VersionsRetention
+// .purgeRoot exists to make unnecessary. The reads report zeros on an empty
+// store and both writes are idempotent, so none of them needs the flag to be
+// meaningful.
 @Controller(VERSIONS_ROUTE.BASE)
 @UserHaveRole(USER_ROLE.ADMINISTRATOR)
 @UseGuards(UserRolesGuard)
@@ -38,14 +48,10 @@ import { VersioningService } from './services/versioning.service'
 // has it.
 @UseFilters(VersioningExceptionsFilter)
 export class VersionsAdminController {
-  constructor(
-    private readonly admin: VersionsAdminService,
-    private readonly versioning: VersioningService
-  ) {}
+  constructor(private readonly admin: VersionsAdminService) {}
 
   @Get(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.ADMIN}/${VERSIONS_ROUTE.STORAGE}`)
   async storage(): Promise<VersionsStorageSummary> {
-    this.requireEnabled()
     return this.admin.storageSummary()
   }
 
@@ -54,17 +60,26 @@ export class VersionsAdminController {
   // root itself, its named versions and its blobs all survive.
   @Post(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.ADMIN}/${VERSIONS_ROUTE.PURGE}`)
   async purge(@Body() dto: PurgeVersionsRootDto): Promise<VersionsPurgeResult> {
-    this.requireEnabled()
     return this.admin.purgeRoot(dto.versionsRoot)
   }
 
-  // Same contract as every other versions endpoint: 404 with the shared message
-  // while `files.versions.enabled` is false (ADR §13), so the admin panel can
-  // tell "the feature is off here" apart from any other 404 and say so instead
-  // of showing an empty table.
-  private requireEnabled(): void {
-    if (!this.versioning.enabled) {
-      throw new HttpException(VERSIONS_DISABLED_MESSAGE, HttpStatus.NOT_FOUND)
-    }
+  // The repair for an unrepointed rename (#471), and the only action the
+  // nightly sweep's error log can point an operator at.
+  //
+  // POST, like the purge, and for a stronger reason: it is neither a resource
+  // creation nor a deletion but a rewrite of a discriminator across a set of
+  // rows, and there is no resource whose URL it is. It is also the one write on
+  // this controller that destroys nothing, which is why it carries no
+  // confirmation flag — see VersionsAdminService.repointRoot.
+  //
+  // It ignores `files.versions.enabled` like its two siblings (#490). #530 first
+  // shipped it behind requireEnabled(); that was written before #490 ungated this
+  // controller and is incompatible with the reason the route exists. The nightly
+  // sweep that DETECTS an unrepointed rename runs flag-off, and its error log
+  // names this endpoint as the remedy — so gating it would point the operator at
+  // a 404 in exactly the state the damage occurs.
+  @Post(`${VERSIONS_ROUTE.VERSIONS}/${VERSIONS_ROUTE.ADMIN}/${VERSIONS_ROUTE.REPOINT}`)
+  async repoint(@Body() dto: RepointVersionsRootDto): Promise<VersionsRepointResult> {
+    return this.admin.repointRoot(dto.fromVersionsRoot, dto.toVersionsRoot)
   }
 }

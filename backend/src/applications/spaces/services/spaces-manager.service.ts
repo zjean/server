@@ -49,6 +49,7 @@ import { SpacesQueries } from './spaces-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
 import { genQuotaCacheKey } from '../../files/utils/quota'
 import { FILE_REPOSITORY } from '../../files/constants/operations'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 @Injectable()
 export class SpacesManager {
@@ -59,7 +60,10 @@ export class SpacesManager {
     private readonly usersQueries: UsersQueries,
     private readonly sharesManager: SharesManager,
     private readonly filesQuotaManager: FilesQuotaManager,
-    private readonly notificationsManager: NotificationsManager
+    private readonly notificationsManager: NotificationsManager,
+    // mod(spaces): CustomVersioningModule is @Global and exports this, so the
+    // injection costs no import in spaces.module.ts (#471).
+    private readonly versioning: VersioningService
   ) {}
 
   listSpaces(userId: number): Promise<Partial<SpaceProps>[]> {
@@ -748,6 +752,12 @@ export class SpacesManager {
       } else {
         try {
           await moveFiles(currentSpaceLocation, newSpaceLocation)
+          // mod(spaces): the fork's version store lives INSIDE the space
+          // directory that just moved, and its rows address it by alias. See
+          // AdminUsersManager.renameUserSpace for why repointing them is part
+          // of this rename's success contract (#471) — a throw here falls into
+          // the restore below and the alias change is refused.
+          await this.versioning.renameSpaceRoot(oldSpaceAlias, newSpaceAlias)
           return true
         } catch (e) {
           // try to restore

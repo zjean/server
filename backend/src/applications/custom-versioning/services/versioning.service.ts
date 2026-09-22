@@ -70,12 +70,7 @@ export class VersioningService {
   // throws: all failures are logged and swallowed (see the class comment).
   async snapshotBeforeOverwrite(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
     if (!this.enabled) return
-    // Guest and link homes live under files.tmpPath while the versions root
-    // resolves into usersPath, so their versions would outlive the ephemeral
-    // tree holding the live files — and every public-link upload would pay a
-    // cross-device copy. Public links are a sharing surface, not an authoring
-    // one; there is no user to show history to (ADR §8).
-    if (user.isGuest || user.isLink) return
+    if (this.mintsNoVersions(user, space)) return
 
     try {
       await this.snapshot(user, space, options)
@@ -85,6 +80,81 @@ export class VersioningService {
         tag: this.snapshotBeforeOverwrite.name,
         msg: `snapshot failed for ${space.url} (${options.origin}), the save proceeds unversioned: ${e}`
       })
+    }
+  }
+
+  // Which principals mint no versions — and why that is NOT simply "guest or
+  // link" (#517).
+  //
+  // A LINK never mints one. A public link is a sharing surface, not an
+  // authoring one (ADR §8): the principal is whoever holds the url, it is
+  // denied history entirely (#492), and there is no durable account to
+  // attribute a revision to.
+  //
+  // A GUEST is a named, authenticated collaborator, so the reason is narrower
+  // and it is a property of the ROOT rather than of the account. Guest homes
+  // live under files.tmpPath while userVersionsRoot resolves into usersPath
+  // (see the note on versionsPathFromRoot), so a version of a file in the
+  // guest's OWN home would be written outside the ephemeral tree holding the
+  // live file, and every such write would pay a cross-device copy. That holds
+  // only when the resolved root IS the acting guest's user root — for a file in
+  // a SHARED SPACE the root is 'space:<alias>' under spacesPath, which the
+  // guest's tmp home has nothing to do with.
+  //
+  // Skipping the shared-space case too was silent data loss: a guest with
+  // MODIFY overwrote a shared file and the previous content was unrecoverable
+  // for everyone, the space owner included, while the identical overwrite by an
+  // internal member was versioned — a hole in the timeline nobody in that space
+  // could see or repair (#517). The guest still cannot READ that history
+  // (#492); the capture protects the file's other members, not the guest.
+  //
+  // Tested on the resolved ROOT rather than on space.inPersonalSpace because
+  // versionsRootFromSpace returns the acting user's root from TWO branches —
+  // personal space, and a share with an external path and no owner — and the
+  // second would otherwise write a guest's blobs into a usersPath tree that
+  // does not otherwise exist. Resolving the root twice on this path costs
+  // nothing: it is a pure function over objects already in hand.
+  private mintsNoVersions(user: UserModel, space: SpaceEnv): boolean {
+    if (user.isLink) return true
+    if (!user.isGuest) return false
+    return versionsRootFromSpace(user, space) === userVersionsRoot(user.login)
+  }
+
+  // The safety capture a restore takes, and the ONE caller that must not
+  // degrade to "the write proceeds unversioned" (#472).
+  //
+  // snapshotBeforeOverwrite swallows everything, deliberately: for the seven
+  // save paths a failed snapshot costs a version, while refusing the save would
+  // cost the user their work — availability over durability (ADR §4). A restore
+  // INVERTS that trade. The snapshot is not a side benefit of the operation, it
+  // IS the feature's promise ("a restore is never destructive", ADR §9), and
+  // the bytes it captures are about to be truncated by writeFromStream.
+  //
+  // The motivating failure is not exotic: stageBlob's fs.copyFile fails ENOSPC
+  // on a full volume — and since versions count against quota, a full volume is
+  // exactly WHEN people reach for Restore. Swallowed, that returned 200 while
+  // the content the user had thirty seconds ago ceased to exist anywhere.
+  //
+  // Called INSIDE restoreVersion's lock and try/finally, so an abort still
+  // releases the lock it took and closes the pinned blob descriptor
+  // (invariant 6), and leaves the live file untouched.
+  //
+  // What it does NOT turn into a failure is `snapshot` deciding there is
+  // nothing to capture — no live file (the restore then creates one, destroying
+  // nothing) — because those return normally rather than throwing. Only a real
+  // failure aborts.
+  private async snapshotOrThrow(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
+    try {
+      await this.snapshot(user, space, options)
+    } catch (e) {
+      this.logger.error({
+        tag: this.snapshotOrThrow.name,
+        msg: `unable to capture ${space.url} before restoring it, the restore was aborted: ${e}`
+      })
+      // A FileError already carries a considered status — enforceQuotaShare's
+      // 507, say — so it is rethrown as is rather than flattened to a 500.
+      if (e instanceof FileError) throw e
+      throw new FileError(abortedRestoreStatus(e), 'Unable to save the current content before restoring, the restore was aborted')
     }
   }
 
@@ -155,22 +225,54 @@ export class VersioningService {
         await this.enforceQuotaShare(user, space, versionsRoot, deduped ? 0 : staged.size)
       }
 
-      // Blob first, row second. A crash between the two leaves an orphan blob,
-      // which the retention GC sweeps; the reverse order would leave a version
-      // row pointing at nothing — a visible, un-downloadable entry.
-      await this.publishBlob(staged.stagePath, blobPath)
-
-      await this.queries.insertVersion({
-        fileId,
-        ...scope,
-        versionsRoot,
-        checksum: staged.checksum,
-        size: staged.size,
-        mtime: Math.floor(stats.mtimeMs),
-        authorId: user.id ?? null,
-        origin: options.origin,
-        label: null
-      })
+      // ROW AND BLOB LAND AS ONE ATOMIC STEP (#489).
+      //
+      // The row is inserted first and the rename runs inside the same
+      // transaction. That is not a reversal of the ADR's "blob first, row
+      // second" rule but the same guarantee by stronger means: the rule exists
+      // so a crash never leaves a COMMITTED row pointing at nothing, and here
+      // the row is committed only after the rename returned. A failure or a
+      // crash in between rolls the row back; a commit that fails after a
+      // successful rename leaves an orphan blob, which is the harmless
+      // direction the nightly sweep already owns.
+      //
+      // What the inversion buys is the thing the old order could not give: a
+      // concurrent eviction, thinning pass, retention rule or purge can no
+      // longer observe this blob on disk while its row is invisible, and unlink
+      // it out from under us. See VersioningQueries' publish/release header.
+      await this.queries.insertVersionPublishing(
+        {
+          fileId,
+          ...scope,
+          versionsRoot,
+          checksum: staged.checksum,
+          size: staged.size,
+          mtime: Math.floor(stats.mtimeMs),
+          authorId: user.id ?? null,
+          // `contentAuthorId` — WHO WROTE THE BYTES THIS ROW HOLDS — is
+          // deliberately absent here: insertVersionPublishing resolves it
+          // INSIDE the transaction that inserts the row, because it is derived
+          // from the newest existing row for this file and reading it out here
+          // would only widen the window two concurrent saves race in.
+          //
+          // The arithmetic itself (#491): `authorId` above names the user
+          // performing THIS write, i.e. the one destroying the content — so the
+          // author of the content being captured is the author of the write
+          // before it. The read-time alternative, shifting the list by one, is
+          // wrong once thinning has removed rows, because the surviving row n-1
+          // is then not the row that actually preceded n (thinning spec §8).
+          // Read at write time the newest row IS the immediate predecessor, so
+          // the same arithmetic is sound here and permanent.
+          //
+          // Null for a file's first version (nothing to name) and after a
+          // system-originated write. After a restore it resolves to the person
+          // who restored, which is correct under this column's definition: they
+          // are who last put these bytes in the live file.
+          origin: options.origin,
+          label: null
+        },
+        () => this.publishBlob(staged.stagePath, blobPath)
+      )
     } catch (e) {
       await removeFiles(staged.stagePath).catch(() => undefined)
       throw e
@@ -580,7 +682,10 @@ export class VersioningService {
       origin: row.origin,
       label: row.label,
       checksum: row.checksum,
-      ...(row.authorLogin && { author: { login: row.authorLogin, fullName: row.authorFullName || row.authorLogin } })
+      ...(row.authorLogin && { author: { login: row.authorLogin, fullName: row.authorFullName || row.authorLogin } }),
+      ...(row.supersededByLogin && {
+        supersededBy: { login: row.supersededByLogin, fullName: row.supersededByFullName || row.supersededByLogin }
+      })
     }))
   }
 
@@ -665,7 +770,10 @@ export class VersioningService {
   // Restores a version into the live file.
   //
   // The current content is snapshotted first (origin `restore`), so a restore
-  // is never destructive — you can always get back to where you were.
+  // is never destructive — you can always get back to where you were. That
+  // promise is only as good as the snapshot, so this one path takes it through
+  // snapshotOrThrow and ABORTS on failure rather than degrading to an
+  // unversioned write (#472).
   //
   // THE LIVE FILE'S INODE MUST SURVIVE. Both editors deliberately use
   // copyFileContent rather than a move "to avoid inode changes"
@@ -718,7 +826,10 @@ export class VersioningService {
         // `version.fileId` rather than a fourth resolution of the same id: the
         // guard above accepted this row only because its fileId is the id this
         // space env resolves to, so the `files` row provably exists (#349).
-        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore', fileId: version.fileId })
+        //
+        // Throws rather than swallows: everything after this line destroys the
+        // live content. See snapshotOrThrow.
+        await this.snapshotOrThrow(user, space, { origin: 'restore', fileId: version.fileId })
         // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
         // but sourced from the pinned descriptor.
         await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))
@@ -757,11 +868,59 @@ export class VersioningService {
     await this.dropVersion(version)
   }
 
+  /* ----------------------------------------------------------------- rename */
+
+  // A user login was renamed, so the home directory that holds their versions
+  // store moved with it (#471).
+  //
+  // CALLED FROM AdminUsersManager.renameUserSpace, which is an UPSTREAM file.
+  // The hook is one line there, taking plain names rather than roots, so the
+  // upstream edit needs no import from this module and stays a one-line
+  // `mod(users):` on the next sync.
+  //
+  // The rename must be part of the caller's success contract: on a throw here
+  // the caller moves the directory back and refuses the rename, because a home
+  // whose versions rows name a different root is strictly worse than a rename
+  // that did not happen — every Download and Restore 404s, new writes split the
+  // history across two roots, and the 3AM orphan sweep unlinks every blob.
+  async renameUserRoot(oldLogin: string, newLogin: string): Promise<number> {
+    return this.renameRoot(userVersionsRoot(oldLogin), userVersionsRoot(newLogin))
+  }
+
+  // The space-alias half of the same fact: SpacesManager.renameSpaceLocation
+  // moves <spacesPath>/<alias>, versions store included.
+  async renameSpaceRoot(oldAlias: string, newAlias: string): Promise<number> {
+    return this.renameRoot(spaceVersionsRoot(oldAlias), spaceVersionsRoot(newAlias))
+  }
+
+  // DELIBERATELY NOT GATED ON `this.enabled`, unlike every other entry point
+  // here. The flag decides whether new versions are MINTED; rows written while
+  // it was on outlive it, and their blobs sit in the home directory either way.
+  // Skipping the repoint while the flag is off would leave an orphaned store
+  // that the next 3AM sweep destroys the moment an operator turns versioning
+  // back on — the failure would be attributed to the flag, not to the rename
+  // that actually caused it.
+  private async renameRoot(oldVersionsRoot: string, newVersionsRoot: string): Promise<number> {
+    const moved = await this.queries.renameRoot(oldVersionsRoot, newVersionsRoot)
+    if (moved) {
+      this.logger.log({ tag: this.renameRoot.name, msg: `repointed ${moved} version(s) from ${oldVersionsRoot} to ${newVersionsRoot}` })
+    }
+    return moved
+  }
+
   /* ------------------------------------------------------------------ purge */
 
   // Purges every version of one file, blobs included.
+  //
+  // NOT GATED ON `files.versions.enabled` (#490). Only CREATION is: turning the
+  // flag off must stop new versions, never strand the ones already stored. The
+  // gate used to be here, so disabling the feature — typically *because of* a
+  // quota complaint — silently stopped reclaiming blobs on permanent delete,
+  // while the FK cascade still removed the rows that were the only remaining
+  // pointer to them. The bytes then kept counting against the user's quota with
+  // no reachable way to free them. Reaching this with no rows costs one indexed
+  // query and returns.
   async purgeForFile(fileId: number): Promise<void> {
-    if (!this.enabled) return
     await this.purgeForFileIds([fileId])
   }
 
@@ -771,8 +930,9 @@ export class VersioningService {
   // and afterwards the descendant ids are simply gone — deleteFiles removes
   // every child row in one regexp query, so there would be nothing left to
   // resolve and every child's history would leak (ADR §10).
+  //
+  // Not gated on the feature flag either — see purgeForFile.
   async purgeForPath(props: FileDBProps, isDir: boolean): Promise<void> {
-    if (!this.enabled) return
     try {
       const fileIds = await this.queries.resolveFileIdsForDelete(props, isDir)
       await this.purgeForFileIds(fileIds)
@@ -787,12 +947,14 @@ export class VersioningService {
     if (!fileIds.length) return
     const rows = await this.queries.listByFileIds(fileIds)
     if (!rows.length) return
-    await this.queries.deleteByFileIds(fileIds)
-    // Rows are gone, so remaining refcounts are accurate: drop any blob that no
-    // other version still points at.
-    for (const blob of new Map(rows.map((r) => [`${r.versionsRoot}|${r.checksum}`, r])).values()) {
-      await this.removeBlobIfUnreferenced(blob.checksum, blob.versionsRoot)
-    }
+    // Rows and blobs go in ONE transaction, for the same reason dropVersion's
+    // do: the bulk DELETE is what holds the lock the refcount check depends on,
+    // so splitting them would reopen #489 on the purge path.
+    const blobs = [...new Map(rows.map((r) => [`${r.versionsRoot}|${r.checksum}`, r])).values()].map((r) => ({
+      checksum: r.checksum,
+      versionsRoot: r.versionsRoot
+    }))
+    await this.queries.deleteByFileIdsReleasingBlobs(fileIds, blobs, (checksum, versionsRoot) => this.unlinkBlob(checksum, versionsRoot))
     this.logger.log({ tag: this.purgeForFileIds.name, msg: `purged ${rows.length} versions for ${fileIds.length} file(s)` })
   }
 
@@ -806,23 +968,29 @@ export class VersioningService {
   }
 
   // Deletes one version row and its blob if nothing else references it.
+  //
+  // The delete, the refcount and the unlink all happen inside ONE transaction
+  // (#489) — see VersioningQueries' publish/release header for why the unlink
+  // has to run while the lock is still held rather than after a check.
   private async dropVersion(version: VersionRow): Promise<void> {
-    await this.queries.deleteById(version.id)
-    await this.removeBlobIfUnreferenced(version.checksum, version.versionsRoot)
+    await this.queries.deleteByIdReleasingBlob(version.id, version.checksum, version.versionsRoot, () =>
+      this.unlinkBlob(version.checksum, version.versionsRoot)
+    )
   }
 
-  private async removeBlobIfUnreferenced(checksum: string, versionsRoot: string): Promise<void> {
-    // Refcount is per (checksum, versionsRoot) because blobs are physically per
-    // root — the same digest in two roots is two files, and counting them as
-    // one would delete a blob another root still needs.
-    if ((await this.queries.countByBlob(checksum, versionsRoot)) > 0) return
+  // Removes the bytes of a blob the queries layer has just proven unreferenced.
+  //
+  // NEVER CALL THIS DIRECTLY. It makes no refcount decision of its own — the
+  // decision belongs to the locked transaction that invokes it, and taking it
+  // here would be the check-then-act #489 removed.
+  private async unlinkBlob(checksum: string, versionsRoot: string): Promise<void> {
     const blobPath = blobPathFromRoot(versionsRoot, checksum)
     if (!blobPath) return
     try {
       await removeFiles(blobPath)
     } catch (e) {
       // Leave it for the orphan-blob GC rather than fail the caller.
-      this.logger.warn({ tag: this.removeBlobIfUnreferenced.name, msg: `unable to remove blob ${blobPath}: ${e}` })
+      this.logger.warn({ tag: this.unlinkBlob.name, msg: `unable to remove blob ${blobPath}: ${e}` })
     }
   }
 
@@ -972,4 +1140,30 @@ export class VersioningService {
       this.logger.warn({ tag: this.releaseLock.name, msg: `Failed to remove lock ${lock.key}: ${e}` })
     }
   }
+}
+
+// Which status an aborted restore answers with, given whatever `snapshot` threw.
+//
+// Three shapes, and the distinction that matters to the caller is whether
+// retrying is worth their time:
+//
+//   ENOSPC / EDQUOT -> 507. The volume or the quota is full. Retrying now will
+//     fail the same way; the user has to free something first.
+//   ER_LOCK_WAIT_TIMEOUT / ER_LOCK_DEADLOCK -> 503. mysql2 surfaces InnoDB's
+//     row-lock timeout (errno 1205) and deadlock victim (1213) as these codes.
+//     Both are TRANSIENT and say nothing about the request — the row the
+//     safety snapshot inserts was simply held by a concurrent writer — so a
+//     flat 500 would be actively misleading, and 503 is the one status a
+//     client may reasonably retry on its own. This becomes reachable once the
+//     nightly sweep takes gap locks over the same table (#471 / PR #530),
+//     which can block the safety snapshot's INSERT.
+//   anything else -> 500.
+//
+// Note this runs only on the RESTORE path. The seven save paths still swallow
+// everything (ADR §4) and never reach here.
+function abortedRestoreStatus(e: unknown): HttpStatus {
+  const code = (e as NodeJS.ErrnoException)?.code
+  if (code === 'ENOSPC' || code === 'EDQUOT') return HttpStatus.INSUFFICIENT_STORAGE
+  if (code === 'ER_LOCK_WAIT_TIMEOUT' || code === 'ER_LOCK_DEADLOCK') return HttpStatus.SERVICE_UNAVAILABLE
+  return HttpStatus.INTERNAL_SERVER_ERROR
 }

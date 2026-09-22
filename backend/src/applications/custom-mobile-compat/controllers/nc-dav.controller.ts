@@ -4,9 +4,12 @@ import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-ski
 import { decodeUrl } from '../../../common/shared'
 import { HTTP_METHOD } from '../../applications.constants'
 import { getProps } from '../../files/utils/files'
+import { SpaceGuard } from '../../spaces/guards/space.guard'
+import { FastifySpaceRequest } from '../../spaces/interfaces/space-request.interface'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
+import { canAccessToSpaceUrl } from '../../spaces/utils/permissions'
 import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
@@ -17,9 +20,10 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcFavoritesReportService } from '../services/nc-favorites-report.service'
 import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
-import { NcShareMountResolverService, type NcShareMount } from '../services/nc-share-mount-resolver.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { destinationHasDotSegments } from '../utils/nc-destination'
+import { buildNcUrlSegments, makeMountsMemo, type NcMountsMemo } from '../utils/nc-url-segments'
 import { parseFavoriteProppatch } from '../utils/nc-favorites-xml'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
@@ -160,6 +164,13 @@ export class NcDavController {
     if (urlSegments === null) {
       throw new HttpException(`Path is not valid: ${input.subpath}`, HttpStatus.BAD_REQUEST)
     }
+    // Authorization, half one: the user-level repository gate. Exactly what
+    // SpaceGuard.checkAccessToSpace does on the native WebDAV surface — a
+    // user without USER_PERMISSION.SHARES must not reach shares/<alias>,
+    // without PERSONAL_SPACE must not reach files/personal, and so on.
+    // Nothing in the NC chain checked this before #515: NcBasicAuthGuard
+    // authenticates the app password and stops there.
+    this.assertRepositoryAccess(user, urlSegments, input.subpath)
     // Flag the home-root case so NcPropfindService can decide whether to
     // append virtual share-mount entries. We compute this against the raw
     // (normalized) subpath rather than the resolved segments: a user whose
@@ -184,6 +195,12 @@ export class NcDavController {
     if (!space.enabled) throw new HttpException('Space is disabled', HttpStatus.FORBIDDEN)
 
     req.space = space
+    // Authorization, half two: the space/root permission overlay, the
+    // trash-read-only rule and the quota rule — i.e. everything
+    // @UseGuards(SpaceGuard) applies to webdav.controller.ts. We cannot use
+    // the guard itself (it derives its SpaceEnv from a Sync-in-shaped URL),
+    // so we call the same static it calls.
+    await this.assertSpacePermissions(req)
     // WebDAV body handlers read req.params['*'] for Destination-relative logic
     // inside COPY/MOVE. We repopulate it so they see the Sync-in-style path.
     ;(req as FastifyRequest & { params: Record<string, string> }).params['*'] = urlSegments.join('/')
@@ -252,6 +269,54 @@ export class NcDavController {
     }
   }
 
+  // ───────── authorization ─────────
+  //
+  // The NC DAV surface reuses Sync-in's own space authorization rather than
+  // growing a second permission model. Before #515 it had NEITHER half, and
+  // the handlers it dispatches into do not compensate: WebDAVMethods.delete /
+  // .put / .mkcol rely entirely on the `@UseGuards(SpaceGuard)` declared on
+  // webdav.controller.ts, and FilesManager.delete runs no check of its own.
+  // Two things followed. `DELETE /remote.php/dav/files/{user}` moved the
+  // user's whole home to trash, and every write verb succeeded against a
+  // READ-ONLY share mount — the PROPFIND response said the user could not
+  // (nc-prop-builder strips DELETE at a share root) but that was presentation
+  // only.
+
+  private assertRepositoryAccess(user: UserModel, urlSegments: string[], subpath: string): void {
+    if (!canAccessToSpaceUrl(user, urlSegments)) {
+      this.logger.warn({ tag: this.assertRepositoryAccess.name, msg: `${user.login} may not access this repository: ${subpath}` })
+      throw new HttpException('You are not allowed to access to this repository', HttpStatus.FORBIDDEN)
+    }
+  }
+
+  private async assertSpacePermissions(req: FastifyDAVRequest): Promise<void> {
+    // oc:favorite is per-user metadata, not file content: stock NC clients
+    // star a file with a PROPPATCH against the file's own DAV URL, and real
+    // Nextcloud lets you favorite something you can only read. Mapping it
+    // through SPACE_HTTP_PERMISSION would demand MODIFY and break starring on
+    // every read-only share. Everything else — including the mtime PROPPATCH
+    // that falls through to WebDAVMethods — takes the normal path.
+    //
+    // Scoped to the files tree. The exemption's justification is "you may star
+    // what you may read", and the trashbin is read-only by rule rather than by
+    // permission — SpaceGuard.checkPermissions refuses every ADD/MODIFY there
+    // outright. Without this clause the exemption reached it too, so a trashed
+    // file could be starred: harmless in itself, but wider than the reasoning
+    // that grants it, and it would silently widen further if the favorites
+    // bridge ever wrote anything beyond the star row.
+    if (
+      req.method === HTTP_METHOD.PROPPATCH &&
+      !req.space.inTrashRepository &&
+      parseFavoriteProppatch(req.body as string | Buffer | null | undefined) !== null
+    ) {
+      return
+    }
+    // PROPFIND / GET / HEAD / REPORT map to no operation at all
+    // (SPACE_HTTP_PERMISSION has no entry, or a null one), so read verbs stay
+    // exactly as permissive as they were.
+    await SpaceGuard.checkPermissions(req as FastifyDAVRequest & FastifySpaceRequest, this.logger)
+  }
+
   // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
   // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
   // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/shares/trash).
@@ -263,7 +328,7 @@ export class NcDavController {
   // shares/<alias>/..., not personal/.... `getMounts` should be the same
   // memo the caller used for its own buildUrlSegments call so the COPY/MOVE
   // path doesn't double-fetch the share list.
-  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: MountsMemo): Promise<string | NcDestinationRefusal> {
+  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: NcMountsMemo): Promise<string | NcDestinationRefusal> {
     const stripped = urlPath.split('?')[0]
     const filesPrefix = `/remote.php/dav/files/${user.login}/`
     const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
@@ -297,51 +362,12 @@ export class NcDavController {
     return segmentsToWebdavNsPath(segs)
   }
 
-  // Resolve an NC subpath into Sync-in spaceEnv segments — i.e.
-  // [repository, spaceAlias, ...path], consumable by SpacesManager.spaceEnv.
-  //
-  // Tries the share-mount alias first: if subpath's first segment matches one
-  // of the user's incoming shares, route into the shares repository. Otherwise
-  // fall through to NcPathResolverService for the user's home setting
-  // (personal or mobileHome-configured space).
-  //
-  // Edge case: a share alias that collides with a real folder in the user's
-  // personal/home space — the share wins (matches real NC behaviour for
-  // recipient-side mountpoints). The personal-space folder remains reachable
-  // via Sync-in's native /webdav route, just not via NC mobile.
-  //
-  // `getMounts` is an optional request-scope memo. When provided, the share
-  // listing is fetched at most once per request even when both buildUrlSegments
-  // and mapNcPathToInternal need it (COPY/MOVE flow).
-  //
-  // Returns null when the subpath is not addressable — see
-  // NcPathResolverService.resolve.
-  private async buildUrlSegments(
-    user: UserModel,
-    input: { mode: 'files' | 'trashbin'; subpath: string },
-    getMounts?: MountsMemo
-  ): Promise<string[] | null> {
-    const normalized = normalizeNcSubpath(input.subpath)
-    if (normalized === null) return null
-
-    if (input.mode === 'files' && normalized) {
-      const parts = normalized.split('/').filter(Boolean)
-      const firstSeg = parts[0]
-      if (firstSeg) {
-        const mounts = getMounts ? await getMounts() : await this.shareMounts.listMounts(user)
-        const mount = mounts.find((m) => m.alias === firstSeg) ?? null
-        if (mount) {
-          return [SPACE_REPOSITORY.SHARES, mount.alias, ...parts.slice(1)]
-        }
-      }
-    }
-
-    const resolved = this.resolver.resolve(user, input)
-    if (!resolved) return null
-    const segs: string[] = [resolved.repository, resolved.spaceAlias]
-    if (resolved.rootAlias) segs.push(resolved.rootAlias)
-    if (resolved.relativePath) segs.push(...resolved.relativePath.split('/').filter(Boolean))
-    return segs
+  // Resolve an NC subpath into Sync-in spaceEnv segments. The logic lives in
+  // utils/nc-url-segments.ts because NcUploadsController needs the exact same
+  // answer for its assembly Destination (#516) — it used to call
+  // NcPathResolverService directly and so never saw a share mount.
+  private buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }, getMounts?: NcMountsMemo) {
+    return buildNcUrlSegments({ resolver: this.resolver, shareMounts: this.shareMounts }, user, input, getMounts)
   }
 
   private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply, mode: 'files' | 'trashbin'): Promise<string | StreamableFile | FastifyReply> {
@@ -486,17 +512,6 @@ function extractStar(req: FastifyDAVRequest, prefix: string): string {
   // Fallback to the '*' param Nest assembled.
   const starParam = (req as FastifyRequest & { params: Record<string, string> }).params?.['*']
   return starParam ?? ''
-}
-
-// Request-scope memo for the user's incoming share-mounts. First call hits
-// the DB via NcShareMountResolverService.listMounts; subsequent calls return
-// the cached promise. Resolvers themselves stay stateless — caching lives at
-// the request boundary (the controller method that created the memo).
-type MountsMemo = () => Promise<NcShareMount[]>
-
-function makeMountsMemo(resolver: NcShareMountResolverService, user: UserModel): MountsMemo {
-  let p: Promise<NcShareMount[]> | undefined
-  return () => (p ??= resolver.listMounts(user))
 }
 
 // Convert spaceEnv-style segments ([repository, spaceAlias, ...]) to a
