@@ -72,7 +72,7 @@ function fakeReply() {
 describe(NcSyncReportService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncReportService
-  let log: { since: Mock; minKeptToken: Mock; currentToken: Mock }
+  let log: { since: Mock; minKeptToken: Mock; currentToken: Mock; maxIdInWindow: Mock }
   let fileRowEnsurer: { ensure: Mock }
   let favorites: { getFavoriteIds: Mock }
   let tmpRoot: string
@@ -83,7 +83,10 @@ describe(NcSyncReportService.name, () => {
     log = {
       since: vi.fn().mockResolvedValue([]),
       minKeptToken: vi.fn().mockResolvedValue(0),
-      currentToken: vi.fn().mockResolvedValue(0)
+      currentToken: vi.fn().mockResolvedValue(0),
+      // Default 0: the window holds nothing the SQL filter dropped, so the
+      // token is whatever the returned events say. Tests that care override it.
+      maxIdInWindow: vi.fn().mockResolvedValue(0)
     }
     // Default: pass the file's existing id through (inode placeholder or real).
     // Individual tests can override to assert a specific DB id is emitted.
@@ -365,7 +368,7 @@ describe(NcSyncReportService.name, () => {
     })
   })
 
-  // RFC 6578 §3.1: sync-collection is anchored at the URL the REPORT was
+  // RFC 6578 §3.3: sync-collection is anchored at the URL the REPORT was
   // sent to. If iOS/Android REPORT a subfolder (e.g. /files/<user>/Documents/),
   // only events under that subtree should surface. Sync-in's SpaceEnv carries
   // the in-space relative URL on `space.relativeUrl` — '.' at the space root,
@@ -416,6 +419,74 @@ describe(NcSyncReportService.name, () => {
 
       expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}31</d:sync-token>`)
       expect(captured.body).not.toContain('<d:href>/remote.php/dav/files/janwiebe/OtherFolder/b.txt</d:href>')
+    })
+  })
+
+  // REGRESSION (review of #509). `since()` drops trash rows in SQL, so the last
+  // row it returns is the last FILES row, not the window's last row. Stamping
+  // that as the token parks the client below every trash row above it; the
+  // daily prune then lifts minKeptToken() — a GLOBAL MIN, not scoped to this
+  // owner — past the parked token and the client is thrown a 412 full re-sync
+  // despite having missed nothing. The token therefore comes from a
+  // repository-blind maximum over the same window.
+  describe('newSyncToken derivation', () => {
+    it('advances past rows the SQL filter dropped, instead of stopping at the last files row', async () => {
+      log.maxIdInWindow.mockResolvedValueOnce(1600)
+      log.since.mockResolvedValueOnce([
+        { id: 1000, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'gone.pdf', type: 'delete', ts: 1 }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}1600</d:sync-token>`)
+    })
+
+    // The user deletes 600 files, syncs (token 1000), then empties the trash:
+    // rows 1001-1600 are all trash rows the filter removes, so the window comes
+    // back empty. Echoing 1000 back is what strands the client.
+    it('advances even when the filtered window is empty — the emptied-trash case', async () => {
+      log.maxIdInWindow.mockResolvedValueOnce(1600)
+      const { reply, captured } = fakeReply()
+      const body = `<d:sync-collection xmlns:d="DAV:"><d:sync-token>${SYNC_TOKEN_URN_PREFIX}1000</d:sync-token></d:sync-collection>`
+      await service.respond(buildReq(body) as never, reply)
+
+      expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}1600</d:sync-token>`)
+      expect(log.maxIdInWindow).toHaveBeenCalledWith({ ownerId: user.id, sinceId: 1000, spaceAlias: SPACE_ALIAS.PERSONAL })
+    })
+
+    it('never advances below the token the client sent', async () => {
+      log.maxIdInWindow.mockResolvedValueOnce(0)
+      const { reply, captured } = fakeReply()
+      const body = `<d:sync-collection xmlns:d="DAV:"><d:sync-token>${SYNC_TOKEN_URN_PREFIX}1000</d:sync-token></d:sync-collection>`
+      await service.respond(buildReq(body) as never, reply)
+
+      expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}1000</d:sync-token>`)
+    })
+
+    // A window that came back full may have unsent FILES rows above its last
+    // one, so the ceiling is the last row actually returned — jumping to the
+    // window max here would skip changes the client has never seen.
+    it('a TRUNCATED window stops at the last returned row, ignoring the higher window max', async () => {
+      log.maxIdInWindow.mockResolvedValueOnce(9999)
+      const body = `<d:sync-collection xmlns:d="DAV:"><d:sync-token>${SYNC_TOKEN_URN_PREFIX}0</d:sync-token><d:limit><d:nresults>2</d:nresults></d:limit></d:sync-collection>`
+      log.since.mockResolvedValueOnce([
+        { id: 10, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'a.txt', type: 'delete', ts: 1 },
+        { id: 11, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'b.txt', type: 'delete', ts: 2 }
+      ])
+      const { reply, captured } = fakeReply()
+      await service.respond(buildReq(body) as never, reply)
+
+      expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}11</d:sync-token>`)
+    })
+
+    // Ordering is load-bearing: a row inserted between the two reads must not
+    // be counted as covered by this response. Reading the ceiling FIRST makes
+    // it impossible for the token to run ahead of what `since()` saw.
+    it('reads the window ceiling BEFORE the events, never after', async () => {
+      const { reply } = fakeReply()
+      await service.respond(buildReq(null) as never, reply)
+
+      expect(log.maxIdInWindow.mock.invocationCallOrder[0]).toBeLessThan(log.since.mock.invocationCallOrder[0])
     })
   })
 })

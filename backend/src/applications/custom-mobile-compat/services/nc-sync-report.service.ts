@@ -75,6 +75,10 @@ export class NcSyncReportService {
     }
 
     const limit = Math.min(parsed.limit ?? MAX_LIMIT, MAX_LIMIT)
+    // Read the window's true ceiling BEFORE the event query, never after: a row
+    // inserted between the two reads must not be counted as covered. Taken
+    // first, this value can only be <= any id `since()` goes on to return.
+    const windowMaxId = await this.syncLog.maxIdInWindow({ ownerId: user.id, sinceId: parsed.sinceId, spaceAlias: space.alias })
     const events = await this.syncLog.since({
       ownerId: user.id,
       sinceId: parsed.sinceId,
@@ -82,16 +86,22 @@ export class NcSyncReportService {
       limit
     })
 
-    // Empty response: echo the same token back so the client knows it's
-    // up to date. The trailing <d:sync-token> still has to be the URN form
-    // — passing the raw `since` integer would break clients who validate
-    // the URN prefix.
+    // Nothing to report: the client is up to date. The token still ADVANCES to
+    // the window's ceiling — an empty window is the common shape of the lag
+    // `maxIdInWindow` exists to close (delete N files, sync, then empty the
+    // trash: every row in the new window is a trash row we filtered out, and
+    // echoing the old token back would strand the client below the prune
+    // horizon). Falls back to the client's own token when the window is empty.
+    // The trailing <d:sync-token> still has to be the URN form — passing the
+    // raw `since` integer would break clients who validate the URN prefix.
     if (events.length === 0) {
-      return this.send(res, [], parsed.sinceId)
+      return this.send(res, [], Math.max(parsed.sinceId, windowMaxId))
     }
 
-    // Dedupe keeping the latest event per resource — RFC 6578 §3.6: "the
-    // server SHOULD NOT report the same resource more than once". Without this
+    // Dedupe keeping the latest event per resource — RFC 6578 §3.2
+    // (Marshalling): "a given member URL MUST appear only once in the
+    // response". A MUST, and about the URL rather than the resource: two
+    // responses for one href are malformed even when they agree. Without this
     // a create + later delete in the same window would produce two responses
     // for the same href, confusing the client's local merge. This mirrors
     // upstream NC's CardDavBackend dedup (`$changes[$row['uri']]`), with the
@@ -104,8 +114,9 @@ export class NcSyncReportService {
     // overwrite the files event for it (a restore-from-trash sequence could
     // then emit a delete marker for the file it just restored).
     //
-    // RFC 6578 §3.1: sync-collection is anchored at the URL the REPORT was
-    // sent to. If the URL resolves to a subfolder of the space, drop events
+    // RFC 6578 §3.3 (Depth Behavior): "the report targets only the collection
+    // being synchronized in a single request" — sync-collection is anchored at
+    // the URL the REPORT was sent to. If the URL resolves to a subfolder of the space, drop events
     // outside that subtree. NC iOS REPORTs at user-root in practice — this
     // is a defensive filter for any client that REPORTs a subpath instead.
     // newSyncToken is still derived from the full `events` window below, so
@@ -155,11 +166,20 @@ export class NcSyncReportService {
       }
     }
 
-    // newSyncToken = the highest event id in this batch — clients use it
-    // to resume from after this exact response. Always derive from the
-    // RAW event window (not the deduped map) so a deleted-then-created
-    // file still advances the token past its delete event.
-    const newSyncToken = events[events.length - 1].id
+    // newSyncToken = the highest id this response COVERS — clients resume from
+    // it. Always derived from the RAW event window (not the deduped map, not
+    // the subtree-filtered list) so a deleted-then-created file, or an event
+    // outside the REPORT's subtree, still advances the token.
+    //
+    // Two ceilings, and the lower one wins:
+    //  - the last row `since()` returned. When it returned `limit` rows the
+    //    window was TRUNCATED, so there may be unsent FILES rows above it and
+    //    this is the only id we may claim.
+    //  - `windowMaxId`, the same window's ceiling ignoring the repository
+    //    filter. Only reachable when the window was not truncated, and it is
+    //    what carries the client past rows `since()` dropped in SQL.
+    const lastReturnedId = events[events.length - 1].id
+    const newSyncToken = events.length >= limit ? lastReturnedId : Math.max(lastReturnedId, windowMaxId)
     return this.send(res, responses, newSyncToken)
   }
 

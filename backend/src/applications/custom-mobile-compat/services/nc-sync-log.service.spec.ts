@@ -156,6 +156,53 @@ describe(NcSyncLogService.name, () => {
       expect(query.params).toContain('files')
     })
 
+    // REGRESSION: the token that goes with the filtered window. Because
+    // `since()` drops trash rows in SQL, the last row it returns is the last
+    // FILES row — stamping that as the token parks the client behind every
+    // trash row above it (delete 600 files, sync, empty the trash: the next
+    // REPORT is empty and echoes the old token back), until the prune lifts the
+    // GLOBAL minKeptToken() past it and the client is thrown a 412 full re-sync
+    // it never earned. `maxIdInWindow` is the same window WITHOUT the
+    // repository filter, so a row we chose not to send still advances the
+    // client — and it keeps the ownerId/spaceAlias scope, so the token never
+    // advances past another collection's events.
+    describe('maxIdInWindow() — the token ceiling', () => {
+      const captureAggregate = (rows: Record<string, unknown>[]) => {
+        const calls: { where?: unknown } = {}
+        fakeDb.select = vi.fn(() => ({
+          from: () => ({
+            where: (condition: unknown) => {
+              calls.where = condition
+              return Promise.resolve(rows)
+            }
+          })
+        }))
+        return calls
+      }
+
+      it('does NOT constrain the repository, but keeps the owner + space scope', async () => {
+        const calls = captureAggregate([{ max: 1600 }])
+        const max = await service.maxIdInWindow({ ownerId: 7, sinceId: 1000, spaceAlias: 'personal' })
+
+        const query = new MySqlDialect().sqlToQuery(calls.where as never)
+        expect(query.sql).not.toContain('`repository`')
+        expect(query.sql).toContain('`ownerId`')
+        expect(query.sql).toContain('`spaceAlias`')
+        expect(query.params).toContain(1000)
+        expect(max).toBe(1600)
+      })
+
+      it('returns 0 for an empty window — MAX() over no rows is NULL', async () => {
+        captureAggregate([{ max: null }])
+        expect(await service.maxIdInWindow({ ownerId: 7, sinceId: 1000 })).toBe(0)
+      })
+
+      it('coerces a max a driver may hand back as a string', async () => {
+        captureAggregate([{ max: '1600' }])
+        expect(await service.maxIdInWindow({ ownerId: 7, sinceId: 0 })).toBe(1600)
+      })
+    })
+
     it('orders ascending by id and defaults the limit to 500', async () => {
       const calls = captureSelect([row()])
       const events = await service.since({ ownerId: 7, sinceId: 0 })
@@ -236,19 +283,38 @@ describe(NcSyncLogService.name, () => {
     expect(captured[0].path).not.toContain('/var/lib/syncin')
   })
 
-  // A DELETE whose payload carries no realPath falls back to rPath — the
-  // handler must not throw or drop the event on a payload shape it did not
-  // expect.
-  it('FileEvent DELETE without space.realPath falls back to rPath', async () => {
+  // A DELETE that arrives without space.realPath has NO safe fallback: `rPath`
+  // on this emission is the absolute TRASH path, so falling back to it writes
+  // exactly the row #478 exists to remove — an unaddressable href plus the
+  // server's disk layout. The payload below is a real move-to-trash shape with
+  // realPath missing, which is the only way the fallback is reachable; the row
+  // must not be written at all.
+  it('FileEvent DELETE without space.realPath is dropped, never logged as the absolute trash path', async () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
       user: { id: 7 },
-      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/var/lib/syncin/users/bob/files' },
       action: ACTION.DELETE,
-      rPath: '/data/janwiebe/files/personal/old.pdf'
+      rPath: '/var/lib/syncin/users/bob/trash/photos/cat.jpg'
     })
     await new Promise((r) => setImmediate(r))
-    expect(captured[0]).toMatchObject({ path: 'old.pdf', type: 'delete' })
+    expect(captured).toEqual([])
+  })
+
+  // Fail-safe for every action, not just DELETE: whatever the reason a path did
+  // not reduce to a space-relative one, an absolute server path addresses
+  // nothing a client can ask for and discloses the disk layout.
+  it('drops any event whose path did not reduce to a space-relative one', async () => {
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      // no realBasePath at all → nothing to strip
+      space: { repository: 'files', alias: 'personal' },
+      action: ACTION.ADD,
+      rPath: '/var/lib/syncin/users/bob/files/photo.jpg'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured).toEqual([])
   })
 
   it('trash repository events get repository="trash"', async () => {

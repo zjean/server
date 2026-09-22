@@ -142,6 +142,33 @@ export class NcSyncLogService implements OnModuleInit {
     return rows.map(toSyncEvent)
   }
 
+  // Highest event id in the SAME window `since()` scans, but WITHOUT its
+  // repository filter — the id the caller may stamp as the new sync-token once
+  // it knows the window was not truncated.
+  //
+  // `since()` drops trash rows in SQL, so the last row it returns is the last
+  // FILES row, not the last row in the window. Stamping that as the token parks
+  // the client behind every trash row that follows it: empty a 600-file trash
+  // and the next REPORT returns [] and echoes the old token back forever, until
+  // the daily prune lifts `minKeptToken()` (a GLOBAL MIN, not scoped to this
+  // owner) past it and the client is thrown a 412 full re-sync despite having
+  // missed nothing. Advancing past a row we deliberately did not send is safe
+  // precisely because we chose not to send it.
+  //
+  // Scoped to the same ownerId/spaceAlias as `since()` so the token never
+  // advances past another collection's events — RFC 6578 §3.2's
+  // DAV:valid-sync-token precondition makes a token valid only "for the
+  // collection targeted by the request-URI".
+  async maxIdInWindow(opts: { ownerId: number; sinceId: number; spaceAlias?: string }): Promise<number> {
+    const conditions = [eq(ncSyncEvents.ownerId, opts.ownerId), gt(ncSyncEvents.id, opts.sinceId)]
+    if (opts.spaceAlias) conditions.push(eq(ncSyncEvents.spaceAlias, opts.spaceAlias))
+    const [row] = await this.db
+      .select({ max: sql<number>`MAX(${ncSyncEvents.id})` })
+      .from(ncSyncEvents)
+      .where(and(...conditions))
+    return Number(row?.max ?? 0)
+  }
+
   // The most recent event id (for issuing the initial sync-token after a
   // full PROPFIND). Returns 0 when the log is empty.
   async currentToken(): Promise<number> {
@@ -208,8 +235,25 @@ export class NcSyncLogService implements OnModuleInit {
     // (sabre's Sync plugin builds every response href, deleted ones included,
     // as `$collectionUrl.'/'.$item` — always collection-relative). The address
     // the client needs is where the file USED to be: `space.realPath`.
-    const eventRPath = e.action === ACTION.DELETE && e.space.realPath ? e.space.realPath : e.rPath
+    //
+    // There is no safe fallback for a DELETE that arrives without it: `rPath`
+    // IS the absolute trash path, so falling back to it would log exactly the
+    // row this exists to prevent. Drop the event instead — a payload shape we
+    // do not recognize must not become an instruction to the client.
+    if (e.action === ACTION.DELETE && !e.space.realPath) {
+      this.logger.warn({ tag: this.handleFileEvent.name, msg: 'dropping a move-to-trash event with no space.realPath (unaddressable)' })
+      return
+    }
+    const eventRPath = e.action === ACTION.DELETE ? e.space.realPath : e.rPath
     const path = stripSpaceRealBasePathPrefix(eventRPath, e.space)
+    // Fail-safe for every action: a path that did not reduce to a space-relative
+    // one is still an absolute server path. It addresses nothing a client can
+    // ask for and discloses the disk layout in the REPORT body, so it is never
+    // worth persisting.
+    if (path.startsWith('/')) {
+      this.logger.warn({ tag: this.handleFileEvent.name, msg: `dropping an event whose path is not relative to the space (action: ${e.action})` })
+      return
+    }
     const ts = Date.now()
     // Fan out to every user who can see the resource — the actor plus, for
     // shared spaces, the space's members (direct users + users in member
