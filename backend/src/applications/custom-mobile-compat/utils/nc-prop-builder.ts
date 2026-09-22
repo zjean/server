@@ -189,7 +189,10 @@ export function buildNcPropResponse(
 
 // Render the <d:response> for a deleted resource — the sync-collection
 // REPORT marker that says "this href is gone now". Just the href + a
-// 404 status, no propstat block (RFC 6578 §3.6).
+// 404 status, no propstat block — RFC 6578 §3.2 (Marshalling): "For members
+// that have been removed, the DAV:response MUST contain one DAV:status with a
+// value set to '404 Not Found' and MUST NOT contain any DAV:propstat element".
+// (§3.6 is "Truncation of Results", which this comment used to cite.)
 export function buildNcDeletedResponse(href: string): Record<string, unknown> {
   return {
     'd:href': href,
