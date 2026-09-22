@@ -219,6 +219,8 @@ export class HarnessDeps {
   /** `rename` / `make` resolve by default; set to a status to make them error. */
   renameError: { status: number; message: string } | null = null
   makeError: { status: number; message: string } | null = null
+  /** `emptyTrash` resolves by default; set to a status to make it error. */
+  emptyTrashError: { status: number; message: string } | null = null
   /** `unlock` / `unlockRequest` resolve by default; set to make them error. */
   unlockError: { status: number; body: unknown } | null = null
   unlockRequestError: { status: number; body: unknown } | null = null
@@ -278,6 +280,11 @@ export class HarnessDeps {
         return Promise.resolve()
       },
       delete: (files: unknown) => log.record('files.delete', files),
+      emptyTrash: (alias: string, displayName: string) => {
+        log.record('files.emptyTrash', alias, displayName)
+        if (this.emptyTrashError) return this.httpError(this.emptyTrashError.status, this.emptyTrashError.message)
+        return of({ id: 'task-empty-trash' })
+      },
       compress: (dto: unknown) => log.record('files.compress', dto),
       decompress: (file: unknown) => log.record('files.decompress', file),
       rename: (file: unknown, name: string, overwrite: boolean) => {

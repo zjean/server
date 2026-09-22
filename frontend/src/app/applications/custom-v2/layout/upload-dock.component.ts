@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, u
 import { FileTask, FileTaskStatus } from '@sync-in-server/backend/src/applications/files/models/file-task'
 import { L10N_LOCALE, L10nLocale, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { ToBytesPipe } from '../../../common/pipes/to-bytes.pipe'
+import type { FileTaskClient } from '../../files/interfaces/file-task-view.interface'
 import { FilesTasksService } from '../../files/services/files-tasks.service'
 import { ButtonComponent } from '../components/button.component'
 import { IconButtonComponent } from '../components/icon-button.component'
@@ -105,6 +106,18 @@ export class UploadDockComponent {
         if (active > 0) this.collapsed.set(false)
       })
     })
+  }
+
+  /**
+   * A task's label.
+   *
+   * `name` is derived server-side from the URL's last segment, which for an
+   * empty-trash task is the bin's ALIAS — so classic's task sidebar prefers the
+   * `displayName` the caller attached (`files-tasks.component.html:62`,
+   * `FilesTasksService.addTask`). Same rule here, or the dock reads `personal`.
+   */
+  protected nameOf(t: FileTask): string {
+    return (t as FileTaskClient).displayName ?? t.name
   }
 
   protected percentOf(t: FileTask): number {

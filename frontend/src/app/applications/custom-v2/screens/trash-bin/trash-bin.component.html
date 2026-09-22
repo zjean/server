@@ -13,7 +13,7 @@
     <span class="personal__divider"></span>
 
     @if (atBinRoot() && files().length > 0) {
-      <app-v2-btn kind="danger" size="sm" icon="trash" (click)="confirmAndEmptyTrash()">{{ 'Empty trash' | translate: locale.language }}</app-v2-btn>
+      <app-v2-btn kind="danger" size="sm" icon="trash" [loading]="emptying()" [disabled]="emptying()" (click)="confirmAndEmptyTrash()">{{ 'Empty trash' | translate: locale.language }}</app-v2-btn>
     }
     <app-v2-icon-btn iconName="refresh" [size]="28" [title]="'Refresh' | translate: locale.language" (click)="refresh()" />
 

@@ -2,9 +2,9 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http'
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, OnDestroy, OnInit, signal } from '@angular/core'
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop'
 import { ActivatedRoute, Router } from '@angular/router'
-import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe, L10nTranslationService } from 'angular-l10n'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
-import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { SPACE_ALIAS, SPACE_PERSONAL_TITLE, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { combineLatest, Subscription } from 'rxjs'
@@ -58,6 +58,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   private readonly store = inject(StoreService)
   private readonly inspector = inject(InspectorService)
   private readonly destroyRef = inject(DestroyRef)
+  private readonly translation = inject(L10nTranslationService)
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   private navSubscription: Subscription | null = null
 
@@ -67,6 +68,12 @@ export class TrashBinComponent implements OnInit, OnDestroy {
   protected readonly errorMessage = signal<string | null>(null)
   protected readonly filter = signal('')
   protected readonly menu = signal<{ file: FileProps; x: number; y: number } | null>(null)
+  // The bin's human-readable name, for the task row in the transfers dock. The route
+  // only carries the alias; the browse response carries the space name beside it.
+  protected readonly binDisplayName = signal('')
+  // Mirrors classic's `submitted` flag on the empty-trash dialog: the request is a
+  // single server-side task, so a second click would queue a redundant one.
+  protected readonly emptying = signal(false)
 
   protected readonly alias = toSignal(this.route.params, { initialValue: {} as { alias?: string } })
   protected readonly pathSegments = toSignal(this.route.url, { initialValue: [] })
@@ -121,7 +128,13 @@ export class TrashBinComponent implements OnInit, OnDestroy {
         filter((ev: FileEvent | null) => {
           if (!ev) return false
           const here = this.currentFolderRoute()
-          return ev.filePath === here || ev.fileDstPath === here
+          if (ev.filePath === here || ev.fileDstPath === here) return true
+          // The empty-trash task addresses the bin ROOT, so `FilesTasksService` derives
+          // its completion event from `task.path`/`task.name` as
+          // `{ filePath: 'trash', fileName: '<alias>' }` — never the 'trash/<alias>'
+          // route this screen sits on. Without this arm the bin keeps rendering rows
+          // the server has already deleted. (Per-row deletes still match `here`.)
+          return this.atBinRoot() && ev.filePath === SPACE_REPOSITORY.TRASH && ev.fileName === this.currentAlias()
         }),
         takeUntilDestroyed(this.destroyRef)
       )
@@ -182,9 +195,26 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     this.toast.success('v2_deleting_one_progress', { name: file.name })
   }
 
+  /**
+   * Empty the bin through upstream's server-side task, not by deleting what we loaded.
+   *
+   * Upstream 2.5.2 (`588c8bbd`) made `/trash/<alias>` addressable and made
+   * `FilesManager.delete()` dispatch it to a private `emptyTrash()` that enumerates the
+   * bin on the server. Deleting `files()` row by row — what this did before — asked a
+   * different question: it emptied whatever the last browse returned, so any later
+   * paging or server-side filtering of that list would silently make it partial, and it
+   * produced N untracked deletes instead of one cancellable `FileTask`.
+   *
+   * The classic caller is `files-trash-empty-dialog.component.ts`; `displayName` and the
+   * task registration both come from there (`FilesService.emptyTrash` does the
+   * `addTask`), and neither is inferable from the DTO types.
+   */
   protected async confirmAndEmptyTrash(): Promise<void> {
+    const alias = this.currentAlias()
     const items = this.files()
-    if (items.length === 0) return
+    // `emptyTrash` addresses the bin ROOT whatever folder we are in, so the scope
+    // guard belongs here too and not only on the button that is hidden below it.
+    if (!alias || !this.atBinRoot() || this.emptying() || items.length === 0) return
     const ok = await this.confirmDialog.open({
       title: 'Empty trash',
       message: 'v2_empty_trash',
@@ -193,8 +223,24 @@ export class TrashBinComponent implements OnInit, OnDestroy {
       kind: 'danger'
     })
     if (!ok) return
-    this.filesService.delete(items.map((f) => this.buildFileStub(f)))
-    this.toast.success('v2_emptying_trash_progress')
+    this.emptying.set(true)
+    this.filesService
+      .emptyTrash(alias, this.binDisplayName() || alias)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        // The server answers with the accepted task, not with an emptied bin — the work
+        // runs asynchronously and the dock draws its progress. So this reports "started",
+        // which is what the toast has always said; what changed is that it now only
+        // fires when the request was actually accepted.
+        next: () => {
+          this.emptying.set(false)
+          this.toast.success('v2_emptying_trash_progress')
+        },
+        error: () => {
+          this.emptying.set(false)
+          this.toast.error('Deletion failed')
+        }
+      })
   }
 
   private buildFileStub(file: FileProps): FileModel {
@@ -211,6 +257,19 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     return this.alias().alias ?? ''
   }
 
+  /**
+   * What to call this bin in the tasks dock.
+   *
+   * The personal space is static server-side — `SPACE_PERSONAL.name` is the alias
+   * itself, so the browse response says `'personal'` — and classic substitutes the
+   * translated title for exactly that case (`trash.component.ts:190`). Every other
+   * space carries its own name.
+   */
+  private displayNameOf(space: { alias: string; name: string } | undefined): string {
+    if (!space) return this.currentAlias()
+    return space.alias === SPACE_ALIAS.PERSONAL ? this.translation.translate(SPACE_PERSONAL_TITLE) : space.name
+  }
+
   private loadFiles(): void {
     const alias = this.currentAlias()
     if (!alias) return
@@ -221,6 +280,7 @@ export class TrashBinComponent implements OnInit, OnDestroy {
     this.http.get<SpaceFiles>(url).subscribe({
       next: (result) => {
         this.files.set(result.files)
+        this.binDisplayName.set(this.displayNameOf(result.space))
         this.loading.set(false)
       },
       error: (e: HttpErrorResponse) => {
