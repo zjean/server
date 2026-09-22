@@ -44,8 +44,15 @@ interface UserWithSettings extends Pick<UserModel, 'id' | 'login'> {
 
 @Injectable()
 export class NcPathResolverService {
-  resolve(user: UserWithSettings, input: NcPathInput): NcResolvedPath {
+  // Returns null when the subpath is NOT ADDRESSABLE (it carries a `.` or `..`
+  // segment). `null` is deliberately not the same answer as a `''`
+  // relativePath: `''` is the space ROOT. Conflating the two let a rejected
+  // path resolve to the root, and a COPY/MOVE whose Destination landed there
+  // trashed the user's whole home before moving the source on top of it
+  // (#483). Callers must treat null as "refuse this request".
+  resolve(user: UserWithSettings, input: NcPathInput): NcResolvedPath | null {
     const subpath = normalize(input.subpath)
+    if (subpath === null) return null
     const repository = input.mode === 'trashbin' ? SPACE_REPOSITORY.TRASH : SPACE_REPOSITORY.FILES
 
     const home = this.readMobileHome(user)
@@ -104,22 +111,29 @@ export class NcPathResolverService {
 // doubles, reject path-escape attempts. Exported so callers that need to peek
 // at the first segment (e.g. share-mount alias lookup in nc-dav.controller)
 // don't have to re-implement decode/normalize separately.
-export function normalizeNcSubpath(sub: string): string {
+//
+// Returns null for a rejected path — see resolve() for why that is distinct
+// from the empty string.
+export function normalizeNcSubpath(sub: string): string | null {
   return normalize(sub)
 }
 
-function normalize(sub: string): string {
+function normalize(sub: string): string | null {
   const decoded = safeDecode(sub)
   // Strip leading and trailing slashes.
   let s = decoded.replace(/^\/+/, '').replace(/\/+$/, '')
   // Collapse internal doubles.
   s = s.replace(/\/{2,}/g, '/')
-  // Defense in depth: reject `..` segments. Upstream FilesManager checks this
-  // too but catching early gives us a clearer 400 from the resolver if we
-  // ever want to surface one.
+  // Defense in depth: reject `.` and `..` segments. Upstream FilesManager
+  // checks this too, but catching it early lets the NC surface answer 400
+  // instead of acting on a path it had to guess at.
+  //
+  // The rejection MUST NOT be reported as `''` — that is the space root, and
+  // returning it here handed COPY/MOVE, PROPFIND and the chunked-upload
+  // assembly the root as their target (#483).
   const parts = s.split('/')
   for (const p of parts) {
-    if (p === '..' || p === '.') return ''
+    if (p === '..' || p === '.') return null
   }
   return s
 }

@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { getProps } from '../../files/utils/files'
@@ -347,6 +348,192 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
     // attachSpace path + mapNcPathToInternal path together should produce
     // exactly one listMounts call thanks to makeMountsMemo.
     expect(shareMounts.listMounts).toHaveBeenCalledTimes(1)
+  })
+})
+
+// #483 — a Destination (or request path) that normalizes to nothing must be
+// REFUSED, not resolved to the space root.
+//
+// normalize() used to answer '' both for "the root" and for "this path has a
+// `.`/`..` segment I refuse to interpret". Either answer produced the segments
+// ['files', 'personal'], which WebDAVMethods.copyMove takes as the destination
+// — and since Overwrite defaults to T (RFC 4918), copyMove calls
+// deleteDestination() on it first: the user's entire home moved to trash, then
+// the source moved on top. FilesManager grants this because the virtual-endpoint
+// overlay only strips DELETE, and delete() performs no permission check of its
+// own. The same conflation made `PROPFIND /files/bob/a/./b` silently list the
+// whole home.
+//
+// Real sabre/dav never lands there: Server::calculateUri() normalizes dot
+// segments and throws Forbidden for anything outside the base URI (see
+// sabre-io/dav @ cfa5d40, lib/DAV/Server.php:559). We take the conservative
+// route for a surface that only has to satisfy stock NC clients (none of which
+// emit dot segments): refuse with 400.
+describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let spacesManager: { spaceEnv: Mock }
+
+  beforeAll(async () => {
+    spacesManager = { spaceEnv: vi.fn() }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        // Real resolver — the null-vs-'' distinction under test lives in it.
+        NcPathResolverService,
+        {
+          provide: NcShareMountResolverService,
+          useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn().mockResolvedValue(null) }
+        },
+        { provide: SpacesManager, useValue: spacesManager },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: {} },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+  })
+
+  const attach = (req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) =>
+    (
+      controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files' | 'trashbin'; subpath: string }) => Promise<void> }
+    ).attachSpace(req, input)
+
+  const moveReq = (destination: string) =>
+    ({
+      url: '/remote.php/dav/files/bob/Documents/report.pdf',
+      method: 'MOVE',
+      headers: { destination },
+      params: {},
+      user: { login: 'bob', settings: null }
+    }) as unknown as FastifyDAVRequest
+
+  const expect400 = async (req: FastifyDAVRequest, subpath = 'Documents/report.pdf') => {
+    await expect(attach(req, { mode: 'files', subpath })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+    expect(req.dav?.copyMove).toBeUndefined()
+  }
+
+  it('refuses a MOVE whose Destination is the bare home root', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/'))
+  })
+
+  it('refuses a MOVE whose Destination is the home root with no trailing slash', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob'))
+  })
+
+  it('refuses a MOVE whose absolute Destination is the home root', async () => {
+    await expect400(moveReq('https://cloud.example.org/remote.php/dav/files/bob/'))
+  })
+
+  it('refuses a MOVE whose Destination carries a "." segment', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/a/./b'))
+  })
+
+  it('refuses a MOVE whose Destination carries a ".." segment', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/a/../b'))
+  })
+
+  it('refuses a MOVE whose Destination is the trashbin root', async () => {
+    await expect400(moveReq('/remote.php/dav/trashbin/bob/'))
+  })
+
+  // The refusal above was only half-applied: `new URL(dest).pathname` runs RFC
+  // 3986 remove_dot_segments (treating `%2e` as a dot), so an ABSOLUTE
+  // Destination had its dot segments erased before anything could refuse them
+  // — the byte-identical request 400'd in relative form and resolved
+  // sabre-style in absolute form. Not exploitable (the collapse happens before
+  // the prefix check, so `…/bob/../alice/x` then fails `startsWith`), but the
+  // decision was reject, not resolve.
+  it.each([
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/../b', 'plain ".."'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/./b', 'plain "."'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/%2e%2e/b', 'lowercase "%2e%2e"'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a/%2E%2E/b', 'uppercase "%2E%2E"'],
+    ['https://cloud.example.org/remote.php/dav/files/bob/a%2F..%2Fb', 'encoded separators']
+  ])('refuses a MOVE whose ABSOLUTE Destination carries %s (%s)', async (destination) => {
+    await expect400(moveReq(destination))
+  })
+
+  // Same shape, aimed OUTSIDE the user's tree. This one 400s either way, but
+  // for the WRONG reason before the fix: `..` collapsed into
+  // `/remote.php/dav/files/alice/secret.txt`, which then failed the
+  // `startsWith(/remote.php/dav/files/bob/)` prefix test. Assert the reason,
+  // not just the status.
+  it('refuses an absolute Destination that climbs out of the home tree as a dot segment, not as a bad prefix', async () => {
+    const req = moveReq('https://cloud.example.org/remote.php/dav/files/bob/../alice/secret.txt')
+    await expect(attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      message: expect.stringContaining('must not contain "." or ".." segments')
+    })
+    expect(req.dav?.copyMove).toBeUndefined()
+  })
+
+  // All four refusals used to report "Destination must point at
+  // /remote.php/dav/{files,trashbin}/{user}/...", which is wrong for the three
+  // that DO point there.
+  it.each([
+    ['/remote.php/dav/files/bob/a/../b', 'must not contain "." or ".." segments'],
+    ['/remote.php/dav/files/bob/', 'must name a file or folder, not the space root'],
+    ['/remote.php/dav/caldav/bob/x', 'must point at /remote.php/dav/{files,trashbin}/{user}/...']
+  ])('reports a distinct reason for %s', async (destination, fragment) => {
+    await expect(attach(moveReq(destination), { mode: 'files', subpath: 'Documents/report.pdf' })).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+      message: expect.stringContaining(fragment)
+    })
+  })
+
+  it('still accepts an ordinary ABSOLUTE MOVE destination', async () => {
+    const req = moveReq('https://cloud.example.org/remote.php/dav/files/bob/Archive/report.pdf')
+    await attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })
+    expect(req.dav.copyMove).toEqual({ destination: 'personal/Archive/report.pdf', overwrite: true, isMove: true })
+  })
+
+  it('still accepts an ordinary MOVE destination', async () => {
+    const req = moveReq('/remote.php/dav/files/bob/Archive/report.pdf')
+    await attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })
+    expect(req.dav.copyMove).toEqual({ destination: 'personal/Archive/report.pdf', overwrite: true, isMove: true })
+  })
+
+  it('refuses a request PATH with a "." segment instead of listing the whole home', async () => {
+    const req = {
+      url: '/remote.php/dav/files/bob/a/./b',
+      method: 'PROPFIND',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await expect(attach(req, { mode: 'files', subpath: 'a/./b' })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+    // The load-bearing half: we never asked for a space at all, so there is no
+    // home-root SpaceEnv for a DELETE/MOVE to act on.
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+  })
+
+  it('still resolves the legitimate home root (subpath "") — the root itself is not rejected', async () => {
+    const req = {
+      url: '/remote.php/dav/files/bob',
+      method: 'PROPFIND',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: '' })
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal'])
+    expect(req.nc.isHomeRoot).toBe(true)
   })
 })
 

@@ -19,6 +19,7 @@ import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-r
 import { NcPropfindService } from '../services/nc-propfind.service'
 import { NcShareMountResolverService, type NcShareMount } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
+import { destinationHasDotSegments } from '../utils/nc-destination'
 import { parseFavoriteProppatch } from '../utils/nc-favorites-xml'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
@@ -32,6 +33,21 @@ import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 // /webdav/<repo>/<alias>/... layout). Chunked uploads live in
 // nc-uploads.controller.ts — they don't reuse WebDAVMethods because Sync-in
 // doesn't model chunked-in-flight state.
+
+// Why a COPY/MOVE Destination was refused. mapNcPathToInternal used to answer
+// a bare `null` for all of these and the caller reported one message —
+// "Destination must point at /remote.php/dav/{files,trashbin}/{user}/..." —
+// which is actively misleading for the three cases where it DOES point there.
+interface NcDestinationRefusal {
+  reason: 'not-nc-path' | 'dot-segment' | 'space-root' | 'unaddressable'
+}
+
+const DESTINATION_REFUSALS: Record<NcDestinationRefusal['reason'], string> = {
+  'not-nc-path': 'Destination must point at /remote.php/dav/{files,trashbin}/{user}/...',
+  'dot-segment': 'Destination must not contain "." or ".." segments',
+  'space-root': 'Destination must name a file or folder, not the space root',
+  unaddressable: 'Destination is not addressable'
+}
 
 @Controller()
 @AuthTokenSkip()
@@ -137,6 +153,13 @@ export class NcDavController {
     // twice. shareRootFiles is a 3-way UNION query — not free.
     const getMounts = makeMountsMemo(this.shareMounts, user)
     const urlSegments = await this.buildUrlSegments(user, input, getMounts)
+    // null = the path is not addressable (a `.`/`..` segment). It used to
+    // normalize to '' and therefore to the space ROOT, which made
+    // `PROPFIND /files/bob/a/./b` list the whole home and gave DELETE and
+    // COPY/MOVE the home as their target (#483). Refuse it instead.
+    if (urlSegments === null) {
+      throw new HttpException(`Path is not valid: ${input.subpath}`, HttpStatus.BAD_REQUEST)
+    }
     // Flag the home-root case so NcPropfindService can decide whether to
     // append virtual share-mount entries. We compute this against the raw
     // (normalized) subpath rather than the resolved segments: a user whose
@@ -196,6 +219,15 @@ export class NcDavController {
       if (!destRaw) {
         throw new HttpException('Destination header is required for COPY/MOVE', HttpStatus.BAD_REQUEST)
       }
+      // Dot segments are refused, never resolved (#483) — and the check has to
+      // happen HERE, on the raw header, because `new URL()` below silently
+      // applies RFC 3986 remove_dot_segments (and treats `%2e` as a dot). Until
+      // this ran, the byte-identical request 400'd in path-relative form (where
+      // `new URL()` throws and the raw string survived to normalizeNcSubpath)
+      // and resolved sabre-style in absolute form. See utils/nc-destination.ts.
+      if (destinationHasDotSegments(destRaw)) {
+        throw new HttpException(`Destination must not contain "." or ".." segments: ${destRaw}`, HttpStatus.BAD_REQUEST)
+      }
       // Destination may be absolute (https://host/remote.php/dav/files/{user}/X)
       // or path-relative. Normalize to the path only, then map NC → Sync-in.
       let destPath = destRaw
@@ -205,8 +237,11 @@ export class NcDavController {
         // path-relative — use as-is
       }
       const destInternal = await this.mapNcPathToInternal(user, destPath, getMounts)
-      if (destInternal === null) {
-        throw new HttpException(`Destination must point at /remote.php/dav/{files,trashbin}/{user}/...: ${destRaw}`, HttpStatus.BAD_REQUEST)
+      if (typeof destInternal !== 'string') {
+        // Four distinct refusals used to share one message that was wrong for
+        // three of them ("must point at /remote.php/dav/{files,trashbin}/{user}/"
+        // for a Destination that does exactly that).
+        throw new HttpException(`${DESTINATION_REFUSALS[destInternal.reason]}: ${destRaw}`, HttpStatus.BAD_REQUEST)
       }
       const overwrite = (req.headers['overwrite'] as string | undefined)?.toUpperCase() !== 'F'
       req.dav.copyMove = {
@@ -220,14 +255,15 @@ export class NcDavController {
   // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
   // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
   // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/shares/trash).
-  // Returns null if the URL path isn't rooted at /remote.php/dav/{files,trashbin}/{user}/.
+  // Returns a refusal reason rather than a bare null: the four ways this can
+  // fail need four different 400 bodies (#512 review).
   //
   // Share-aware via buildUrlSegments: a destination whose first subpath
   // segment matches one of the user's incoming share aliases lands in
   // shares/<alias>/..., not personal/.... `getMounts` should be the same
   // memo the caller used for its own buildUrlSegments call so the COPY/MOVE
   // path doesn't double-fetch the share list.
-  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: MountsMemo): Promise<string | null> {
+  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: MountsMemo): Promise<string | NcDestinationRefusal> {
     const stripped = urlPath.split('?')[0]
     const filesPrefix = `/remote.php/dav/files/${user.login}/`
     const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
@@ -242,9 +278,22 @@ export class NcDavController {
       mode = 'trashbin'
       subpath = stripped === trashPrefixNoSlash ? '' : stripped.slice(trashPrefix.length)
     } else {
-      return null
+      return { reason: 'not-nc-path' }
     }
+    // A Destination that normalizes to nothing addresses the space ROOT. With
+    // `Overwrite: T` — the RFC 4918 default this controller applies — copyMove
+    // then calls deleteDestination() on it, moving the user's entire home into
+    // trash before putting the source on top. No stock NC client emits a
+    // request shaped like this, and there is no path through it that the user
+    // could have meant, so refuse it (#483). normalizeNcSubpath also returns
+    // null for a `.`/`..` segment; both cases become the caller's 400. (The
+    // caller now rejects dot segments before we see them — this stays as the
+    // defence in depth it was written to be.)
+    const normalized = normalizeNcSubpath(subpath)
+    if (normalized === null) return { reason: 'dot-segment' }
+    if (normalized === '') return { reason: 'space-root' }
     const segs = await this.buildUrlSegments(user, { mode, subpath }, getMounts)
+    if (segs === null) return { reason: 'unaddressable' }
     return segmentsToWebdavNsPath(segs)
   }
 
@@ -264,8 +313,16 @@ export class NcDavController {
   // `getMounts` is an optional request-scope memo. When provided, the share
   // listing is fetched at most once per request even when both buildUrlSegments
   // and mapNcPathToInternal need it (COPY/MOVE flow).
-  private async buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }, getMounts?: MountsMemo): Promise<string[]> {
+  //
+  // Returns null when the subpath is not addressable — see
+  // NcPathResolverService.resolve.
+  private async buildUrlSegments(
+    user: UserModel,
+    input: { mode: 'files' | 'trashbin'; subpath: string },
+    getMounts?: MountsMemo
+  ): Promise<string[] | null> {
     const normalized = normalizeNcSubpath(input.subpath)
+    if (normalized === null) return null
 
     if (input.mode === 'files' && normalized) {
       const parts = normalized.split('/').filter(Boolean)
@@ -280,6 +337,7 @@ export class NcDavController {
     }
 
     const resolved = this.resolver.resolve(user, input)
+    if (!resolved) return null
     const segs: string[] = [resolved.repository, resolved.spaceAlias]
     if (resolved.rootAlias) segs.push(resolved.rootAlias)
     if (resolved.relativePath) segs.push(...resolved.relativePath.split('/').filter(Boolean))
