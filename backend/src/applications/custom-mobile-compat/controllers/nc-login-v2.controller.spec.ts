@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common'
+import { HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { Mock } from 'vitest'
@@ -393,6 +393,50 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       const html = controller.renderLoginPage(flow.loginToken, fakeReq(), attacker)
       expect(attacker._status).toBe(HttpStatus.CONFLICT)
       expect(html).toContain('already in progress')
+    })
+  })
+
+  // `logUser` starts with `validateUserAccess`, which THROWS rather than
+  // returning null: a link account, a deactivated one, or one that has spent
+  // USER_MAX_PASSWORD_ATTEMPTS all raise HttpException(403). That throw used to
+  // escape `submitLoginPage` entirely, so the person at the browser got Nest's
+  // raw JSON envelope rendered in a tab while the app polled to timeout.
+  describe('submitLoginPage — when logUser throws', () => {
+    const USER = { id: 7, login: 'alice', isActive: false }
+
+    async function submitWith(thrown: unknown) {
+      vi.clearAllMocks()
+      const users = moduleRef.get(UsersManager) as unknown as { findUser: Mock; logUser: Mock }
+      users.findUser.mockResolvedValue(USER)
+      users.logUser.mockRejectedValue(thrown)
+      const flow = flows.initiate('Nextcloud-iOS/33.1')
+      const getRes = fakeRes()
+      controller.renderLoginPage(flow.loginToken, fakeReq(), getRes)
+      const res = fakeRes()
+      const html = await controller.submitLoginPage(flow.loginToken, { login: 'alice', password: 'pw' }, fakeReq(cookieFrom(getRes)), res)
+      return { flow, res, html }
+    }
+
+    it('renders the login page with the 403 reason instead of letting the exception escape', async () => {
+      const { res, html } = await submitWith(new HttpException('Account locked', HttpStatus.FORBIDDEN))
+      // The assertion that matters: it RESOLVED. Before the fix this call
+      // rejected and Nest serialised the exception as JSON.
+      expect(res._status).toBe(HttpStatus.FORBIDDEN)
+      expect(res._headers['Content-Type']).toBe('text/html; charset=utf-8')
+      expect(html).toContain('<form method="post"')
+      expect(html).toContain('Account locked')
+    })
+
+    it('leaves the flow unauthenticated, so the poll still yields nothing', async () => {
+      const { flow } = await submitWith(new HttpException('Account locked', HttpStatus.FORBIDDEN))
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
+    })
+
+    it('does not echo a non-HttpException message into the page', async () => {
+      const { res, html } = await submitWith(new Error('connect ECONNREFUSED 10.0.0.5:3306'))
+      expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
+      expect(html).not.toContain('ECONNREFUSED')
+      expect(html).toContain('See server logs')
     })
   })
 })
