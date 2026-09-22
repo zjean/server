@@ -3,6 +3,12 @@
 } @else if (errorMessage()) {
   <div class="diagram-view__state diagram-view__state--error">{{ errorMessage() | translate: locale.language }}</div>
 } @else if (iframeSrc()) {
+  @if (readOnly()) {
+    <div class="diagram-view__readonly" role="status">
+      <span class="diagram-view__readonly-label" l10nTranslate>Read-only</span>
+      <span l10nTranslate>You do not have permission to edit this diagram. Changes will not be saved.</span>
+    </div>
+  }
   <iframe
     #editorFrame
     class="diagram-view__frame"

@@ -157,6 +157,8 @@
   "Your unsaved edits are still on the canvas. Pick one:": "Your unsaved edits are still on the canvas. Pick one:",
   "Keep mine": "Keep mine",
   "Discard mine": "Discard mine",
+  "Read-only": "Read-only",
+  "You do not have permission to edit this diagram. Changes will not be saved.": "You do not have permission to edit this diagram. Changes will not be saved.",
   "Calculate size": "Calculate size",
   "Size calculation failed": "Size calculation failed",
   "Folders only": "Folders only",

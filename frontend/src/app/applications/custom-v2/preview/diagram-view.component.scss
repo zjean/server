@@ -12,6 +12,24 @@
   height: 100%;
 }
 
+.diagram-view__readonly {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--si-space-3);
+  padding: var(--si-space-3) var(--si-space-6);
+  background: var(--si-amber-soft);
+  color: var(--si-amber-ink);
+  font-size: var(--si-text-7);
+  border-bottom: 1px solid var(--si-amber-line);
+}
+
+.diagram-view__readonly-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .diagram-view__state {
   display: flex;
   align-items: center;

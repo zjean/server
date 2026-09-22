@@ -16,6 +16,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import { buildEditorSrc } from '../utils/diagram-embed'
 
 interface DrawioEvent {
   event: string
@@ -57,6 +58,9 @@ export class DiagramViewComponent implements OnInit {
   protected readonly iframeSrc = signal<SafeResourceUrl | null>(null)
 
   protected readonly conflict = signal<{ theirEtag: string; theirXml: string } | null>(null)
+  // Mirrors `isWritable` for the template. The private field stays the source of
+  // truth for the save path so a stray signal write cannot re-enable writing.
+  protected readonly readOnly = signal(false)
 
   private etag = ''
   private editorOrigin = '__unset__'
@@ -94,9 +98,9 @@ export class DiagramViewComponent implements OnInit {
           }
           this.etag = res.etag
           this.isWritable = res.isWritable
+          this.readOnly.set(!res.isWritable)
           this.pendingXml = res.xml
-          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1`
-          this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
+          this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(buildEditorSrc(res.editorUrl, res.isWritable)))
           this.loading.set(false)
         },
         error: () => {
@@ -137,6 +141,11 @@ export class DiagramViewComponent implements OnInit {
         // a blank tab in our iframe-embedded context and never produces a
         // download. See drawio embed-mode docs (UI-triggered exports section).
         this.postToEditor({ action: 'load', xml: this.pendingXml, exportProtocol: true })
+        // Second channel for the same fact as the host banner: `chrome=0`
+        // already removes the editing UI, but a status line inside the canvas
+        // is where drawio itself reports document state, so that is where a
+        // user who wonders why the toolbar is gone will look.
+        if (!this.isWritable) this.postToEditor({ action: 'status', message: 'Read-only' })
         break
       case 'save':
       case 'autosave':
@@ -257,6 +266,9 @@ export class DiagramViewComponent implements OnInit {
   }
 
   private saveXml(xml: string): void {
+    // Defence in depth. `buildEditorSrc` mounts the viewer when the file is not
+    // writable, so drawio should never emit a save at all — but a save that did
+    // arrive must not reach the backend, which would refuse it anyway (#473).
     if (!this.isWritable) return
     if (this.conflict() !== null) {
       // Dialog is open. Don't touch the backend — just remember the latest
