@@ -32,8 +32,18 @@ describe(NcMobileOidcController.name, () => {
   let usersManager: { generateAppPassword: Mock }
   let appPasswords: { pruneMobileAppPasswords: Mock; mintMobileAppPassword: Mock }
 
-  function fakeReq(query?: Record<string, string>): FastifyRequest {
-    return { headers: { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }, query: query ?? {} } as unknown as FastifyRequest
+  function fakeReq(query?: Record<string, string>, cookie?: string): FastifyRequest {
+    const headers: Record<string, string> = { host: 'sync-in.example.test', 'x-forwarded-proto': 'https' }
+    if (cookie) headers.cookie = `nc_login_flow=${encodeURIComponent(cookie)}`
+    return { headers, query: query ?? {} } as unknown as FastifyRequest
+  }
+
+  // A flow whose browser-binding cookie has been established, as it would be
+  // after the browser GET /login/v2/flow/<token> that precedes every OIDC hop.
+  function boundFlow() {
+    const flow = flows.initiate('Nextcloud-iOS/33.1')
+    const cookie = flows.bindBrowser(flow.loginToken, undefined) as string
+    return { flow, cookie }
   }
   function fakeRes() {
     const res: Partial<FastifyReply> & { _status?: number; _body?: string; _redirected?: string } = {
@@ -102,15 +112,25 @@ describe(NcMobileOidcController.name, () => {
       expect(res._status).toBe(HttpStatus.NOT_FOUND)
     })
 
+    it('refuses to start an IdP round-trip for an unbound browser', async () => {
+      // The flow page sets the binding cookie; reaching this route without it
+      // means someone else is driving a flow they did not open.
+      const { flow } = boundFlow()
+      const res = fakeRes()
+      await controller.start(flow.loginToken, fakeReq(), res)
+      expect(res._status).toBe(HttpStatus.CONFLICT)
+      expect(mobileOidc.buildAuthorizationUrl).not.toHaveBeenCalled()
+    })
+
     it('marks flow oidc-pending and redirects to the IdP', async () => {
-      const flow = flows.initiate()
+      const { flow, cookie } = boundFlow()
       mobileOidc.buildAuthorizationUrl.mockResolvedValueOnce({
         url: 'https://authelia.test/api/oidc/authorization?code_challenge=CC',
         codeVerifier: 'CV',
         nonce: 'NONCE'
       })
       const res = fakeRes()
-      await controller.start(flow.loginToken, fakeReq(), res)
+      await controller.start(flow.loginToken, fakeReq(undefined, cookie), res)
       // The redirect_uri sent to the IdP is built from `auth.oidc.redirectUri`'s
       // origin (where the IdP can reach the server / what the maintainer
       // pre-registered), not the mobile-facing baseUrl. The configuration
@@ -157,42 +177,38 @@ describe(NcMobileOidcController.name, () => {
       expect(res._status).toBe(HttpStatus.NOT_FOUND)
     })
 
-    it('happy path: mints AUTH_SCOPE.MOBILE_NC app-password and completes the flow', async () => {
-      const flow = flows.initiate()
+    it('happy path: authenticates and renders the GRANT page — it mints nothing', async () => {
+      // This is the fix for the silent-authorisation hole. With autoRedirect
+      // and a live IdP session, everything up to here can happen with zero
+      // user interaction, so the IdP's say-so must not by itself produce a
+      // credential for whoever started the flow.
+      const { flow, cookie } = boundFlow()
       flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
       mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
-      appPasswords.mintMobileAppPassword.mockResolvedValueOnce({ name: 'mobile abc12345', password: 'APPPWD' })
 
       const res = fakeRes()
-      const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
-      expect(html).toContain('All set!')
-      // Success page must emit the NC client deep link so iOS / Android can
-      // hand off without waiting for the next poll. URL is HTML-escaped (`&`
-      // becomes `&amp;`) — browser un-escapes when following the meta refresh.
-      expect(html).toContain('nc://login/server:https%3A%2F%2Fsync-in.example.test')
-      expect(html).toContain('user:alice')
-      expect(html).toContain('password:APPPWD')
-      expect(html).toMatch(/<meta[^>]*http-equiv="refresh"[^>]*nc:\/\/login/)
+      const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(undefined, cookie), res)
+      expect(html).toContain('Authorize this app?')
+      expect(html).toContain('alice')
+      expect(html).toContain('Nextcloud-iOS/33.1')
+      expect(html).toContain('name="grantToken"')
+      expect(appPasswords.mintMobileAppPassword).not.toHaveBeenCalled()
+      // And the initiator's poll still comes away empty.
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
 
       expect(mobileOidc.exchangeAndResolveUser).toHaveBeenCalledWith(
         expect.objectContaining({ expectedState: flow.loginToken, codeVerifier: 'CV', nonce: 'NONCE' })
       )
-      expect(appPasswords.mintMobileAppPassword).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }), expect.stringMatching(/^mobile /))
-      // Prune runs before mint so the row count stays bounded — without
-      // this, repeated OAuth attempts pile up MOBILE_NC rows and slow down
-      // post-login auth (validateAppPassword bcrypt-loops every row).
-      expect(appPasswords.pruneMobileAppPasswords).toHaveBeenCalledWith(expect.objectContaining({ login: 'alice' }))
-      const pruneOrder = appPasswords.pruneMobileAppPasswords.mock.invocationCallOrder[0]
-      const mintOrder = appPasswords.mintMobileAppPassword.mock.invocationCallOrder[0]
-      expect(pruneOrder).toBeLessThan(mintOrder)
+    })
 
-      // Flow should now hand off credentials on next poll
-      const creds = flows.consumeByPollToken(flow.pollToken)
-      expect(creds).toEqual({
-        server: 'https://sync-in.example.test',
-        loginName: 'alice',
-        appPassword: 'APPPWD'
-      })
+    it('refuses to authenticate a callback replayed from a different browser', async () => {
+      const { flow } = boundFlow()
+      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
+      mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
+      const res = fakeRes()
+      await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(undefined, 'other-browser'), res)
+      expect(res._status).toBe(HttpStatus.CONFLICT)
+      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
     })
 
     it('renders "no Sync-in account" page when user lookup returns null; no app-password minted', async () => {
@@ -227,22 +243,6 @@ describe(NcMobileOidcController.name, () => {
     // surfaced as a generic alert because the flow stayed oidc-pending
     // and polling timed out. We now wrap the mint+complete block and
     // render an HTML diagnostic instead.
-    it('renders sign-in-failed HTML when mintMobileAppPassword throws; flow stays not-ready so retry is possible', async () => {
-      const flow = flows.initiate()
-      flows.markOidcPending(flow.loginToken, { codeVerifier: 'CV', nonce: 'NONCE' })
-      mobileOidc.exchangeAndResolveUser.mockResolvedValueOnce({ id: 1, login: 'alice' })
-      appPasswords.mintMobileAppPassword.mockRejectedValueOnce(new HttpException('Name already used', HttpStatus.BAD_REQUEST))
-
-      const res = fakeRes()
-      const html = await controller.callback('CODE', flow.loginToken, undefined, undefined, fakeReq(), res)
-      expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
-      expect(html).toContain('Sign-in failed')
-      expect(html).toContain('credentials could not be saved')
-      // Flow must remain not-ready so the next /poll returns 404, the
-      // browser session expires cleanly, and the user can retry.
-      expect(flows.consumeByPollToken(flow.pollToken)).toBeNull()
-    })
-
     it('preserves all IdP query params (esp. iss per RFC 9207) on the callback URL passed to openid-client', async () => {
       // Real-world failure: Authelia returns `iss` per RFC 9207 and openid-client
       // validates it. If we drop `iss` when reconstructing the callback URL,

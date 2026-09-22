@@ -1,6 +1,7 @@
 import { NestFastifyApplication } from '@nestjs/platform-fastify'
 import { XMLParser } from 'fast-xml-parser'
 import fs from 'node:fs/promises'
+import path from 'node:path'
 import { appBootstrap } from '../../../app.bootstrap'
 import { USER_PERMISSION, USER_PERMS_SEP, USER_ROLE } from '../../users/constants/user'
 import { UserModel } from '../../users/models/user.model'
@@ -92,6 +93,67 @@ describe('NC chunked upload, interrupted and resumed (e2e)', () => {
       readAsDirectory: children.filter((r: never) => !!r['d:propstat']['d:prop']['d:resourcetype']).length
     }
   }
+
+  // `uploadId` is a route param that reaches the filesystem twice: once for the
+  // staging directory (always sanitised) and once for the assembly tmp path,
+  // `${space.realPath}.uploading.${uploadId}` (which was not). find-my-way
+  // decodes %2F and %2E in path params, so the raw form really does arrive with
+  // separators in it and the interpolation really does escape the user's tree.
+  //
+  // MEASURED, so nobody has to re-derive it: that escape is NOT reachable over
+  // HTTP today, and this test passes with or without the sanitiser. Two
+  // independent things stop it, neither of them the tmp path itself:
+  //   1. chunks cannot be staged under such an id — chunkHandler builds its
+  //      prefix from the DECODED uploadId and matches it against the RAW url,
+  //      so any id containing %2F fails extractTrailing and 400s; and
+  //   2. with no chunks staged, concatenate throws 'no chunks to assemble'
+  //      (nc-chunked-uploads.service.ts:104) BEFORE it mkdir's or opens the
+  //      destination with 'w'.
+  // So this is hardening against a latent defect — the asymmetry between the
+  // two call sites — not a patch for a live hole. It is one refactor away from
+  // mattering: fix extractTrailing to decode, or add any other caller of
+  // assembleAndMove, and blocker 1 disappears.
+  //
+  // The differential coverage for the sanitiser itself is the unit suite in
+  // nc-chunked-uploads.service.spec.ts. This case pins the end-to-end property
+  // so that a future change which removes a blocker cannot go unnoticed.
+  it('cannot destroy a file outside the user directory via a traversal-laden upload id', async () => {
+    const rel = 'nc-traversal-target.bin'
+    // Decoded exactly as find-my-way hands it to the handler: it decodes
+    // %2F → / and %2E → . in path params, so the encoded spelling is not a
+    // defence and the raw form is what the code actually sees.
+    const rawUploadId = decodeURIComponent('%2E%2E%2F%2E%2E%2F%2E%2E%2F%2E%2E%2Fnc-e2e-escaped')
+    expect(rawUploadId).toBe('../../../../nc-e2e-escaped')
+
+    const filesPath = UserModel.getFilesPath(user.login)
+    // Where the assembly tmp file lands before the fix. Note the tmp file is
+    // RENAMED onto the destination afterwards, so its absence proves nothing —
+    // the damage is that the victim at this path is opened with 'w', truncated,
+    // and then moved away. So plant a sentinel and check it survives.
+    const victim = path.resolve(`${path.join(filesPath, rel)}.uploading.${rawUploadId}`)
+    // Sanity-check the exploit geometry, so this assertion cannot go vacuous:
+    // the target really is outside the user's files directory.
+    expect(victim.startsWith(path.resolve(filesPath) + path.sep)).toBe(false)
+
+    const sentinel = 'do-not-touch-me'
+    await fs.mkdir(path.dirname(victim), { recursive: true })
+    await fs.writeFile(victim, sentinel, 'utf8')
+
+    try {
+      const uploadRoot = `/remote.php/dav/uploads/${user.login}/${encodeURIComponent(rawUploadId)}`
+      await nc('MKCOL', uploadRoot)
+      await nc('PUT', `${uploadRoot}/00000001`, { payload: 'X'.repeat(64) })
+      await nc('MOVE', `${uploadRoot}/.file`, {
+        headers: { destination: `/remote.php/dav/files/${user.login}/${rel}`, 'oc-total-length': '64' }
+      })
+
+      // The one thing the server must not do, whatever it answers.
+      expect(await fs.readFile(victim, 'utf8')).toBe(sentinel)
+    } finally {
+      await fs.rm(victim, { force: true }).catch(() => undefined)
+      await fs.rm(path.join(filesPath, rel), { force: true }).catch(() => undefined)
+    }
+  })
 
   it('reports a resume offset that matches the bytes actually staged, and assembles correctly from it', async () => {
     const rel = 'nc-resume-target.bin'

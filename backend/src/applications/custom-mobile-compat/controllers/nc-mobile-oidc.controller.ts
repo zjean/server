@@ -3,11 +3,12 @@ import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { configuration } from '../../../configuration/config.environment'
 import { NC_ROUTE } from '../constants/routes'
-import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
-import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
+import { readFlowCookie } from '../utils/nc-flow-cookie'
+import { renderGrantPage } from '../utils/nc-grant-page'
+import { escapeHtml, renderHtml } from '../utils/nc-html'
 
 // Mobile OIDC delegation for the Nextcloud Login Flow v2 browser hop.
 //
@@ -19,9 +20,10 @@ import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 //   GET /custom-mobile/oidc/callback?code&state
 //     Authelia returns here. State is the loginToken; we look up the flow,
 //     exchange the code, fetch userinfo, and *look up* the matching Sync-in
-//     user (no auto-create on mobile — see design doc). On success, mints an
-//     AUTH_SCOPE.MOBILE_NC app-password and stashes it on the flow so the
-//     mobile app's poll endpoint can collect it.
+//     user (no auto-create on mobile — see design doc). On success the user is
+//     AUTHENTICATED but not yet authorised: we render the grant page, and only
+//     POST /login/v2/grant/<token> mints the AUTH_SCOPE.MOBILE_NC app-password
+//     the poll endpoint hands back.
 //
 // See docs/plans/2026-04-25-mobile-nc-oidc-login-design.md.
 @Controller()
@@ -32,7 +34,6 @@ export class NcMobileOidcController {
   constructor(
     private readonly flows: NcLoginFlowService,
     private readonly mobileOidc: NcMobileOidcService,
-    private readonly appPasswords: NcAppPasswordService,
     private readonly response: NcResponseService
   ) {}
 
@@ -44,6 +45,23 @@ export class NcMobileOidcController {
         .status(HttpStatus.NOT_FOUND)
         .header('Content-Type', 'text/html; charset=utf-8')
         .send(renderHtml({ title: 'Login expired', body: '<h1>Login session expired</h1><p>Please return to the app and start again.</p>' }))
+      return
+    }
+
+    // This route is reachable directly (it is the href behind the OIDC button,
+    // and the target of the autoRedirect 302), so it must re-check the binding
+    // rather than assume the flow page set it. A flow whose browser cookie is
+    // absent or belongs to another browser must not start an IdP round-trip.
+    if (!this.flows.isBoundTo(flow, readFlowCookie(req))) {
+      res
+        .status(HttpStatus.CONFLICT)
+        .header('Content-Type', 'text/html; charset=utf-8')
+        .send(
+          renderHtml({
+            title: 'Login already in progress',
+            body: '<h1>Login already in progress</h1><p>Open the sign-in link from the app again in this browser.</p>'
+          })
+        )
       return
     }
 
@@ -137,39 +155,29 @@ export class NcMobileOidcController {
       })
     }
 
-    // Bound MOBILE_NC row growth, then mint. Both calls inside the same
-    // catch — if either fails (DB error, name-collision race, write
-    // rejection), we render a useful HTML error instead of letting the
-    // exception escape to Nest's default JSON envelope (which the in-app
-    // browser surfaces as a generic "Fout" alert because the flow stays
-    // oidc-pending and iOS keeps polling until it times out).
-    let creds: { server: string; loginName: string; appPassword: string }
-    try {
-      await this.appPasswords.pruneMobileAppPasswords(user)
-      const tokenShort = state.slice(0, 8)
-      const appPwd = await this.appPasswords.mintMobileAppPassword(user, `mobile ${tokenShort}`)
-      creds = {
-        server: this.response.baseUrl(req),
-        loginName: user.login,
-        appPassword: appPwd.password
-      }
-      this.flows.completeWithCredentials(state, creds)
-    } catch (e) {
-      const err = e as Error
-      this.logger.warn({
-        tag: this.callback.name,
-        msg: `app-password mint or flow completion failed — ${err.message}`,
-        stack: err.stack
-      })
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR)
+    // Authenticated by the IdP — NOT yet authorised for this client.
+    //
+    // This is the exact point the silent-authorisation hole lived: with
+    // `autoRedirect` on and a live IdP session, everything from the victim
+    // opening a planted link to a minted app password happened with zero user
+    // interaction, and whoever started the flow collected the credential from
+    // the poll endpoint. The IdP proving who the user is says nothing about
+    // whether they meant to pair THIS app, so the mint moves behind an explicit
+    // grant. `markAuthenticated` also re-checks the browser binding, so a
+    // callback replayed from another browser stops here.
+    const grantToken = this.flows.markAuthenticated(state, user, readFlowCookie(req))
+    if (!grantToken) {
+      res.status(HttpStatus.CONFLICT)
       return renderHtml({
-        title: 'Sign-in failed',
-        body: '<h1>Sign-in failed</h1><p>Sign-in completed but credentials could not be saved. Please return to the app and try again.</p><p class="brand">See server logs for details.</p>'
+        title: 'Login already in progress',
+        body: '<h1>Login already in progress</h1><p>Open the sign-in link from the app again in this browser.</p>'
       })
     }
 
-    const success = renderNcSuccessBody(creds)
-    return renderHtml({ title: 'Signed in', body: success.body, headExtras: success.headExtras })
+    return renderHtml({
+      title: 'Authorize the app',
+      body: renderGrantPage(state, grantToken, user.login, flow.clientName)
+    })
   }
 }
 

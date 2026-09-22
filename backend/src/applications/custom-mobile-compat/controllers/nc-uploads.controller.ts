@@ -12,7 +12,7 @@ import { VersioningService } from '../../custom-versioning/services/versioning.s
 import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
 import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
-import { NcChunkedUploadsService } from '../services/nc-chunked-uploads.service'
+import { NcChunkedUploadsService, sanitizeUploadId } from '../services/nc-chunked-uploads.service'
 import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { PROPSTAT_OK, renderMultistatus } from '../utils/nc-xml'
 
@@ -204,8 +204,22 @@ export class NcUploadsController {
     }
 
     // Assemble to a sibling tmp file then atomic-move to avoid partial writes.
-    const tmpPath = `${space.realPath}.uploading.${uploadId}`
-    await makeDir(path.dirname(space.realPath), true)
+    //
+    // `uploadId` is an attacker-controlled route param and find-my-way decodes
+    // `%2F` → `/` and `%2E` → `.` before we see it, so it MUST be sanitised
+    // before it reaches a path — the staging paths always did, this one did
+    // not, which made it a traversal primitive: a `..`-laden id escaped the
+    // user's tree, `makeDir(..., recursive)` materialised the intermediate
+    // directory so the kernel's `..` resolution then succeeded, and
+    // `concatenate` opened the target with 'w' — truncating whatever was there.
+    // Belt and braces: sanitise, then assert containment, because the sanitiser
+    // is a denylist and the containment check is not.
+    const parentDir = path.dirname(space.realPath)
+    const tmpPath = `${space.realPath}.uploading.${sanitizeUploadId(uploadId)}`
+    if (path.dirname(path.resolve(tmpPath)) !== path.resolve(parentDir)) {
+      throw new HttpException('invalid upload id', HttpStatus.BAD_REQUEST)
+    }
+    await makeDir(parentDir, true)
     try {
       const total = await this.staging.concatenate(req.user.id, uploadId, tmpPath)
       if (expectedTotal !== null && expectedTotal !== total) {

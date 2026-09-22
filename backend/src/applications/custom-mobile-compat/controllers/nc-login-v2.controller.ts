@@ -8,6 +8,8 @@ import { NC_ROUTE } from '../constants/routes'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
+import { readFlowCookie, setFlowCookie } from '../utils/nc-flow-cookie'
+import { renderGrantPage } from '../utils/nc-grant-page'
 import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 
 // NC Login Flow v2 — the 3-step authentication dance used by Nextcloud's
@@ -15,8 +17,11 @@ import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 //
 //   1. POST /index.php/login/v2        (the app calls this)
 //      → { poll: {token, endpoint}, login: <browser URL> }
-//   2. User opens <browser URL> → our login page → posts back → we mint an
+//   2. User opens <browser URL> → our login page → posts back → authenticated
+//      → grant page → POST /login/v2/grant/<token> → only THEN do we mint an
 //      AUTH_SCOPE.MOBILE_NC app password and stash it on the flow.
+//      Authentication and authorisation are separate on purpose: whoever holds
+//      the login URL is not necessarily whoever is sitting at the browser.
 //   3. POST /index.php/login/v2/poll   (the app polls until ready)
 //      → 404 while pending, once 200 with { server, loginName, appPassword }
 //
@@ -38,7 +43,10 @@ export class NcLoginV2Controller {
   @Post(NC_ROUTE.LOGIN_V2.slice(1))
   initiate(@Req() req: FastifyRequest): { poll: { token: string; endpoint: string }; login: string } {
     const base = this.response.baseUrl(req)
-    const flow = this.flows.initiate()
+    // Capture who is asking, so the grant page can tell the user what they are
+    // about to authorise. This is the only moment the requesting client talks
+    // to us directly — every later step is the browser.
+    const flow = this.flows.initiate(req.headers['user-agent'])
     return {
       poll: {
         token: flow.pollToken,
@@ -81,7 +89,7 @@ export class NcLoginV2Controller {
   //     local form is included beneath when oidc.options.enablePasswordAuth is true
   //     (admins / guests / app-passwords still go through the local form)
   @Get(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
-  renderLoginPage(@Param('token') loginToken: string, @Res({ passthrough: true }) res: FastifyReply): string {
+  renderLoginPage(@Param('token') loginToken: string, @Req() req: FastifyRequest, @Res({ passthrough: true }) res: FastifyReply): string {
     const flow = this.flows.findByLoginToken(loginToken)
     if (!flow) {
       res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
@@ -97,6 +105,20 @@ export class NcLoginV2Controller {
         body: '<h1>All set!</h1><p>You can return to the app — it will finish signing in automatically.</p>'
       })
     }
+
+    // Bind the flow to this browser before rendering anything actionable. The
+    // cookie is what every later step (OIDC start, OIDC callback, form POST,
+    // grant POST) is checked against, so one flow can never be driven half by
+    // one browser and half by another.
+    const bound = this.flows.bindBrowser(loginToken, readFlowCookie(req))
+    if (!bound) {
+      res.status(HttpStatus.CONFLICT).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Login already in progress',
+        body: '<h1>Login already in progress</h1><p>This sign-in link was already opened in another browser. Return to the app and start again.</p>'
+      })
+    }
+    setFlowCookie(req, res, bound)
 
     const provider = configuration.auth?.provider
     if (provider === AUTH_PROVIDER.OIDC) {
@@ -166,6 +188,54 @@ export class NcLoginV2Controller {
       })
     }
 
+    // Authenticated — NOT yet authorised. No app password is minted here any
+    // more; the user has to say yes to this specific client on the next page.
+    const grantToken = this.flows.markAuthenticated(loginToken, authed, readFlowCookie(req))
+    if (!grantToken) {
+      res.status(HttpStatus.CONFLICT).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Login already in progress',
+        body: '<h1>Login already in progress</h1><p>This sign-in link was opened in another browser. Return to the app and start again.</p>'
+      })
+    }
+
+    res.header('Content-Type', 'text/html; charset=utf-8')
+    return renderHtml({
+      title: 'Authorize the app',
+      body: renderGrantPage(loginToken, grantToken, authed.login, flow.clientName)
+    })
+  }
+
+  // Step 2c — the user explicitly authorizes this client.
+  //
+  // This is the ONLY route that mints a MOBILE_NC app password. It requires,
+  // all at once: the flow in 'authenticated' state, the browser-binding cookie
+  // set when the flow page was opened, and the single-use grant token that was
+  // embedded in the page we just rendered. Without the split, whoever held the
+  // login URL got a credential the moment the browser finished authenticating
+  // — which is not the same person as whoever pressed the button.
+  @Post(NC_ROUTE.LOGIN_V2_GRANT.slice(1))
+  async grant(
+    @Param('token') loginToken: string,
+    @Body() body: GrantFormBody,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply
+  ): Promise<string> {
+    const granted = this.flows.consumeGrant(loginToken, body?.grantToken, readFlowCookie(req))
+    if (!granted) {
+      res.status(HttpStatus.NOT_FOUND).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Login expired',
+        body: '<h1>Login session expired</h1><p>Please return to the app and start again.</p>'
+      })
+    }
+
+    const user = await this.usersManager.findUser(granted.login, false)
+    if (!user) {
+      res.status(HttpStatus.UNAUTHORIZED).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({ title: 'Sign-in failed', body: '<h1>Sign-in failed</h1><p>Account no longer available.</p>' })
+    }
+
     // Bound MOBILE_NC row growth, then mint. Same protective wrapper as the
     // OIDC callback path: a DB error or name-collision race here used to
     // bubble out as a Nest JSON 500 envelope, which iOS surfaces as a
@@ -173,19 +243,19 @@ export class NcLoginV2Controller {
     // eventually times out.
     let creds: { server: string; loginName: string; appPassword: string }
     try {
-      await this.appPasswords.pruneMobileAppPasswords(authed)
+      await this.appPasswords.pruneMobileAppPasswords(user)
       const tokenShort = loginToken.slice(0, 8)
-      const appPwd = await this.appPasswords.mintMobileAppPassword(authed, `mobile ${tokenShort}`)
+      const appPwd = await this.appPasswords.mintMobileAppPassword(user, `mobile ${tokenShort}`)
       creds = {
         server: this.response.baseUrl(req),
-        loginName: authed.login,
+        loginName: user.login,
         appPassword: appPwd.password
       }
       this.flows.completeWithCredentials(loginToken, creds)
     } catch (e) {
       const err = e as Error
       this.logger.warn({
-        tag: this.submitLoginPage.name,
+        tag: this.grant.name,
         msg: `app-password mint or flow completion failed — ${err.message}`,
         stack: err.stack
       })
@@ -225,6 +295,10 @@ interface PollBody {
 interface LoginFormBody {
   login?: string
   password?: string
+}
+
+interface GrantFormBody {
+  grantToken?: string
 }
 
 // NC clients send the poll token as form-urlencoded (token=...) but some send
