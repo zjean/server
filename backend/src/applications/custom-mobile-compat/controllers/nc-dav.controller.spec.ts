@@ -366,7 +366,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
 //
 // Real sabre/dav never lands there: Server::calculateUri() normalizes dot
 // segments and throws Forbidden for anything outside the base URI (see
-// sabre-io/dav @ da5b4b0, lib/DAV/Server.php:559). We take the conservative
+// sabre-io/dav @ cfa5d40, lib/DAV/Server.php:559). We take the conservative
 // route for a surface that only has to satisfy stock NC clients (none of which
 // emit dot segments): refuse with 400.
 describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, () => {
