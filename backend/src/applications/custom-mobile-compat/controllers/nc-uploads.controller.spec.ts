@@ -1,4 +1,5 @@
 import * as filesUtils from '../../files/utils/files'
+import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { buildUploadDirPropfindBody, NcUploadsController, parseOcTotalLength } from './nc-uploads.controller'
 
 // OC-Total-Length is part of the NC chunked-upload protocol — clients are
@@ -175,5 +176,74 @@ describe('NcUploadsController assembly versioning', () => {
 
     expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
     expect(filesUtils.moveFiles).toHaveBeenCalled()
+  })
+})
+
+// The assembly MOVE's Destination header, end to end through the real path
+// resolver.
+//
+//   #483 — a Destination that normalizes to nothing resolved to the space ROOT,
+//          and the assembly ends in `moveFiles(tmp, space.realPath, true)` —
+//          i.e. the user's whole home replaced by the uploaded file.
+describe('NcUploadsController assembly destination', () => {
+  const user = { id: 7, login: 'alice' } as any
+
+  function buildController() {
+    const staging = {
+      concatenate: vi.fn().mockResolvedValue(1024),
+      remove: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockReturnValue(true),
+      ensureDir: vi.fn()
+    }
+    const spacesManager = {
+      spaceEnv: vi.fn().mockResolvedValue({
+        realPath: '/data/users/alice/files/x',
+        dbFile: { ownerId: 7, path: 'x', inTrash: false },
+        envPermissions: 'a:m:d',
+        url: 'files/personal/x'
+      })
+    }
+    const versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
+
+    vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(false)
+    vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
+    vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
+
+    // Real resolver: the decode-count and the null-vs-root distinction are its
+    // behaviour, and mocking it would hide both defects.
+    const controller = new NcUploadsController(staging as any, new NcPathResolverService() as any, spacesManager as any, versioning as any)
+    return { controller, spacesManager }
+  }
+
+  const moveReq = (destination: string) =>
+    ({
+      user,
+      method: 'MOVE',
+      url: '/remote.php/dav/uploads/alice/up-1/.file',
+      headers: { destination, 'oc-total-length': '1024' }
+    }) as any
+
+  const res = () => ({ status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), send: vi.fn() }) as any
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('refuses a Destination carrying a "." segment rather than assembling onto the home root (#483)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/a/./b'), res())).rejects.toMatchObject({
+      status: 400
+    })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  it('refuses a Destination that is the bare home root (#483)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/'), res())).rejects.toMatchObject({
+      status: 400
+    })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
   })
 })

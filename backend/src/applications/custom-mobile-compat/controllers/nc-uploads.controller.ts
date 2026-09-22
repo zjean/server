@@ -174,6 +174,13 @@ export class NcUploadsController {
 
     // Resolve destination space + check ADD permission (or MODIFY if overwriting).
     const resolved = this.resolver.resolve(req.user, { mode: 'files', subpath: destPath })
+    // A destination that is not addressable (`.`/`..` segment) or that
+    // normalizes to nothing resolves to the space ROOT — and the assembly
+    // below does `moveFiles(tmp, space.realPath, true)`, which would replace
+    // the user's whole home with the uploaded file. Refuse both (#483).
+    if (!resolved || !resolved.relativePath) {
+      throw new HttpException('Destination must name a file inside /remote.php/dav/files/{user}/', HttpStatus.BAD_REQUEST)
+    }
     const urlSegments: string[] = [resolved.repository, resolved.spaceAlias]
     if (resolved.rootAlias) urlSegments.push(resolved.rootAlias)
     if (resolved.relativePath) urlSegments.push(...resolved.relativePath.split('/').filter(Boolean))

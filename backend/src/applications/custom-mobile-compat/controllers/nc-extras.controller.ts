@@ -265,6 +265,12 @@ export class NcExtrasController {
     }
     // Safely decode — NcPathResolver also does its own normalization.
     const resolved = this.resolver.resolve(user, { mode: 'files', subpath })
+    // null = the path carries a `.`/`..` segment. It used to resolve to the
+    // home root (#483); there is no preview to render for that, so bail.
+    if (!resolved) {
+      this.logger.debug({ tag: this.resolveFilePath.name, msg: `filePath=${filePath} is not addressable` })
+      return null
+    }
     const urlSegments: string[] = [resolved.repository, resolved.spaceAlias]
     if (resolved.rootAlias) urlSegments.push(resolved.rootAlias)
     if (resolved.relativePath) urlSegments.push(...resolved.relativePath.split('/').filter(Boolean))

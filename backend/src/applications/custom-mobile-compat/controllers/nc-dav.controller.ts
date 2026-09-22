@@ -137,6 +137,13 @@ export class NcDavController {
     // twice. shareRootFiles is a 3-way UNION query — not free.
     const getMounts = makeMountsMemo(this.shareMounts, user)
     const urlSegments = await this.buildUrlSegments(user, input, getMounts)
+    // null = the path is not addressable (a `.`/`..` segment). It used to
+    // normalize to '' and therefore to the space ROOT, which made
+    // `PROPFIND /files/bob/a/./b` list the whole home and gave DELETE and
+    // COPY/MOVE the home as their target (#483). Refuse it instead.
+    if (urlSegments === null) {
+      throw new HttpException(`Path is not valid: ${input.subpath}`, HttpStatus.BAD_REQUEST)
+    }
     // Flag the home-root case so NcPropfindService can decide whether to
     // append virtual share-mount entries. We compute this against the raw
     // (normalized) subpath rather than the resolved segments: a user whose
@@ -244,7 +251,16 @@ export class NcDavController {
     } else {
       return null
     }
+    // A Destination that normalizes to nothing addresses the space ROOT. With
+    // `Overwrite: T` — the RFC 4918 default this controller applies — copyMove
+    // then calls deleteDestination() on it, moving the user's entire home into
+    // trash before putting the source on top. No stock NC client emits a
+    // request shaped like this, and there is no path through it that the user
+    // could have meant, so refuse it (#483). normalizeNcSubpath also returns
+    // null for a `.`/`..` segment; both cases become the caller's 400.
+    if (!normalizeNcSubpath(subpath)) return null
     const segs = await this.buildUrlSegments(user, { mode, subpath }, getMounts)
+    if (segs === null) return null
     return segmentsToWebdavNsPath(segs)
   }
 
@@ -264,8 +280,16 @@ export class NcDavController {
   // `getMounts` is an optional request-scope memo. When provided, the share
   // listing is fetched at most once per request even when both buildUrlSegments
   // and mapNcPathToInternal need it (COPY/MOVE flow).
-  private async buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }, getMounts?: MountsMemo): Promise<string[]> {
+  //
+  // Returns null when the subpath is not addressable — see
+  // NcPathResolverService.resolve.
+  private async buildUrlSegments(
+    user: UserModel,
+    input: { mode: 'files' | 'trashbin'; subpath: string },
+    getMounts?: MountsMemo
+  ): Promise<string[] | null> {
     const normalized = normalizeNcSubpath(input.subpath)
+    if (normalized === null) return null
 
     if (input.mode === 'files' && normalized) {
       const parts = normalized.split('/').filter(Boolean)
@@ -280,6 +304,7 @@ export class NcDavController {
     }
 
     const resolved = this.resolver.resolve(user, input)
+    if (!resolved) return null
     const segs: string[] = [resolved.repository, resolved.spaceAlias]
     if (resolved.rootAlias) segs.push(resolved.rootAlias)
     if (resolved.relativePath) segs.push(...resolved.relativePath.split('/').filter(Boolean))

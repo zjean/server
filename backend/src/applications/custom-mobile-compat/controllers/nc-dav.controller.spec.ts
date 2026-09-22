@@ -1,3 +1,4 @@
+import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
 import { getProps } from '../../files/utils/files'
@@ -347,6 +348,141 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
     // attachSpace path + mapNcPathToInternal path together should produce
     // exactly one listMounts call thanks to makeMountsMemo.
     expect(shareMounts.listMounts).toHaveBeenCalledTimes(1)
+  })
+})
+
+// #483 — a Destination (or request path) that normalizes to nothing must be
+// REFUSED, not resolved to the space root.
+//
+// normalize() used to answer '' both for "the root" and for "this path has a
+// `.`/`..` segment I refuse to interpret". Either answer produced the segments
+// ['files', 'personal'], which WebDAVMethods.copyMove takes as the destination
+// — and since Overwrite defaults to T (RFC 4918), copyMove calls
+// deleteDestination() on it first: the user's entire home moved to trash, then
+// the source moved on top. FilesManager grants this because the virtual-endpoint
+// overlay only strips DELETE, and delete() performs no permission check of its
+// own. The same conflation made `PROPFIND /files/bob/a/./b` silently list the
+// whole home.
+//
+// Real sabre/dav never lands there: Server::calculateUri() normalizes dot
+// segments and throws Forbidden for anything outside the base URI (see
+// sabre-io/dav @ da5b4b0, lib/DAV/Server.php:559). We take the conservative
+// route for a surface that only has to satisfy stock NC clients (none of which
+// emit dot segments): refuse with 400.
+describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let spacesManager: { spaceEnv: Mock }
+
+  beforeAll(async () => {
+    spacesManager = { spaceEnv: vi.fn() }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        // Real resolver — the null-vs-'' distinction under test lives in it.
+        NcPathResolverService,
+        {
+          provide: NcShareMountResolverService,
+          useValue: { listMounts: vi.fn().mockResolvedValue([]), findByAlias: vi.fn().mockResolvedValue(null) }
+        },
+        { provide: SpacesManager, useValue: spacesManager },
+        { provide: SpacesQueries, useValue: {} },
+        { provide: WebDAVMethods, useValue: {} },
+        { provide: NcPropfindService, useValue: {} },
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: {} }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+  })
+
+  const attach = (req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) =>
+    (
+      controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files' | 'trashbin'; subpath: string }) => Promise<void> }
+    ).attachSpace(req, input)
+
+  const moveReq = (destination: string) =>
+    ({
+      url: '/remote.php/dav/files/bob/Documents/report.pdf',
+      method: 'MOVE',
+      headers: { destination },
+      params: {},
+      user: { login: 'bob', settings: null }
+    }) as unknown as FastifyDAVRequest
+
+  const expect400 = async (req: FastifyDAVRequest, subpath = 'Documents/report.pdf') => {
+    await expect(attach(req, { mode: 'files', subpath })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+    expect(req.dav?.copyMove).toBeUndefined()
+  }
+
+  it('refuses a MOVE whose Destination is the bare home root', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/'))
+  })
+
+  it('refuses a MOVE whose Destination is the home root with no trailing slash', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob'))
+  })
+
+  it('refuses a MOVE whose absolute Destination is the home root', async () => {
+    await expect400(moveReq('https://cloud.example.org/remote.php/dav/files/bob/'))
+  })
+
+  it('refuses a MOVE whose Destination carries a "." segment', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/a/./b'))
+  })
+
+  it('refuses a MOVE whose Destination carries a ".." segment', async () => {
+    await expect400(moveReq('/remote.php/dav/files/bob/a/../b'))
+  })
+
+  it('refuses a MOVE whose Destination is the trashbin root', async () => {
+    await expect400(moveReq('/remote.php/dav/trashbin/bob/'))
+  })
+
+  it('still accepts an ordinary MOVE destination', async () => {
+    const req = moveReq('/remote.php/dav/files/bob/Archive/report.pdf')
+    await attach(req, { mode: 'files', subpath: 'Documents/report.pdf' })
+    expect(req.dav.copyMove).toEqual({ destination: 'personal/Archive/report.pdf', overwrite: true, isMove: true })
+  })
+
+  it('refuses a request PATH with a "." segment instead of listing the whole home', async () => {
+    const req = {
+      url: '/remote.php/dav/files/bob/a/./b',
+      method: 'PROPFIND',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await expect(attach(req, { mode: 'files', subpath: 'a/./b' })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+    // The load-bearing half: we never asked for a space at all, so there is no
+    // home-root SpaceEnv for a DELETE/MOVE to act on.
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+  })
+
+  it('still resolves the legitimate home root (subpath "") — the root itself is not rejected', async () => {
+    const req = {
+      url: '/remote.php/dav/files/bob',
+      method: 'PROPFIND',
+      headers: {},
+      params: {},
+      user: { login: 'bob', settings: null }
+    } as unknown as FastifyDAVRequest
+    await attach(req, { mode: 'files', subpath: '' })
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal'])
+    expect(req.nc.isHomeRoot).toBe(true)
   })
 })
 
