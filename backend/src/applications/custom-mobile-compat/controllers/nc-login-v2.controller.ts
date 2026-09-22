@@ -179,7 +179,29 @@ export class NcLoginV2Controller {
     }
 
     const ip = clientIp(req)
-    const authed = await this.usersManager.logUser(user, password, ip)
+    // `logUser` does not only return null on a bad password — it starts with
+    // `validateUserAccess`, which THROWS HttpException(403) for a link account,
+    // a deactivated account, or one that has exhausted
+    // USER_MAX_PASSWORD_ATTEMPTS. Uncaught, that reached the browser as Nest's
+    // raw JSON error envelope instead of the page every other branch here
+    // renders, and the flow stayed `pending` with nothing on screen to explain
+    // why. Same protective wrapper as the grant step below.
+    let authed: Awaited<ReturnType<UsersManager['logUser']>>
+    try {
+      authed = await this.usersManager.logUser(user, password, ip)
+    } catch (e) {
+      const err = e as Error
+      this.logger.warn({ tag: this.submitLoginPage.name, msg: `login refused for *${login}* — ${err.message}`, stack: err.stack })
+      // Only an HttpException's message is deliberately user-facing ('Account
+      // locked', …). Anything else is an internal failure and must not be
+      // echoed into the page.
+      const isHttp = e instanceof HttpException
+      res.status(isHttp ? e.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR).header('Content-Type', 'text/html; charset=utf-8')
+      return renderHtml({
+        title: 'Sign in to Sync-in',
+        body: renderLoginForm(loginToken, isHttp ? `${err.message}.` : 'Sign-in failed. See server logs for details.')
+      })
+    }
     if (!authed) {
       res.status(HttpStatus.UNAUTHORIZED).header('Content-Type', 'text/html; charset=utf-8')
       return renderHtml({
