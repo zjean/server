@@ -70,12 +70,7 @@ export class VersioningService {
   // throws: all failures are logged and swallowed (see the class comment).
   async snapshotBeforeOverwrite(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
     if (!this.enabled) return
-    // Guest and link homes live under files.tmpPath while the versions root
-    // resolves into usersPath, so their versions would outlive the ephemeral
-    // tree holding the live files — and every public-link upload would pay a
-    // cross-device copy. Public links are a sharing surface, not an authoring
-    // one; there is no user to show history to (ADR §8).
-    if (user.isGuest || user.isLink) return
+    if (this.mintsNoVersions(user, space)) return
 
     try {
       await this.snapshot(user, space, options)
@@ -86,6 +81,43 @@ export class VersioningService {
         msg: `snapshot failed for ${space.url} (${options.origin}), the save proceeds unversioned: ${e}`
       })
     }
+  }
+
+  // Which principals mint no versions — and why that is NOT simply "guest or
+  // link" (#517).
+  //
+  // A LINK never mints one. A public link is a sharing surface, not an
+  // authoring one (ADR §8): the principal is whoever holds the url, it is
+  // denied history entirely (#492), and there is no durable account to
+  // attribute a revision to.
+  //
+  // A GUEST is a named, authenticated collaborator, so the reason is narrower
+  // and it is a property of the ROOT rather than of the account. Guest homes
+  // live under files.tmpPath while userVersionsRoot resolves into usersPath
+  // (see the note on versionsPathFromRoot), so a version of a file in the
+  // guest's OWN home would be written outside the ephemeral tree holding the
+  // live file, and every such write would pay a cross-device copy. That holds
+  // only when the resolved root IS the acting guest's user root — for a file in
+  // a SHARED SPACE the root is 'space:<alias>' under spacesPath, which the
+  // guest's tmp home has nothing to do with.
+  //
+  // Skipping the shared-space case too was silent data loss: a guest with
+  // MODIFY overwrote a shared file and the previous content was unrecoverable
+  // for everyone, the space owner included, while the identical overwrite by an
+  // internal member was versioned — a hole in the timeline nobody in that space
+  // could see or repair (#517). The guest still cannot READ that history
+  // (#492); the capture protects the file's other members, not the guest.
+  //
+  // Tested on the resolved ROOT rather than on space.inPersonalSpace because
+  // versionsRootFromSpace returns the acting user's root from TWO branches —
+  // personal space, and a share with an external path and no owner — and the
+  // second would otherwise write a guest's blobs into a usersPath tree that
+  // does not otherwise exist. Resolving the root twice on this path costs
+  // nothing: it is a pure function over objects already in hand.
+  private mintsNoVersions(user: UserModel, space: SpaceEnv): boolean {
+    if (user.isLink) return true
+    if (!user.isGuest) return false
+    return versionsRootFromSpace(user, space) === userVersionsRoot(user.login)
   }
 
   private async snapshot(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {

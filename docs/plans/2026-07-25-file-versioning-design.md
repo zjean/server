@@ -291,6 +291,15 @@ This section replaces the draft's claim that snapshotting "never blocks the user
 
 **Rationale (verified).** `UserModel.getHomePath(login, isGuest, isLink)` puts guests under `tmpPath/guests/<login>` and links under `tmpPath/links/<login>` (`user.model.ts:135-148`), whereas `getTrashPath(login)` calls `getHomePath(login)` **without those flags** (:154-156) and so resolves into `usersPath`. A `getVersionsPath` modeled on it would inherit the same split: versions for a guest upload would be written outside the ephemeral tree that holds the live files, outliving the guest home and accumulating unreferenced blobs. Skipping also avoids a guaranteed cross-device copy on every public-link upload. Public links are a sharing surface, not a document-authoring surface; version history there has no user to show it to.
 
+**CORRECTED (#517): the guest half of that rule was too wide, and the excess was silent data loss.** The rationale above is about the **root**, not about the account — and it only holds where the resolved root is the acting guest's **own user root**. For a file in a **shared space** `versionsRootFromSpace` returns `space:<alias>`, under `spacesPath`, which a guest's tmp home has nothing to do with. Skipping there meant a guest with MODIFY overwrote a shared file and the previous content was unrecoverable for **everyone in that space, its owner included**, while the identical overwrite by an internal member was versioned — a hole in the timeline nobody in the space could see or repair.
+
+The rule is now, in `VersioningService.mintsNoVersions`:
+
+- **link** → never mints, unchanged (whoever holds the url; nothing durable to attribute a revision to).
+- **guest** → skips only when `versionsRootFromSpace(user, space) === userVersionsRoot(user.login)`, which covers both branches that return the acting user's own root (personal space, and a share with an external path and no owner) and nothing else.
+
+Reading history stays denied to both (#492): the capture protects the file's **other** members, not the guest.
+
 ## 9. Restore — `copyFileContent`, never `moveFiles`; the inode must survive
 
 **Decision.** Restore is: acquire a lock → snapshot the *current* content as a new version with origin `restore` → replace live content with **`copyFileContent(blobPath, realPath)`** → update the `files` row (size/mtime) → emit `FileEvent` UPDATE → release the lock.

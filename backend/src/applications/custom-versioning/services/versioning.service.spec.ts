@@ -233,7 +233,22 @@ describe(VersioningService.name, () => {
     } as unknown as SpaceEnv
   }
 
+  // A shared space env: no root, so versionsRootFromSpace resolves to
+  // 'space:team' under spacesPath — the case #517 is about.
+  function sharedSpace(overrides: Partial<SpaceEnv> = {}): SpaceEnv {
+    return personalSpace({
+      url: 'files/team/docs/report.txt',
+      inPersonalSpace: false,
+      inFilesRepository: true,
+      inSharesRepository: false,
+      alias: 'team',
+      ...overrides
+    })
+  }
+
   const versionsDir = () => path.join(tmpRoot, 'users', 'alice', 'versions')
+
+  const spaceVersionsDir = () => path.join(tmpRoot, 'spaces', 'team', 'versions')
 
   const pathExists = (p: string) =>
     fs
@@ -260,7 +275,7 @@ describe(VersioningService.name, () => {
     await fs.utimes(filePath, t, t)
   }
 
-  async function blobFiles(): Promise<string[]> {
+  async function blobFiles(root: string = versionsDir()): Promise<string[]> {
     const found: string[] = []
     async function walk(dir: string) {
       for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -272,7 +287,7 @@ describe(VersioningService.name, () => {
         }
       }
     }
-    await walk(versionsDir())
+    await walk(root)
     return found
   }
 
@@ -495,8 +510,71 @@ describe(VersioningService.name, () => {
   it.each([
     ['guest', () => guest],
     ['link', () => linkUser]
-  ])('is a no-op for a %s user, whose home lives outside the versions root', async (_label, getUser) => {
+  ])('is a no-op for a %s user in their own home, which lives outside the versions root', async (_label, getUser) => {
     await service.snapshotBeforeOverwrite(getUser(), personalSpace(), { origin: 'web' })
+    expect(queries.rows).toHaveLength(0)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+  })
+
+  // #517. The tmpPath/usersPath mismatch the case above rests on is a property
+  // of the ROOT, and a shared space does not have it — the root is
+  // 'space:<alias>' under spacesPath. Skipping the guest anyway destroyed the
+  // previous content for every member of that space, its owner included, on a
+  // write that an internal member would have had versioned.
+  it('versions a guest’s overwrite in a SHARED space, into the space root', async () => {
+    await service.snapshotBeforeOverwrite(guest, sharedSpace(), { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.rows[0]).toMatchObject({ versionsRoot: 'space:team', authorId: guest.id, size: CONTENT.length })
+    // The blob holds the destroyed bytes and lives under spacesPath, nowhere
+    // near the guest's ephemeral tmp home.
+    const blobs = await blobFiles(spaceVersionsDir())
+    expect(blobs).toHaveLength(1)
+    expect(await fs.readFile(blobs[0], 'utf8')).toBe(CONTENT)
+    expect(await blobFiles()).toHaveLength(0)
+    expect(loggedErrors).not.toHaveBeenCalled()
+  })
+
+  // States the defect as the ASYMMETRY it was: the same overwrite of the same
+  // shared file, by two members of the same space, used to produce a version
+  // for one of them and silent loss for the other.
+  it('gives a guest and an internal member the same outcome on a shared file', async () => {
+    await service.snapshotBeforeOverwrite(user, sharedSpace(), { origin: 'web' })
+    const internal = queries.rows.length
+
+    queries.rows = []
+    await service.snapshotBeforeOverwrite(guest, sharedSpace(), { origin: 'web' })
+
+    expect(internal).toBe(1)
+    expect(queries.rows).toHaveLength(internal)
+    expect(queries.rows[0].versionsRoot).toBe('space:team')
+  })
+
+  // The OTHER branch of versionsRootFromSpace that returns the acting user's
+  // own root: a share with an external path and no owner. Keying the skip on
+  // space.inPersonalSpace instead of on the resolved root would have written a
+  // guest's blobs into a usersPath tree their live files never live in.
+  it('is still a no-op for a guest on a share that resolves to their own user root', async () => {
+    const externalShare = personalSpace({
+      inPersonalSpace: false,
+      inFilesRepository: false,
+      inSharesRepository: true,
+      alias: 'some-share',
+      root: { externalPath: '/mnt/external' }
+    } as Partial<SpaceEnv>)
+
+    await service.snapshotBeforeOverwrite(guest, externalShare, { origin: 'web' })
+
+    expect(queries.rows).toHaveLength(0)
+    expect(ensurer.ensureFileId).not.toHaveBeenCalled()
+  })
+
+  // Links stay out everywhere, root notwithstanding: a public link is a sharing
+  // surface, not an authoring one (ADR §8), and there is no durable account to
+  // attribute a revision to.
+  it('mints nothing for a link principal, even in a shared space', async () => {
+    await service.snapshotBeforeOverwrite(linkUser, sharedSpace(), { origin: 'web' })
+
     expect(queries.rows).toHaveLength(0)
     expect(ensurer.ensureFileId).not.toHaveBeenCalled()
   })
