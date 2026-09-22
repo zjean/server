@@ -10,6 +10,7 @@ import type { FilesVersionsConfig } from '../../files/files.config'
 import { isPathExists, removeFiles } from '../../files/utils/files'
 import { spaces } from '../../spaces/schemas/spaces.schema'
 import { users } from '../../users/schemas/users.schema'
+import { API_VERSIONS_ADMIN_REPOINT } from '../constants/routes'
 import { VERSIONS_ROOT_SPACE_PREFIX, VERSIONS_ROOT_USER_PREFIX, VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { VersionRow } from '../interfaces/version.interface'
 import { spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot } from '../utils/paths'
@@ -72,10 +73,27 @@ export class VersionsRetention {
     this.isRunning = true
     this.logger.log({ tag: this.cleanVersions.name, msg: 'START' })
     try {
-      // Row rules, per root that actually holds versions. Read ONCE and reused
-      // by the coherence check below — two reads of the same list could
-      // disagree, and the cheaper of the two answers is the one that decides
-      // whether blobs get unlinked.
+      // Root list for the whole sweep. Read ONCE and reused by the coherence
+      // check below — two reads of the same list could disagree, and the
+      // cheaper of the two answers is the one that decides whether blobs get
+      // unlinked.
+      //
+      // THIS READ MUST STAY OUTSIDE ANY `this.config.enabled` GATE, and the
+      // rule is load-bearing rather than stylistic. The flag decides whether
+      // new versions are MINTED; the filesystem rules below run regardless,
+      // because rows and blobs written while it was on outlive it. They derive
+      // the stranded-root list from exactly this answer, so gating the read
+      // would hand them an empty list — and an empty stranded list is not
+      // "nothing is wrong", it is "the tripwire is disarmed". The one state in
+      // which that matters is the one it exists for: an unrepointed rename on
+      // an instance where versioning has since been switched off.
+      //
+      // (Agreed resolution with #524, which gates the ROW rules on the flag:
+      // the gate goes around the loop below, never around this line, and that
+      // branch's `expect(distinctRoots).not.toHaveBeenCalled()` narrows to the
+      // shaping probes — unlabeledOlderThan / distinctFileIdsByRoot /
+      // evictUntilUnderCeiling — which is what "did no row work" actually
+      // means.)
       const rootsWithRows = await this.queries.distinctRoots()
       for (const versionsRoot of rootsWithRows) {
         // Each rule is independently guarded: a broken root must not stop the
@@ -91,40 +109,22 @@ export class VersionsRetention {
       // visited and would leak forever. These enumerate the disk instead.
       //
       // …which is exactly what makes this the one rule that can destroy an
-      // entire history at once, so a root that looks like the far side of an
-      // unrepointed rename is left alone (#471). See orphanedRenameSuspected.
-      const unresolvable = await this.unresolvableRoots(rootsWithRows)
-      if (unresolvable.length) {
+      // entire history at once, so every blob a STRANDED root's rows still
+      // name is held back from it (#471). See collectOrphanBlobs.
+      const stranded = await this.unresolvableRoots(rootsWithRows)
+      if (stranded.length) {
         this.logger.error({
           tag: this.cleanVersions.name,
           msg:
-            `${unresolvable.length} versions root(s) hold rows but have no store on disk (${unresolvable.join(', ')}). ` +
+            `${stranded.length} versions root(s) hold rows but have no store on disk (${stranded.join(', ')}). ` +
             `A user login or space alias was very likely renamed without repointing its version rows — every download ` +
-            `and restore under those roots will 404 until they are repointed.`
+            `and restore under those roots will 404 until they are repointed. ` +
+            `REMEDY: POST ${API_VERSIONS_ADMIN_REPOINT} {"fromVersionsRoot":"<stale root>","toVersionsRoot":"<current root>"} ` +
+            `as an administrator; it only rewrites the recorded root and deletes nothing.`
         })
       }
-      const rootsWithRowsSet = new Set(rootsWithRows)
       for (const versionsRoot of await this.rootsOnDisk()) {
-        // The rename signature, and BOTH halves are required: some root's rows
-        // have lost their store, and THIS root has a store but no rows. That
-        // pair is what an unrepointed rename produces, and sweeping here would
-        // unlink the whole of the history those rows describe.
-        //
-        // Neither half alone trips it, deliberately. A root with no rows is
-        // otherwise still swept — that case is the entire reason this rule
-        // enumerates the disk rather than the table (see the loop above). And
-        // one stale root elsewhere in the instance does not stop the sweep for
-        // roots that are internally consistent, which a blanket skip did: it
-        // turned a single historical inconsistency into blob GC being disabled
-        // for every user, forever.
-        if (unresolvable.length && !rootsWithRowsSet.has(versionsRoot)) {
-          this.logger.warn({
-            tag: this.cleanVersions.name,
-            msg: `${versionsRoot}: has a store on disk but no rows while ${unresolvable.length} root(s) have rows but no store — not sweeping it`
-          })
-          continue
-        }
-        await this.runRule('orphanBlobs', versionsRoot, () => this.collectOrphanBlobs(versionsRoot))
+        await this.runRule('orphanBlobs', versionsRoot, () => this.collectOrphanBlobs(versionsRoot, stranded))
       }
       // Global, not per root: the query has no root filter, so running it inside
       // the loop meant N identical full anti-joins per night and a count
@@ -291,11 +291,43 @@ export class VersionsRetention {
   // Blobs on disk that no row references, plus staging debris from a crashed
   // snapshot. The grace period matters: a snapshot writes the blob before the
   // row, so a just-written blob is legitimately unreferenced for a moment.
-  private async collectOrphanBlobs(versionsRoot: string): Promise<number> {
+  //
+  // THE #471 TRIPWIRE LIVES HERE, PER BLOB, and it is per blob because the
+  // root-level version of it did not survive contact with the scenario it was
+  // written for. That guard skipped a root only while the root had NO rows,
+  // reasoning that "some root's rows lost their store" plus "this root has a
+  // store but no rows" is the signature of an unrepointed rename. It is — for
+  // about as long as it takes the renamed user to press Save once. From that
+  // instant `versionsRootFromSpace` derives the CURRENT login, the new root
+  // acquires rows, the guard reads false, and the sweep unlinks the entire
+  // pre-rename history: exactly #471, now with the tripwire watching.
+  //
+  // What actually distinguishes the two cases is not whether this root has
+  // rows, but whether the bytes in front of us are ones a STRANDED root's rows
+  // still describe. After a rename they are — the store moved with the home
+  // directory, so `user:alice`'s rows name blobs physically sitting under
+  // `user:bob`. A genuine orphan is named by nothing anywhere. So the per-root
+  // refcount decides as before, and a blob it calls unreferenced gets one more
+  // question asked of the stranded roots before it is unlinked.
+  //
+  // This costs nothing on a healthy instance (`stranded` is empty and the
+  // query short-circuits), and it does not neuter the rule while a stranded
+  // root exists: a root with no rows is still swept, and a genuinely orphaned
+  // blob is still collected. Only bytes with a claimant are held back, and they
+  // are held back rather than deleted, which is the direction this rule is
+  // allowed to be wrong in.
+  //
+  // KNOWN LIMIT: the signal is the stranded root, so a rename whose OLD name
+  // has since acquired a store of its own — a user deleted and recreated under
+  // the previous login — is not protected. Repointing the rows is the fix for
+  // that, and the unconditional error log above names the endpoint that does
+  // it; this is the net under the fix, not a substitute for it.
+  private async collectOrphanBlobs(versionsRoot: string, stranded: string[] = []): Promise<number> {
     const versionsPath = versionsPathFromRoot(versionsRoot)
     if (!versionsPath || !(await isPathExists(versionsPath))) return 0
     const now = Date.now()
     let removed = 0
+    let heldBack = 0
 
     for (const shard of await fs.readdir(versionsPath, { withFileTypes: true }).catch(() => [])) {
       const shardPath = path.join(versionsPath, shard.name)
@@ -321,9 +353,23 @@ export class VersionsRetention {
         if (!stats || now - stats.mtimeMs <= this.ORPHAN_GRACE_MS) continue
         // Refcount within THIS root only — see the class comment.
         if ((await this.queries.countByBlob(blob.name, versionsRoot)) > 0) continue
+        // …and the tripwire: unreferenced HERE is not unreferenced if a root
+        // that has lost its store still names these bytes.
+        if ((await this.queries.countByBlobInRoots(blob.name, stranded)) > 0) {
+          heldBack++
+          continue
+        }
         await removeFiles(blobPath).catch(() => undefined)
         removed++
       }
+    }
+    if (heldBack) {
+      this.logger.warn({
+        tag: this.collectOrphanBlobs.name,
+        msg:
+          `${versionsRoot}: kept ${heldBack} unreferenced blob(s) that rows in a root with no store still name ` +
+          `(${stranded.join(', ')}) — repoint those rows and they become readable history again`
+      })
     }
     return removed
   }
@@ -346,9 +392,9 @@ export class VersionsRetention {
     return rows.length
   }
 
-  // Roots that rows point at but that have NO versions directory on disk — half
-  // the signature of an orphaned store, and the input to the blob sweep's
-  // tripwire (#471).
+  // Roots that rows point at but that have NO versions directory on disk — the
+  // signature of an orphaned store, and the input to the blob sweep's tripwire
+  // (#471).
   //
   // WHY ONLY THE BLOB SWEEP CARES. `versionsRoot` is derived from a user login
   // or a space alias, both mutable, and renaming either moves the home
@@ -361,9 +407,10 @@ export class VersionsRetention {
   // removal resolves the stale root, finds nothing, and logs), so they are left
   // running rather than stalling every root's retention on one bad entry.
   //
-  // This list alone is NOT the trip condition — see cleanVersions for why both
-  // halves are needed. On its own it is a diagnostic, and a real one: these
-  // roots' downloads and restores are already 404ing.
+  // It is also a diagnostic in its own right, and a real one: these roots'
+  // downloads and restores are already 404ing, and nothing but repointing the
+  // rows fixes that — which is why cleanVersions logs it unconditionally, at
+  // error level, with the repair endpoint named.
   private async unresolvableRoots(rootsWithRows: string[]): Promise<string[]> {
     const unresolvable: string[] = []
     for (const versionsRoot of rootsWithRows) {
