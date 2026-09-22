@@ -53,14 +53,25 @@ export class NcChunkedUploadsService {
     await this.ensureDir(userId, uploadId)
     const full = this.chunkPath(userId, uploadId, chunkName)
     const out = fsSync.createWriteStream(full)
-    return new Promise((resolve, reject) => {
-      let written = 0
-      src.on('data', (c: Buffer | string) => (written += typeof c === 'string' ? Buffer.byteLength(c) : c.length))
-      src.on('error', reject)
-      out.on('error', reject)
-      out.on('finish', () => resolve(written))
-      src.pipe(out)
-    })
+    try {
+      // pipeline, not `src.pipe(out)`: pipe does NOT destroy the destination
+      // when the source errors, and a mobile client aborting mid-upload is the
+      // normal case on this path — so the old code left the write descriptor
+      // open for the life of the process on every abort. pipeline destroys both
+      // ends on any failure.
+      await pipeline(src, out)
+    } catch (e) {
+      // ...and drop the truncated chunk. Android's resume path (see
+      // listChunksWithStats) derives `nextByte` by summing chunk sizes, so a
+      // short chunk left behind does not merely waste disk — it makes the
+      // resumed upload assemble a corrupt file.
+      await fs.rm(full, { force: true }).catch(() => undefined)
+      throw e
+    }
+    // Counted by the destination rather than a `data` listener on the source:
+    // it is the number of bytes that actually reached disk, which is what the
+    // controller's Content-Length check is asking about.
+    return out.bytesWritten
   }
 
   async listChunks(userId: number, uploadId: string): Promise<string[]> {
@@ -117,11 +128,18 @@ export class NcChunkedUploadsService {
         await pipeline(src, out, { end: false })
       }
     } finally {
-      await new Promise<void>((resolve, reject) => {
-        out.on('error', reject)
-        out.on('finish', () => resolve())
-        out.end()
-      })
+      // `pipeline` destroys `out` when a chunk fails, and a destroyed writable
+      // emits neither `finish` nor a second `error` (the first one already set
+      // `errorEmitted`) — so waiting on those events here hung the assembly
+      // forever, and with it the MOVE that triggered it. Nothing is left to
+      // flush in that case; skip the close and let the original error surface.
+      if (!out.destroyed) {
+        await new Promise<void>((resolve, reject) => {
+          out.on('error', reject)
+          out.on('finish', () => resolve())
+          out.end()
+        })
+      }
     }
     return total
   }

@@ -1,13 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
-import { and, eq } from 'drizzle-orm'
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import fs from 'node:fs/promises'
 import { ACTION } from '../../../common/constants'
-import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
-import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { FileEvent } from '../../files/events/file-events'
 import type { FileEventType } from '../../files/interfaces/file-event.interface'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
-import { filesRecents } from '../../files/schemas/files-recents.schema'
+import type { FileRecent, FileRecentLocation } from '../../files/schemas/file-recent.interface'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { dirName, fileName, getMimeType } from '../../files/utils/files'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
@@ -53,11 +50,12 @@ import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 // Slimming to non-editor paths would drop the DB-row materialisation guarantee
 // for editor saves and gain nothing (the editor path is already idempotent).
 //
-// Double-write on editor saves is redundant but harmless: both paths upsert by
-// the same logical identity, so the end state is a single row. Our upsert keys
-// on (id, location) [upsertRecent below]; upstream's FilesQueries.upsertRecent
-// keys on (location, name). For a real file (stable id, name, location) both
-// converge on one row — no duplicate, no drift.
+// Double-write on editor saves is redundant but harmless: since #493 both
+// paths go through the *same* call — FilesQueries.upsertRecent — which deletes
+// by (location, path, name) and re-inserts inside one transaction. Identical
+// keying plus a transaction is what makes the end state a single row; two
+// differently-keyed writers would have raced (upstream's DELETE landing between
+// our UPDATE-miss and our INSERT leaves two rows).
 //
 // fix #163 (the `if (fileId <= 0) return` guard in handleFileEvent, mirrored in
 // upstream's updateRecentFromEditor / toRecents): never store FS-only files
@@ -83,10 +81,7 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
     this.handleFileEvent(e).catch((err: Error) => this.logger.warn({ tag: this.handleFileEvent.name, msg: err.message }))
   }
 
-  constructor(
-    @Inject(DB_TOKEN_PROVIDER) private readonly db: DBSchema,
-    private readonly filesQueries: FilesQueries
-  ) {}
+  constructor(private readonly filesQueries: FilesQueries) {}
 
   onModuleInit(): void {
     // Sync-in's FileEvent is a process-global singleton; only attach in
@@ -188,10 +183,19 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
     return this.filesQueries.getOrCreateSpaceFile(NO_CLIENT_FILE_ID, lookupProps, dbFile)
   }
 
-  // UPDATE-then-INSERT upsert. files_recents has no unique constraint we
-  // could lean on for ON DUPLICATE KEY, and the (id, location) composite
-  // already disambiguates rows in practice (a file id only ever lives in
-  // one ownerId/spaceId/shareId column).
+  // Delegates to upstream's transactional upsert (FilesQueries.upsertRecent):
+  // DELETE by (location, path, name) then INSERT, in one transaction. That is
+  // the same call upstream's FilesRecents.updateRecentFromEditor makes, so the
+  // two writers cannot diverge, and it is the only correct shape here because
+  // files_recents has no unique key to hang ON DUPLICATE KEY on.
+  //
+  // #493: this replaced a hand-rolled UPDATE-then-INSERT whose "did the UPDATE
+  // hit anything?" test was dead code. Drizzle's mysql2 driver returns
+  // MySqlQueryResult = [ResultSetHeader, FieldPacket[]] — a *tuple* — so
+  // reading `.affectedRows` / `.rowsAffected` off the result was always
+  // undefined (the repo's own dbCheckAffectedRows reads `queryResult.at(0)`),
+  // the guard always saw 0, and every single file event inserted another row.
+  // Do not reintroduce a raw upsert here.
   private async upsertRecent(args: {
     fileId: number
     space: SpaceEnv
@@ -201,35 +205,16 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
     mime: string
     mtime: number
   }): Promise<void> {
-    const location = this.locationForUpsert(args.space, args.userId)
+    const location = this.locationForUpsert(args.space, args.userId, args.dirUrl)
     if (!location) return
 
-    const where = [eq(filesRecents.id, args.fileId)]
-    if (location.ownerId !== undefined) where.push(eq(filesRecents.ownerId, location.ownerId))
-    if (location.spaceId !== undefined) where.push(eq(filesRecents.spaceId, location.spaceId))
-    if (location.shareId !== undefined) where.push(eq(filesRecents.shareId, location.shareId))
-
-    const updateResult = await this.db
-      .update(filesRecents)
-      .set({ name: args.baseName, path: args.dirUrl, mime: args.mime, mtime: args.mtime })
-      .where(and(...where))
-      .limit(1)
-    const affected =
-      (updateResult as unknown as { rowsAffected?: number; affectedRows?: number }).rowsAffected ??
-      (updateResult as unknown as { affectedRows?: number }).affectedRows ??
-      0
-    if (affected > 0) return
-
-    await this.db.insert(filesRecents).values({
+    await this.filesQueries.upsertRecent(location, {
       id: args.fileId,
-      ownerId: location.ownerId ?? null,
-      spaceId: location.spaceId ?? null,
-      shareId: location.shareId ?? null,
-      path: args.dirUrl,
       name: args.baseName,
       mime: args.mime,
-      mtime: args.mtime
-    })
+      mtime: args.mtime,
+      ...location
+    } as FileRecent)
   }
 
   // Mirrors FilesRecents.getLocation for the single-file case. inSharesList
@@ -237,9 +222,9 @@ export class RecentsTouchService implements OnModuleInit, OnModuleDestroy {
   // for the batched browse-time walk. inSharesRepository && id === 0 is
   // exactly inSharesList per SpaceEnv.setRepository — so when we reach the
   // share branch space.id is always truthy.
-  private locationForUpsert(space: SpaceEnv, userId: number): { ownerId?: number; spaceId?: number; shareId?: number } | null {
-    if (space.inPersonalSpace) return { ownerId: userId }
-    if (space.inSharesRepository) return space.id ? { shareId: space.id } : null
-    return space.id ? { spaceId: space.id } : null
+  private locationForUpsert(space: SpaceEnv, userId: number, dirUrl: string): FileRecentLocation | null {
+    if (space.inPersonalSpace) return { ownerId: userId, path: dirUrl }
+    if (space.inSharesRepository) return space.id ? { shareId: space.id, path: dirUrl } : null
+    return space.id ? { spaceId: space.id, path: dirUrl } : null
   }
 }

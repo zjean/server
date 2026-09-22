@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import fs from 'node:fs/promises'
 import { ACTION } from '../../../common/constants'
 import { FileEvent } from '../../files/events/file-events'
-import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
+import type { FileRecent, FileRecentLocation } from '../../files/schemas/file-recent.interface'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { RecentsTouchService } from './recents-touch.service'
 import { Mock } from 'vitest'
@@ -17,9 +17,16 @@ vi.mock('node:fs/promises', async (importActual) => {
   return { ...actual, default: { ...(actual as any).default, stat: vi.fn() } }
 })
 
-// Scope: FileEvent → ensureDbRow → upsertRecent. The DB layer is mocked at the
-// drizzle-builder level (matches the pattern in nc-sync-log.service.spec.ts);
-// we exercise branching and column shape, not real SQL.
+// Scope: FileEvent → ensureDbRow → upsertRecent.
+//
+// The recents write is asserted over an in-memory *table* rather than over a
+// mocked query result. That is deliberate, and it is the #493 regression lock:
+// the previous version of this spec mocked the drizzle result as
+// `{ affectedRows: n }`, a shape the mysql2 driver never returns
+// (MySqlQueryResult is a `[ResultSetHeader, FieldPacket[]]` tuple), so a dead
+// "did the UPDATE hit anything?" branch passed its test while inserting a
+// duplicate row per file event in production. A stateful fake cannot be
+// satisfied that way — it only goes green if the end state really is one row.
 
 interface StatLike {
   isDirectory: () => boolean
@@ -30,14 +37,13 @@ interface StatLike {
 describe(RecentsTouchService.name, () => {
   let moduleRef: TestingModule
   let service: RecentsTouchService
-  let updates: Record<string, unknown>[]
-  let inserts: Record<string, unknown>[]
-  let updateAffected: number
+  let recentsRows: Record<string, unknown>[]
   let filesQueriesMock: {
     getUserFileByPath: Mock
     getOrCreateUserFile: Mock
     getOrCreateSpaceFile: Mock
     getSpaceFileId: Mock
+    upsertRecent: Mock
   }
   let statSpy: Mock
 
@@ -48,46 +54,40 @@ describe(RecentsTouchService.name, () => {
     ...overrides
   })
 
+  // Mirrors FilesQueries.upsertRecent (files-queries.service.ts): inside one
+  // transaction, DELETE every row matching the location (repository columns +
+  // path) that carries the same name, then INSERT the new one. files_recents
+  // has no unique key, so this delete-then-insert *is* the upsert.
+  const rowMatches = (row: Record<string, unknown>, location: FileRecentLocation, name: string): boolean => {
+    const { path: locationPath, ...repository } = location
+    return row.path === locationPath && row.name === name && Object.entries(repository).every(([column, value]) => row[column] === value)
+  }
+
+  const fakeUpsertRecent = async (location: FileRecentLocation, recent: FileRecent): Promise<void> => {
+    recentsRows = recentsRows.filter((row) => !rowMatches(row, location, recent.name))
+    recentsRows.push({ ...recent })
+  }
+
   beforeEach(async () => {
     // Pin the clock (Date only — leaves timers/promises real) so the 14-day
     // retention check in handleFileEvent is deterministic against the fixed
     // mtimes the tests assert on; otherwise real time eventually drifts past
-    // the window and the UPDATE/insert tests silently stop firing.
+    // the window and the upsert tests silently stop firing.
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-05-23T00:00:00Z'))
 
-    updates = []
-    inserts = []
-    updateAffected = 0
-
-    const fakeDb = {
-      update: vi.fn(() => ({
-        set: (set: Record<string, unknown>) => ({
-          where: () => ({
-            limit: () => {
-              updates.push(set)
-              return Promise.resolve({ affectedRows: updateAffected })
-            }
-          })
-        })
-      })),
-      insert: vi.fn(() => ({
-        values: (v: Record<string, unknown>) => {
-          inserts.push(v)
-          return Promise.resolve({ affectedRows: 1 })
-        }
-      }))
-    }
+    recentsRows = []
 
     filesQueriesMock = {
       getUserFileByPath: vi.fn().mockResolvedValue(null),
       getOrCreateUserFile: vi.fn().mockResolvedValue(101),
       getOrCreateSpaceFile: vi.fn().mockResolvedValue(202),
-      getSpaceFileId: vi.fn().mockResolvedValue(undefined)
+      getSpaceFileId: vi.fn().mockResolvedValue(undefined),
+      upsertRecent: vi.fn(fakeUpsertRecent)
     }
 
     moduleRef = await Test.createTestingModule({
-      providers: [RecentsTouchService, { provide: DB_TOKEN_PROVIDER, useValue: fakeDb }, { provide: FilesQueries, useValue: filesQueriesMock }]
+      providers: [RecentsTouchService, { provide: FilesQueries, useValue: filesQueriesMock }]
     }).compile()
     moduleRef.useLogger(['fatal'])
     service = moduleRef.get(RecentsTouchService)
@@ -114,7 +114,20 @@ describe(RecentsTouchService.name, () => {
     inSharesRepository: false
   }
 
-  it('UPDATE in personal space → inserts a recents row with ownerId, dir url, basename, mtime', async () => {
+  const teamSpace = {
+    id: 55,
+    url: 'files/team/docs/quarterly.docx',
+    relativeUrl: 'docs/quarterly.docx',
+    paths: ['docs', 'quarterly.docx'],
+    inPersonalSpace: false,
+    inTrashRepository: false,
+    inSharesList: false,
+    inSharesRepository: false,
+    repository: 'files',
+    root: { id: 0, alias: 'root' }
+  }
+
+  it('UPDATE in personal space → writes a recents row with ownerId, dir url, basename, mtime', async () => {
     const mtime = new Date('2026-05-20T10:00:00Z')
     statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
 
@@ -129,66 +142,72 @@ describe(RecentsTouchService.name, () => {
       7,
       expect.objectContaining({ id: NO_CLIENT_FILE_ID, path: 'folder', name: 'foo.txt', isDir: false })
     )
-    expect(inserts).toHaveLength(1)
-    expect(inserts[0]).toMatchObject({
+    // The location is the one upstream's FilesRecents.updateRecentFromEditor builds,
+    // so the fork's writer and upstream's editor writer address the same row.
+    expect(filesQueriesMock.upsertRecent).toHaveBeenCalledWith(
+      { ownerId: 7, path: 'files/personal/folder' },
+      expect.objectContaining({ id: 101, name: 'foo.txt', mtime: mtime.getTime() })
+    )
+    expect(recentsRows).toHaveLength(1)
+    expect(recentsRows[0]).toMatchObject({
       id: 101,
       ownerId: 7,
-      spaceId: null,
-      shareId: null,
       path: 'files/personal/folder',
       name: 'foo.txt',
       mtime: mtime.getTime()
     })
   })
 
-  it('UPDATE for a file already in recents → updates mtime, no insert', async () => {
-    updateAffected = 1
-    const mtime = new Date('2026-05-21T10:00:00Z')
-    statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
+  it('#493: repeated saves of the same file leave exactly one recents row, with the latest mtime', async () => {
+    // A Collabora session saves unprompted every ~15s; each save emits a FileEvent
+    // UPDATE. Before the fix each event INSERTed a fresh row (the UPDATE branch
+    // could never fire), so a ten-minute edit left ~40 rows for one file in a table
+    // with no unique key, and browse-time reconciliation could not prune them.
+    const saves = [
+      new Date('2026-05-20T10:00:00Z'),
+      new Date('2026-05-20T10:00:15Z'),
+      new Date('2026-05-20T10:00:30Z'),
+      new Date('2026-05-20T10:00:45Z')
+    ]
+    filesQueriesMock.getUserFileByPath.mockResolvedValue(101)
 
-    await service.handleFileEvent({
-      user: { id: 7 } as never,
-      space: personalSpace as never,
-      action: ACTION.UPDATE,
-      rPath: '/data/7/files/personal/folder/foo.txt'
-    })
-
-    expect(updates).toHaveLength(1)
-    expect(updates[0]).toMatchObject({ name: 'foo.txt', path: 'files/personal/folder', mtime: mtime.getTime() })
-    expect(inserts).toHaveLength(0)
-  })
-
-  it('ADD in a non-personal space → inserts a recents row with spaceId', async () => {
-    filesQueriesMock.getSpaceFileId.mockResolvedValueOnce(undefined)
-    const spaceSpace = {
-      id: 55,
-      url: 'files/team/docs/quarterly.docx',
-      relativeUrl: 'docs/quarterly.docx',
-      paths: ['docs', 'quarterly.docx'],
-      inPersonalSpace: false,
-      inTrashRepository: false,
-      inSharesList: false,
-      inSharesRepository: false,
-      repository: 'files',
-      root: { id: 0, alias: 'root' }
+    for (const mtime of saves) {
+      statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
+      await service.handleFileEvent({
+        user: { id: 7 } as never,
+        space: personalSpace as never,
+        action: ACTION.UPDATE,
+        rPath: '/data/7/files/personal/folder/foo.txt'
+      })
     }
 
+    expect(filesQueriesMock.upsertRecent).toHaveBeenCalledTimes(saves.length)
+    expect(recentsRows).toHaveLength(1)
+    expect(recentsRows[0]).toMatchObject({ id: 101, ownerId: 7, mtime: saves[saves.length - 1].getTime() })
+  })
+
+  it('ADD in a non-personal space → writes a recents row with spaceId', async () => {
+    filesQueriesMock.getSpaceFileId.mockResolvedValueOnce(undefined)
+
     await service.handleFileEvent({
       user: { id: 7 } as never,
-      space: spaceSpace as never,
+      space: teamSpace as never,
       action: ACTION.ADD,
       rPath: '/data/team/files/docs/quarterly.docx'
     })
 
-    expect(inserts).toHaveLength(1)
-    expect(inserts[0]).toMatchObject({
+    expect(filesQueriesMock.upsertRecent).toHaveBeenCalledWith(
+      { spaceId: 55, path: 'files/team/docs' },
+      expect.objectContaining({ id: 202, name: 'quarterly.docx' })
+    )
+    expect(recentsRows).toHaveLength(1)
+    expect(recentsRows[0]).toMatchObject({
       id: 202,
-      ownerId: null,
       spaceId: 55,
-      shareId: null,
       path: 'files/team/docs',
       name: 'quarterly.docx'
     })
+    expect(recentsRows[0].ownerId).toBeUndefined()
   })
 
   it('skips when the event targets a directory', async () => {
@@ -201,8 +220,7 @@ describe(RecentsTouchService.name, () => {
       rPath: '/data/7/files/personal/folder'
     })
 
-    expect(inserts).toHaveLength(0)
-    expect(updates).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
     expect(filesQueriesMock.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 
@@ -215,7 +233,7 @@ describe(RecentsTouchService.name, () => {
     })
 
     expect(statSpy).not.toHaveBeenCalled()
-    expect(inserts).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
   })
 
   it('skips events whose mtime is outside the 14-day retention window', async () => {
@@ -229,7 +247,7 @@ describe(RecentsTouchService.name, () => {
       rPath: '/data/7/files/personal/folder/foo.txt'
     })
 
-    expect(inserts).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
     expect(filesQueriesMock.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 
@@ -242,7 +260,7 @@ describe(RecentsTouchService.name, () => {
     })
 
     expect(statSpy).not.toHaveBeenCalled()
-    expect(inserts).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
   })
 
   it('skips silently when the file no longer exists on disk', async () => {
@@ -255,7 +273,7 @@ describe(RecentsTouchService.name, () => {
       rPath: '/data/7/files/personal/folder/gone.txt'
     })
 
-    expect(inserts).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
     expect(filesQueriesMock.getOrCreateUserFile).not.toHaveBeenCalled()
   })
 
@@ -269,7 +287,8 @@ describe(RecentsTouchService.name, () => {
     })
 
     expect(filesQueriesMock.getOrCreateUserFile).not.toHaveBeenCalled()
-    expect(inserts[0]).toMatchObject({ id: 555, ownerId: 7 })
+    expect(recentsRows).toHaveLength(1)
+    expect(recentsRows[0]).toMatchObject({ id: 555, ownerId: 7 })
   })
 
   it('fix #163: skips the upsert when the materialised files-row id is not positive', async () => {
@@ -288,42 +307,38 @@ describe(RecentsTouchService.name, () => {
       rPath: '/data/7/files/personal/folder/foo.txt'
     })
 
-    expect(inserts).toHaveLength(0)
-    expect(updates).toHaveLength(0)
+    expect(filesQueriesMock.upsertRecent).not.toHaveBeenCalled()
+    expect(recentsRows).toHaveLength(0)
   })
 
-  it('UPDATE in a non-personal space for an existing recents row → updates, no insert', async () => {
-    // Catches the symmetric branch to the personal-space update test: the
-    // WHERE clause for the upsert builds spaceId vs ownerId, so a regression
-    // in the space-side construction would slip past the personal test.
-    filesQueriesMock.getSpaceFileId.mockResolvedValueOnce(202)
-    updateAffected = 1
-    const mtime = new Date('2026-05-22T10:00:00Z')
-    statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
-    const spaceSpace = {
-      id: 55,
-      url: 'files/team/docs/quarterly.docx',
-      relativeUrl: 'docs/quarterly.docx',
-      paths: ['docs', 'quarterly.docx'],
-      inPersonalSpace: false,
-      inTrashRepository: false,
-      inSharesList: false,
-      inSharesRepository: false,
-      repository: 'files',
-      root: { id: 0, alias: 'root' }
+  it('repeated UPDATEs in a non-personal space also collapse to one row', async () => {
+    // Catches the symmetric branch to the personal-space case: the location
+    // built for the upsert carries spaceId vs ownerId, so a regression in the
+    // space-side construction (a location that never matches the stored row)
+    // would slip past the personal test and duplicate rows again.
+    filesQueriesMock.getSpaceFileId.mockResolvedValue(202)
+    const first = new Date('2026-05-22T10:00:00Z')
+    const second = new Date('2026-05-22T10:05:00Z')
+
+    for (const mtime of [first, second]) {
+      statSpy.mockResolvedValueOnce(makeStat({ mtime }) as never)
+      await service.handleFileEvent({
+        user: { id: 7 } as never,
+        space: teamSpace as never,
+        action: ACTION.UPDATE,
+        rPath: '/data/team/files/docs/quarterly.docx'
+      })
     }
 
-    await service.handleFileEvent({
-      user: { id: 7 } as never,
-      space: spaceSpace as never,
-      action: ACTION.UPDATE,
-      rPath: '/data/team/files/docs/quarterly.docx'
-    })
-
     expect(filesQueriesMock.getOrCreateSpaceFile).not.toHaveBeenCalled()
-    expect(updates).toHaveLength(1)
-    expect(updates[0]).toMatchObject({ name: 'quarterly.docx', path: 'files/team/docs', mtime: mtime.getTime() })
-    expect(inserts).toHaveLength(0)
+    expect(recentsRows).toHaveLength(1)
+    expect(recentsRows[0]).toMatchObject({
+      id: 202,
+      spaceId: 55,
+      name: 'quarterly.docx',
+      path: 'files/team/docs',
+      mtime: second.getTime()
+    })
   })
 
   it('attachListener() is idempotent and onModuleDestroy() removes the listener', async () => {
