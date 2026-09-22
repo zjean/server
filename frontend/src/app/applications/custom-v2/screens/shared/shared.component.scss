@@ -160,15 +160,18 @@
   }
 
   // Non-interactive cells: clicks fall through to the stretched target so the row
-  // still opens when the pointer happens to be over the recipient count or the date.
-  &__recipients,
+  // still opens when the pointer happens to be over the second column or the date.
+  &__secondary,
   &__modified {
     pointer-events: none;
   }
 
-  &__recipients {
+  &__secondary {
     font-size: var(--si-text-6);
     color: var(--si-fg-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__size {

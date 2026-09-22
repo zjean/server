@@ -230,6 +230,9 @@ export class HarnessDeps {
   // --- observable inputs ------------------------------------------------
   readonly routeUrl = new BehaviorSubject<UrlSegmentLike[]>([])
   readonly routeParams = new BehaviorSubject<Record<string, string>>({})
+  // Static route `data`. The file browsers don't read it; the Shared screen takes
+  // its variant from there, which is how one component serves three routes.
+  readonly routeData = new BehaviorSubject<Record<string, unknown>>({})
   readonly filesOnEvent = new Subject<unknown>()
   // `login` matters as well as `id`: it is what the lock flow compares against
   // `file.lock.owner.login` / `file.root.owner.login`.
@@ -343,7 +346,10 @@ export class HarnessDeps {
         }
       },
       { provide: HttpClient, useValue: http },
-      { provide: ActivatedRoute, useValue: { url: this.routeUrl.asObservable(), params: this.routeParams.asObservable() } },
+      {
+        provide: ActivatedRoute,
+        useValue: { url: this.routeUrl.asObservable(), params: this.routeParams.asObservable(), data: this.routeData.asObservable() }
+      },
       {
         provide: Router,
         useValue: {

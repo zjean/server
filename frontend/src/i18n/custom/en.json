@@ -371,5 +371,7 @@
   "Select all": "Select all",
   "Clear the selection": "Clear the selection",
   "Favorite": "Favorite",
-  "v2_offline_strip": "You’re offline. Changes can’t be saved until the connection is back."
+  "v2_offline_strip": "You’re offline. Changes can’t be saved until the connection is back.",
+  "Shared by": "Shared by",
+  "Opening the classic interface": "Opening the classic interface"
 }
