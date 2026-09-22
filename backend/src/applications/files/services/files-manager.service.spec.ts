@@ -1260,7 +1260,7 @@ describe(FilesManager.name, () => {
 
       await service.copyMove(user, src, dst, false, true)
 
-      expect(deleteSpy).toHaveBeenCalledWith(user, dst)
+      expect(deleteSpy).toHaveBeenCalledWith(user, dst, undefined, undefined, { pathWillBeRecreated: true })
       expect(filesUtils.copyFiles).toHaveBeenCalledWith(src.realPath, dst.realPath, true, false)
       expect(filesTasksTransfer.copy).not.toHaveBeenCalled()
       expect(deleteSpy.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(filesUtils.copyFiles).mock.invocationCallOrder[0])
@@ -1283,8 +1283,67 @@ describe(FilesManager.name, () => {
       await service.copyMove(user, src, dst, false, true, false, undefined, signal)
 
       expect(filesTasksTransfer.copy).toHaveBeenCalledWith(user, src, dst, true, false, false, signal, expect.any(Function))
-      expect(deleteSpy).toHaveBeenCalledWith(user, dst)
+      expect(deleteSpy).toHaveBeenCalledWith(user, dst, undefined, undefined, { pathWillBeRecreated: true })
       expect(src.task.props).toMatchObject({ progress: 40, size: 40, totalSize: 100 })
+    })
+
+    /* Fork: mod(files) regression. An overwrite deletes the destination first, and the compensating ADD is
+       emitted only when `srcSpace.realBasePath !== dstSpace.realBasePath` — false for a move WITHIN one
+       space. So a plain `MOVE a.txt -> b.txt` over an existing `b.txt` used to leave a lone move-to-trash
+       DELETE naming `b.txt`: a path that still exists and now holds the moved content. Every
+       path-addressed consumer reads that as "evict b.txt" (the NC sync REPORT renders it as a 404 marker
+       and every other device drops the file). The destination IS trashed — only the event is suppressed. */
+    it('emits no delete event for a destination it is about to overwrite (intra-space move)', async () => {
+      const src = makeSpace({
+        url: 'files/personal/a.txt',
+        realPath: '/data/users/john/files/a.txt',
+        dbFile: { ownerId: 7, path: 'a.txt', inTrash: false }
+      })
+      const dst = makeSpace({
+        url: 'files/personal/b.txt',
+        realPath: '/data/users/john/files/b.txt',
+        dbFile: { ownerId: 7, path: 'b.txt', inTrash: false }
+      })
+      const trashFile = '/data/users/john/trash/b.txt'
+      setPathExists({ [src.realPath]: true, [path.dirname(dst.realPath)]: true, [dst.realPath]: true }, false)
+      const emitSpy = vi.spyOn(FileEvent, 'emit')
+
+      await service.copyMove(user, src, dst, true, true)
+
+      // The destination really was moved to the trash, and the source really was moved onto it.
+      expect(filesUtils.moveFiles).toHaveBeenNthCalledWith(1, dst.realPath, trashFile, true)
+      expect(filesUtils.moveFiles).toHaveBeenNthCalledWith(2, src.realPath, dst.realPath, true)
+      expect(filesQueries.moveFiles).toHaveBeenNthCalledWith(1, dst.dbFile, { ...targetTrashDbScope, path: 'b.txt' }, false)
+      // ...but no consumer is told the destination path was removed.
+      expect(emitSpy).not.toHaveBeenCalledWith('event', expect.objectContaining({ action: ACTION.DELETE }))
+      expect(emitSpy).not.toHaveBeenCalledWith('event', expect.objectContaining({ rPath: trashFile }))
+    })
+
+    // The same operation across two spaces still emits its pair: the delete for the OVERWRITTEN
+    // destination stays suppressed, while the moved file's own DELETE_PERMANENTLY + ADD are untouched.
+    it('keeps the cross-space move pair while suppressing the overwritten destination delete', async () => {
+      const src = makeSpace({
+        id: 21,
+        url: 'files/personal/a.txt',
+        realPath: '/src-base/a.txt',
+        realBasePath: '/src-base',
+        dbFile: { ownerId: 7, path: 'a.txt', inTrash: false }
+      })
+      const dst = makeSpace({
+        id: 22,
+        url: 'files/project/b.txt',
+        realPath: '/dst-base/b.txt',
+        realBasePath: '/dst-base',
+        dbFile: { ownerId: null, spaceId: 22, path: 'b.txt', inTrash: false }
+      })
+      setPathExists({ [src.realPath]: true, [path.dirname(dst.realPath)]: true, [dst.realPath]: true }, false)
+      const emitSpy = vi.spyOn(FileEvent, 'emit')
+
+      await service.copyMove(user, src, dst, true, true)
+
+      expect(emitSpy).toHaveBeenCalledWith('event', { user, space: src, action: ACTION.DELETE_PERMANENTLY, rPath: src.realPath })
+      expect(emitSpy).toHaveBeenCalledWith('event', { user, space: dst, action: ACTION.ADD, rPath: dst.realPath })
+      expect(emitSpy).not.toHaveBeenCalledWith('event', expect.objectContaining({ action: ACTION.DELETE }))
     })
   })
 

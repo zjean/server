@@ -582,10 +582,15 @@ export class FilesManager {
     // check destination
     await this.filesLockManager.checkConflicts(dstSpace.dbFile, depth, { userId: user.id, lockTokens: dav?.lockTokens })
 
+    /* Fork: mod(files) — `pathWillBeRecreated` suppresses the move-to-trash FileEvent for this delete.
+       The destination is overwritten, not removed: the very next statement writes the source's content
+       back to `dstSpace.realPath`. The compensating ADD below is emitted only when the two spaces differ,
+       so on an intra-space move this delete would otherwise be the ONLY event for the operation — telling
+       every path-addressed consumer to evict a path that still exists and now holds the moved content. */
     const deleteDestination = (): Promise<void> =>
       srcSpace.inTrashRepository
-        ? this.delete(user, dstSpace, undefined, undefined, { protectedTrashPath: srcSpace.realPath })
-        : this.delete(user, dstSpace)
+        ? this.delete(user, dstSpace, undefined, undefined, { protectedTrashPath: srcSpace.realPath, pathWillBeRecreated: true })
+        : this.delete(user, dstSpace, undefined, undefined, { pathWillBeRecreated: true })
 
     // Task transfers defer overwrite handling until their staged content is ready to commit.
     if (!useTaskTransfer && overwrite && (await isPathExists(dstSpace.realPath))) {
@@ -681,7 +686,14 @@ export class FilesManager {
         }
         // emit an event for the file or directory moved to the trash
         // space keeps its original path and rPath is its new trash path
-        FileEvent.emit('event', { user, space, action: ACTION.DELETE, rPath: trashFile })
+        /* Fork: mod(files) — skipped when the caller is about to recreate this exact path (copyMove's
+           overwrite). Only this emission is gated: the two DELETE_PERMANENTLY emissions below/above
+           really do free bytes, and the quota consumer keys on the SPACE rather than the path
+           (files-event-manager.service.ts ignores ACTION.DELETE outright, since trashing frees nothing),
+           so suppressing those would lose a legitimate quota invalidation. */
+        if (!options?.pathWillBeRecreated) {
+          FileEvent.emit('event', { user, space, action: ACTION.DELETE, rPath: trashFile })
+        }
       } else if (trashTarget.mode === 'permanent') {
         forceDeleteInDB = true
         await removeFiles(space.realPath)
