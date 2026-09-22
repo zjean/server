@@ -91,21 +91,40 @@ export class VersionsRetention {
       // visited and would leak forever. These enumerate the disk instead.
       //
       // …which is exactly what makes this the one rule that can destroy an
-      // entire history at once, so it is gated on the store being COHERENT
-      // (#471). See unresolvableRoots.
+      // entire history at once, so a root that looks like the far side of an
+      // unrepointed rename is left alone (#471). See orphanedRenameSuspected.
       const unresolvable = await this.unresolvableRoots(rootsWithRows)
       if (unresolvable.length) {
         this.logger.error({
           tag: this.cleanVersions.name,
           msg:
-            `orphan-blob collection SKIPPED: ${unresolvable.length} versions root(s) hold rows but have no store on disk ` +
-            `(${unresolvable.join(', ')}). A user login or space alias was very likely renamed without repointing its ` +
-            `version rows; sweeping now would unlink every blob under the new name.`
+            `${unresolvable.length} versions root(s) hold rows but have no store on disk (${unresolvable.join(', ')}). ` +
+            `A user login or space alias was very likely renamed without repointing its version rows — every download ` +
+            `and restore under those roots will 404 until they are repointed.`
         })
-      } else {
-        for (const versionsRoot of await this.rootsOnDisk()) {
-          await this.runRule('orphanBlobs', versionsRoot, () => this.collectOrphanBlobs(versionsRoot))
+      }
+      const rootsWithRowsSet = new Set(rootsWithRows)
+      for (const versionsRoot of await this.rootsOnDisk()) {
+        // The rename signature, and BOTH halves are required: some root's rows
+        // have lost their store, and THIS root has a store but no rows. That
+        // pair is what an unrepointed rename produces, and sweeping here would
+        // unlink the whole of the history those rows describe.
+        //
+        // Neither half alone trips it, deliberately. A root with no rows is
+        // otherwise still swept — that case is the entire reason this rule
+        // enumerates the disk rather than the table (see the loop above). And
+        // one stale root elsewhere in the instance does not stop the sweep for
+        // roots that are internally consistent, which a blanket skip did: it
+        // turned a single historical inconsistency into blob GC being disabled
+        // for every user, forever.
+        if (unresolvable.length && !rootsWithRowsSet.has(versionsRoot)) {
+          this.logger.warn({
+            tag: this.cleanVersions.name,
+            msg: `${versionsRoot}: has a store on disk but no rows while ${unresolvable.length} root(s) have rows but no store — not sweeping it`
+          })
+          continue
         }
+        await this.runRule('orphanBlobs', versionsRoot, () => this.collectOrphanBlobs(versionsRoot))
       }
       // Global, not per root: the query has no root filter, so running it inside
       // the loop meant N identical full anti-joins per night and a count
@@ -327,24 +346,24 @@ export class VersionsRetention {
     return rows.length
   }
 
-  // Roots that rows point at but that have NO versions directory on disk — the
-  // signature of an orphaned store, and the tripwire for the orphan-blob rule
-  // (#471).
+  // Roots that rows point at but that have NO versions directory on disk — half
+  // the signature of an orphaned store, and the input to the blob sweep's
+  // tripwire (#471).
   //
-  // WHY THIS GUARDS THE BLOB SWEEP AND NOTHING ELSE. `versionsRoot` is derived
-  // from a user login or a space alias, both mutable, and renaming either moves
-  // the home directory with the blob store inside it. Repointing the rows is
-  // now part of both rename paths, so this should never fire — but when it
-  // does, the blob sweep is the rule that turns the inconsistency into
-  // permanent data loss: it enumerates the DISK, finds the store under its new
-  // name, refcounts it against rows that still say the old one, gets 0 for
-  // every blob, and unlinks all of them. The row rules cannot do comparable
-  // damage (their own blob removal resolves the stale root, finds nothing, and
-  // logs), so they are left running rather than stalling every root's retention
-  // on one bad entry.
+  // WHY ONLY THE BLOB SWEEP CARES. `versionsRoot` is derived from a user login
+  // or a space alias, both mutable, and renaming either moves the home
+  // directory with the blob store inside it. Repointing the rows is now part of
+  // both rename paths, so this should never fire — but when it does, the blob
+  // sweep is the rule that turns the inconsistency into permanent data loss: it
+  // enumerates the DISK, finds the store under its new name, refcounts it
+  // against rows that still say the old one, gets 0 for every blob, and unlinks
+  // all of them. The row rules cannot do comparable damage (their own blob
+  // removal resolves the stale root, finds nothing, and logs), so they are left
+  // running rather than stalling every root's retention on one bad entry.
   //
-  // Erring toward a leak is the whole point: unswept blobs cost disk, an
-  // unguarded sweep costs history.
+  // This list alone is NOT the trip condition — see cleanVersions for why both
+  // halves are needed. On its own it is a diagnostic, and a real one: these
+  // roots' downloads and restores are already 404ing.
   private async unresolvableRoots(rootsWithRows: string[]): Promise<string[]> {
     const unresolvable: string[] = []
     for (const versionsRoot of rootsWithRows) {

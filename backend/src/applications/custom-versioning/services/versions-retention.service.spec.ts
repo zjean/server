@@ -333,14 +333,15 @@ describe(VersionsRetention.name, () => {
 
   // #471: the blob sweep enumerates the DISK and refcounts by root, so a root
   // whose rows say one name while its store sits under another loses every
-  // blob. Repointing on rename is the fix; this is the tripwire behind it.
-  it('skips orphan-blob collection entirely when a root has rows but no store on disk', async () => {
-    const digest = 'f'.repeat(64)
-    const blob = await seedBlob(digest)
+  // blob. Repointing on rename is the fix; this is the tripwire behind it, and
+  // it needs BOTH halves of the rename signature.
+  it('does not sweep a root that has a store but no rows while another root has rows but no store', async () => {
+    const blob = await seedBlob('f'.repeat(64))
     queries.countByBlob.mockResolvedValue(0)
-    // `user:alice` still resolves (seedBlob made its directory); `user:ghost`
-    // is the orphaned one, and its presence is what disarms the sweep.
-    queries.distinctRoots.mockResolvedValue([ROOT, 'user:ghost'])
+    // `user:ghost` is the far side: rows recorded under a name whose store is
+    // gone. `user:alice` has the store and — because it is absent from this
+    // list — no rows. That pair is what an unrepointed rename produces.
+    queries.distinctRoots.mockResolvedValue(['user:ghost'])
 
     await service.cleanVersions()
 
@@ -350,6 +351,42 @@ describe(VersionsRetention.name, () => {
         .then(() => true)
         .catch(() => false)
     ).toBe(true)
+  })
+
+  // Neither half alone may disarm it. A blanket skip on "some root somewhere is
+  // stale" turned one historical inconsistency into blob GC being off for every
+  // user forever — which is how this was first written, and what the e2e suite
+  // caught.
+  it('still sweeps a root that holds rows, even while another root has rows but no store', async () => {
+    const blob = await seedBlob('f'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    queries.distinctRoots.mockResolvedValue([ROOT, 'user:ghost'])
+
+    await service.cleanVersions()
+
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(false)
+  })
+
+  // And the case rootsOnDisk() exists for in the first place: a root whose
+  // versions were all purged still gets its leftovers collected.
+  it('still sweeps a root with no rows when nothing is unresolvable', async () => {
+    const blob = await seedBlob('f'.repeat(64))
+    queries.countByBlob.mockResolvedValue(0)
+    queries.distinctRoots.mockResolvedValue([])
+
+    await service.cleanVersions()
+
+    expect(
+      await fs
+        .access(blob)
+        .then(() => true)
+        .catch(() => false)
+    ).toBe(false)
   })
 
   it('removes stale staging debris from a crashed snapshot', async () => {
