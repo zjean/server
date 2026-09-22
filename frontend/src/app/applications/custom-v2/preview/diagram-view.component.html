@@ -18,17 +18,28 @@
   <!--
     The sandbox is defence in depth (#498). allow-scripts + allow-same-origin are
     what drawio needs to run at all, so what this actually buys is the absence of
-    allow-top-navigation: the editor origin cannot navigate the Sync-in tab away.
-    Every other token is a capability drawio genuinely uses — popups and
-    popups-to-escape-sandbox for its native File > Print window, forms for its
-    dialogs, downloads for File > Save As.
+    the UNCONDITIONAL allow-top-navigation: the editor origin cannot navigate the
+    Sync-in tab away on its own. Every other token is a capability drawio
+    genuinely uses — popups and popups-to-escape-sandbox for its native
+    File > Print window, forms for its dialogs, downloads for File > Save As.
+
+    allow-top-navigation-BY-USER-ACTIVATION is not padding, and leaving it out
+    was measured to break a real feature silently. A hyperlink attached to a
+    shape is opened by drawio with target `_top`, not `_blank`: with the
+    sandbox but without this token, clicking a linked shape in a diagram did
+    NOTHING AT ALL — no navigation, no popup, and nothing in the console
+    (verified in headless Chromium against embed.diagrams.net: the same click
+    with the sandbox attribute removed navigated the tab, and adding just this
+    token restored it). The by-user-activation form keeps the property the
+    sandbox exists for, since it is the SILENT, scripted redirect that is the
+    threat here, and that still cannot happen without a real gesture.
   -->
   <iframe
     #editorFrame
     class="diagram-view__frame"
     [src]="iframeSrc()"
     [title]="'Diagram editor' | translate: locale.language"
-    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
+    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads allow-top-navigation-by-user-activation"
     allowfullscreen
   ></iframe>
 }

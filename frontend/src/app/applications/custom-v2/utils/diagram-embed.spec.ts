@@ -64,10 +64,26 @@ describe('isAllowedExportDataUrl', () => {
   ])('refuses %s', (url) => {
     expect(isAllowedExportDataUrl(url)).toBe(false)
   })
+
+  // The payload is JSON.parse of a cross-origin message: TYPED, not validated.
+  // A number is truthy, so it passed the caller's `if (!data.data) return`
+  // guard and reached `value.trim()`, throwing a TypeError out of the
+  // `window:message` handler.
+  it.each([42, 0, true, null, undefined, {}, [], ['data:image/png;base64,x']])('refuses the non-string %s without throwing', (value) => {
+    expect(() => isAllowedExportDataUrl(value as never)).not.toThrow()
+    expect(isAllowedExportDataUrl(value as never)).toBe(false)
+  })
 })
 
 describe('svg sanitiser policy', () => {
   it.each(['script', 'SCRIPT', 'iframe', 'object', 'embed', 'base', 'animate', 'set'])('drops <%s>', (tag) => {
+    expect(isForbiddenSvgElement(tag)).toBe(true)
+  })
+
+  // A stylesheet is an execution surface the attribute scrub never looks at —
+  // its CSS TEXT is a child node, not an attribute — and drawio's SVG export
+  // does not need one (presentation is inlined as attributes).
+  it.each(['style', 'STYLE'])('drops <%s>, whose text no attribute check inspects', (tag) => {
     expect(isForbiddenSvgElement(tag)).toBe(true)
   })
 
@@ -112,7 +128,21 @@ describe('buildPrintDocument', () => {
     // about:blank inherits our origin AND our header CSP, which carries
     // 'unsafe-inline'. This second policy is what stops an injected inline
     // script from running there.
-    expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${NONCE}'; object-src 'none'">`)
+    expect(html).toContain(`script-src 'nonce-${NONCE}'`)
+    expect(html).toContain(`object-src 'none'`)
+  })
+
+  it('denies by default and allows back only what a printed diagram needs', () => {
+    const html = buildPrintDocument('diagram', '<svg/>', NONCE)
+    const csp = /content="([^"]+)"/.exec(html)?.[1] ?? ''
+    // `default-src 'none'` is what closes the off-origin stylesheet route — the
+    // one thing a <style> smuggled in on the SVG could have reached for, and
+    // the reason the element is dropped as well.
+    expect(csp).toContain(`default-src 'none'`)
+    expect(csp).toContain('img-src data: blob:')
+    expect(csp).toContain(`style-src 'unsafe-inline'`)
+    // No network fetch of any kind from a print document.
+    expect(csp).not.toMatch(/connect-src|frame-src/)
   })
 
   it('carries the nonce on its own script and on no other', () => {

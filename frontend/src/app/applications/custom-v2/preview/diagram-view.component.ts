@@ -26,6 +26,9 @@ import {
   printNonce
 } from '../utils/diagram-embed'
 
+// Passes of the SVG scrub before it is declared non-convergent. See sanitizeSvg.
+const SANITIZE_MAX_PASSES = 5
+
 interface DrawioEvent {
   event: string
   xml?: string
@@ -224,7 +227,9 @@ export class DiagramViewComponent implements OnInit {
     const w = this.printWindow
     this.printWindow = null
     if (!w || w.closed) return
-    const svg = data.data ? this.sanitizeSvg(data.data) : ''
+    // Same reason as the `typeof` test in isAllowedExportDataUrl: the payload is
+    // JSON.parse of a cross-origin message, typed but not validated.
+    const svg = typeof data.data === 'string' && data.data ? this.sanitizeSvg(data.data) : ''
     if (!svg) {
       try {
         w.close()
@@ -256,7 +261,32 @@ export class DiagramViewComponent implements OnInit {
   // so a slightly malformed export still prints instead of silently failing,
   // and `<foreignObject>` (drawio's HTML labels) is walked rather than dropped.
   // Returns null when there is nothing recognisable to print.
+  //
+  // LOOPS UNTIL THE OUTPUT IS STABLE. A single parse → scrub → serialise is the
+  // canonical mXSS shape: the string this returns is re-parsed by
+  // `document.write`, and HTML serialisation is not a round trip — a construct
+  // that parsed one way can serialise to text that parses a DIFFERENT way the
+  // second time, resurrecting an element the scrub removed. Nobody has built a
+  // working payload against this particular pair of parsers and the nonce'd CSP
+  // is what actually holds the line, but "sanitise once and hand the string to a
+  // write sink" is the shape DOMPurify loops for, so this loops too. Two passes
+  // is the normal case (the second only confirms stability); the cap stops a
+  // pathological input from spinning.
   private sanitizeSvg(markup: string): string | null {
+    let current = markup
+    for (let pass = 0; pass < SANITIZE_MAX_PASSES; pass++) {
+      const scrubbed = this.scrubSvgOnce(current)
+      if (scrubbed === null) return null
+      if (scrubbed === current) return scrubbed
+      current = scrubbed
+    }
+    // Never converged. Refuse rather than print the last iteration — an input
+    // that keeps changing under an idempotent scrub is not one to trust.
+    console.warn('diagram print rejected: sanitiser did not converge')
+    return null
+  }
+
+  private scrubSvgOnce(markup: string): string | null {
     let root: SVGSVGElement | null
     try {
       root = new DOMParser().parseFromString(markup, 'text/html').body.querySelector('svg')

@@ -46,7 +46,13 @@ const EXPORT_MEDIA_TYPES = new Set([
 // True only for a `data:` URL whose media type is one we expect an export to
 // produce. A bare `data:,…` (no media type) defaults to text/plain per RFC 2397
 // and is accepted; anything with a scheme other than `data:` is not.
-export function isAllowedExportDataUrl(value: string): boolean {
+//
+// The `typeof` test is not redundant with the caller's truthiness guard. The
+// payload is `JSON.parse` of a cross-origin message, so it is typed but not
+// validated: `{"data": 42}` is truthy, reaches here, and `value.trim()` would
+// throw a TypeError straight out of the `window:message` handler.
+export function isAllowedExportDataUrl(value: unknown): boolean {
+  if (typeof value !== 'string') return false
   const match = /^data:([^;,]*)[;,]/.exec(value.trim())
   if (!match) return false
   const mediaType = match[1].trim().toLowerCase()
@@ -61,8 +67,14 @@ export function isAllowedExportDataUrl(value: string): boolean {
 // (`<set attributeName="href" to="javascript:…">`), which would walk straight
 // past an attribute-value check made once at sanitise time. drawio exports do
 // not animate, so nothing is lost.
+// `style` is here even though the print document's own CSP would not stop CSS:
+// a stylesheet is an execution surface of its own (`@import` off-origin,
+// `background: url(...)`), its text is never inspected by the attribute scrub
+// below, and an SVG export needs none of it — drawio inlines presentation
+// attributes. Dropping it costs nothing and removes the whole question.
 const FORBIDDEN_SVG_ELEMENTS = new Set([
   'script',
+  'style',
   'iframe',
   'object',
   'embed',
@@ -120,11 +132,17 @@ export function buildPrintPlaceholderDocument(): string {
 // names a nonce allows only scripts carrying it — so the print harness below
 // runs and any script that rode in on the SVG does not, whatever the SVG
 // sanitiser missed. `object-src 'none'` closes the plugin route the same way.
-// Nothing else is constrained: images, styles and fonts are left alone so the
-// printed page still looks like the diagram.
+//
+// `default-src 'none'` then closes everything the printed document has no
+// business doing: no fetch, no connect, no frame, and — the reason it is worth
+// the extra length — no off-origin stylesheet, which is the one thing a `<style>`
+// smuggled in on the SVG could have reached for. Only what a printed diagram
+// actually needs is allowed back: inline styles (the block below, plus drawio's
+// own `style=` attributes), `data:`/`blob:` images (drawio embeds raster fills
+// that way) and `data:` fonts.
 export function buildPrintDocument(title: string, svg: string, nonce: string): string {
   return `<!doctype html><html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'nonce-${nonce}'; object-src 'none'">
 <title>${escapeHtml(title)}</title>
 <style>
   html, body { margin: 0; padding: 0; }
