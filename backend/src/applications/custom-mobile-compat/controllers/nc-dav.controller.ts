@@ -20,9 +20,10 @@ import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcFavoritesReportService } from '../services/nc-favorites-report.service'
 import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
 import { NcPropfindService } from '../services/nc-propfind.service'
-import { NcShareMountResolverService, type NcShareMount } from '../services/nc-share-mount-resolver.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { NcSyncReportService } from '../services/nc-sync-report.service'
 import { destinationHasDotSegments } from '../utils/nc-destination'
+import { buildNcUrlSegments, makeMountsMemo, type NcMountsMemo } from '../utils/nc-url-segments'
 import { parseFavoriteProppatch } from '../utils/nc-favorites-xml'
 import { detectReportBodyType } from '../utils/nc-sync-xml'
 import type { FastifyRequest } from 'fastify'
@@ -315,7 +316,7 @@ export class NcDavController {
   // shares/<alias>/..., not personal/.... `getMounts` should be the same
   // memo the caller used for its own buildUrlSegments call so the COPY/MOVE
   // path doesn't double-fetch the share list.
-  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: MountsMemo): Promise<string | NcDestinationRefusal> {
+  private async mapNcPathToInternal(user: UserModel, urlPath: string, getMounts?: NcMountsMemo): Promise<string | NcDestinationRefusal> {
     const stripped = urlPath.split('?')[0]
     const filesPrefix = `/remote.php/dav/files/${user.login}/`
     const filesPrefixNoSlash = `/remote.php/dav/files/${user.login}`
@@ -349,51 +350,12 @@ export class NcDavController {
     return segmentsToWebdavNsPath(segs)
   }
 
-  // Resolve an NC subpath into Sync-in spaceEnv segments — i.e.
-  // [repository, spaceAlias, ...path], consumable by SpacesManager.spaceEnv.
-  //
-  // Tries the share-mount alias first: if subpath's first segment matches one
-  // of the user's incoming shares, route into the shares repository. Otherwise
-  // fall through to NcPathResolverService for the user's home setting
-  // (personal or mobileHome-configured space).
-  //
-  // Edge case: a share alias that collides with a real folder in the user's
-  // personal/home space — the share wins (matches real NC behaviour for
-  // recipient-side mountpoints). The personal-space folder remains reachable
-  // via Sync-in's native /webdav route, just not via NC mobile.
-  //
-  // `getMounts` is an optional request-scope memo. When provided, the share
-  // listing is fetched at most once per request even when both buildUrlSegments
-  // and mapNcPathToInternal need it (COPY/MOVE flow).
-  //
-  // Returns null when the subpath is not addressable — see
-  // NcPathResolverService.resolve.
-  private async buildUrlSegments(
-    user: UserModel,
-    input: { mode: 'files' | 'trashbin'; subpath: string },
-    getMounts?: MountsMemo
-  ): Promise<string[] | null> {
-    const normalized = normalizeNcSubpath(input.subpath)
-    if (normalized === null) return null
-
-    if (input.mode === 'files' && normalized) {
-      const parts = normalized.split('/').filter(Boolean)
-      const firstSeg = parts[0]
-      if (firstSeg) {
-        const mounts = getMounts ? await getMounts() : await this.shareMounts.listMounts(user)
-        const mount = mounts.find((m) => m.alias === firstSeg) ?? null
-        if (mount) {
-          return [SPACE_REPOSITORY.SHARES, mount.alias, ...parts.slice(1)]
-        }
-      }
-    }
-
-    const resolved = this.resolver.resolve(user, input)
-    if (!resolved) return null
-    const segs: string[] = [resolved.repository, resolved.spaceAlias]
-    if (resolved.rootAlias) segs.push(resolved.rootAlias)
-    if (resolved.relativePath) segs.push(...resolved.relativePath.split('/').filter(Boolean))
-    return segs
+  // Resolve an NC subpath into Sync-in spaceEnv segments. The logic lives in
+  // utils/nc-url-segments.ts because NcUploadsController needs the exact same
+  // answer for its assembly Destination (#516) — it used to call
+  // NcPathResolverService directly and so never saw a share mount.
+  private buildUrlSegments(user: UserModel, input: { mode: 'files' | 'trashbin'; subpath: string }, getMounts?: NcMountsMemo) {
+    return buildNcUrlSegments({ resolver: this.resolver, shareMounts: this.shareMounts }, user, input, getMounts)
   }
 
   private async invokeWebDAV(req: FastifyDAVRequest, res: FastifyReply, mode: 'files' | 'trashbin'): Promise<string | StreamableFile | FastifyReply> {
@@ -538,17 +500,6 @@ function extractStar(req: FastifyDAVRequest, prefix: string): string {
   // Fallback to the '*' param Nest assembled.
   const starParam = (req as FastifyRequest & { params: Record<string, string> }).params?.['*']
   return starParam ?? ''
-}
-
-// Request-scope memo for the user's incoming share-mounts. First call hits
-// the DB via NcShareMountResolverService.listMounts; subsequent calls return
-// the cached promise. Resolvers themselves stay stateless — caching lives at
-// the request boundary (the controller method that created the memo).
-type MountsMemo = () => Promise<NcShareMount[]>
-
-function makeMountsMemo(resolver: NcShareMountResolverService, user: UserModel): MountsMemo {
-  let p: Promise<NcShareMount[]> | undefined
-  return () => (p ??= resolver.listMounts(user))
 }
 
 // Convert spaceEnv-style segments ([repository, spaceAlias, ...]) to a

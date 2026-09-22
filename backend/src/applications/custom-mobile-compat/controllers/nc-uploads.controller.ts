@@ -13,8 +13,10 @@ import { haveSpaceEnvPermissions } from '../../spaces/utils/permissions'
 import { UserModel } from '../../users/models/user.model'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcChunkedUploadsService, sanitizeUploadId } from '../services/nc-chunked-uploads.service'
-import { NcPathResolverService } from '../services/nc-path-resolver.service'
+import { NcPathResolverService, normalizeNcSubpath } from '../services/nc-path-resolver.service'
+import { NcShareMountResolverService } from '../services/nc-share-mount-resolver.service'
 import { destinationHasDotSegments } from '../utils/nc-destination'
+import { buildNcUrlSegments } from '../utils/nc-url-segments'
 import { PROPSTAT_OK, renderMultistatus } from '../utils/nc-xml'
 
 // NC chunked-upload controller.
@@ -41,6 +43,7 @@ export class NcUploadsController {
   constructor(
     private readonly staging: NcChunkedUploadsService,
     private readonly resolver: NcPathResolverService,
+    private readonly shareMounts: NcShareMountResolverService,
     private readonly spacesManager: SpacesManager,
     private readonly versioning: VersioningService
   ) {}
@@ -179,17 +182,29 @@ export class NcUploadsController {
     }
 
     // Resolve destination space + check ADD permission (or MODIFY if overwriting).
-    const resolved = this.resolver.resolve(req.user, { mode: 'files', subpath: destPath })
+    //
+    // Share-aware, via the same helper NcDavController uses for every other
+    // verb. This call used to be `this.resolver.resolve()` — which knows
+    // nothing about share mounts — so `Destination:
+    // /remote.php/dav/files/alice/TeamShare/big.iso` resolved to
+    // ['files','personal','TeamShare','big.iso'], `makeDir` created
+    // `<home>/files/TeamShare/` and the assembly wrote there. The client's
+    // follow-up PROPFIND of the same URL routed to the SHARE (the alias wins
+    // the collision, by design), so the upload reported 201 and the file was
+    // invisible: small files landed in the share, large ones vanished (#516).
+    const urlSegments = await buildNcUrlSegments({ resolver: this.resolver, shareMounts: this.shareMounts }, req.user, {
+      mode: 'files',
+      subpath: destPath
+    })
     // A destination that is not addressable (`.`/`..` segment) or that
     // normalizes to nothing resolves to the space ROOT — and the assembly
     // below does `moveFiles(tmp, space.realPath, true)`, which would replace
     // the user's whole home with the uploaded file. Refuse both (#483).
-    if (!resolved || !resolved.relativePath) {
+    // `segments.length <= 2` is the same refusal read from the share side:
+    // a Destination naming only the mount alias addresses the share root.
+    if (!urlSegments || !normalizeNcSubpath(destPath) || urlSegments.length <= 2) {
       throw new HttpException('Destination must name a file inside /remote.php/dav/files/{user}/', HttpStatus.BAD_REQUEST)
     }
-    const urlSegments: string[] = [resolved.repository, resolved.spaceAlias]
-    if (resolved.rootAlias) urlSegments.push(resolved.rootAlias)
-    if (resolved.relativePath) urlSegments.push(...resolved.relativePath.split('/').filter(Boolean))
 
     const space = await this.spacesManager.spaceEnv(req.user, urlSegments).catch((e: Error) => {
       throw new HttpException(`destination space is not valid: ${e.message}`, HttpStatus.BAD_REQUEST)
