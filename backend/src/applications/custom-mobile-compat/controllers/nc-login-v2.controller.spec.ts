@@ -7,7 +7,7 @@ import { UsersManager } from '../../users/services/users-manager.service'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
-import { createInMemoryCache } from '../utils/nc-cache.fixture'
+import { clearLoginFlows, createInMemoryCache } from '../utils/nc-cache.fixture'
 import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
 import { NC_RATE_LIMIT_METADATA, NcRateLimitGuard } from '../guards/nc-rate-limit.guard'
 import { NcLoginV2Controller } from './nc-login-v2.controller'
@@ -107,7 +107,7 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
   })
 
   beforeEach(async () => {
-    await flows.clearForTests()
+    await clearLoginFlows(moduleRef.get(Cache))
     mockConfig.auth.provider = 'mysql'
     mockConfig.auth.oidc.options.autoRedirect = false
     mockConfig.auth.oidc.options.enablePasswordAuth = true

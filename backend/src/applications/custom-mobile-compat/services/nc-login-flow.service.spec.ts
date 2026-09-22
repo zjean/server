@@ -1,4 +1,4 @@
-import { createInMemoryCache, type InMemoryCache } from '../utils/nc-cache.fixture'
+import { clearLoginFlows, createInMemoryCache, type InMemoryCache } from '../utils/nc-cache.fixture'
 import { NcLoginFlowService } from './nc-login-flow.service'
 
 // The store is the cache (#482), so every case here drives the service through
@@ -169,9 +169,14 @@ describe(NcLoginFlowService.name, () => {
     expect(cache.size()).toBe(0)
   })
 
-  it('clearForTests purges all state', async () => {
+  it('the spec helper purges all state, and the service exposes no such hook', async () => {
+    // `clearForTests()` used to be a public method on the injectable. It is a
+    // test concern doing an O(keyspace) `keys()` scan, so it moved to the
+    // fixture; this asserts both halves — the helper works, and the
+    // production surface no longer carries it.
     const flow = await svc.initiate()
-    await svc.clearForTests()
+    expect((svc as unknown as Record<string, unknown>).clearForTests).toBeUndefined()
+    await clearLoginFlows(cache)
     await expect(svc.findByLoginToken(flow.loginToken)).resolves.toBeNull()
     await expect(svc.consumeByPollToken(flow.pollToken)).resolves.toBeNull()
   })

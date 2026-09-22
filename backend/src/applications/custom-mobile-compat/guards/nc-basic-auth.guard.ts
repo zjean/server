@@ -10,7 +10,7 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
-import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
+import { NC_RATE_LIMIT_OPTIONS, NC_RATE_LIMIT_SCOPE } from '../constants/rate-limit'
 import { NC_AUTH_REALM } from '../constants/routes'
 
 // NcBasicAuthGuard
@@ -96,11 +96,26 @@ export class NcBasicAuthGuard implements CanActivate {
     // tilt — every request of which is authenticated — spends nothing, and
     // before the DB lookup so the cheap half of the work is covered too.
     //
-    // `req.ip`, not the X-Forwarded-For read below for logging: that header is
-    // caller-controlled, and a limiter an attacker can re-bucket at will is
-    // not a limiter.
+    // Bucketed on `req.ip` — NOT on the raw X-Forwarded-For this module reads
+    // for LOGGING. Read carefully, because the two are not the same claim:
+    //
+    //   - The HEADER is never read here, so a caller cannot name its own
+    //     bucket by adding one when the deployment does not expect it.
+    //   - The VALUE still depends on `server.trustProxy` (app.bootstrap.ts,
+    //     default `1`). With `trustProxy` truthy and NO reverse proxy in
+    //     front, Fastify derives `req.ip` from the caller's own
+    //     X-Forwarded-For, so an attacker rotating that header gets a fresh
+    //     bucket per value and walks past this limiter.
+    //
+    // That is not specific to this guard: upstream's AuthBasicStrategy and
+    // AuthRateLimitGuard key on the same `req.ip`, and `auth.md` already
+    // states the client address follows `server.trustProxy`. The deployment
+    // contract is therefore: either front the app with a reverse proxy that
+    // overwrites X-Forwarded-For, or set `server.trustProxy: false`. A
+    // `trustProxy` that does not describe the deployment silently weakens
+    // every per-IP limit in the app, this one included.
     const rateLimit = await this.cache.consumeRateLimit(
-      `${NcBasicAuthGuard.RATE_LIMIT_PREFIX}-${genHash((req.ip as string | undefined) ?? 'unknown', 'sha256')}`,
+      `${NcBasicAuthGuard.RATE_LIMIT_PREFIX}${NC_RATE_LIMIT_SCOPE}-${genHash((req.ip as string | undefined) ?? 'unknown', 'sha256')}`,
       NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.ttl,
       NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.limit,
       NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration

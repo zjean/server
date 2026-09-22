@@ -5,7 +5,7 @@ import { FastifyRequest } from 'fastify'
 import { AUTH_RATE_LIMIT_ERROR_MESSAGE } from '../../../authentication/constants/auth'
 import { genHash } from '../../files/utils/files'
 import { Cache } from '../../../infrastructure/cache/cache.service'
-import type { NcRateLimitOptions } from '../constants/rate-limit'
+import { NC_RATE_LIMIT_SCOPE, type NcRateLimitOptions } from '../constants/rate-limit'
 
 export const NC_RATE_LIMIT_METADATA = 'nc-rate-limit'
 
@@ -44,11 +44,25 @@ export class NcRateLimitGuard implements CanActivate {
     if (!options) return true
 
     const req = context.switchToHttp().getRequest<FastifyRequest>()
-    // `req.ip`, NOT the X-Forwarded-For this module reads for LOGGING.
-    // Fastify resolves `req.ip` from the forwarded chain only when the server
-    // is configured to trust its proxy; taking the raw header here would let
-    // any caller pick their own bucket and walk straight past the limit.
-    const key = `${NcRateLimitGuard.KEY_PREFIX}-${bucketOf(context)}-${genHash(req.ip ?? 'unknown', 'sha256')}`
+    // Bucketed on `req.ip` — NOT on the raw X-Forwarded-For this module reads
+    // for LOGGING. Read carefully, because the two are not the same claim:
+    //
+    //   - The HEADER is never read here, so a caller cannot name its own
+    //     bucket by adding one when the deployment does not expect it.
+    //   - The VALUE still depends on `server.trustProxy` (app.bootstrap.ts,
+    //     default `1`). With `trustProxy` truthy and NO reverse proxy in
+    //     front, Fastify derives `req.ip` from the caller's own
+    //     X-Forwarded-For, so an attacker rotating that header gets a fresh
+    //     bucket per value and walks past this limiter.
+    //
+    // That is not specific to this guard: upstream's AuthBasicStrategy and
+    // AuthRateLimitGuard key on the same `req.ip`, and `auth.md` already
+    // states the client address follows `server.trustProxy`. The deployment
+    // contract is therefore: either front the app with a reverse proxy that
+    // overwrites X-Forwarded-For, or set `server.trustProxy: false`. A
+    // `trustProxy` that does not describe the deployment silently weakens
+    // every per-IP limit in the app, this one included.
+    const key = `${NcRateLimitGuard.KEY_PREFIX}${NC_RATE_LIMIT_SCOPE}-${bucketOf(context)}-${genHash(req.ip ?? 'unknown', 'sha256')}`
     const result = await this.cache.consumeRateLimit(key, options.ttl, options.limit, options.blockDuration)
     if (result.isBlocked) {
       throw new ThrottlerException(AUTH_RATE_LIMIT_ERROR_MESSAGE)

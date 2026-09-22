@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core'
 import { Test, TestingModule } from '@nestjs/testing'
 import { ThrottlerException } from '@nestjs/throttler'
 import { Cache } from '../../../infrastructure/cache/cache.service'
-import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
+import { NC_RATE_LIMIT_OPTIONS, NC_RATE_LIMIT_SCOPE } from '../constants/rate-limit'
 import { createInMemoryCache, type InMemoryCache } from '../utils/nc-cache.fixture'
 import { NcRateLimit, NcRateLimitGuard } from './nc-rate-limit.guard'
 
@@ -81,10 +81,17 @@ describe(NcRateLimitGuard.name, () => {
     await expect(guard.canActivate(contextFor('otherMetered', { ip: '10.0.0.1' }))).resolves.toBe(true)
   })
 
-  it('ignores X-Forwarded-For — otherwise the caller picks its own bucket', async () => {
+  it('never reads X-Forwarded-For itself — the bucket is whatever Fastify resolved', async () => {
     // The module reads this header elsewhere to LOG a useful client address.
-    // Keying the limiter on it would mean an attacker rotating the header
-    // value gets an unlimited number of fresh budgets.
+    // Reading it HERE would mean an attacker rotating the value gets an
+    // unlimited number of fresh budgets regardless of how the server is
+    // deployed.
+    //
+    // Note what this does NOT prove: `req.ip` is itself derived from the
+    // forwarded chain when `server.trustProxy` is truthy (its default), so a
+    // deployment with no reverse proxy in front is still re-bucketable. That
+    // is a deployment contract, identical to upstream's own per-IP limiters —
+    // see the comment in the guard.
     const spoofed = (n: number) => contextFor('metered', { ip: '10.0.0.1', headers: { 'x-forwarded-for': `203.0.113.${n}` } })
     for (let i = 0; i < 3; i++) await expect(guard.canActivate(spoofed(i))).resolves.toBe(true)
     await expect(guard.canActivate(spoofed(99))).rejects.toBeInstanceOf(ThrottlerException)
@@ -106,6 +113,17 @@ describe(NcRateLimitGuard.name, () => {
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
     cache.advance(61_000)
     await expect(guard.canActivate(ctx)).resolves.toBe(true)
+  })
+
+  it('scopes the bucket per run under test, so parallel e2e workers do not share a counter', async () => {
+    // Deliberately NOT a skip: the limiter must run where we assert. What the
+    // scope removes is the SHARING — the e2e suite runs spec files in
+    // parallel worker threads against one cache, and two agents can run the
+    // suite at once.
+    expect(NC_RATE_LIMIT_SCOPE).toMatch(/^-run[0-9a-f]{12}$/)
+    const spy = vi.spyOn(cache, 'consumeRateLimit')
+    await guard.canActivate(contextFor('metered', { ip: '10.0.0.1' }))
+    expect(spy.mock.calls[0][0]).toContain(NC_RATE_LIMIT_SCOPE)
   })
 
   it('meters the credential-posting route as tightly as upstream meters /auth/login', async () => {

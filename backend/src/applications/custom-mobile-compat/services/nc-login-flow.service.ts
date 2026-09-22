@@ -9,8 +9,8 @@ import { Cache } from '../../../infrastructure/cache/cache.service'
 //   PENDING       → the browser tab hasn't completed yet; poll returns 404.
 //   OIDC-PENDING  → browser was redirected to the IdP; awaiting callback.
 //   READY         → browser completed auth, app-password minted; next poll
-//                   returns credentials once and the flow is consumed.
-//   DONE          → consumed; further polls return 404 forever.
+//                   returns credentials once and the flow is then DELETED, so
+//                   every later poll 404s because there is nothing to find.
 //
 // STATE LIVES IN `Cache`, NOT IN THIS PROCESS (#482).
 //
@@ -38,7 +38,10 @@ import { Cache } from '../../../infrastructure/cache/cache.service'
 //     across replicas: two concurrent grant POSTs would both see a live grant
 //     token and both mint a credential.
 
-export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'authenticated' | 'ready' | 'done'
+// No 'done' member: a consumed flow is removed from the cache rather than
+// parked in a terminal state, so nothing can ever be observed holding one.
+// Re-adding it would reintroduce a state the exactly-once `del` gate replaced.
+export type LoginFlowStatus = 'pending' | 'oidc-pending' | 'authenticated' | 'ready'
 
 export interface LoginFlow {
   pollToken: string
@@ -70,7 +73,13 @@ export interface LoginFlow {
 const TTL_MS = 20 * 60 * 1000 // 20 min
 // Cache keys. No `_` or `%` anywhere in the prefix: MysqlCacheAdapter.keys()
 // turns the pattern into a SQL LIKE, where both are wildcards.
-const KEY_PREFIX = 'nc-login-flow'
+// Exported for the spec helper that purges flows between cases
+// (`clearLoginFlows` in utils/nc-cache.fixture.ts). It lives there rather than
+// as a method here because purging means `cache.keys('<prefix>-*')`, an O(N)
+// scan of the whole keyspace on Redis, which has no business on a provider
+// that is instantiated in production.
+export const LOGIN_FLOW_KEY_PREFIX = 'nc-login-flow'
+const KEY_PREFIX = LOGIN_FLOW_KEY_PREFIX
 
 @Injectable()
 export class NcLoginFlowService {
@@ -215,12 +224,6 @@ export class NcLoginFlowService {
     if (!(await this.cache.del(flowKey(pollToken)))) return null
     await this.cache.del(indexKey(flow.loginToken))
     return flow.credentials
-  }
-
-  // Test hook: purge state. Called between tests to avoid bleed.
-  async clearForTests(): Promise<void> {
-    const keys = await this.cache.keys(`${KEY_PREFIX}-*`)
-    if (keys.length) await this.cache.mdel(keys)
   }
 
   private async findByPollToken(pollToken: string): Promise<LoginFlow | null> {

@@ -1,8 +1,10 @@
-import { Controller, Get, HttpStatus, Logger, Param, Query, Req, Res } from '@nestjs/common'
+import { Controller, Get, HttpStatus, Logger, Param, Query, Req, Res, UseGuards } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { configuration } from '../../../configuration/config.environment'
+import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
 import { NC_ROUTE } from '../constants/routes'
+import { NcRateLimit, NcRateLimitGuard } from '../guards/nc-rate-limit.guard'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcMobileOidcService } from '../services/nc-mobile-oidc.service'
 import { NcResponseService } from '../services/nc-response.service'
@@ -26,8 +28,16 @@ import { escapeHtml, renderHtml } from '../utils/nc-html'
 //     the poll endpoint hands back.
 //
 // See docs/plans/2026-04-25-mobile-nc-oidc-login-design.md.
+
+// Rate limiting (#477): both handlers are `@AuthTokenSkip()` and reachable by
+// anyone who holds a URL, and the callback makes an OUTBOUND token exchange
+// with the IdP per request — so this is the one route family here that can
+// spend somebody else's resources. Metered per IP like the login-v2 pair it
+// is half of. (This controller only mounts when `auth.provider === 'oidc'`,
+// which is why it was easy to miss.)
 @Controller()
 @AuthTokenSkip()
+@UseGuards(NcRateLimitGuard)
 export class NcMobileOidcController {
   private readonly logger = new Logger(NcMobileOidcController.name)
 
@@ -38,6 +48,7 @@ export class NcMobileOidcController {
   ) {}
 
   @Get(NC_ROUTE.MOBILE_OIDC_LOGIN.slice(1))
+  @NcRateLimit(NC_RATE_LIMIT_OPTIONS.MOBILE_OIDC_START)
   async start(@Param('token') loginToken: string, @Req() req: FastifyRequest, @Res() res: FastifyReply): Promise<void> {
     const flow = await this.flows.findByLoginToken(loginToken)
     if (!flow || flow.status !== 'pending') {
@@ -78,6 +89,7 @@ export class NcMobileOidcController {
   }
 
   @Get(NC_ROUTE.MOBILE_OIDC_CALLBACK.slice(1))
+  @NcRateLimit(NC_RATE_LIMIT_OPTIONS.MOBILE_OIDC_CALLBACK)
   async callback(
     @Query('code') _code: string,
     @Query('state') state: string,

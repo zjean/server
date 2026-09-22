@@ -1,4 +1,5 @@
 import type { Cache } from '../../../infrastructure/cache/cache.service'
+import { LOGIN_FLOW_KEY_PREFIX } from '../services/nc-login-flow.service'
 import type { CacheRateLimitResult } from '../../../infrastructure/cache/interfaces/cache-rate-limit.interface'
 
 // A working in-memory stand-in for `Cache`, for specs of code that keeps state
@@ -106,4 +107,17 @@ export function createInMemoryCache(): InMemoryCache {
     genSlugKey: (...args: unknown[]) => args.join('-')
   }
   return cache
+}
+
+// Purge every in-flight login flow from a cache, so one spec case cannot see
+// another's state.
+//
+// This used to be `NcLoginFlowService.clearForTests()`. It is a test concern
+// wearing a production method: nothing routes to it, and its `keys()` scan is
+// O(keyspace) on Redis — exactly the call you do not want reachable from an
+// injectable that real deployments instantiate. Same job, off the production
+// surface.
+export async function clearLoginFlows(cache: Cache): Promise<void> {
+  const keys = await cache.keys(`${LOGIN_FLOW_KEY_PREFIX}-*`)
+  if (keys.length) await cache.mdel(keys)
 }

@@ -1,3 +1,6 @@
+import { randomBytes } from 'node:crypto'
+import { IS_TEST_ENV } from '../../../configuration/config.constants'
+
 // Per-IP rate limits for the Nextcloud-compatible surface (#477).
 //
 // Every route in this module is `@AuthTokenSkip()`, so none of them is behind
@@ -8,6 +11,25 @@
 //
 // Shapes and units match `AUTH_RATE_LIMIT_OPTIONS` (ttl and blockDuration in
 // MILLISECONDS) so they read against upstream's own limits side by side.
+
+// Per-run bucket scope, EMPTY outside tests.
+//
+// The limiters deliberately carry no `skipIf: () => IS_TEST_ENV` (that is the
+// whole reason this module does not use `AuthRateLimitGuard`): a limiter that
+// is off where we assert is a limiter nobody has tested. But leaving the key
+// unqualified makes the counter global to the shared dev cache, and the e2e
+// suite runs its spec files in PARALLEL worker threads against one database
+// and one cache. Every NC-touching file mints credentials that miss the
+// basic-auth cache, so they all draw on one 60/60s budget — and two agents
+// running `test:e2e` at the same time would push it over and surface as an
+// unrelated-looking 401/429 in whichever file lost the race.
+//
+// A random scope per PROCESS gives each worker thread (and each concurrent
+// run) its own counter. The limiter still runs, still counts, still blocks,
+// and a spec can still assert it blocks — the budget is simply not shared
+// with a test nobody wrote together with it. In production the scope is the
+// empty string, so the key is exactly what it would otherwise have been.
+export const NC_RATE_LIMIT_SCOPE: string = IS_TEST_ENV ? `-run${randomBytes(6).toString('hex')}` : ''
 
 export interface NcRateLimitOptions {
   limit: number
@@ -41,6 +63,26 @@ export const NC_RATE_LIMIT_OPTIONS = {
   // the single-use grant token, so this is a backstop on the mint (which
   // writes rows and hashes a password), not an authentication gate.
   LOGIN_FLOW_GRANT: { limit: 20, ttl: 60_000, blockDuration: 60_000 },
+
+  // GET /custom-mobile/oidc/login/:token — the browser hop that starts the
+  // IdP round-trip. Only mounted when `auth.provider === 'oidc'`.
+  //
+  // An unknown token 404s and an unbound browser 409s before anything is
+  // spent, so the metered cost is the authorization-URL build (PKCE + a
+  // discovery lookup) plus a flow write. Same 20/60s as the initiate route it
+  // follows: one honest sign-in uses one call, and a shared NAT egress can
+  // still start several at once.
+  MOBILE_OIDC_START: { limit: 20, ttl: 60_000, blockDuration: 60_000 },
+
+  // GET /custom-mobile/oidc/callback — where the IdP returns.
+  //
+  // The only route in this module that makes an OUTBOUND request per call: a
+  // code exchange against the IdP's token endpoint, plus a userinfo fetch.
+  // It is unauthenticated (the IdP's redirect is the only thing that reaches
+  // it) and a bad `state` 404s cheaply, but without a limit anyone who can
+  // guess or observe an in-flight loginToken can point our token endpoint at
+  // the IdP as fast as they like. One honest sign-in makes exactly one call.
+  MOBILE_OIDC_CALLBACK: { limit: 20, ttl: 60_000, blockDuration: 60_000 },
 
   // NcBasicAuthGuard, for credentials that MISS the guard's positive/negative
   // cache and therefore reach `validateAppPassword`.
