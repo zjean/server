@@ -11,6 +11,10 @@ import { userFullNameSQL, users } from '../../users/schemas/users.schema'
 import { VersionInsert, VersionOrigin, VersionRow } from '../interfaces/version.interface'
 import { customFilesVersions } from '../schemas/files-versions.schema'
 
+// The handle drizzle hands a transaction callback. Derived rather than named so
+// it cannot drift from the DBSchema this class is injected with.
+type DBTransaction = Parameters<Parameters<DBSchema['transaction']>[0]>[0]
+
 // All SQL for custom_files_versions lives here, keeping VersioningService about
 // orchestration only — the same split upstream uses (FilesQueries /
 // FilesManager) and custom-favorites uses (FavoritesQueries /
@@ -21,6 +25,113 @@ export class VersioningQueries {
 
   async insertVersion(values: VersionInsert): Promise<number> {
     return dbGetInsertedId(await this.db.insert(customFilesVersions).values(values))
+  }
+
+  /* ------------------------------------------------- blob publish / release */
+  //
+  // THE THREE METHODS BELOW ARE ONE MECHANISM, and the reason they take a
+  // callback instead of returning a decision is the whole point: the
+  // filesystem step has to happen while the database still holds the state the
+  // decision was made from (#489).
+  //
+  // The race they close: `removeBlobIfUnreferenced` used to count rows and then
+  // unlink, while a snapshot published its blob and then inserted its row.
+  // Interleaved, a refcount of 0 means "not referenced YET" — the unlink lands
+  // on bytes a row is about to point at, and that version lists but 404s on
+  // download and restore.
+  //
+  // It is closed by two changes that only work together:
+  //
+  //   1. THE ROW GOES IN BEFORE THE BLOB, inside a transaction. On its own this
+  //      would violate the ADR's "blob first, row second" rule, whose reason is
+  //      that a crash between the two must never leave a committed row pointing
+  //      at nothing. A transaction preserves exactly that: the row is committed
+  //      only after the rename returned, and a failure or a crash in between
+  //      rolls it back. The residual case is the reverse — a commit that fails
+  //      after a successful rename — which leaves an orphan blob, the harmless
+  //      direction the nightly sweep already owns.
+  //
+  //      What the inversion buys is that a blob can no longer be on disk while
+  //      its row is invisible: by the time the rename runs, the row exists and
+  //      is exclusively locked by this transaction.
+  //
+  //   2. THE DROPPER'S DELETE, REFCOUNT AND UNLINK ARE ONE TRANSACTION, and the
+  //      refcount is a LOCKING read. A plain SELECT would answer from the
+  //      transaction's REPEATABLE READ snapshot and miss a row committed after
+  //      it started; `for('update')` reads the latest committed version AND
+  //      blocks on rows another transaction is still writing. So a publisher
+  //      that has inserted — committed or not — is always either seen or waited
+  //      for.
+  //
+  // The remaining order is publisher-second: the dropper's locking read runs
+  // over a (checksum, versionsRoot) range the publisher has not inserted into
+  // yet. Under REPEATABLE READ — MariaDB's and MySQL's default, and what this
+  // deployment runs — that read takes a next-key lock on the range, so the
+  // publisher's INSERT waits for the dropper to commit and then re-publishes
+  // the bytes. Under READ COMMITTED there is no gap lock and that one ordering
+  // reopens a much narrower window, with the nightly sweep as the backstop.
+  //
+  // WHAT IS DELIBERATELY *NOT* HERE: a matching locking read on the publisher
+  // side. It closes the READ COMMITTED gap, and it deadlocks — two snapshots of
+  // different content take gap locks on the same index gap (neither conflicts),
+  // then each blocks on the other's gap lock trying to insert into it. Measured,
+  // not theorised: it produced two `Innodb_deadlocks` per e2e run and silently
+  // cost those saves their version, because `snapshotBeforeOverwrite` swallows
+  // everything by design.
+
+  // Inserts a version row and publishes its blob as one atomic step.
+  //
+  // `publishBlob` runs INSIDE the transaction, so it must be the cheap half of
+  // the write — the copy and the hash happen before this is called, and only
+  // the same-filesystem rename is in here.
+  async insertVersionPublishing(values: VersionInsert, publishBlob: () => Promise<void>): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      const versionId = dbGetInsertedId(await tx.insert(customFilesVersions).values(values))
+      await publishBlob()
+      return versionId
+    })
+  }
+
+  // Deletes one row and, still holding the lock, unlinks its blob if nothing
+  // else references it.
+  async deleteByIdReleasingBlob(versionId: number, checksum: string, versionsRoot: string, unlinkBlob: () => Promise<void>): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(customFilesVersions).where(eq(customFilesVersions.id, versionId))
+      if (await this.blobIsUnreferenced(tx, checksum, versionsRoot)) await unlinkBlob()
+    })
+  }
+
+  // The purge equivalent: every row of a set of files goes, then each distinct
+  // blob they referenced is released if nothing else points at it.
+  //
+  // The bulk DELETE is inside the transaction for the same reason the single
+  // one is — it is the delete that holds the locks the checks depend on, so
+  // splitting them would reopen #489 on the purge path.
+  async deleteByFileIdsReleasingBlobs(
+    fileIds: number[],
+    blobs: { checksum: string; versionsRoot: string }[],
+    unlinkBlob: (checksum: string, versionsRoot: string) => Promise<void>
+  ): Promise<void> {
+    if (!fileIds.length) return
+    await this.db.transaction(async (tx) => {
+      await tx.delete(customFilesVersions).where(inArray(customFilesVersions.fileId, fileIds))
+      for (const blob of blobs) {
+        if (await this.blobIsUnreferenced(tx, blob.checksum, blob.versionsRoot)) await unlinkBlob(blob.checksum, blob.versionsRoot)
+      }
+    })
+  }
+
+  // Refcount is per (checksum, versionsRoot) because blobs are physically per
+  // root — the same digest in two roots is two files, and counting them as one
+  // would delete a blob another root still needs.
+  private async blobIsUnreferenced(tx: DBTransaction, checksum: string, versionsRoot: string): Promise<boolean> {
+    const rows = await tx
+      .select({ id: customFilesVersions.id })
+      .from(customFilesVersions)
+      .where(and(eq(customFilesVersions.checksum, checksum), eq(customFilesVersions.versionsRoot, versionsRoot)))
+      .limit(1)
+      .for('update')
+    return rows.length === 0
   }
 
   // Newest version for the coalescing tuple. Returns the row so the caller can

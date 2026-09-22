@@ -26,7 +26,7 @@ import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
 import { SnapshotOptions, VersionOrigin, VersionProps, VersionRow, VersionsUsage } from '../interfaces/version.interface'
 import { blobPathFromRoot, spaceVersionsRoot, userVersionsRoot, versionsPathFromRoot, versionsRootFromSpace } from '../utils/paths'
-import { VERSIONS_BLOB_PUBLISH_GRACE_MS, VERSIONS_STAGING_DIR } from '../constants/versioning'
+import { VERSIONS_STAGING_DIR } from '../constants/versioning'
 import { versionsToExpire } from '../utils/versions-thinning'
 import { VersioningQueries } from './versioning-queries.service'
 import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
@@ -155,39 +155,52 @@ export class VersioningService {
         await this.enforceQuotaShare(user, space, versionsRoot, deduped ? 0 : staged.size)
       }
 
-      // Blob first, row second. A crash between the two leaves an orphan blob,
-      // which the retention GC sweeps; the reverse order would leave a version
-      // row pointing at nothing — a visible, un-downloadable entry.
-      await this.publishBlob(staged.stagePath, blobPath)
-
-      await this.queries.insertVersion({
-        fileId,
-        ...scope,
-        versionsRoot,
-        checksum: staged.checksum,
-        size: staged.size,
-        mtime: Math.floor(stats.mtimeMs),
-        authorId: user.id ?? null,
-        // WHO WROTE THE BYTES THIS ROW HOLDS, recorded here and never derived
-        // on read (#491). `authorId` above names the user performing THIS
-        // write, i.e. the one destroying the content — so the author of the
-        // content being captured is the author of the write before it, which is
-        // exactly the `authorId` of the newest row for this file right now.
-        //
-        // The read-time alternative — shift the list by one — is wrong once
-        // thinning has removed rows, because the surviving row n-1 is then not
-        // the row that actually preceded n (thinning spec §8). Read at write
-        // time, the newest row IS the immediate predecessor, so the same
-        // arithmetic is sound here and permanent.
-        //
-        // Null for a file's first version (nothing to name) and after a
-        // system-originated write. After a restore it resolves to the person
-        // who restored, which is correct under this column's definition: they
-        // are who last put these bytes in the live file.
-        contentAuthorId: await this.queries.lastAuthorIdForFile(fileId),
-        origin: options.origin,
-        label: null
-      })
+      // ROW AND BLOB LAND AS ONE ATOMIC STEP (#489).
+      //
+      // The row is inserted first and the rename runs inside the same
+      // transaction. That is not a reversal of the ADR's "blob first, row
+      // second" rule but the same guarantee by stronger means: the rule exists
+      // so a crash never leaves a COMMITTED row pointing at nothing, and here
+      // the row is committed only after the rename returned. A failure or a
+      // crash in between rolls the row back; a commit that fails after a
+      // successful rename leaves an orphan blob, which is the harmless
+      // direction the nightly sweep already owns.
+      //
+      // What the inversion buys is the thing the old order could not give: a
+      // concurrent eviction, thinning pass, retention rule or purge can no
+      // longer observe this blob on disk while its row is invisible, and unlink
+      // it out from under us. See VersioningQueries' publish/release header.
+      await this.queries.insertVersionPublishing(
+        {
+          fileId,
+          ...scope,
+          versionsRoot,
+          checksum: staged.checksum,
+          size: staged.size,
+          mtime: Math.floor(stats.mtimeMs),
+          authorId: user.id ?? null,
+          // WHO WROTE THE BYTES THIS ROW HOLDS, recorded here and never derived
+          // on read (#491). `authorId` above names the user performing THIS
+          // write, i.e. the one destroying the content — so the author of the
+          // content being captured is the author of the write before it, which is
+          // exactly the `authorId` of the newest row for this file right now.
+          //
+          // The read-time alternative — shift the list by one — is wrong once
+          // thinning has removed rows, because the surviving row n-1 is then not
+          // the row that actually preceded n (thinning spec §8). Read at write
+          // time, the newest row IS the immediate predecessor, so the same
+          // arithmetic is sound here and permanent.
+          //
+          // Null for a file's first version (nothing to name) and after a
+          // system-originated write. After a restore it resolves to the person
+          // who restored, which is correct under this column's definition: they
+          // are who last put these bytes in the live file.
+          contentAuthorId: await this.queries.lastAuthorIdForFile(fileId),
+          origin: options.origin,
+          label: null
+        },
+        () => this.publishBlob(staged.stagePath, blobPath)
+      )
     } catch (e) {
       await removeFiles(staged.stagePath).catch(() => undefined)
       throw e
@@ -847,12 +860,14 @@ export class VersioningService {
     if (!fileIds.length) return
     const rows = await this.queries.listByFileIds(fileIds)
     if (!rows.length) return
-    await this.queries.deleteByFileIds(fileIds)
-    // Rows are gone, so remaining refcounts are accurate: drop any blob that no
-    // other version still points at.
-    for (const blob of new Map(rows.map((r) => [`${r.versionsRoot}|${r.checksum}`, r])).values()) {
-      await this.removeBlobIfUnreferenced(blob.checksum, blob.versionsRoot)
-    }
+    // Rows and blobs go in ONE transaction, for the same reason dropVersion's
+    // do: the bulk DELETE is what holds the lock the refcount check depends on,
+    // so splitting them would reopen #489 on the purge path.
+    const blobs = [...new Map(rows.map((r) => [`${r.versionsRoot}|${r.checksum}`, r])).values()].map((r) => ({
+      checksum: r.checksum,
+      versionsRoot: r.versionsRoot
+    }))
+    await this.queries.deleteByFileIdsReleasingBlobs(fileIds, blobs, (checksum, versionsRoot) => this.unlinkBlob(checksum, versionsRoot))
     this.logger.log({ tag: this.purgeForFileIds.name, msg: `purged ${rows.length} versions for ${fileIds.length} file(s)` })
   }
 
@@ -866,53 +881,29 @@ export class VersioningService {
   }
 
   // Deletes one version row and its blob if nothing else references it.
+  //
+  // The delete, the refcount and the unlink all happen inside ONE transaction
+  // (#489) — see VersioningQueries' publish/release header for why the unlink
+  // has to run while the lock is still held rather than after a check.
   private async dropVersion(version: VersionRow): Promise<void> {
-    await this.queries.deleteById(version.id)
-    await this.removeBlobIfUnreferenced(version.checksum, version.versionsRoot)
+    await this.queries.deleteByIdReleasingBlob(version.id, version.checksum, version.versionsRoot, () =>
+      this.unlinkBlob(version.checksum, version.versionsRoot)
+    )
   }
 
-  private async removeBlobIfUnreferenced(checksum: string, versionsRoot: string): Promise<void> {
-    // Refcount is per (checksum, versionsRoot) because blobs are physically per
-    // root — the same digest in two roots is two files, and counting them as
-    // one would delete a blob another root still needs.
-    if ((await this.queries.countByBlob(checksum, versionsRoot)) > 0) return
+  // Removes the bytes of a blob the queries layer has just proven unreferenced.
+  //
+  // NEVER CALL THIS DIRECTLY. It makes no refcount decision of its own — the
+  // decision belongs to the locked transaction that invokes it, and taking it
+  // here would be the check-then-act #489 removed.
+  private async unlinkBlob(checksum: string, versionsRoot: string): Promise<void> {
     const blobPath = blobPathFromRoot(versionsRoot, checksum)
     if (!blobPath) return
-    // THE REFCOUNT ABOVE IS NOT ENOUGH ON ITS OWN (#489). It is a check-then-act,
-    // and `snapshot` publishes its blob before inserting its row — so a
-    // concurrent save can have put these exact bytes in place while its row is
-    // still in flight, and a count of 0 then means "not referenced YET" rather
-    // than "not referenced". Unlinking there leaves a version that lists and
-    // 404s on download and restore, which is the mirror image of the race the
-    // ADR closed by renaming unconditionally.
-    //
-    // The blob's own mtime settles it, because a publish is a rename of the
-    // staged copy and carries that copy's write time: a blob older than the
-    // grace cannot have been published inside the grace, so no insert can still
-    // be in flight for it. A publish that has NOT yet renamed owns no file here
-    // at all, and its rename lands after this unlink — blob and row both
-    // present, which is the correct outcome.
-    //
-    // Anything younger is simply left to the nightly orphan sweep, whose own
-    // (much longer) grace makes the same test correctly. That sweep is where
-    // #489's preferred fix put every unreferenced blob; this keeps prompt
-    // reclamation for the overwhelming majority — a version dropped by
-    // thinning, retention, eviction or an admin purge is old, and so is its
-    // blob — and defers only the ones that could be racing.
-    const stats = await fs.stat(blobPath).catch(() => null)
-    if (!stats) return
-    if (Date.now() - stats.mtimeMs < VERSIONS_BLOB_PUBLISH_GRACE_MS) {
-      this.logger.verbose({
-        tag: this.removeBlobIfUnreferenced.name,
-        msg: `blob ${checksum.slice(0, 12)} in ${versionsRoot} is inside the publish window, leaving it to the orphan sweep`
-      })
-      return
-    }
     try {
       await removeFiles(blobPath)
     } catch (e) {
       // Leave it for the orphan-blob GC rather than fail the caller.
-      this.logger.warn({ tag: this.removeBlobIfUnreferenced.name, msg: `unable to remove blob ${blobPath}: ${e}` })
+      this.logger.warn({ tag: this.unlinkBlob.name, msg: `unable to remove blob ${blobPath}: ${e}` })
     }
   }
 

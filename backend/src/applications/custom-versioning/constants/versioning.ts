@@ -71,29 +71,3 @@ export const VERSIONS_MAX_DIFF_BYTES = 2 * 1024 * 1024
 // heavy consumers", which a fixed top-N answers, and the number is exported so
 // the panel's heading and the query cannot disagree about it.
 export const VERSIONS_ADMIN_TOP_ROOTS = 10
-
-// How long after a blob appeared on disk the EAGER unlink path must leave it
-// alone (#489).
-//
-// `removeBlobIfUnreferenced` is a check-then-act: it counts the rows pointing
-// at a blob and unlinks when the count is 0. A snapshot publishes its blob
-// BEFORE inserting its row (deliberately — the reverse order would leave a row
-// pointing at nothing), so between those two steps a concurrent eviction,
-// thinning pass, retention rule or purge can see a refcount of 0 for a blob
-// that is about to be referenced, and unlink it. The row then lists and 404s.
-//
-// The nightly orphan sweep already closes this from the other end with a 24h
-// grace, and the fix is to give the eager path the same test with a window
-// sized for its purpose. It is a sound one rather than a hopeful one: a blob is
-// published by renaming the staged copy into place, and that copy's mtime is
-// set by the staging write, so a blob whose mtime is older than this window
-// PROVES no publish completed for it inside the window. A publish that is still
-// in flight has not created a file at all, and its rename lands after the
-// unlink — leaving blob and row both present, which is correct.
-//
-// Five minutes is generous against the only thing that can stretch the
-// publish→insert gap: a blocked INSERT, bounded by MySQL's
-// `innodb_lock_wait_timeout` (50s by default). Being generous costs only a
-// delay — a blob dropped inside its own window is left to the nightly sweep,
-// which is where issue #489's preferred fix put all of them.
-export const VERSIONS_BLOB_PUBLISH_GRACE_MS = 300_000
