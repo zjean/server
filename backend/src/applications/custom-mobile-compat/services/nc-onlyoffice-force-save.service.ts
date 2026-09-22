@@ -66,7 +66,13 @@ export class NcOnlyOfficeForceSaveService {
     const token = await this.jwt.signAsync(cmd, { secret: oo.secret, expiresIn: 60 })
     const payload = { ...cmd, token }
 
-    const rejectUnauthorized = !oo.verifySSL
+    // Mirrors upstream OnlyOfficeManager (only-office-manager.service.ts:89):
+    // `rejectUnauthorized` IS `verifySSL`, not its negation. Inverting it broke
+    // both directions — the shipped default (verifySSL: false, i.e. a
+    // self-signed/internal-CA doc server) failed every mobile Save with a TLS
+    // error, and an admin explicitly asking for verification got it silently
+    // disabled on a POST carrying a JWT signed with the doc-server secret.
+    const rejectUnauthorized = oo.verifySSL
     try {
       await this.http.axiosRef({
         method: 'POST',
