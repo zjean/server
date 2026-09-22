@@ -1,5 +1,9 @@
+import { SPACE_ALIAS, SPACE_ALL_OPERATIONS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
+import { SpaceEnv } from '../../spaces/models/space-env.model'
+import { WebDAVFile } from '../../webdav/models/webdav-file.model'
 import type { NcShareMount } from '../services/nc-share-mount-resolver.service'
-import { buildShareMountPropResponse } from './nc-share-mount-response'
+import { buildNcPropResponse } from './nc-prop-builder'
+import { buildShareMountPropResponse, rawurlencodeSegment } from './nc-share-mount-response'
 
 function mount(over: Partial<NcShareMount> = {}): NcShareMount {
   return {
@@ -111,5 +115,124 @@ describe('buildShareMountPropResponse', () => {
     const b = buildShareMountPropResponse(mount({ size: -42 }), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, string> } }
     expect(a['d:propstat']['d:prop']['oc:size']).toBe('0')
     expect(b['d:propstat']['d:prop']['oc:size']).toBe('0')
+  })
+})
+
+describe('buildShareMountPropResponse — divergence from the PROPFIND prop set', () => {
+  const HREF_BASE = '/remote.php/dav/files/bob/'
+
+  // Mount-root entries are synthesized here rather than by buildNcPropResponse,
+  // so the two prop sets can drift silently. This case is the tripwire: it names
+  // the ONE prop the mount root does not carry, so adding or dropping any other
+  // prop on either side fails here instead of in a client.
+  //
+  // `oc:favorite` is that prop, and its absence is a real divergence, not a
+  // decision: NC clients read a missing `oc:favorite` as not-favorited, so a
+  // starred share-mount root shows unstarred at the home listing while the same
+  // folder shows starred when PROPFINDed directly. Tracked by #488 — when it is
+  // fixed, move the key out of MOUNT_OMITS and into the equality below.
+  const MOUNT_OMITS = ['oc:favorite']
+
+  function livePropKeys(): string[] {
+    const space = {
+      id: 0,
+      alias: SPACE_ALIAS.PERSONAL,
+      envPermissions: SPACE_ALL_OPERATIONS,
+      permissions: SPACE_ALL_OPERATIONS,
+      repository: SPACE_REPOSITORY.FILES,
+      root: { id: 0, alias: 'personal', name: 'personal', permissions: SPACE_ALL_OPERATIONS, owner: { id: 1, login: 'alice' } }
+    } as unknown as SpaceEnv
+    const dir = new WebDAVFile(
+      { id: 9001, name: 'alice-photos', isDir: true, size: 0, ctime: 1_716_891_500_000, mtime: 1_716_891_600_000, mime: '' } as never,
+      HREF_BASE
+    )
+    const r = buildNcPropResponse(dir, space, 'files', false, 'Alice Liddell') as unknown as {
+      'd:propstat': { 'd:prop': Record<string, unknown> }
+    }
+    return Object.keys(r['d:propstat']['d:prop'])
+  }
+
+  it('omits oc:favorite — and omits NOTHING ELSE the live PROPFIND path emits for the same folder', () => {
+    const mountKeys = Object.keys(
+      (buildShareMountPropResponse(mount(), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, unknown> } })['d:propstat']['d:prop']
+    )
+    expect(mountKeys).not.toContain('oc:favorite')
+    expect([...mountKeys].sort()).toEqual([...livePropKeys().filter((k) => !MOUNT_OMITS.includes(k))].sort())
+  })
+})
+
+describe('buildShareMountPropResponse — mime and timestamp translation', () => {
+  const HREF_BASE = '/remote.php/dav/files/bob/'
+  const props = (over: Partial<NcShareMount> = {}) =>
+    (buildShareMountPropResponse(mount(over), HREF_BASE) as { 'd:propstat': { 'd:prop': Record<string, string> } })['d:propstat']['d:prop']
+
+  // Sync-in stores a mime by replacing only its FIRST '/' with '-'. Turning
+  // every dash back into a slash emits `application/vnd.openxmlformats/…` for
+  // a .docx, and both clients compare the directEditing mimetype with exact
+  // equality — so the Edit affordance silently disappears.
+  it('turns only the FIRST dash back into a slash', () => {
+    expect(props({ isDir: false, size: 10, mime: 'application-vnd-ms-excel' })['d:getcontenttype']).toBe('application/vnd-ms-excel')
+    expect(props({ isDir: false, size: 10, mime: 'text-x-python' })['d:getcontenttype']).toBe('text/x-python')
+  })
+
+  it('emits no content-type / content-length for a file mount with no stored mime', () => {
+    const p = props({ isDir: false, size: 10, mime: '' })
+    expect(p).not.toHaveProperty('d:getcontenttype')
+    expect(p).not.toHaveProperty('d:getcontentlength')
+  })
+
+  it('never emits content-type / content-length for a folder mount, even if a mime is set', () => {
+    const p = props({ isDir: true, mime: 'image-jpeg' })
+    expect(p).not.toHaveProperty('d:getcontenttype')
+    expect(p).not.toHaveProperty('d:getcontentlength')
+  })
+
+  // mtime is stored in MILLISECONDS. d:getlastmodified is the field that keeps
+  // a date rather than being divided down to seconds, so a unit slip here shows
+  // up as a 1970 date on the client rather than as an error.
+  it('renders the ms mtime as an RFC1123 date', () => {
+    expect(props()['d:getlastmodified']).toBe(new Date(1_716_891_600_000).toUTCString())
+  })
+
+  it('clamps a non-finite or negative mtime to the epoch rather than emitting "Invalid Date"', () => {
+    expect(props({ mtime: Number.NaN as number })['d:getlastmodified']).toBe(new Date(0).toUTCString())
+    expect(props({ mtime: -1 })['d:getlastmodified']).toBe(new Date(0).toUTCString())
+  })
+
+  it('keys the etag on the same clamped mtime it reports', () => {
+    expect(props({ mtime: Number.NaN as number })['d:getetag']).toBe('"9001-0"')
+  })
+
+  it('never claims a preview for a mount root (the home listing has no thumbnail for it)', () => {
+    expect(props()['nc:has-preview']).toBe('false')
+  })
+
+  it('emits oc:comments-unread and nc:is-encrypted in the integer form', () => {
+    expect(props()['oc:comments-unread']).toBe('0')
+    expect(props()['nc:is-encrypted']).toBe('0')
+  })
+})
+
+describe('rawurlencodeSegment', () => {
+  // sabre/dav encodes with PHP rawurlencode, which differs from JS
+  // encodeURIComponent on exactly five ASCII characters. iOS reconciles its
+  // offline cache on byte-for-byte href equality, so the five matter.
+  it.each([
+    ['!', '%21'],
+    ["'", '%27'],
+    ['(', '%28'],
+    [')', '%29'],
+    ['*', '%2A']
+  ])('escapes %s, which encodeURIComponent leaves bare', (raw, encoded) => {
+    expect(encodeURIComponent(raw)).toBe(raw)
+    expect(rawurlencodeSegment(raw)).toBe(encoded)
+  })
+
+  it('leaves the unreserved set alone', () => {
+    expect(rawurlencodeSegment('abcXYZ019-_.~')).toBe('abcXYZ019-_.~')
+  })
+
+  it('encodes a slash, so an alias can never break out of its own href segment', () => {
+    expect(rawurlencodeSegment('a/b')).toBe('a%2Fb')
   })
 })
