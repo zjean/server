@@ -107,8 +107,11 @@ describe('versions editor callbacks (e2e)', () => {
     expect(versions).toHaveLength(1)
     expect(versions[0].origin).toBe('onlyoffice')
     // The author arrives as a PARAMETER here, not on a request — there is no
-    // req in an editor callback.
-    expect(versions[0].author?.login).toBe(e2e.user.login)
+    // req in an editor callback. It lands as `supersededBy`, the actor who
+    // replaced the content; `author` is the row's CONTENT author, and these
+    // pre-save bytes were seeded straight to disk with nobody recorded (#491).
+    expect(versions[0].supersededBy?.login).toBe(e2e.user.login)
+    expect(versions[0].author).toBeUndefined()
     expect((await e2e.api.content(versions[0].id, rel)).body).toBe('the document as it was before the editor saved')
     expect(await fs.readFile(e2e.filesPath(rel), 'utf8')).toBe('the document the editor produced')
   })
@@ -243,7 +246,9 @@ describe('versions editor callbacks (e2e)', () => {
     const rel = 'e2e11-snapshot-failure.docx'
     await e2e.seed(rel, 'failure case before')
 
-    const spy = vi.spyOn(e2e.versioningQueries, 'insertVersion').mockRejectedValueOnce(new Error('injected DB failure'))
+    // The write seam is `insertVersionPublishing` since #489 — it is the call
+    // that commits the row and publishes the blob as one step.
+    const spy = vi.spyOn(e2e.versioningQueries, 'insertVersionPublishing').mockRejectedValueOnce(new Error('injected DB failure'))
     try {
       await callback(rel, 6, 'failure case after')
     } finally {
