@@ -45,7 +45,11 @@
           <div class="dock-row">
             <span class="dock-row__spinner"></span>
             <span class="dock-row__name dock-row__name--active">{{ nameOf(t) }}</span>
-            <span class="dock-row__pct">{{ percentOf(t) }}%</span>
+            <!-- A delete or a compress reports no byte total, so a percentage would sit
+                 at 0% for the whole run and read as a stalled upload. -->
+            @if (hasProgress(t)) {
+              <span class="dock-row__pct">{{ percentOf(t) }}%</span>
+            }
             @if (canCancel(t)) {
               <app-v2-icon-btn
                 iconName="x"

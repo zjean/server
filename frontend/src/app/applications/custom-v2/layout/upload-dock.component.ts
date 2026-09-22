@@ -8,6 +8,7 @@ import { ButtonComponent } from '../components/button.component'
 import { IconButtonComponent } from '../components/icon-button.component'
 import { IconV2Component } from '../icons/icon-v2.component'
 import { TransfersService } from '../services/transfers.service'
+import { activeTaskLabel } from '../utils/task-labels'
 
 /**
  * The upload dock (D8) — bottom-right, 360px, collapsible to one line.
@@ -58,16 +59,21 @@ export class UploadDockComponent {
   // dock takes the success pair instead. Without this a done dock read as still busy.
   protected readonly idleAndClean = computed(() => this.agg().active === 0 && this.agg().failed === 0)
 
+  // The verb and the mark both come from what is actually running — see
+  // `utils/task-labels.ts`. The dock is named for uploads but carries every task type,
+  // and it used to say "Uploading" for all of them.
+  private readonly runningLabel = computed(() => activeTaskLabel(this.active().map((t) => t.type)))
+
   protected readonly markGlyph = computed(() => {
-    if (this.agg().active > 0) return 'upload' as const
+    if (this.agg().active > 0) return this.runningLabel().glyph
     return this.agg().failed > 0 ? ('info' as const) : ('check' as const)
   })
 
   protected readonly headline = computed(() => {
     const a = this.agg()
-    if (a.active > 0) return 'v2_uploading_n_of_m'
-    if (a.failed > 0) return a.failed === 1 ? 'v2_transfer_one_failed' : 'v2_transfer_n_failed'
-    return this.ended().length === 1 ? 'v2_transfer_one_done' : 'v2_transfer_n_done'
+    if (a.active > 0) return this.runningLabel().headline
+    if (a.failed > 0) return a.failed === 1 ? 'v2_task_one_failed' : 'v2_task_n_failed'
+    return this.ended().length === 1 ? 'v2_task_one_done' : 'v2_task_n_done'
   })
 
   protected readonly headlineParams = computed(() => {
@@ -118,6 +124,11 @@ export class UploadDockComponent {
    */
   protected nameOf(t: FileTask): string {
     return (t as FileTaskClient).displayName ?? t.name
+  }
+
+  /** Whether this task reports a byte total, i.e. whether a percentage means anything. */
+  protected hasProgress(t: FileTask): boolean {
+    return !!t.props.totalSize
   }
 
   protected percentOf(t: FileTask): number {
