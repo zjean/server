@@ -132,6 +132,32 @@ describe('NC DAV request bodies are never drained by a content-type parser (e2e)
     )
   })
 
+  describe('the login-v2 form parser', () => {
+    const form = (url: string, payload: string) =>
+      app.inject({ method: 'POST', url, payload, headers: { 'content-type': 'application/x-www-form-urlencoded' } } as never)
+
+    // The counterweight to narrowing the parser: these routes are its only
+    // consumers and they must still get a parsed body. `readPollToken` answers
+    // 400 'missing token' when the body is absent and 404 + '[]' when it read a
+    // token that no flow matches — so the STATUS is the differential.
+    it.each(['/login/v2/poll', '/index.php/login/v2/poll'])('still reads token= from a form body at %s', async (url) => {
+      const res = await form(url, `token=${'0'.repeat(32)}`)
+      expect(res.statusCode).toBe(404)
+      expect(res.body).toBe('[]')
+    })
+
+    it('answers 400 when the form body really is empty', async () => {
+      expect((await form('/login/v2/poll', '')).statusCode).toBe(400)
+    })
+
+    // A parser registered without its own bodyLimit inherits the server's
+    // 25 MB. This is the cap that replaces it.
+    it('refuses an oversized form body instead of buffering it', async () => {
+      const res = await form('/login/v2/poll', `token=${'x'.repeat(9000)}`)
+      expect(res.statusCode).toBe(413)
+    })
+  })
+
   describe('the XML-bodied DAV methods keep their parsed body', () => {
     // The counterweight: the fix must not reach any method other than PUT, or
     // every PROPFIND in the tree loses the body its handler reads.
