@@ -174,6 +174,39 @@ describe('WebDAV (e2e)', () => {
       expect(getRes.headers['content-length']).toEqual(String(Buffer.byteLength(textContent, 'utf8')))
     })
 
+    // The fork registers a parser for this content type to serve the NC
+    // login-v2 form POSTs. It used to be registered with `parseAs: 'string'`,
+    // which makes fastify drain the body BEFORE the parser function can look
+    // at the URL — so every urlencoded request on every route was buffered and
+    // discarded, and any write arriving with it would have landed empty. The
+    // /webdav tree was saved by bootstrapWebDAV's onRequest hook alone; this
+    // case pins the outcome so neither defence can be removed unnoticed.
+    it('PUT with application/x-www-form-urlencoded should preserve stream and create file with content', async () => {
+      const formish = 'token=not-a-form&value=this+is+file+content'
+
+      const putRes = await app.inject({
+        method: 'PUT',
+        url: testFilePath,
+        headers: {
+          authorization: auth,
+          'content-type': 'application/x-www-form-urlencoded'
+        },
+        body: formish
+      } as any)
+
+      expect([201, 204]).toContain(putRes.statusCode)
+
+      const getRes = await app.inject({
+        method: 'GET',
+        url: testFilePath,
+        headers: { authorization: auth }
+      } as any)
+
+      expect(getRes.statusCode).toEqual(200)
+      expect(getRes.body).toEqual(formish)
+      expect(getRes.headers['content-length']).toEqual(String(Buffer.byteLength(formish, 'utf8')))
+    })
+
     it('PUT with application/octet-stream should work as expected', async () => {
       const binaryContent = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
