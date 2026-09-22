@@ -1,3 +1,37 @@
+## [Unreleased]
+
+### Upgrading
+
+- **`DRAWIO_URL` has been removed.** The drawio editor location is now part of the configuration system as
+  `applications.files.diagrams.editorUrl` in `environment.yaml`, or the environment variable
+  **`SYNCIN_APPLICATIONS_FILES_DIAGRAMS_EDITORURL`** (one segment — `EDITORURL`, never `EDITOR_URL`: the config loader
+  splits on `_` and matches each segment against a whole key).
+
+  **If you set `DRAWIO_URL`, you must migrate it before upgrading.** The old variable was read straight from
+  `process.env`, carried no `SYNCIN_` prefix and so never reached the config loader's "Ignoring unknown environment
+  variable" path. After the upgrade it is ignored, the default `https://embed.diagrams.net` applies, and the CSP
+  `frame-src` follows the default — so **nothing visibly breaks** while the complete XML of every diagram any user
+  opens is posted into a page served by JGraph. A boot-time `[REMOVED][ENVIRONMENT]` warning fires if the variable is
+  still present. The value is deliberately not auto-migrated: the replacement is validated as an http(s) URL and feeds
+  the CSP.
+
+### Fixed
+
+- **diagrams:** `/api/diagrams/{load,save,new}` carried no `SpaceGuard`, so the routes checked only a bare MODIFY bit —
+  a read-only space member could create diagrams, and trash, disabled-space and quota gates were not applied. All three
+  routes now run the guard's own decision function, and are restricted to diagram files (`.drawio`, `.dwb`) rather than
+  doubling as a read-any-file / replace-any-file primitive.
+- **diagrams:** a read-only user was mounted an editable canvas and could edit for as long as they liked before
+  discovering no save would ever land; the viewer (`chrome=0`) is mounted instead, with a banner.
+- **diagrams:** drawio export payloads coming back over `postMessage` are validated before they reach a same-origin
+  sink, and printed SVG is sanitised under a nonce'd CSP.
+- **diagrams:** malformed paths, unknown spaces, traversal-shaped names and duplicate file names returned `500`; they
+  now return `400` / `404` / `403` / `400`.
+
+### Changed
+
+- **diagrams:** the v2 viewer discloses the editor host whenever the configured editor is not same-origin.
+
 ## [2.4.4-custom.1](https://github.com/zjean/server/compare/v2.4.4...v2.4.4-custom.1) (2026-07-27)
 
 First `-custom` release of the [zjean/server](https://github.com/zjean/server) fork, on top of upstream Sync-in 2.4.4.
