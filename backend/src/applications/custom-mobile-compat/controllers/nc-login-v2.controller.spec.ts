@@ -8,6 +8,8 @@ import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
 import { createInMemoryCache } from '../utils/nc-cache.fixture'
+import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
+import { NC_RATE_LIMIT_METADATA, NcRateLimitGuard } from '../guards/nc-rate-limit.guard'
 import { NcLoginV2Controller } from './nc-login-v2.controller'
 
 // Mock the config singleton; tests mutate `configuration.auth.*` per-case in
@@ -441,6 +443,32 @@ describe(`${NcLoginV2Controller.name} — login page dispatch`, () => {
       expect(res._status).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
       expect(html).not.toContain('ECONNREFUSED')
       expect(html).toContain('See server logs')
+    })
+  })
+  // #477 — every route here is @AuthTokenSkip(), so nothing upstream meters
+  // them. These assert the WIRING rather than the limiter's behaviour (which
+  // nc-rate-limit.guard.spec.ts covers): a correct guard that is not attached
+  // to the handler is the failure mode this issue actually describes.
+  describe('rate-limit wiring', () => {
+    const guards: unknown[] = Reflect.getMetadata('__guards__', NcLoginV2Controller) ?? []
+
+    it('mounts the per-IP guard on the controller', () => {
+      expect(guards).toContain(NcRateLimitGuard)
+    })
+
+    it.each([
+      ['initiate', NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_INITIATE],
+      ['submitLoginPage', NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_SUBMIT],
+      ['grant', NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_GRANT]
+    ] as const)('meters %s', (handler, options) => {
+      expect(Reflect.getMetadata(NC_RATE_LIMIT_METADATA, NcLoginV2Controller.prototype[handler])).toEqual(options)
+    })
+
+    it.each(['pollCanonical', 'pollAlt'] as const)('leaves %s unmetered on purpose', (handler) => {
+      // A client polls this once a second by design, the token is 256 bits of
+      // CSPRNG, and no credential is checked — metering it would break the
+      // sign-in it is meant to protect.
+      expect(Reflect.getMetadata(NC_RATE_LIMIT_METADATA, NcLoginV2Controller.prototype[handler])).toBeUndefined()
     })
   })
 })

@@ -1,13 +1,16 @@
 import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common'
+import { ThrottlerException } from '@nestjs/throttler'
 import { instanceToPlain, plainToInstance } from 'class-transformer'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { PinoLogger } from 'nestjs-pino'
+import { AUTH_RATE_LIMIT_ERROR_MESSAGE } from '../../../authentication/constants/auth'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { genHash } from '../../files/utils/files'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
 import { NC_AUTH_REALM } from '../constants/routes'
 
 // NcBasicAuthGuard
@@ -24,6 +27,7 @@ import { NC_AUTH_REALM } from '../constants/routes'
 export class NcBasicAuthGuard implements CanActivate {
   private static readonly CACHE_TTL_SECONDS = 900
   private static readonly CACHE_PREFIX = 'auth-nc-mobile'
+  private static readonly RATE_LIMIT_PREFIX = 'nc-rate-limit-basic'
 
   constructor(
     private readonly usersQueries: UsersQueries,
@@ -75,6 +79,34 @@ export class NcBasicAuthGuard implements CanActivate {
       // rehydrate into UserModel so prototype methods like havePermission() work.
       req.user = plainToInstance(UserModel, cached)
       return true
+    }
+
+    // Per-IP limit on credentials that MISS the cache, i.e. the ones that go
+    // on to cost a DB lookup and up to MAX_MOBILE_PASSWORDS bcrypt(10) rounds
+    // (#477). The equivalent of AuthBasicStrategy's WebDAV limiter, which this
+    // guard is otherwise a copy of and which had no counterpart here.
+    //
+    // It has to be per IP rather than per credential, because the guard's
+    // failure cache is already keyed on the credential PAIR: an attacker
+    // sending a unique password every request never hits that cache and so
+    // never pays for the previous attempt. Tracking the IP also catches
+    // password-spraying, which by construction never repeats a pair.
+    //
+    // Placed after the cache check so an established client syncing at full
+    // tilt — every request of which is authenticated — spends nothing, and
+    // before the DB lookup so the cheap half of the work is covered too.
+    //
+    // `req.ip`, not the X-Forwarded-For read below for logging: that header is
+    // caller-controlled, and a limiter an attacker can re-bucket at will is
+    // not a limiter.
+    const rateLimit = await this.cache.consumeRateLimit(
+      `${NcBasicAuthGuard.RATE_LIMIT_PREFIX}-${genHash((req.ip as string | undefined) ?? 'unknown', 'sha256')}`,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.ttl,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.limit,
+      NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration
+    )
+    if (rateLimit.isBlocked) {
+      throw new ThrottlerException(AUTH_RATE_LIMIT_ERROR_MESSAGE)
     }
 
     // Look up user by login or email.

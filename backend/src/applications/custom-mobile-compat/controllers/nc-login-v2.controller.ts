@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Logger, Param, Post, Query, Req, Res } from '@nestjs/common'
+import { Body, Controller, Get, HttpException, HttpStatus, Logger, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { AUTH_PROVIDER } from '../../../authentication/providers/auth-providers.constants'
 import { configuration } from '../../../configuration/config.environment'
 import { UsersManager } from '../../users/services/users-manager.service'
+import { NC_RATE_LIMIT_OPTIONS } from '../constants/rate-limit'
 import { NC_ROUTE } from '../constants/routes'
+import { NcRateLimit, NcRateLimitGuard } from '../guards/nc-rate-limit.guard'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
 import { NcLoginFlowService } from '../services/nc-login-flow.service'
 import { NcResponseService } from '../services/nc-response.service'
@@ -27,8 +29,14 @@ import { escapeHtml, renderHtml, renderNcSuccessBody } from '../utils/nc-html'
 //
 // See https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html
 
+// Rate limiting (#477): the guard is inert without a @NcRateLimit on the
+// handler, so mounting it at class level is free and means a route added later
+// only has to name its budget rather than remember the guard. The two poll
+// handlers are deliberately left unmetered — a client polls this every second
+// by design, the token is 256 bits of CSPRNG, and no credential is checked.
 @Controller()
 @AuthTokenSkip()
+@UseGuards(NcRateLimitGuard)
 export class NcLoginV2Controller {
   private readonly logger = new Logger(NcLoginV2Controller.name)
 
@@ -41,6 +49,7 @@ export class NcLoginV2Controller {
 
   // Step 1 — app initiates
   @Post(NC_ROUTE.LOGIN_V2.slice(1))
+  @NcRateLimit(NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_INITIATE)
   async initiate(@Req() req: FastifyRequest): Promise<{ poll: { token: string; endpoint: string }; login: string }> {
     const base = this.response.baseUrl(req)
     // Capture who is asking, so the grant page can tell the user what they are
@@ -148,6 +157,7 @@ export class NcLoginV2Controller {
 
   // Step 2b — browser POSTs credentials
   @Post(NC_ROUTE.LOGIN_V2_FLOW.slice(1))
+  @NcRateLimit(NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_SUBMIT)
   async submitLoginPage(
     @Param('token') loginToken: string,
     @Body() body: LoginFormBody,
@@ -241,6 +251,7 @@ export class NcLoginV2Controller {
   // login URL got a credential the moment the browser finished authenticating
   // — which is not the same person as whoever pressed the button.
   @Post(NC_ROUTE.LOGIN_V2_GRANT.slice(1))
+  @NcRateLimit(NC_RATE_LIMIT_OPTIONS.LOGIN_FLOW_GRANT)
   async grant(
     @Param('token') loginToken: string,
     @Body() body: GrantFormBody,
