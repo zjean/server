@@ -154,11 +154,7 @@ export class VersioningService {
       // A FileError already carries a considered status — enforceQuotaShare's
       // 507, say — so it is rethrown as is rather than flattened to a 500.
       if (e instanceof FileError) throw e
-      const code = (e as NodeJS.ErrnoException)?.code
-      throw new FileError(
-        code === 'ENOSPC' || code === 'EDQUOT' ? HttpStatus.INSUFFICIENT_STORAGE : HttpStatus.INTERNAL_SERVER_ERROR,
-        'Unable to save the current content before restoring, the restore was aborted'
-      )
+      throw new FileError(abortedRestoreStatus(e), 'Unable to save the current content before restoring, the restore was aborted')
     }
   }
 
@@ -1061,4 +1057,30 @@ export class VersioningService {
       this.logger.warn({ tag: this.releaseLock.name, msg: `Failed to remove lock ${lock.key}: ${e}` })
     }
   }
+}
+
+// Which status an aborted restore answers with, given whatever `snapshot` threw.
+//
+// Three shapes, and the distinction that matters to the caller is whether
+// retrying is worth their time:
+//
+//   ENOSPC / EDQUOT -> 507. The volume or the quota is full. Retrying now will
+//     fail the same way; the user has to free something first.
+//   ER_LOCK_WAIT_TIMEOUT / ER_LOCK_DEADLOCK -> 503. mysql2 surfaces InnoDB's
+//     row-lock timeout (errno 1205) and deadlock victim (1213) as these codes.
+//     Both are TRANSIENT and say nothing about the request — the row the
+//     safety snapshot inserts was simply held by a concurrent writer — so a
+//     flat 500 would be actively misleading, and 503 is the one status a
+//     client may reasonably retry on its own. This becomes reachable once the
+//     nightly sweep takes gap locks over the same table (#471 / PR #530),
+//     which can block the safety snapshot's INSERT.
+//   anything else -> 500.
+//
+// Note this runs only on the RESTORE path. The seven save paths still swallow
+// everything (ADR §4) and never reach here.
+function abortedRestoreStatus(e: unknown): HttpStatus {
+  const code = (e as NodeJS.ErrnoException)?.code
+  if (code === 'ENOSPC' || code === 'EDQUOT') return HttpStatus.INSUFFICIENT_STORAGE
+  if (code === 'ER_LOCK_WAIT_TIMEOUT' || code === 'ER_LOCK_DEADLOCK') return HttpStatus.SERVICE_UNAVAILABLE
+  return HttpStatus.INTERNAL_SERVER_ERROR
 }

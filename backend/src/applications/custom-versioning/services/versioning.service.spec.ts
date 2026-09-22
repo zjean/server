@@ -1717,6 +1717,27 @@ describe(VersioningService.name, () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
   })
 
+  // A lock-wait timeout is transient and says nothing about the request, so it
+  // is the one abort a client may reasonably retry on its own. Reachable once
+  // the nightly sweep takes gap locks over the same table (#471 / PR #530):
+  // those can block the safety snapshot's INSERT, and mysql2 surfaces InnoDB's
+  // errno 1205 as this code. Without the branch it flattens to 500, which reads
+  // as "your restore is broken" rather than "try again".
+  it('answers 503 when the pre-restore capture loses a row lock', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    queries.insertVersion = async () => {
+      throw Object.assign(new Error('Lock wait timeout exceeded; try restarting transaction'), { code: 'ER_LOCK_WAIT_TIMEOUT', errno: 1205 })
+    }
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toMatchObject({
+      httpCode: HttpStatus.SERVICE_UNAVAILABLE
+    })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
+  })
+
   it('restore holds a server lock and releases it', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
