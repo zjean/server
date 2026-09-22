@@ -179,6 +179,48 @@ describe(NcSyncLogService.name, () => {
     expect(captured[0]).toMatchObject({ type: 'delete', path: 'old.pdf' })
   })
 
+  // REGRESSION #478. The move-to-trash emission is the one that does NOT
+  // address the space it names: upstream fires the SOURCE (files) space with
+  // `rPath` set to the file's new ABSOLUTE path under the user's trash root,
+  // which shares no prefix with the files space's realBasePath. Logging that
+  // verbatim both discloses the server's disk layout in the REPORT body and
+  // makes the 404 marker name an href no client has ever seen — so the delete
+  // never propagates, which is the entire point of RFC 6578 incremental sync.
+  // The payload below is the exact shape files-manager.service.ts emits.
+  it('FileEvent DELETE (move to trash) → logs the ORIGINAL files-relative path, not the absolute trash path', async () => {
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      space: {
+        repository: 'files',
+        alias: 'personal',
+        realBasePath: '/var/lib/syncin/users/bob/files',
+        realPath: '/var/lib/syncin/users/bob/files/photos/cat.jpg'
+      },
+      action: ACTION.DELETE,
+      rPath: '/var/lib/syncin/users/bob/trash/photos/cat.jpg'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured[0]).toMatchObject({ repository: 'files', spaceAlias: 'personal', path: 'photos/cat.jpg', type: 'delete' })
+    // No absolute path may survive into the row at all.
+    expect(captured[0].path).not.toContain('/var/lib/syncin')
+  })
+
+  // A DELETE whose payload carries no realPath falls back to rPath — the
+  // handler must not throw or drop the event on a payload shape it did not
+  // expect.
+  it('FileEvent DELETE without space.realPath falls back to rPath', async () => {
+    service.attachListener()
+    ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {
+      user: { id: 7 },
+      space: { repository: 'files', alias: 'personal', realBasePath: '/data/janwiebe/files/personal' },
+      action: ACTION.DELETE,
+      rPath: '/data/janwiebe/files/personal/old.pdf'
+    })
+    await new Promise((r) => setImmediate(r))
+    expect(captured[0]).toMatchObject({ path: 'old.pdf', type: 'delete' })
+  })
+
   it('trash repository events get repository="trash"', async () => {
     service.attachListener()
     ;(FileEvent.emit as (e: 'event', payload: unknown) => boolean)('event', {

@@ -185,7 +185,22 @@ export class NcSyncLogService implements OnModuleInit {
     // so realPath === rPath and stripping realPath would yield ''. realBasePath
     // is the space root itself (e.g. /data/<user>/files), independent of the
     // request URL.
-    const path = stripSpaceRealBasePathPrefix(e.rPath, e.space)
+    //
+    // ACTION.DELETE (move-to-trash) is the one emission whose `rPath` does not
+    // address the space it names: upstream fires `{ space, action:
+    // ACTION.DELETE, rPath: trashFile }` (files-manager.service.ts) — the
+    // SOURCE space, which is the FILES repository, but the file's new ABSOLUTE
+    // path under the user's TRASH root. The two roots differ
+    // (UserModel.getFilesPath vs getTrashPath), so there is no realBasePath
+    // prefix to strip and the row would keep the absolute path. That both
+    // leaks the server's disk layout into the REPORT body and makes the 404
+    // marker name an href the client has never seen, so the delete never
+    // propagates — which is the whole point of RFC 6578 incremental sync
+    // (sabre's Sync plugin builds every response href, deleted ones included,
+    // as `$collectionUrl.'/'.$item` — always collection-relative). The address
+    // the client needs is where the file USED to be: `space.realPath`.
+    const eventRPath = e.action === ACTION.DELETE && e.space.realPath ? e.space.realPath : e.rPath
+    const path = stripSpaceRealBasePathPrefix(eventRPath, e.space)
     const ts = Date.now()
     // Fan out to every user who can see the resource — the actor plus, for
     // shared spaces, the space's members (direct users + users in member
