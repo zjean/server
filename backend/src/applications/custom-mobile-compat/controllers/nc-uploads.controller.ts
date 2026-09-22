@@ -264,7 +264,12 @@ function parseDestination(dest: string, login: string): string | null {
   }
   const prefix = `/remote.php/dav/files/${login}/`
   if (!urlPath.startsWith(prefix)) return null
-  return decodeURIComponent(urlPath.slice(prefix.length))
+  // Return the subpath STILL PERCENT-ENCODED. The one decode belongs to
+  // NcPathResolverService.normalize(), which every caller funnels through —
+  // decoding here too made it twice, so a file named `50%20off.txt` (wire:
+  // `50%2520off.txt`) assembled as `50 off.txt` (#484). nc-dav.controller
+  // has always handed over the encoded subpath; this is the same contract.
+  return urlPath.slice(prefix.length)
 }
 
 // Pull the segment of `url` after `prefix`. Drops any query string.

@@ -180,7 +180,13 @@ describe('NcUploadsController assembly versioning', () => {
 })
 
 // The assembly MOVE's Destination header, end to end through the real path
-// resolver.
+// resolver. Two defects lived here:
+//
+//   #484 — parseDestination did its own decodeURIComponent and then handed the
+//          result to resolve(), whose normalize() decodes again. A file named
+//          `50%20off.txt` travels the wire as `50%2520off.txt` and assembled as
+//          `50 off.txt`. nc-dav.controller has always passed the still-encoded
+//          subpath; this one disagreed.
 //
 //   #483 — a Destination that normalizes to nothing resolved to the space ROOT,
 //          and the assembly ends in `moveFiles(tmp, space.realPath, true)` —
@@ -226,6 +232,23 @@ describe('NcUploadsController assembly destination', () => {
   const res = () => ({ status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), send: vi.fn() }) as any
 
   afterEach(() => vi.restoreAllMocks())
+
+  it('decodes the Destination exactly once (#484)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    // On the wire for a file literally named `50%20off.txt`.
+    await controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/50%2520off.txt'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', '50%20off.txt'])
+  })
+
+  it('decodes an ordinary escaped space once, not zero times', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/My%20folder/a.txt'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'My folder', 'a.txt'])
+  })
 
   it('refuses a Destination carrying a "." segment rather than assembling onto the home root (#483)', async () => {
     const { controller, spacesManager } = buildController()
