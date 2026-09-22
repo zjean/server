@@ -9,11 +9,20 @@
       <span l10nTranslate>You do not have permission to edit this diagram. Changes will not be saved.</span>
     </div>
   }
+  <!--
+    The sandbox is defence in depth (#498). allow-scripts + allow-same-origin are
+    what drawio needs to run at all, so what this actually buys is the absence of
+    allow-top-navigation: the editor origin cannot navigate the Sync-in tab away.
+    Every other token is a capability drawio genuinely uses — popups and
+    popups-to-escape-sandbox for its native File > Print window, forms for its
+    dialogs, downloads for File > Save As.
+  -->
   <iframe
     #editorFrame
     class="diagram-view__frame"
     [src]="iframeSrc()"
     [title]="'Diagram editor' | translate: locale.language"
+    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
     allowfullscreen
   ></iframe>
 }
