@@ -47,6 +47,15 @@ const versioning = {
   purgeForFile: vi.fn().mockResolvedValue(undefined)
 }
 
+// Faithful-enough stand-in for writeUploadFromStream: consumes the source and
+// reports the accepted byte counts, which is what saveStream's #518 assertion
+// reads.
+async function drainAndReport(_rPath: string, stream: Readable, options: { onProgress?: (bytes: number) => void }): Promise<void> {
+  for await (const chunk of stream) {
+    options?.onProgress?.(Buffer.byteLength(chunk as string | Buffer))
+  }
+}
+
 describe(FilesManager.name, () => {
   let service: FilesManager
   let filesTasksTransfer: { copy: Mock; move: Mock; delete: Mock; createByteProgressHandler: Mock; createExtractionProgressHandler: Mock }
@@ -201,8 +210,17 @@ describe(FilesManager.name, () => {
     vi.spyOn(filesUtils, 'makeTemporaryDirectory').mockImplementation(async (parentPath, targetPath, operation, executionId = 'direct-id') =>
       temporaryPath(operation as FILE_OPERATION, executionId, targetPath, parentPath)
     )
-    vi.spyOn(filesUtils, 'writeUploadFromStream').mockResolvedValue(undefined)
-    vi.spyOn(filesUtils, 'writeUploadFromStreamAndChecksum').mockResolvedValue('sha256-abc')
+    // #518: saveStream now compares the bytes the write helper actually
+    // consumed against the declared content-length, so the stand-in has to
+    // behave like the real helper in the one respect that matters — drain the
+    // source and report every chunk through onProgress. A mock that just
+    // resolves looks exactly like a body that was drained out from under us,
+    // which is the very bug the assertion exists to catch.
+    vi.spyOn(filesUtils, 'writeUploadFromStream').mockImplementation(drainAndReport)
+    vi.spyOn(filesUtils, 'writeUploadFromStreamAndChecksum').mockImplementation(async (rPath, stream, _alg, options) => {
+      await drainAndReport(rPath, stream, options)
+      return 'sha256-abc'
+    })
     vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
     vi.spyOn(filesUtils, 'copyFiles').mockResolvedValue(undefined)
     vi.spyOn(filesUtils, 'removeFiles').mockResolvedValue(undefined)
@@ -388,6 +406,120 @@ describe(FilesManager.name, () => {
       ).rejects.toEqual(new FileError(HttpStatus.BAD_REQUEST, 'Content-range : start offset does not match the current file size'))
 
       expect(filesUtils.writeUploadFromStream).not.toHaveBeenCalled()
+    })
+
+    // #518: the belt-and-braces half of #475 (a body drained before saveStream
+    // read it stored a 0-byte file and answered 201). #513 fixed the drain at
+    // source; this asserts a future regression of that shape fails loudly.
+    // Matrix: browser/WebDAV new file, overwrite, content-range resume,
+    // tmpPath staging, chunked (no content-length), over-long body.
+    describe('declared content-length vs bytes received (#518)', () => {
+      // A request whose body delivers FEWER bytes than content-length
+      // announced — what a drained req.raw looks like from in here.
+      const shortBody = (declared: number, actual: string, extraHeaders: Record<string, string> = {}) =>
+        ({
+          method: 'PUT',
+          headers: { 'content-length': String(declared), ...extraHeaders },
+          raw: Readable.from([actual])
+        }) as any
+
+      it('rejects a short body with BAD_REQUEST and removes the file it just created', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+        const emitSpy = vi.spyOn(FileEvent, 'emit')
+
+        await expect(service.saveStream(user, space, shortBody(10, ''))).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 0 of 10 declared bytes')
+        )
+
+        // The 0-byte file #475 left behind must not survive the refusal.
+        expect(filesUtils.removeFiles).toHaveBeenCalledWith(space.realPath)
+        // And no success event may be emitted for a write that did not happen.
+        expect(emitSpy).not.toHaveBeenCalledWith('event', expect.anything())
+        // The lock still has to come off.
+        expect(filesLockManager.removeLock).toHaveBeenCalledWith('lock-1')
+      })
+
+      it('rejects a short body over an EXISTING file but leaves the file alone', async () => {
+        // The inode was truncated at the first byte by design (flag "w"), and
+        // versioning has already snapshotted it. Deleting the user's file to
+        // tidy up would be strictly worse than the truncated one plus a 4xx.
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(false)
+
+        await expect(service.saveStream(user, space, shortBody(10, 'abc'))).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 3 of 10 declared bytes')
+        )
+
+        expect(filesUtils.removeFiles).not.toHaveBeenCalledWith(space.realPath)
+      })
+
+      it('rejects a short body on the tmpPath branch before the move, and cleans the staging file', async () => {
+        const space = makeSpace()
+        const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [tmpPath]: false }, false)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(false)
+
+        await expect(service.saveStream(user, space, shortBody(10, 'abc'), { tmpPath })).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 3 of 10 declared bytes')
+        )
+
+        expect(filesUtils.removeFiles).toHaveBeenCalledWith(tmpPath)
+        // Crucially: the live file was never replaced.
+        expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+      })
+
+      it('accepts a complete body', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+
+        await expect(service.saveStream(user, space, shortBody(5, 'hello'))).resolves.toBe(false)
+        expect(filesUtils.removeFiles).not.toHaveBeenCalled()
+      })
+
+      it('accepts a ranged resume, whose content-length is the RANGE length and not the final size', async () => {
+        // The false-positive the issue warns about: comparing against the
+        // resulting file size would reject every legitimate resume.
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true }, true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(false)
+        vi.mocked(filesUtils.fileSize).mockResolvedValueOnce(100)
+
+        await expect(
+          service.saveStream(user, space, shortBody(5, 'world', { 'content-range': 'bytes 100-104/105' }), {
+            dav: { depth: DEPTH.RESOURCE, lockTokens: [] }
+          })
+        ).resolves.toBe(true)
+        expect(filesUtils.removeFiles).not.toHaveBeenCalled()
+      })
+
+      it('skips the check entirely when no content-length was declared (chunked)', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+
+        await expect(service.saveStream(user, space, { method: 'PUT', headers: {}, raw: Readable.from(['whatever']) } as any)).resolves.toBe(false)
+        expect(filesUtils.removeFiles).not.toHaveBeenCalled()
+      })
+
+      it('does not treat a longer-than-declared body as an error', async () => {
+        // One-directional on purpose: the size/quota limiter is the single
+        // authority on "too much", and it runs on every chunk.
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+
+        await expect(service.saveStream(user, space, shortBody(2, 'hello'))).resolves.toBe(false)
+        expect(filesUtils.removeFiles).not.toHaveBeenCalled()
+      })
+
+      it('applies to the checksum branch as well', async () => {
+        const space = makeSpace()
+        setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
+
+        await expect(service.saveStream(user, space, shortBody(9, 'abc'), { checksumAlg: 'sha256' })).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 3 of 9 declared bytes')
+        )
+      })
     })
 
     it('should validate tmp stream before moving it to the destination', async () => {
@@ -1792,7 +1924,11 @@ describe(FilesManager.name, () => {
 
       await service.downloadFromUrl(user, space, { url: 'https://example.org/file.txt' })
 
-      expect(space.task.props).toMatchObject({ progress: 1, size: 0, totalSize: 55 })
+      // size is 3 (the body is `abc`) rather than 0 because the
+      // writeUploadFromStream stand-in now drains the source and reports each
+      // chunk through onProgress, the way the real helper does — see
+      // drainAndReport. The old 0 only reflected a mock that consumed nothing.
+      expect(space.task.props).toMatchObject({ progress: 1, size: 3, totalSize: 55 })
       expect(taskEmitSpy).toHaveBeenCalledWith('startWatch', space, '/tmp/download.txt')
       expect(filesUtils.temporaryFilePath).toHaveBeenCalledWith(targetTmpRoot, '/tmp/download.txt', FILE_OPERATION.DOWNLOAD, 'task-1')
       expect(filesUtils.writeUploadFromStream).toHaveBeenCalledWith(

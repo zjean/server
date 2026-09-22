@@ -209,15 +209,25 @@ export class FilesManager {
         await this.versioning.snapshotBeforeOverwrite(user, space, { origin: this.versionOrigin(options) })
       }
       let checksum: string
+      /* Fork (#518): count the bytes this request body actually delivered.
+         `onProgress` already fires once per accepted chunk, so this needs no
+         change in the upstream write helpers. */
+      let bytesReceived = 0
+      const countBytes = (bytes: number) => {
+        bytesReceived += bytes
+      }
       if (options?.checksumAlg) {
         checksum = await writeUploadFromStreamAndChecksum(options?.tmpPath || space.realPath, req.raw, options.checksumAlg, {
-          limiter: fileLimiter
+          limiter: fileLimiter,
+          onProgress: countBytes
         })
       } else {
         await writeUploadFromStream(options?.tmpPath || space.realPath, req.raw, {
-          limiter: fileLimiter
+          limiter: fileLimiter,
+          onProgress: countBytes
         })
       }
+      await this.assertDeclaredBodyWasWritten(space, { contentLength, bytesReceived, fExists, startRange, tmpPath: options?.tmpPath })
       if (options?.tmpPath) {
         await options.validateTmpFile?.({ tmpPath: options.tmpPath, realPath: space.realPath, checksum })
         try {
@@ -260,6 +270,63 @@ export class FilesManager {
         }
       }
     }
+  }
+
+  /* Fork (#518): belt-and-braces for the #475 failure class — a body drained
+     before saveStream read it, producing a 0-byte file and a cheerful 201.
+     #513 fixed that at source (the content-type parsers no longer drain
+     req.raw); this makes any future regression of the same shape fail loudly
+     instead of silently storing an empty file.
+
+     Deliberately ONE-DIRECTIONAL: only a SHORT body is an error here. An
+     over-long body is already the limiter's job (maxFileSize / quota), and
+     treating "more than declared" as fatal would make this the second
+     authority on the same question.
+
+     It is also skipped whenever Content-Length is absent — chunked transfer
+     encoding, HTTP/2 without the header — because then nothing was declared
+     and there is nothing to disagree with.
+
+     Why comparing against the BODY length rather than the resulting file size
+     is the check that survives every caller: for a resumed `Content-Range`
+     PUT, Content-Length is the length of THAT range, not of the final file,
+     and for the tmpPath branch the final file does not exist yet. Bytes-off-
+     the-wire is the one quantity all four callers (browser upload, sync
+     client, WebDAV PUT, NC text editor) declare the same way. */
+  private async assertDeclaredBodyWasWritten(
+    space: SpaceEnv,
+    ctx: { contentLength: number | undefined; bytesReceived: number; fExists: boolean; startRange: number; tmpPath?: string }
+  ): Promise<void> {
+    if (ctx.contentLength === undefined || ctx.bytesReceived >= ctx.contentLength) {
+      return
+    }
+    this.logger.error({
+      tag: this.saveStream.name,
+      msg: `incomplete upload for ${space.realPath} : wrote ${ctx.bytesReceived} of ${ctx.contentLength} declared bytes`
+    })
+    /* Do not leave the short write in place as if it had succeeded — but only
+       remove what this call itself brought into existence:
+         - the staging file, always (nothing has been moved over the live file
+           yet, so the previous content is still intact);
+         - a file we CREATED here, i.e. a fresh direct write at offset 0.
+       A short write over an EXISTING file cannot be undone from here (the
+       inode was truncated at the first byte, by design — see the versioning
+       hook above, which has already snapshotted it when versioning is on).
+       Deleting the user's file to tidy up would be worse than leaving the
+       truncated one; the 4xx is what tells the client to retry. */
+    if (ctx.tmpPath) {
+      await removeFiles(ctx.tmpPath).catch((e: Error) =>
+        this.logger.error({ tag: this.saveStream.name, msg: `unable to remove incomplete tmp file ${ctx.tmpPath} : ${e}` })
+      )
+    } else if (!ctx.fExists && ctx.startRange === 0) {
+      await removeFiles(space.realPath).catch((e: Error) =>
+        this.logger.error({ tag: this.saveStream.name, msg: `unable to remove incomplete file ${space.realPath} : ${e}` })
+      )
+    }
+    // FileError (not Error) so the translation layers turn this into a 4xx:
+    // a plain Error escapes as a 500. No comma in the message —
+    // FilesMethods.handleError truncates at the first one.
+    throw new FileError(HttpStatus.BAD_REQUEST, `Incomplete upload: received ${ctx.bytesReceived} of ${ctx.contentLength} declared bytes`)
   }
 
   async saveMultipart(user: UserModel, space: SpaceEnv, req: FastifySpaceRequest) {

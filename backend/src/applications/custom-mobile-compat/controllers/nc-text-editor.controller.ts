@@ -197,11 +197,23 @@ export class NcTextEditorController {
     // truncate the file to 0 bytes. Reconstruct req.raw from req.body so
     // saveStream gets the actual content.
     const bodyText = typeof req.body === 'string' ? req.body : ''
+    const bodyBytes = Buffer.from(bodyText, 'utf-8')
     // Fastify's req.headers and req.method are getters that read from req.raw.
     // Preserve them on the replacement stream so saveStream can still access
     // req.headers['content-range'] and req.method without a TypeError.
+    //
+    // content-length is RE-DERIVED from the replacement buffer rather than
+    // forwarded: the incoming value describes the bytes on the wire, and what
+    // saveStream will now see is our re-encoded copy of Fastify's parse of
+    // them. The two agree for plain UTF-8 and disagree for anything else (a
+    // BOM, a charset parameter). Since #518 saveStream asserts the body
+    // delivers what content-length declared, so a stale header here would
+    // turn a save that works today into a 400.
     const { headers: rawHeaders, method: rawMethod } = req.raw
-    const newRaw = Object.assign(Readable.from([Buffer.from(bodyText, 'utf-8')]), { headers: rawHeaders, method: rawMethod })
+    const newRaw = Object.assign(Readable.from([bodyBytes]), {
+      headers: { ...rawHeaders, 'content-length': String(bodyBytes.length) },
+      method: rawMethod
+    })
     ;(req as unknown as { raw: Readable }).raw = newRaw
 
     try {
