@@ -105,6 +105,18 @@ describe('NcPropfindService', () => {
     )
   })
 
+  // #505: the NC surface is the ONLY consumer of SpacesBrowser's per-file
+  // detail joins (shares, hasComments, favorites, lock). Classic WebDAV
+  // filters them off the wire, so it must not pay for the queries. If this
+  // `true` is ever lost, NC mobile silently stops emitting <oc:share-types>,
+  // <nc:has-comments> and <nc:lock> with no error anywhere.
+  it('asks WebDAVSpaces for browse details (withDetails = true)', async () => {
+    const r = req()
+    const { res } = fakeReply()
+    await service.respond(r, res, 'files')
+    expect(webdavSpaces.propfind).toHaveBeenCalledWith(r, 'files', true)
+  })
+
   it('emits all four namespaces on multistatus', async () => {
     const r = req()
     const { res, state } = fakeReply()
