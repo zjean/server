@@ -10,6 +10,7 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
 import { NC_RATE_LIMIT_OPTIONS, NC_RATE_LIMIT_SCOPE } from '../constants/rate-limit'
 import { NC_AUTH_REALM } from '../constants/routes'
 import { setRetryAfter } from './nc-rate-limit.guard'
@@ -27,7 +28,10 @@ import { setRetryAfter } from './nc-rate-limit.guard'
 @Injectable()
 export class NcBasicAuthGuard implements CanActivate {
   private static readonly CACHE_TTL_SECONDS = 900
-  private static readonly CACHE_PREFIX = 'auth-nc-mobile'
+  // Shared with UsersManager.deleteAppPassword, which scans this prefix to
+  // evict a revoked credential it has no cleartext for (#476). Changing the
+  // literal in one place only would silently un-revoke every NC device.
+  private static readonly CACHE_PREFIX = CACHE_AUTH_NC_MOBILE_PREFIX
   private static readonly RATE_LIMIT_PREFIX = 'nc-rate-limit-basic'
 
   constructor(

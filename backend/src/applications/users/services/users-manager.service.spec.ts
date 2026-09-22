@@ -8,6 +8,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { AuthManager } from '../../../authentication/auth.service'
 import { CACHE_AUTH_WEBDAV_PREFIX } from '../../../authentication/constants/cache'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AUTH_SESSION } from '../../../authentication/providers/auth-providers.constants'
 import { comparePassword } from '../../../common/functions'
@@ -536,6 +537,33 @@ describe(UsersManager.name, () => {
     expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_AUTH_WEBDAV_PREFIX}-match`])
   })
 
+  // #476 — the fork added a SECOND cached Basic-auth scope. Revoking a
+  // `mobile_nc` app password from the classic Account → App passwords screen
+  // used to leave the device fully working (DAV read/write, chunked upload,
+  // favorites, versions) for the remaining 900s of NcBasicAuthGuard's positive
+  // cache, because the eviction was written as `if (app === WEBDAV)`.
+  it('deletes NC-mobile auth cache entries for the user when deleting a mobile_nc app password (#476)', async () => {
+    const secrets = {
+      appPasswords: [
+        { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.MOBILE_NC, password: 'HASH' },
+        { name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }
+      ]
+    }
+    mockSecretsMutation(secrets as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([`${CACHE_AUTH_NC_MOBILE_PREFIX}-mine`, `${CACHE_AUTH_NC_MOBILE_PREFIX}-someone-else`])
+    cache.get = vi
+      .fn()
+      .mockResolvedValueOnce({ id: userTest.id })
+      .mockResolvedValueOnce({ id: userTest.id + 1 })
+    cache.mdel = vi.fn().mockResolvedValue(true)
+
+    await expect(usersManager.deleteAppPassword(userTest, 'mobile-a1b2c3d4')).resolves.toBeUndefined()
+
+    // The NC prefix, not the WebDAV one — the two caches are keyed separately.
+    expect(cache.keys).toHaveBeenCalledWith(`${CACHE_AUTH_NC_MOBILE_PREFIX}-*`)
+    expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_AUTH_NC_MOBILE_PREFIX}-mine`])
+  })
+
   it('does not delete WebDAV auth cache entries when deleting another app password scope', async () => {
     const secrets = {
       appPasswords: [{ name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }]
@@ -548,6 +576,40 @@ describe(UsersManager.name, () => {
 
     expect(cache.keys).not.toHaveBeenCalled()
     expect(cache.mdel).not.toHaveBeenCalled()
+  })
+
+  // #481 — app-password names are unique per user but NOT per scope, so an
+  // unscoped delete could reach across scopes: a user who happened to name a
+  // WebDAV app password `mobile-a1b2c3d4` would have had it deleted by the NC
+  // logout path instead of the device credential the name came from.
+  it('deletes only within the requested scope when one is given (#481)', async () => {
+    const webdavRow = { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }
+    const mobileRow = { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.MOBILE_NC, password: 'HASH' }
+    const getCurrentSecrets = mockSecretsMutation({ appPasswords: [webdavRow, mobileRow] } as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([])
+    cache.mdel = vi.fn()
+
+    await expect(usersManager.deleteAppPassword(userTest, 'mobile-a1b2c3d4', AUTH_SCOPE.MOBILE_NC)).resolves.toBeUndefined()
+
+    expect(getCurrentSecrets().appPasswords).toEqual([webdavRow])
+  })
+
+  it('still matches any scope when none is given — the classic Account screen deletes the row the user picked', async () => {
+    const getCurrentSecrets = mockSecretsMutation({
+      appPasswords: [{ name: 'webdav-client', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }]
+    } as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([])
+    cache.mdel = vi.fn()
+
+    await expect(usersManager.deleteAppPassword(userTest, 'webdav-client')).resolves.toBeUndefined()
+
+    expect(getCurrentSecrets().appPasswords).toEqual([])
+  })
+
+  it('404s when the name exists but only under another scope', async () => {
+    mockSecretsMutation({ appPasswords: [{ name: 'shared-name', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }] } as UserSecrets)
+
+    await expect(usersManager.deleteAppPassword(userTest, 'shared-name', AUTH_SCOPE.MOBILE_NC)).rejects.toThrow('App password not found')
   })
 
   it('compareUserPassword + updateLanguage + updatePassword branches', async () => {
