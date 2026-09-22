@@ -20,7 +20,7 @@ import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } fr
 import { API_FILES_OPERATION } from '@sync-in-server/backend/src/applications/files/constants/routes'
 import { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
-import { SPACE_ALIAS } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
+import { SPACE_ALIAS, SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import { ShareDialogService } from '../../components/share-dialog.service'
 import { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { encodeUrl } from '@sync-in-server/backend/src/common/shared'
@@ -176,7 +176,7 @@ export class FileDetailComponent implements OnInit {
     const prefix = this.parentPath()
     const sibs = this.siblings()
     if (!p || !prefix) return -1
-    return sibs.findIndex((s) => `${prefix}/${s.name}` === p)
+    return sibs.findIndex((s) => `${prefix}/${addressOf(s)}` === p)
   })
 
   protected readonly isImage = computed(() => isImageMime(this.file()?.mime))
@@ -215,10 +215,22 @@ export class FileDetailComponent implements OnInit {
   protected readonly canToggleToOffice = computed(() => !!this.file() && this.isPdf() && this.officeEditorEnabled())
 
   protected readonly canShare = computed(() => {
-    const parts = this.currentPath().split('/').filter(Boolean)
-    const alias = parts[1] ?? ''
-    return !!this.file() && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES
+    const repo = this.repository()
+    return !!this.file() && repo !== SPACE_REPOSITORY.TRASH && repo !== SPACE_REPOSITORY.SHARES
   })
+
+  /**
+   * Segment 0 of a repository path — `files`, `trash` or `shares`; segment 1 is the
+   * space or SHARE alias inside it (`file-browser.base.ts:913`,
+   * `trash-bin.component.ts:148`).
+   *
+   * The repository tests below used to read segment 1 and compare it with
+   * SPACE_ALIAS.TRASH / SPACE_ALIAS.SHARES, which happen to spell the same strings.
+   * That only ever matched a path that does not exist, so "is this a trash file" was
+   * permanently false — harmless while nothing navigated here with one, and wrong the
+   * moment #429 made `shares/<alias>` a real path this screen opens.
+   */
+  private readonly repository = computed(() => this.currentPath().split('/').filter(Boolean)[0] ?? '')
 
   // Whether the embedded text / markdown editors may offer editing. The shared
   // contract does the permission and lock test (utils/file-writeable.ts); the
@@ -228,8 +240,7 @@ export class FileDetailComponent implements OnInit {
   // screen currently navigates here with a trash path, so this is a guard against a
   // hand-typed one rather than a live route.
   protected readonly fileWriteable = computed(() => {
-    const alias = this.currentPath().split('/').filter(Boolean)[1] ?? ''
-    if (alias === SPACE_ALIAS.TRASH) return false
+    if (this.repository() === SPACE_REPOSITORY.TRASH) return false
     return isFileWriteable(this.file(), this.permissions())
   })
 
@@ -355,14 +366,14 @@ export class FileDetailComponent implements OnInit {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() + 1 + sibs.length) % sibs.length
-    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
+    this.goTo(`${this.parentPath()}/${addressOf(sibs[idx])}`)
   }
 
   protected previous(): void {
     const sibs = this.siblings()
     if (!sibs.length) return
     const idx = (this.currentIndex() - 1 + sibs.length) % sibs.length
-    this.goTo(`${this.parentPath()}/${sibs[idx].name}`)
+    this.goTo(`${this.parentPath()}/${addressOf(sibs[idx])}`)
   }
 
   protected async close(): Promise<void> {
@@ -419,10 +430,15 @@ export class FileDetailComponent implements OnInit {
   // "Personal → file.txt" for personal files and "myspace → file.txt" for
   // space files, instead of always showing "Personal".
   private rootBreadcrumb(path: string): BreadcrumbSegment[] {
-    const alias = path.split('/').filter(Boolean)[1] ?? ''
+    const parts = path.split('/').filter(Boolean)
+    const repo = parts[0] ?? ''
+    const alias = parts[1] ?? ''
+    // Repository first — see `repository()`. Segment 1 of a `shares/…` path is a SHARE
+    // alias, and reading it as a space alias sent the trail to a space route that does
+    // not exist.
+    if (repo === SPACE_REPOSITORY.TRASH) return [{ label: 'Trash', route: ['/', V2_PATH, V2_ROUTES.TRASH] }]
+    if (repo === SPACE_REPOSITORY.SHARES) return [{ label: 'Shared', route: ['/', V2_PATH, V2_ROUTES.SHARED] }]
     if (alias === SPACE_ALIAS.PERSONAL) return [{ label: 'Personal', icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.PERSONAL] }]
-    if (alias === SPACE_ALIAS.TRASH) return [{ label: 'Trash', route: ['/', V2_PATH, V2_ROUTES.TRASH] }]
-    if (alias === SPACE_ALIAS.SHARES) return [{ label: 'Shared', route: ['/', V2_PATH, V2_ROUTES.SHARED] }]
     if (alias) return [{ label: alias, icon: 'folder', route: ['/', V2_PATH, V2_ROUTES.SPACES, alias] }]
     return []
   }
@@ -433,16 +449,18 @@ export class FileDetailComponent implements OnInit {
   // expose a folder-browse view, so their intermediates stay non-navigable.
   private folderTrail(path: string): BreadcrumbSegment[] {
     const parts = path.split('/').filter(Boolean)
+    const repo = parts[0] ?? ''
     const alias = parts[1] ?? ''
     const segs = parts.slice(2, -1)
     if (segs.length === 0) return []
+    if (repo === SPACE_REPOSITORY.TRASH || repo === SPACE_REPOSITORY.SHARES) return segs.map((seg) => ({ label: seg }))
     if (alias === SPACE_ALIAS.PERSONAL) {
       return segs.map((seg, i) => ({
         label: seg,
         route: ['/', V2_PATH, V2_ROUTES.PERSONAL, ...segs.slice(0, i + 1)]
       }))
     }
-    if (alias && alias !== SPACE_ALIAS.TRASH && alias !== SPACE_ALIAS.SHARES) {
+    if (alias) {
       return segs.map((seg, i) => ({
         label: seg,
         route: ['/', V2_PATH, V2_ROUTES.SPACES, alias, ...segs.slice(0, i + 1)]
@@ -478,7 +496,15 @@ export class FileDetailComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (result) => {
-          const match = result.files.find((f) => f.name === name)
+          // Resolved by ADDRESS, not by name (#429): the last segment of the path is
+          // whatever addressed the row on the wire, and for a share or space root that
+          // is the alias while `name` is the human label. Browsing `shares` returns one
+          // entry per incoming share, named after the SHARE — so `shares/<alias>`
+          // matched nothing and every content URL under it 404'd.
+          //
+          // The name fallback stays: inside a folder there is no `root`, `addressOf`
+          // returns the name, and the two spellings coincide.
+          const match = (result.files ?? []).find((f) => addressOf(f) === name) ?? (result.files ?? []).find((f) => f.name === name)
           if (!match) {
             this.errorMessage.set('File not found in parent folder.')
             this.file.set(null)
@@ -501,6 +527,18 @@ export class FileDetailComponent implements OnInit {
         }
       })
   }
+}
+
+/**
+ * How a browse-listing row is addressed on the wire.
+ *
+ * Classic's own convention, verbatim: `this.root?.alias || this.name`
+ * (files/models/file.model.ts:93), which is what every classic content URL, download
+ * and navigation is built from. A share or space ROOT is addressed by its alias; an
+ * ordinary file by its name, because it has no root.
+ */
+function addressOf(f: FileProps): string {
+  return f.root?.alias || f.name
 }
 
 // The `?tab=` deep link, including the two spellings this screen's own aside used

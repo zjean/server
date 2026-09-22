@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, OnInit, ViewEncapsulation } from '@angular/core'
+import { ChangeDetectionStrategy, Component, HostListener, inject, ViewEncapsulation } from '@angular/core'
 import { RouterOutlet } from '@angular/router'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { CompressDialogComponent } from '../components/compress-dialog.component'
@@ -11,9 +11,9 @@ import { ShareDialogComponent } from '../components/share-dialog.component'
 import { ToastHostComponent } from '../components/toast-host.component'
 import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
-import { setUiVersion } from '../ui-version'
 import { BottomTabBarComponent } from './bottom-tab-bar.component'
 import { InspectorPanelComponent } from './inspector-panel.component'
+import { resumeUiVersion } from '../ui-version'
 import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
 import { PageBreadcrumbComponent } from './page-breadcrumb.component'
@@ -60,7 +60,13 @@ import { UploadDockComponent } from './upload-dock.component'
     L10nTranslatePipe
   ]
 })
-export class LayoutV2Component implements OnInit {
+// The v2 chrome. Note what it deliberately does NOT do: persist `ui.version`.
+// Rendering this layout is not consent to live in v2 — a pasted /v2/* link renders
+// it too, and writing the preference here opted that browser in for good, bouncing
+// every later classic bookmark and deep link through uiVersionGuard (#502). The
+// preference is written by the explicit opt-in alone (`tryRedesignedUI()` in the
+// classic user-profile sidebar) and cleared by "Back to classic" in the left nav.
+export class LayoutV2Component {
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
   protected readonly layoutV2 = inject(LayoutV2Service)
   protected readonly dockWidthMin = DOCK_WIDTH_MIN
@@ -68,8 +74,13 @@ export class LayoutV2Component implements OnInit {
   private resizeRaf: number | null = null
   private dockResizeCleanup: (() => void) | null = null
 
-  ngOnInit() {
-    setUiVersion('v2')
+  constructor() {
+    // The one preference write this layout may make, and it only ever REMOVES state:
+    // a hand-off to classic (a shared folder, a placeholder screen) suspends
+    // uiVersionGuard for the tab, and being back on a /v2 route is what ends that
+    // excursion. It cannot opt anyone in — `ui.version` is untouched, which is the
+    // invariant #502 established and `ui-version.spec.ts` pins.
+    resumeUiVersion()
   }
 
   // Skip link target. The sidebar puts ~20 focusable items between the top of

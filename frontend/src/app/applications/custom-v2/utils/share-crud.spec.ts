@@ -82,6 +82,22 @@ describe('createLinkShare', () => {
     expect(links[0].linkSettings.isActive).toBe(true)
   })
 
+  // #430. `shares.type` is a whole-share discriminator and the two list endpoints
+  // partition on it — `links/list` pins SHARE_TYPE.LINK, `shares/list` pins
+  // SHARE_TYPE.COMMON — so this omission decides which tab of the Shared screen the
+  // share turns up in. Classic's link dialog DOES set `type: SHARE_TYPE.LINK`
+  // (`link-dialog.component.ts:197`), and v2 deliberately does not: its dialog is
+  // merged, one share carries both people and links, and a share with both has no
+  // correct value for a field that only says one or the other. Stamping LINK would
+  // drop the same share out of "With others", out of classic's Shares screen and out
+  // of content indexing (`files-content-parser.service.ts:129` also filters COMMON).
+  //
+  // The consequence is paid on the READ side instead: `shared.component.ts::loadViaLinks`
+  // unions both collections. If this case ever fails, that union is what to look at.
+  it('posts no share type, so the server defaults it to COMMON and the merged dialog stays coherent', () => {
+    expect(build().body).not.toHaveProperty('type')
+  })
+
   // An explicit setting wins over the default, so a caller can name a link something
   // other than the file.
   it('lets the caller override the name', () => {
@@ -138,6 +154,12 @@ describe('updateShare', () => {
 
   it('sends an empty links array when the share genuinely has none', () => {
     expect(build({ links: [] }).body.links).toEqual([])
+  })
+
+  // Same contract from the update side: a share edited by v2 must not change type
+  // either, or editing the people on a link share would move it between tabs.
+  it('posts no share type on an update', () => {
+    expect(build().body).not.toHaveProperty('type')
   })
 
   it('puts to the share’s own id', () => {

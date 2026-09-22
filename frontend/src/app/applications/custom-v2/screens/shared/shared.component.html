@@ -4,7 +4,7 @@
       <h1 class="shared__title-text">{{ config().title | translate: locale.language }}</h1>
       <div class="shared__title-meta">
         @if (!loading() && !errorMessage()) {
-          {{ (shares().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: shares().length } }}
+          {{ (rows().length === 1 ? 'one_item' : 'nb_items') | translate: locale.language : { nb: rows().length } }}
         }
       </div>
     </div>
@@ -18,17 +18,17 @@
     <div class="shared__state" l10nTranslate>Loading…</div>
   } @else if (errorMessage(); as err) {
     <div class="shared__state shared__state--error">{{ err | translate: locale.language }}</div>
-  } @else if (shares().length === 0) {
+  } @else if (rows().length === 0) {
     <app-v2-empty-state [icon]="config().icon" title="Nothing here yet" [lede]="config().emptyState" />
   } @else {
     <div class="share-table">
       <div class="share-table__head">
         <span l10nTranslate>Name</span>
-        <span l10nTranslate>Recipients</span>
-        <span l10nTranslate>Modified</span>
+        <span>{{ config().secondaryLabel | translate: locale.language }}</span>
+        <span>{{ config().whenLabel | translate: locale.language }}</span>
         <span></span>
       </div>
-      @for (s of shares(); track s.id) {
+      @for (row of rows(); track row.key) {
         <!-- A div, not a button. The "more" control at the end of the row is a real
              <button>, and a button may not contain interactive content — so the row
              is a plain grid, the NAME cell is the primary target, and its ::after
@@ -36,28 +36,32 @@
              middle cells pass clicks through; the actions cell raises itself above
              the stretched target. See styles/_card.scss § stretched primary target. -->
         <div class="share-row v2-stretch-host">
-          <button type="button" class="v2-stretch-target share-row__name" (click)="openShare(s)">
-            <app-v2-file-glyph [type]="s.file?.mime ? mimeToGlyph(s.file.mime) : 'folder'" [size]="28" [rounded]="6" />
+          <button type="button" class="v2-stretch-target share-row__name" (click)="openRow(row)">
+            <app-v2-file-glyph [type]="row.isDir ? 'folder' : mimeToGlyph(row.mime)" [size]="28" [rounded]="6" />
             <span class="share-row__meta">
-              <span class="share-row__title">{{ s.name }}</span>
-              @if (s.description) {
-                <span class="share-row__description">{{ s.description }}</span>
+              <span class="share-row__title">{{ row.name }}</span>
+              @if (row.description) {
+                <span class="share-row__description">{{ row.description }}</span>
               }
             </span>
           </button>
-          <div class="share-row__recipients">
-            {{ (recipientCount(s) === 1 ? 'one_user' : 'nb_users') | translate: locale.language : { nb: recipientCount(s) } }}
-            @if ((s.counts?.links ?? 0) > 0) {
-              · {{ (s.counts.links === 1 ? 'one_link' : 'nb_links') | translate: locale.language : { nb: s.counts.links } }}
+          <div class="share-row__secondary">
+            @if (variant() === 'with-others') {
+              {{ (recipientCount(row) === 1 ? 'one_user' : 'nb_users') | translate: locale.language : { nb: recipientCount(row) } }}
+              @if (row.links > 0) {
+                · {{ (row.links === 1 ? 'one_link' : 'nb_links') | translate: locale.language : { nb: row.links } }}
+              }
+            } @else {
+              {{ row.secondary }}
             }
           </div>
           <div class="share-row__modified">
-            @if (s.modifiedAt) {
-              <app-v2-timestamp [ms]="s.modifiedAt" [now]="renderedAt" />
+            @if (row.when) {
+              <app-v2-timestamp [ms]="row.when" [now]="renderedAt" />
             }
           </div>
           <div class="share-row__actions v2-stretch-aside">
-            <app-v2-icon-btn iconName="more" [size]="26" [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: s.name }" />
+            <app-v2-icon-btn iconName="more" [size]="26" [ariaLabel]="'v2_more_actions_for' | translate: locale.language : { name: row.name }" />
           </div>
         </div>
       }

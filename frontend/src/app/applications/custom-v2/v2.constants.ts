@@ -32,4 +32,6 @@ export const V2_ROUTES = {
 } as const
 
 export const UI_VERSION_STORAGE_KEY = 'ui.version'
+// sessionStorage key — see `suspendUiVersion()` in ui-version.ts.
+export const UI_VERSION_SUSPEND_KEY = 'ui.version.suspended'
 export type UiVersion = 'classic' | 'v2'

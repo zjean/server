@@ -370,5 +370,9 @@
   "Select all": "Alles selecteren",
   "Clear the selection": "Selectie wissen",
   "Favorite": "Favoriet",
-  "v2_offline_strip": "Je bent offline. Wijzigingen kunnen niet worden opgeslagen totdat de verbinding terug is."
+  "v2_offline_strip": "Je bent offline. Wijzigingen kunnen niet worden opgeslagen totdat de verbinding terug is.",
+  "Shared by": "Gedeeld door",
+  "Opening the classic interface": "De klassieke interface wordt geopend",
+  "This share cannot be opened": "Dit gedeelde item kan niet worden geopend",
+  "mobile_nc": "Mobiel (Nextcloud)"
 }
