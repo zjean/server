@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing'
+import { MySqlDialect } from 'drizzle-orm/mysql-core'
 import { ACTION } from '../../../common/constants'
 import { FileEvent } from '../../files/events/file-events'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
@@ -64,20 +65,23 @@ describe(NcSyncLogService.name, () => {
   // A chainable select fake that records what was asked for. Returns `rows`
   // from the terminal .limit() call, mirroring Drizzle's builder shape.
   const captureSelect = (rows: Record<string, unknown>[]) => {
-    const calls: { orderBy: number; limit?: number } = { orderBy: 0 }
+    const calls: { orderBy: number; limit?: number; where?: unknown } = { orderBy: 0 }
     fakeDb.select = vi.fn(() => ({
       from: () => ({
-        where: () => ({
-          orderBy: (...args: unknown[]) => {
-            calls.orderBy = args.length
-            return {
-              limit: (n: number) => {
-                calls.limit = n
-                return Promise.resolve(rows)
+        where: (condition: unknown) => {
+          calls.where = condition
+          return {
+            orderBy: (...args: unknown[]) => {
+              calls.orderBy = args.length
+              return {
+                limit: (n: number) => {
+                  calls.limit = n
+                  return Promise.resolve(rows)
+                }
               }
             }
           }
-        })
+        }
       })
     }))
     return calls
@@ -133,6 +137,32 @@ describe(NcSyncLogService.name, () => {
       expect(event.id).toBe(9)
       expect(event.ownerId).toBe(7)
       expect(event.ts).toBe(1_700_000_000_000)
+    })
+  })
+
+  describe('since() — the sync-token reader', () => {
+    // REGRESSION #479. `repository` is a second dimension the spaceAlias filter
+    // does not constrain: the personal space carries alias 'personal' for BOTH
+    // repositories. Without this condition a trash row whose trash-relative
+    // path collides with a live files path is returned to the files REPORT and
+    // can override the files event for that path. The only caller refuses the
+    // trashbin URL outright, so trash rows are never wanted here.
+    it('scopes the query to the files repository', async () => {
+      const calls = captureSelect([])
+      await service.since({ ownerId: 7, sinceId: 3, spaceAlias: 'personal' })
+
+      const query = new MySqlDialect().sqlToQuery(calls.where as never)
+      expect(query.sql).toContain('`repository`')
+      expect(query.params).toContain('files')
+    })
+
+    it('orders ascending by id and defaults the limit to 500', async () => {
+      const calls = captureSelect([row()])
+      const events = await service.since({ ownerId: 7, sinceId: 0 })
+
+      expect(calls.orderBy).toBe(1)
+      expect(calls.limit).toBe(500)
+      expect(events).toHaveLength(1)
     })
   })
 

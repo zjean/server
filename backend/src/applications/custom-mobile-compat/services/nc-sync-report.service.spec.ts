@@ -224,6 +224,31 @@ describe(NcSyncReportService.name, () => {
     expect(captured.body).toContain(`<d:sync-token>${SYNC_TOKEN_URN_PREFIX}11</d:sync-token>`)
   })
 
+  // REGRESSION #479. `since()` filters trash rows out at the SQL level, but the
+  // dedupe key is the second half of that guard: keyed on path alone, a trash
+  // event whose trash-relative path coincides with a live files path silently
+  // replaces the files event for it — so a restore-from-trash sequence emits a
+  // 404 marker for the file it just restored. Driven here by handing the
+  // service a trash row `since()` would no longer return, which is the only way
+  // to exercise the key independently of the filter.
+  it('does not let a trash event override the files event for the same path', async () => {
+    const filePath = path.join(tmpRoot, 'report.pdf')
+    await fs.writeFile(filePath, 'restored-bytes')
+
+    log.since.mockResolvedValueOnce([
+      { id: 20, ownerId: 7, repository: 'files', spaceAlias: 'personal', path: 'report.pdf', type: 'create', ts: 2 },
+      { id: 21, ownerId: 7, repository: 'trash', spaceAlias: 'personal', path: 'report.pdf', type: 'delete', ts: 3 }
+    ])
+    const { reply, captured } = fakeReply()
+    await service.respond(buildReq(null) as never, reply)
+
+    // The files event still produces its 200 propstat...
+    expect(captured.body).toContain('<d:displayname>report.pdf</d:displayname>')
+    expect(captured.body).toContain('HTTP/1.1 200 OK')
+    // ...and is not replaced by the trash event's delete marker.
+    expect(captured.body).not.toContain('HTTP/1.1 404 Not Found')
+  })
+
   it('returns 412 Precondition Failed when sinceId is older than minKeptToken', async () => {
     log.minKeptToken.mockResolvedValueOnce(100)
     const { reply } = fakeReply()

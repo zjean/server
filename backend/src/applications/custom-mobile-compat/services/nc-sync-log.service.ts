@@ -88,8 +88,17 @@ export class NcSyncLogService implements OnModuleInit {
   // Return events with `id > sinceId` for `ownerId`, optionally scoped to a
   // single space. Ordered by id ascending so the caller can stamp the last
   // returned id as the new sync-token. Empty array means "no changes".
+  //
+  // FILES-REPOSITORY ONLY. `repository` is a second dimension that the
+  // spaceAlias filter does not constrain — the personal space carries
+  // alias 'personal' for BOTH repositories (spaces-manager.service.ts), so
+  // without this condition a trash row whose trash-relative path happens to
+  // collide with a live files path is returned alongside the files rows and
+  // can override them in the caller's dedupe. The only caller is the
+  // sync-collection REPORT, which refuses the trashbin URL outright (405),
+  // so trash rows are never wanted here.
   async since(opts: { ownerId: number; sinceId: number; spaceAlias?: string; limit?: number }): Promise<NcSyncEvent[]> {
-    const conditions = [eq(ncSyncEvents.ownerId, opts.ownerId), gt(ncSyncEvents.id, opts.sinceId)]
+    const conditions = [eq(ncSyncEvents.ownerId, opts.ownerId), gt(ncSyncEvents.id, opts.sinceId), eq(ncSyncEvents.repository, 'files')]
     if (opts.spaceAlias) conditions.push(eq(ncSyncEvents.spaceAlias, opts.spaceAlias))
     const rows = await this.db
       .select()

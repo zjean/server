@@ -90,14 +90,20 @@ export class NcSyncReportService {
       return this.send(res, [], parsed.sinceId)
     }
 
-    // Dedupe by path keeping the latest event — RFC 6578 §3.6: "the server
-    // SHOULD NOT report the same resource more than once". Without this a
-    // create + later delete in the same window would produce two responses
-    // for the same href, confusing the client's local merge. `since()` already
-    // scopes the query to a single spaceAlias (WHERE eq), so path alone is a
-    // unique key here — this mirrors upstream NC's CardDavBackend dedup
-    // (`$changes[$row['uri']]`, keyed on the path/uri field alone, with the
-    // collection dimension pushed into the SQL WHERE rather than into the key).
+    // Dedupe keeping the latest event per resource — RFC 6578 §3.6: "the
+    // server SHOULD NOT report the same resource more than once". Without this
+    // a create + later delete in the same window would produce two responses
+    // for the same href, confusing the client's local merge. This mirrors
+    // upstream NC's CardDavBackend dedup (`$changes[$row['uri']]`), with the
+    // collection dimension pushed into the SQL WHERE rather than into the key.
+    //
+    // The key carries `repository` as well as `path` because a path alone does
+    // not name a resource here: the personal space uses alias 'personal' for
+    // BOTH the files and the trash repository, so a trash row whose
+    // trash-relative path collides with a live files path would otherwise
+    // overwrite the files event for it (a restore-from-trash sequence could
+    // then emit a delete marker for the file it just restored).
+    //
     // RFC 6578 §3.1: sync-collection is anchored at the URL the REPORT was
     // sent to. If the URL resolves to a subfolder of the space, drop events
     // outside that subtree. NC iOS REPORTs at user-root in practice — this
@@ -105,11 +111,24 @@ export class NcSyncReportService {
     // newSyncToken is still derived from the full `events` window below, so
     // the client advances past out-of-subtree events and doesn't re-fetch
     // them on the next refresh.
-    const inScope = scopeEventsToSubtree(events, space.relativeUrl)
+    //
+    // And a row from another repository is dropped outright rather than merely
+    // kept distinct: this REPORT is anchored on the FILES collection (the
+    // trashbin URL is refused with 405 above), so a trash row describes no
+    // resource inside it, and both its href and a live file's would render as
+    // `<collectionUrl>/<path>` — two contradictory responses for one href.
+    // `since()` already excludes them in SQL; keeping the guarantee local to
+    // the renderer is what makes the wider dedupe key safe. newSyncToken is
+    // still derived from the raw `events` window below, so the client advances
+    // past a dropped row rather than re-fetching it forever.
+    const inScope = scopeEventsToSubtree(
+      events.filter((e) => e.repository === 'files'),
+      space.relativeUrl
+    )
 
     const latest = new Map<string, NcSyncEvent>()
     for (const e of inScope) {
-      latest.set(e.path, e)
+      latest.set(`${e.repository}:${e.path}`, e)
     }
 
     // Favorite-id set, fetched once. Threaded into each create/update response
