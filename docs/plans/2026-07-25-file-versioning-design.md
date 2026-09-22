@@ -323,6 +323,12 @@ Three fixes, all now in the code:
 
 The general lesson, worth more than the specific bug: **anything that reads a blob must pin it before running code that can evict.** Eviction and reads share no lock.
 
+**A FAILED pre-restore snapshot ABORTS the restore (#472).** The first implementation took that snapshot through `snapshotBeforeOverwrite`, which catches everything and logs *"the save proceeds unversioned"*. That is the correct trade for the seven save paths — availability over durability, §4 — and the wrong one here, because for a restore the snapshot is not a side benefit, it IS this section's promise, and the bytes it failed to capture are truncated on the next line. The motivating case is mundane: `stageBlob`'s `fs.copyFile` fails `ENOSPC` on a full volume, and since versions count against quota a full volume is exactly *when* someone reaches for Restore. The API answered **200** while the content the user had thirty seconds ago ceased to exist anywhere.
+
+Restore now calls `VersioningService.snapshotOrThrow`, which rethrows a `FileError` as it stands (so `enforceQuotaShare`'s 507 survives), maps `ENOSPC`/`EDQUOT` to **507** and anything else to **500**, and does so inside the lock's `try/finally` — the lock is released, the pinned descriptor closed, and the live file never touched. What is *not* a failure is `snapshot` finding nothing to capture: those paths return normally.
+
+**The link/guest half of #472 was already closed by #492**, which refuses `restoreVersion`, `setLabel` and `deleteVersion` to those principals in the service itself, above the blob descriptor — so the "a write-enabled public link can roll a shared document back, destructively" path is refused before any of the above runs.
+
 The lock is created the way non-DAV `saveStream` does it (`filesLockManager.create`, `files-manager.service.ts:127`) — restore is always an app-initiated action, never a DAV write, so it always runs under a real lock.
 
 ## 10. Trash and delete interplay

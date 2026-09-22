@@ -120,6 +120,48 @@ export class VersioningService {
     return versionsRootFromSpace(user, space) === userVersionsRoot(user.login)
   }
 
+  // The safety capture a restore takes, and the ONE caller that must not
+  // degrade to "the write proceeds unversioned" (#472).
+  //
+  // snapshotBeforeOverwrite swallows everything, deliberately: for the seven
+  // save paths a failed snapshot costs a version, while refusing the save would
+  // cost the user their work — availability over durability (ADR §4). A restore
+  // INVERTS that trade. The snapshot is not a side benefit of the operation, it
+  // IS the feature's promise ("a restore is never destructive", ADR §9), and
+  // the bytes it captures are about to be truncated by writeFromStream.
+  //
+  // The motivating failure is not exotic: stageBlob's fs.copyFile fails ENOSPC
+  // on a full volume — and since versions count against quota, a full volume is
+  // exactly WHEN people reach for Restore. Swallowed, that returned 200 while
+  // the content the user had thirty seconds ago ceased to exist anywhere.
+  //
+  // Called INSIDE restoreVersion's lock and try/finally, so an abort still
+  // releases the lock it took and closes the pinned blob descriptor
+  // (invariant 6), and leaves the live file untouched.
+  //
+  // What it does NOT turn into a failure is `snapshot` deciding there is
+  // nothing to capture — no live file (the restore then creates one, destroying
+  // nothing) — because those return normally rather than throwing. Only a real
+  // failure aborts.
+  private async snapshotOrThrow(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
+    try {
+      await this.snapshot(user, space, options)
+    } catch (e) {
+      this.logger.error({
+        tag: this.snapshotOrThrow.name,
+        msg: `unable to capture ${space.url} before restoring it, the restore was aborted: ${e}`
+      })
+      // A FileError already carries a considered status — enforceQuotaShare's
+      // 507, say — so it is rethrown as is rather than flattened to a 500.
+      if (e instanceof FileError) throw e
+      const code = (e as NodeJS.ErrnoException)?.code
+      throw new FileError(
+        code === 'ENOSPC' || code === 'EDQUOT' ? HttpStatus.INSUFFICIENT_STORAGE : HttpStatus.INTERNAL_SERVER_ERROR,
+        'Unable to save the current content before restoring, the restore was aborted'
+      )
+    }
+  }
+
   private async snapshot(user: UserModel, space: SpaceEnv, options: SnapshotOptions): Promise<void> {
     const stats = await fs.stat(space.realPath).catch(() => null)
     // Nothing to version: a create, or a directory. Callers gate on this too,
@@ -697,7 +739,10 @@ export class VersioningService {
   // Restores a version into the live file.
   //
   // The current content is snapshotted first (origin `restore`), so a restore
-  // is never destructive — you can always get back to where you were.
+  // is never destructive — you can always get back to where you were. That
+  // promise is only as good as the snapshot, so this one path takes it through
+  // snapshotOrThrow and ABORTS on failure rather than degrading to an
+  // unversioned write (#472).
   //
   // THE LIVE FILE'S INODE MUST SURVIVE. Both editors deliberately use
   // copyFileContent rather than a move "to avoid inode changes"
@@ -750,7 +795,10 @@ export class VersioningService {
         // `version.fileId` rather than a fourth resolution of the same id: the
         // guard above accepted this row only because its fileId is the id this
         // space env resolves to, so the `files` row provably exists (#349).
-        await this.snapshotBeforeOverwrite(user, space, { origin: 'restore', fileId: version.fileId })
+        //
+        // Throws rather than swallows: everything after this line destroys the
+        // live content. See snapshotOrThrow.
+        await this.snapshotOrThrow(user, space, { origin: 'restore', fileId: version.fileId })
         // Same shape as copyFileContent (flag 'w', start 0 -> inode preserved),
         // but sourced from the pinned descriptor.
         await writeFromStream(space.realPath, handle.createReadStream({ autoClose: false }))

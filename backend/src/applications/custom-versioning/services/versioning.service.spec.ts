@@ -1670,6 +1670,53 @@ describe(VersioningService.name, () => {
     expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
   })
 
+  /* --------------------------------------------- the restore's safety snapshot */
+
+  // #472. snapshotBeforeOverwrite swallows every failure, which is right for
+  // the seven save paths — availability over durability (ADR §4) — and wrong
+  // here: for a restore the snapshot IS the promise (ADR §9), and the bytes it
+  // was supposed to capture are truncated on the very next line. Swallowed, the
+  // API answered 200 while the content the user had thirty seconds ago ceased
+  // to exist anywhere.
+  it('aborts the restore, untouched, when the pre-restore capture fails', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    queries.insertVersion = async () => {
+      throw new Error('the versions table is unreachable')
+    }
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toThrow(FileError)
+
+    // The live content is what makes this a data-loss test rather than a status
+    // code test: an abort that still truncated would pass on the rejection
+    // alone.
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
+    // And the revision the user asked for is still there to try again with.
+    expect(queries.rows.find((r) => r.id === versionId)).toBeDefined()
+    // The abort happens inside the lock's try/finally, so nothing is stranded.
+    expect(lockManager.removeLock).toHaveBeenCalledWith('lock-1')
+  })
+
+  // The motivating failure, at its real site: stageBlob's fs.copyFile on a full
+  // volume. Versions count against quota, so a full volume is exactly when
+  // someone reaches for Restore. 507 rather than a flat 500 so the UI can say
+  // what happened.
+  it('answers 507 when the volume is full while capturing the pre-restore content', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    const versionId = queries.rows[0].id
+    await fs.writeFile(filePath, 'clobbered content')
+    const full: NodeJS.ErrnoException = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' })
+    vi.spyOn(fs, 'copyFile').mockRejectedValueOnce(full)
+
+    await expect(service.restoreVersion(user, personalSpace(), versionId)).rejects.toMatchObject({
+      httpCode: HttpStatus.INSUFFICIENT_STORAGE
+    })
+    expect(await fs.readFile(filePath, 'utf8')).toBe('clobbered content')
+  })
+
   it('restore holds a server lock and releases it', async () => {
     versionsConfig.minIntervalSeconds = 0
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
