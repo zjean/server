@@ -144,13 +144,26 @@ describe(VersionsRetention.name, () => {
 
     await service.cleanVersions()
 
-    // Those three shape history that is still addressable; applying a policy to
-    // a store the operator has taken out of service would delete revisions they
-    // would find missing on re-enabling.
-    expect(queries.distinctRoots).not.toHaveBeenCalled()
+    // These three ARE the shaping rules — retentionDays, thinning and
+    // quotaShare, one probe each. They shape history that is still
+    // addressable, so applying a policy to a store the operator has taken out
+    // of service would delete revisions they would find missing on
+    // re-enabling.
     expect(queries.unlabeledOlderThan).not.toHaveBeenCalled()
     expect(queries.distinctFileIdsByRoot).not.toHaveBeenCalled()
     expect(versioning.evictUntilUnderCeiling).not.toHaveBeenCalled()
+
+    // DELIBERATELY NOT ASSERTED: `distinctRoots`. It is a READ — the root list
+    // the loop iterates — not a shaping rule, and nothing it returns is acted
+    // on outside the gate here. Pinning "it was never called" would pin the
+    // gate's current SHAPE rather than its effect, and #471's rename tripwire
+    // (PR #530) consumes that same list AFTER the loop, unconditionally. With
+    // the assertion in place the only merge resolution that keeps this file
+    // green is the one that pulls `distinctRoots()` back inside the gate —
+    // which silently disables the tripwire in exactly the state this PR newly
+    // makes dangerous, since the nightly GC now runs with the flag off. So the
+    // call is free to move out; the three probes above are what the title
+    // claims and what must stay true.
   })
 
   it('still reclaims orphan blobs and dangling rows while the feature flag is off', async () => {
