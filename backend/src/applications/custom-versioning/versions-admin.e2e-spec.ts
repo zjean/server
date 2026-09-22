@@ -1,8 +1,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { USER_ROLE } from '../users/constants/user'
-import { API_VERSIONS_ADMIN_PURGE, API_VERSIONS_ADMIN_STORAGE } from './constants/routes'
-import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
-import type { VersionsPurgeResult, VersionsStorageSummary } from './interfaces/version.interface'
+import { API_VERSIONS_ADMIN_PURGE, API_VERSIONS_ADMIN_REPOINT, API_VERSIONS_ADMIN_STORAGE } from './constants/routes'
+import type { VersionsPurgeResult, VersionsRepointResult, VersionsStorageSummary } from './interfaces/version.interface'
 import { setupVersionsE2E, type VersionsActor, type VersionsE2EContext } from './utils/versions-e2e.fixture'
 
 // The operator surface (#342), driven over real HTTP.
@@ -53,6 +52,14 @@ describe('versions admin surface (e2e)', () => {
       body: { versionsRoot }
     } as never)
 
+  const repoint = (session: { cookie: string; csrf: string }, fromVersionsRoot: string, toVersionsRoot: string, opts?: { csrf?: boolean }) =>
+    e2e.app.inject({
+      method: 'POST',
+      url: API_VERSIONS_ADMIN_REPOINT,
+      headers: { cookie: session.cookie, ...(opts?.csrf === false ? {} : { 'sync-in-csrf': session.csrf }) },
+      body: { fromVersionsRoot, toVersionsRoot }
+    } as never)
+
   // Two unlabeled versions of one file, in the fixture user's own root.
   const seedHistory = async (rel: string, generations = 2) => {
     await e2e.seed(rel, `${rel} generation 0`)
@@ -93,6 +100,20 @@ describe('versions admin surface (e2e)', () => {
 
       expect((await purge(e2e.session, `user:${e2e.user.login}`)).statusCode).toBe(HttpStatus.FORBIDDEN)
       expect(await e2e.versionsOf(rel)).toHaveLength(before.length)
+    })
+
+    // The repair is not destructive, but it decides which store a root's
+    // history is read from — a non-admin who could call it could make another
+    // user's history unreadable, or graft their own rows onto someone's store.
+    it('is refused the repoint AND leaves the recorded root alone', async () => {
+      const rel = 'admin-nonadmin-repoint.txt'
+      await seedHistory(rel)
+      const before = await e2e.versioningQueries.usageByRoot(root())
+
+      const res = await repoint(e2e.session, root(), `${root()}-moved`)
+      expect(res.statusCode).toBe(HttpStatus.FORBIDDEN)
+
+      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(before.count)
     })
 
     it('is refused an unauthenticated request outright', async () => {
@@ -191,12 +212,78 @@ describe('versions admin surface (e2e)', () => {
       expect(await e2e.versionsOf(rel)).toHaveLength(before.length)
     })
 
+    /* ---------------------------------------------------------------- repoint */
+
+    // The repair path for an install that renamed a login or a space alias
+    // before the rename hooks shipped (#471). Driven end to end because the
+    // whole point of it is that an operator can run it from the nightly error
+    // log without database surgery.
+    it('repoints a root’s rows and can put them back', async () => {
+      const rel = 'admin-repoint.txt'
+      const mine = await seedHistory(rel)
+      const before = await e2e.versioningQueries.usageByRoot(root())
+      expect(before.count).toBeGreaterThan(0)
+      const stale = `${root()}-stale`
+
+      const away = await repoint(operator, root(), stale)
+      expect(away.statusCode).toBe(HttpStatus.CREATED)
+      expect((away.json() as VersionsRepointResult).moved).toBe(before.count)
+      // The rows moved, and nothing was deleted on the way: the count is now
+      // under the other name, not gone.
+      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(0)
+      expect((await e2e.versioningQueries.usageByRoot(stale)).count).toBe(before.count)
+
+      const back = await repoint(operator, stale, root())
+      expect(back.statusCode).toBe(HttpStatus.CREATED)
+      expect((back.json() as VersionsRepointResult).moved).toBe(before.count)
+      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(before.count)
+      // And this file's own history is readable again through the ordinary
+      // API — the state the whole repair exists to restore. Asserted per file
+      // rather than against the root total, which also carries rows seeded by
+      // the cases above.
+      expect((await e2e.versionsOf(rel)).map((v) => v.id)).toEqual(mine.map((v) => v.id))
+    })
+
+    it('answers zero for a stale root that holds no rows', async () => {
+      const res = await repoint(operator, `${root()}-never-existed`, `${root()}-elsewhere`)
+      expect(res.statusCode).toBe(HttpStatus.CREATED)
+      expect((res.json() as VersionsRepointResult).moved).toBe(0)
+    })
+
+    // FileError again: without the controller's filter each of these is a 500.
+    it.each([
+      ['a malformed source', 'not-a-root', 'user:someone'],
+      ['a cross-kind repoint', 'user:someone', 'space:team'],
+      ['a no-op', 'user:someone', 'user:someone']
+    ])('answers 400, not 500, for %s', async (_label, from, to) => {
+      expect((await repoint(operator, from, to)).statusCode).toBe(HttpStatus.BAD_REQUEST)
+    })
+
+    it('rejects a body missing one end', async () => {
+      const res = await e2e.app.inject({
+        method: 'POST',
+        url: API_VERSIONS_ADMIN_REPOINT,
+        headers: { cookie: operator.cookie, 'sync-in-csrf': operator.csrf },
+        body: { fromVersionsRoot: 'user:someone' }
+      } as never)
+      expect(res.statusCode).toBe(HttpStatus.BAD_REQUEST)
+    })
+
+    it('still requires the CSRF header on the repoint', async () => {
+      const res = await repoint(operator, `${root()}-csrf`, `${root()}-csrf2`, { csrf: false })
+      expect(res.statusCode).toBe(HttpStatus.FORBIDDEN)
+    })
+
     /* ------------------------------------------------------------ feature flag */
 
-    // ADR §13: the same 404 and the same message as every other versions route
-    // while the feature is off, so the panel can say "versioning is disabled
-    // here" instead of rendering an empty table over a working instance.
-    it('404s with the shared message while versioning is off, and purges nothing', async () => {
+    // THESE TWO ROUTES DELIBERATELY DO NOT FOLLOW ADR §13 (#490). Every
+    // per-file endpoint 404s with VERSIONS_DISABLED_MESSAGE while the feature
+    // is off, and should — there is no history to offer a user. These are the
+    // operator's only instrument for the store that already exists, and the
+    // flag goes off precisely when it is needed: an operator disabling
+    // versioning over a quota complaint, with the bytes still charged by the
+    // quota walk. 404ing here left `rm -rf` + `DELETE FROM` as the only remedy.
+    it('serves the storage summary and actually purges while versioning is off', async () => {
       const rel = 'admin-flag-off.txt'
       await seedHistory(rel)
       // Read back through the QUERIES, not through versionsOf: listVersions is
@@ -208,12 +295,26 @@ describe('versions admin surface (e2e)', () => {
       e2e.config.enabled = false
 
       const storage = await get(operator)
-      expect(storage.statusCode).toBe(HttpStatus.NOT_FOUND)
-      expect(storage.json().message).toBe(VERSIONS_DISABLED_MESSAGE)
+      expect(storage.statusCode).toBe(HttpStatus.OK)
 
       const purged = await purge(operator, root())
-      expect(purged.statusCode).toBe(HttpStatus.NOT_FOUND)
-      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(before.count)
+      expect(purged.statusCode).toBe(HttpStatus.CREATED)
+      expect((purged.json() as VersionsPurgeResult).removed).toBeGreaterThan(0)
+      // The reclaim is what matters, not the status: a 201 over a no-op would
+      // leave the operator exactly as stuck as the 404 did.
+      const after = await e2e.versioningQueries.usageByRoot(root())
+      expect(after.count).toBeLessThan(before.count)
+
+      // The repoint is ungated for the same reason, and for a sharper one of
+      // its own: the nightly sweep that DETECTS an unrepointed rename runs
+      // flag-off, and its error log names this endpoint as the remedy. #530
+      // first shipped it behind requireEnabled(), which would have pointed the
+      // operator at a 404 in exactly the state the damage occurs.
+      const repointed = await repoint(operator, root(), `${root()}-off`)
+      expect(repointed.statusCode).toBe(HttpStatus.CREATED)
+      expect((repointed.json() as VersionsRepointResult).moved).toBe(after.count)
+      expect((await e2e.versioningQueries.usageByRoot(root())).count).toBe(0)
+      expect((await e2e.versioningQueries.usageByRoot(`${root()}-off`)).count).toBe(after.count)
     })
   })
 })
