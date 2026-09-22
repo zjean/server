@@ -18,6 +18,7 @@ import type { SpaceEnv } from '../models/space-env.model'
 import { SpacesBrowser } from './spaces-browser.service'
 import { SpacesManager } from './spaces-manager.service'
 import { SpacesQueries } from './spaces-queries.service'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 describe(SpacesBrowser.name, () => {
   let spacesBrowserService: SpacesBrowser
@@ -26,6 +27,11 @@ describe(SpacesBrowser.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [await ConfigModule.forRoot({ load: [exportConfiguration], isGlobal: true })],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
           provide: Cache,

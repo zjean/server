@@ -20,6 +20,7 @@ import { CompressFileDto, CopyMoveFileDto } from '../dto/file-operations.dto'
 import { FilesManager } from './files-manager.service'
 import { FilesMethods } from './files-methods.service'
 import { FilesQuotaManager } from './files-quota-manager.service'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 describe(FilesMethods.name, () => {
   let filesMethods: FilesMethods
@@ -47,6 +48,11 @@ describe(FilesMethods.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         FilesMethods,
         SpacesManager,
         { provide: DB_TOKEN_PROVIDER, useValue: {} },

@@ -14,6 +14,7 @@ import { SpacesManager } from './services/spaces-manager.service'
 import { SpacesQueries } from './services/spaces-queries.service'
 import { SpacesController } from './spaces.controller'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(SpacesController.name, () => {
   let spacesController: SpacesController
@@ -22,6 +23,11 @@ describe(SpacesController.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SpacesController],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
           provide: NotificationsManager,

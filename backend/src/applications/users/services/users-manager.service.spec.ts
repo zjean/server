@@ -32,6 +32,7 @@ import { UsersManager } from './users-manager.service'
 import { UsersQueries } from './users-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
 import { Mock } from 'vitest'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 vi.mock('../../../common/functions', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../common/functions')>()
@@ -102,6 +103,11 @@ describe(UsersManager.name, () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         AdminUsersManager,
         AdminUsersQueries,
         UsersManager,

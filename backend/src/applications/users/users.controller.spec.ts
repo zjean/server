@@ -15,6 +15,7 @@ import { UsersQueries } from './services/users-queries.service'
 import { UsersController } from './users.controller'
 import { generateUserTest } from './utils/test'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(UsersController.name, () => {
   let module: TestingModule
@@ -28,6 +29,11 @@ describe(UsersController.name, () => {
       imports: [await ConfigModule.forRoot({ load: [exportConfiguration], isGlobal: true })],
       controllers: [UsersController],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
           provide: Cache,

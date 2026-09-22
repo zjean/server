@@ -14,6 +14,7 @@ import { AdminUsersQueries } from './services/admin-users-queries.service'
 import { UsersManager } from './services/users-manager.service'
 import { UsersQueries } from './services/users-queries.service'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(AdminUsersController.name, () => {
   let controller: AdminUsersController
@@ -23,6 +24,11 @@ describe(AdminUsersController.name, () => {
       imports: [await ConfigModule.forRoot({ load: [exportConfiguration], isGlobal: true })],
       controllers: [AdminUsersController],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         {
           provide: Cache,

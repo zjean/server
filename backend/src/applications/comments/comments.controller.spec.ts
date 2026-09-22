@@ -14,6 +14,7 @@ import { CommentsManager } from './services/comments-manager.service'
 import { CommentsQueries } from './services/comments-queries.service'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
 import { Mocked } from 'vitest'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(CommentsController.name, () => {
   let commentsController: CommentsController
@@ -37,6 +38,11 @@ describe(CommentsController.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CommentsController],
       providers: [
+        // mod: SpacesManager / AdminUsersManager repoint the fork's version
+
+        // rows when a space alias or user login is renamed (#471).
+
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: NotificationsManager, useValue: {} },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         { provide: Cache, useValue: {} },
