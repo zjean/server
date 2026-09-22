@@ -1,10 +1,16 @@
-import { mkdtemp, rm, truncate, writeFile } from 'node:fs/promises'
+import { mkdtemp, open, rm, truncate, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
 import { maxFileSizeExceededError } from '../applications/files/utils/errors'
-import { generateThumbnail, maxThumbnailFallbackSize, maxThumbnailInputSize, sniffUndecodableImageFormat } from './image'
+import {
+  generateThumbnail,
+  maxThumbnailFallbackSize,
+  maxThumbnailInputSize,
+  sniffUndecodableImageFormat,
+  sniffUndecodableImageFormatFromHandle
+} from './image'
 
 // 1×1 transparent PNG (smallest valid PNG, hex-encoded).
 const tinyPng = Buffer.from(
@@ -136,6 +142,57 @@ describe(sniffUndecodableImageFormat.name, () => {
     expect(await sniffUndecodableImageFormat(await write(`photo-${brand}.jpg`, isobmff(brand)))).toBe(mime)
   })
 
+  // Fork (#503 review): BMP and ICO are the SILENT half of the allow-list.
+  // `.bmp`/`.ico` pass FilesManager's `startsWith('image-')` gate, sharp has no
+  // libvips loader for either (`sharp.format.bmp` and `.ico` are both absent in
+  // 8.18.6), and every browser renders them — so leaving them off the list
+  // turned working previews into generic file icons with no error anywhere.
+  function bmp(dibHeaderSize: number): Buffer {
+    const buf = Buffer.alloc(32)
+    buf.write('BM', 0, 'ascii')
+    buf.writeUInt32LE(32, 2) // file size
+    buf.writeUInt32LE(0, 6) // reserved
+    buf.writeUInt32LE(14 + dibHeaderSize, 10) // pixel data offset
+    buf.writeUInt32LE(dibHeaderSize, 14)
+    return buf
+  }
+
+  // ICONDIR: reserved uint16 0, type uint16 1, image count uint16.
+  function ico(type: number, count: number): Buffer {
+    const buf = Buffer.alloc(22)
+    buf.writeUInt16LE(0, 0)
+    buf.writeUInt16LE(type, 2)
+    buf.writeUInt16LE(count, 4)
+    return buf
+  }
+
+  it.each([
+    ['BITMAPCOREHEADER', 12],
+    ['BITMAPINFOHEADER', 40],
+    ['BITMAPV4HEADER', 108],
+    ['BITMAPV5HEADER', 124]
+  ])('recognises a BMP declaring a %s', async (_label, dibHeaderSize) => {
+    // Extension deliberately wrong again — bytes win.
+    expect(await sniffUndecodableImageFormat(await write(`shot-${dibHeaderSize}.png`, bmp(dibHeaderSize)))).toBe('image/bmp')
+  })
+
+  it('does not take "BM" alone as a BMP', async () => {
+    // Two bytes of magic is far too weak on its own: the DIB header size at
+    // offset 14 is what makes this a signature rather than a prefix match.
+    expect(await sniffUndecodableImageFormat(await write('note.bmp', Buffer.from('BMX text that happens to start with BM')))).toBeNull()
+  })
+
+  it('recognises an ICO', async () => {
+    expect(await sniffUndecodableImageFormat(await write('favicon.ico', ico(1, 3)))).toBe('image/vnd.microsoft.icon')
+  })
+
+  it.each([
+    ['a .cur cursor (ICONDIR type 2)', ico(2, 1)],
+    ['an ICONDIR declaring no images', ico(1, 0)]
+  ])('returns null for %s', async (_label, bytes) => {
+    expect(await sniffUndecodableImageFormat(await write('thing.ico', bytes))).toBeNull()
+  })
+
   it('recognises a naked JPEG XL codestream', async () => {
     expect(await sniffUndecodableImageFormat(await write('shot.jpg', Buffer.from('ff0a' + '00'.repeat(14), 'hex')))).toBe('image/jxl')
   })
@@ -160,6 +217,34 @@ describe(sniffUndecodableImageFormat.name, () => {
 
   it('returns null rather than throwing when the file is gone', async () => {
     expect(await sniffUndecodableImageFormat(path.join(tmpDir, 'does-not-exist.heic'))).toBeNull()
+  })
+
+  // Fork (#503 review): the handle-taking variant is what FilesManager calls,
+  // so that the sniff and the bytes it then serves come from ONE descriptor
+  // (invariant 3). It must agree with the path form and must leave the
+  // handle's file position alone, or the caller's createReadStream would skip
+  // the header it just read.
+  describe(sniffUndecodableImageFormatFromHandle.name, () => {
+    it('agrees with the path form and leaves the read position at 0', async () => {
+      const bytes = Buffer.concat([isobmff('heic'), Buffer.from('trailing payload')])
+      const fh = await open(await write('pinned.jpg', bytes), 'r')
+      try {
+        expect(await sniffUndecodableImageFormatFromHandle(fh)).toBe('image/heic')
+        const chunks: Buffer[] = []
+        for await (const chunk of fh.createReadStream({ start: 0, autoClose: false })) {
+          chunks.push(chunk as Buffer)
+        }
+        expect(Buffer.concat(chunks).equals(bytes)).toBe(true)
+      } finally {
+        await fh.close()
+      }
+    })
+
+    it('returns null rather than throwing on a closed handle', async () => {
+      const fh = await open(await write('closed.heic', isobmff('heic')), 'r')
+      await fh.close()
+      expect(await sniffUndecodableImageFormatFromHandle(fh)).toBeNull()
+    })
   })
 
   // The fallback ceiling must stay well under the decode ceiling: one bounds
