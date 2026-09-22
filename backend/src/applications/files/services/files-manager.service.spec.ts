@@ -470,6 +470,48 @@ describe(FilesManager.name, () => {
         expect(filesUtils.moveFiles).not.toHaveBeenCalled()
       })
 
+      it('rolls a RESUMED staging file back to its start offset instead of discarding it', async () => {
+        // The staging file for a multi-request upload accumulates across
+        // requests (flag "a" once start > 0 — utils/files.ts:373). Removing it
+        // on one short chunk throws away every byte already staged and forces
+        // a restart from zero; leaving it long is worse still, because
+        // saveStream's own offset check then rejects the retry of that same
+        // chunk ("start offset does not match the current file size") and the
+        // transfer is wedged. Truncating back to startRange is the only state
+        // the client's retry can continue from.
+        const space = makeSpace()
+        const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [tmpPath]: true }, true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(false)
+        vi.mocked(filesUtils.fileSize).mockResolvedValueOnce(100)
+        const truncate = vi.spyOn(fs, 'truncate').mockResolvedValueOnce(undefined)
+
+        await expect(service.saveStream(user, space, shortBody(10, 'abc', { 'content-range': 'bytes 100-109/110' }), { tmpPath })).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 3 of 10 declared bytes')
+        )
+
+        expect(truncate).toHaveBeenCalledWith(tmpPath, 100)
+        expect(filesUtils.removeFiles).not.toHaveBeenCalledWith(tmpPath)
+        expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+      })
+
+      it('still removes a staging file this request owned outright', async () => {
+        // startRange 0 opens the tmp file with flag "w", so nothing staged
+        // earlier survives it anyway — there is no progress to preserve.
+        const space = makeSpace()
+        const tmpPath = '/data/users/john/tmp/sync-in-file.txt'
+        setPathExists({ [space.realPath]: true, [path.dirname(space.realPath)]: true, [tmpPath]: true }, true)
+        vi.mocked(filesUtils.isPathIsDir).mockResolvedValue(false)
+        const truncate = vi.spyOn(fs, 'truncate')
+
+        await expect(service.saveStream(user, space, shortBody(10, 'abc'), { tmpPath })).rejects.toEqual(
+          new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 3 of 10 declared bytes')
+        )
+
+        expect(filesUtils.removeFiles).toHaveBeenCalledWith(tmpPath)
+        expect(truncate).not.toHaveBeenCalled()
+      })
+
       it('accepts a complete body', async () => {
         const space = makeSpace()
         setPathExists({ [space.realPath]: false, [path.dirname(space.realPath)]: true }, false)
@@ -1768,7 +1810,7 @@ describe(FilesManager.name, () => {
         size,
         closed: false,
         stat: vi.fn(async () => ({ size }) as Stats),
-        createReadStream: vi.fn(() => stream),
+        createReadStream: vi.fn((_options?: unknown) => stream),
         close: vi.fn(async () => {
           handle.closed = true
         })
@@ -1793,7 +1835,7 @@ describe(FilesManager.name, () => {
       // an open would make the declared length describe a body we no longer
       // send.
       const space = decodeFails('/data/users/john/files/heic-as-jpg.jpg', 'image-jpeg')
-      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/heic')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle').mockResolvedValueOnce('image/heic')
       const { handle, stream } = fakeHandle(1234)
       vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
       const statPath = vi.spyOn(fs, 'stat')
@@ -1803,6 +1845,13 @@ describe(FilesManager.name, () => {
       expect(fs.open).toHaveBeenCalledWith(space.realPath, 'r')
       expect(handle.stat).toHaveBeenCalled()
       expect(statPath).not.toHaveBeenCalled()
+      // Invariant 3: the sniff reads through the SAME descriptor we serve
+      // from, so contentType cannot describe bytes a concurrent write
+      // replaced between a path sniff and the open.
+      expect(imageUtils.sniffUndecodableImageFormatFromHandle).toHaveBeenCalledWith(handle)
+      // createReadStream is pinned to offset 0 — the sniff read through this
+      // handle, and a FileHandle stream otherwise starts at its position.
+      expect(handle.createReadStream).toHaveBeenCalledWith({ start: 0 })
       // The SNIFFED mime, not the `.jpg` extension's — a client handed
       // image/jpeg for HEIC bytes decodes nothing.
       expect(result).toEqual({ stream, contentType: 'image/heic', contentLength: 1234 })
@@ -1816,21 +1865,55 @@ describe(FilesManager.name, () => {
       // SVG in a `.png` reached the fallback and was served verbatim as
       // image/png — quietly undoing image.spec.ts' disguised-SVG rejection.
       const space = decodeFails('/data/users/john/files/disguised.png', 'image-png')
-      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce(null)
-      const open = vi.spyOn(fs, 'open')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle').mockResolvedValueOnce(null)
+      const { handle } = fakeHandle(64)
+      vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
 
       await expect(service.generateThumbnail(space, 256)).rejects.toEqual(
         new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
       )
-      // Never even opened the file, let alone streamed it.
-      expect(open).not.toHaveBeenCalled()
+      // Opened, because the sniff now reads THROUGH the descriptor we would
+      // serve from (invariant 3) — but never streamed, and never leaked.
+      expect(handle.createReadStream).not.toHaveBeenCalled()
+      expect(handle.closed).toBe(true)
+    })
+
+    it('refuses rather than 500s when the original cannot be opened for the fallback', async () => {
+      // The path-based sniff used to swallow an ENOENT here and return null,
+      // producing the same 400. Opening first must not turn that into a plain
+      // Error escaping as a 500.
+      const space = decodeFails('/data/users/john/files/vanished.heic', 'image-heic')
+      vi.spyOn(fs, 'open').mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }))
+
+      await expect(service.generateThumbnail(space, 256)).rejects.toEqual(
+        new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+      )
+    })
+
+    it.each([
+      ['a BMP', 'image-bmp', 'shot.bmp', 'image/bmp'],
+      ['an ICO', 'image-vnd.microsoft.icon', 'favicon.ico', 'image/vnd.microsoft.icon']
+    ])('still streams %s, which sharp has no loader for at all', async (_label, extensionMime, name, sniffed) => {
+      // Regression guard for the silent half of #503: both extensions pass the
+      // `startsWith('image-')` gate, sharp throws a plain Error on both, and
+      // every browser renders them. A narrower allow-list turned these grids
+      // into generic file icons with nothing in the response to say why.
+      const space = decodeFails(`/data/users/john/files/${name}`, extensionMime)
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle').mockResolvedValueOnce(sniffed)
+      const { handle, stream } = fakeHandle(4096)
+      vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
+
+      const result = await service.generateThumbnail(space, 256)
+
+      expect(result).toEqual({ stream, contentType: sniffed, contentLength: 4096 })
+      expect(handle.closed).toBe(false)
     })
 
     it('refuses above maxThumbnailFallbackSize and releases the pinned handle', async () => {
       // A folder of 30 iPhone HEICs at the old 50 MB ceiling was ~1.5 GB of
       // egress for ONE grid render, because the fallback is per tile.
       const space = decodeFails('/data/users/john/files/huge.heic', 'image-heic')
-      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/heic')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle').mockResolvedValueOnce('image/heic')
       const { handle } = fakeHandle(imageUtils.maxThumbnailFallbackSize + 1)
       vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
 
@@ -1844,7 +1927,7 @@ describe(FilesManager.name, () => {
 
     it('accepts a file exactly at the cap', async () => {
       const space = decodeFails('/data/users/john/files/edge.avif', 'image-avif')
-      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/avif')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle').mockResolvedValueOnce('image/avif')
       const { handle } = fakeHandle(imageUtils.maxThumbnailFallbackSize)
       vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
 
@@ -1879,7 +1962,7 @@ describe(FilesManager.name, () => {
     ;(filesUtils.isPathExists as Mock).mockResolvedValueOnce(true)
     ;(filesUtils.getMimeType as Mock).mockReturnValueOnce('image-png')
     vi.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(maxFileSizeExceededError())
-    const sniff = vi.spyOn(imageUtils, 'sniffUndecodableImageFormat')
+    const sniff = vi.spyOn(imageUtils, 'sniffUndecodableImageFormatFromHandle')
 
     await expect(service.generateThumbnail(space, 256)).rejects.toEqual(maxFileSizeExceededError())
     expect(sniff).not.toHaveBeenCalled()
