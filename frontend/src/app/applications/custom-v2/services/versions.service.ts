@@ -50,9 +50,10 @@ export class VersionsService {
    * backend constant this file imports — no duplicated string, and the backend
    * spec pins the wording.
    *
-   * Latching is one-way on purpose: any success sets `available`, and only a
-   * feature-off 404 sets `unavailable`. A per-file failure never disables the
-   * panel globally.
+   * Latching is one-way on purpose: any success sets `available`, and only an
+   * answer that holds for the whole session sets `unavailable` — a feature-off
+   * 404, or a 403 from the role gate. A per-file failure never disables the panel
+   * globally. See `noteAvailability` for why those two and nothing else.
    */
   readonly availability = signal<VersionsAvailability>('unknown')
 
@@ -160,8 +161,29 @@ export class VersionsService {
     })
   }
 
+  /**
+   * Two answers latch `unavailable`, and they mean different things:
+   *
+   * - a **404** carrying `VERSIONS_DISABLED_MESSAGE` — the feature is off on this
+   *   server, so no file has history. Matched on the message because these routes
+   *   also 404 with 'Space not found' when SpaceGuard cannot resolve the path,
+   *   and that one is per-file.
+   * - a **403** — the whole VersioningController is gated on the USER role
+   *   (#492), so a guest or link principal is refused every version route before
+   *   any path is resolved. No message check: unlike the 404 there is no
+   *   per-file 403 to confuse it with. `SpaceGuard` answers 404 for a path it
+   *   cannot resolve, and the only in-feature 403 is the MODIFY refusal on
+   *   restore/label/delete — which never reaches here, because those three do not
+   *   report availability.
+   *
+   * Both are per-principal and session-long, which is what makes latching right:
+   * without this, `probe()` never settles and re-fires on every file selection
+   * (`file-detail.component.ts`) and every editor open — hundreds of refused
+   * requests, each writing a role-guard warning server-side.
+   */
   private noteAvailability(e: unknown): void {
-    if (e instanceof HttpErrorResponse && e.status === 404 && e.error?.message === VERSIONS_DISABLED_MESSAGE) {
+    if (!(e instanceof HttpErrorResponse)) return
+    if (e.status === 403 || (e.status === 404 && e.error?.message === VERSIONS_DISABLED_MESSAGE)) {
       this.availability.set('unavailable')
     }
   }
