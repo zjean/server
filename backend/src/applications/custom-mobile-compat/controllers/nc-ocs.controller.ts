@@ -2,8 +2,11 @@ import { Controller, Delete, Get, HttpException, HttpStatus, Param, Req, Res, Us
 import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
+import { comparePassword } from '../../../common/functions'
 import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
+import { UsersQueries } from '../../users/services/users-queries.service'
+import type { UserAppPassword } from '../../users/interfaces/user-secrets.interface'
 import { ncCapabilities, type NcCapabilitiesPayload } from '../constants/capabilities'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcResponseService } from '../services/nc-response.service'
@@ -22,6 +25,7 @@ export class NcOcsController {
   constructor(
     private readonly response: NcResponseService,
     private readonly usersManager: UsersManager,
+    private readonly usersQueries: UsersQueries,
     private readonly basicAuthGuard: NcBasicAuthGuard
   ) {}
 
@@ -97,7 +101,9 @@ export class NcOcsController {
 
     const found = await this.findAppPasswordName(req.user, parsed.password)
     if (found) {
-      await this.usersManager.deleteAppPassword(req.user, found)
+      // Scoped: names are unique per user but not per scope, so an unscoped
+      // delete could take a WebDAV row that happens to share the name (#481).
+      await this.usersManager.deleteAppPassword(req.user, found, AUTH_SCOPE.MOBILE_NC)
     }
     // Always evict — even if we didn't find a matching row (the guard still
     // cached a positive hit that we must drop).
@@ -105,23 +111,29 @@ export class NcOcsController {
     return this.response.json(res, {})
   }
 
-  // Walk user.secrets.appPasswords[] and return the slug-name of the row whose
-  // hashed password matches `candidate`. Uses Sync-in's stored-hash compare via
-  // validateAppPassword's side-effect (it updates currentAccess on match, which
-  // we detect by diffing the list before / after). This avoids duplicating the
-  // hashing scheme in our code (mod-free w.r.t. upstream).
+  // Return the name of the caller's OWN MOBILE_NC app-password row, or null.
+  //
+  // This used to identify the row by diffing `currentAccess` before and after
+  // a `validateAppPassword` call, and to fall back to `after[0]` — the NEWEST
+  // row — when the diff found nothing. Both halves are wrong. `currentAccess`
+  // is second-granularity and the guard's 900s positive cache means a row's
+  // previous value can be arbitrarily close, so the diff can legitimately see
+  // no change; the fallback then made "log out device A" delete device B's
+  // credential while A's stayed live (#481). A logout that revokes the wrong
+  // device is worse than a logout that revokes nothing.
+  //
+  // Comparing the presented secret against each candidate hash answers the
+  // question directly. No dummy compare for timing: the caller is already
+  // authenticated as this user by NcBasicAuthGuard, so there is no oracle
+  // here that they did not already have.
   private async findAppPasswordName(user: UserModel, candidate: string): Promise<string | null> {
-    const before = await this.usersManager.listAppPasswords(user)
-    const ok = await this.usersManager.validateAppPassword(user, candidate, '0.0.0.0', AUTH_SCOPE.MOBILE_NC)
-    if (!ok) return null
-    const after = await this.usersManager.listAppPasswords(user)
-    for (const entry of after) {
-      const prev = before.find((p) => p.name === entry.name)
-      if (!prev || `${prev.currentAccess ?? ''}` !== `${entry.currentAccess ?? ''}`) {
-        return entry.name
-      }
+    const secrets = await this.usersQueries.getUserSecrets(user.id)
+    const rows: UserAppPassword[] = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
+    for (const row of rows) {
+      if (row.app !== AUTH_SCOPE.MOBILE_NC) continue
+      if (await comparePassword(candidate, row.password)) return row.name
     }
-    return after[0]?.name ?? null
+    return null
   }
 
   private doUserProvisioning(

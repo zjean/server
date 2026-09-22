@@ -571,6 +571,40 @@ describe(UsersManager.name, () => {
     expect(cache.mdel).not.toHaveBeenCalled()
   })
 
+  // #481 — app-password names are unique per user but NOT per scope, so an
+  // unscoped delete could reach across scopes: a user who happened to name a
+  // WebDAV app password `mobile-a1b2c3d4` would have had it deleted by the NC
+  // logout path instead of the device credential the name came from.
+  it('deletes only within the requested scope when one is given (#481)', async () => {
+    const webdavRow = { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }
+    const mobileRow = { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.MOBILE_NC, password: 'HASH' }
+    const getCurrentSecrets = mockSecretsMutation({ appPasswords: [webdavRow, mobileRow] } as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([])
+    cache.mdel = vi.fn()
+
+    await expect(usersManager.deleteAppPassword(userTest, 'mobile-a1b2c3d4', AUTH_SCOPE.MOBILE_NC)).resolves.toBeUndefined()
+
+    expect(getCurrentSecrets().appPasswords).toEqual([webdavRow])
+  })
+
+  it('still matches any scope when none is given — the classic Account screen deletes the row the user picked', async () => {
+    const getCurrentSecrets = mockSecretsMutation({
+      appPasswords: [{ name: 'webdav-client', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }]
+    } as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([])
+    cache.mdel = vi.fn()
+
+    await expect(usersManager.deleteAppPassword(userTest, 'webdav-client')).resolves.toBeUndefined()
+
+    expect(getCurrentSecrets().appPasswords).toEqual([])
+  })
+
+  it('404s when the name exists but only under another scope', async () => {
+    mockSecretsMutation({ appPasswords: [{ name: 'shared-name', app: AUTH_SCOPE.WEBDAV, password: 'HASH' }] } as UserSecrets)
+
+    await expect(usersManager.deleteAppPassword(userTest, 'shared-name', AUTH_SCOPE.MOBILE_NC)).rejects.toThrow('App password not found')
+  })
+
   it('compareUserPassword + updateLanguage + updatePassword branches', async () => {
     usersQueriesService.compareUserPassword = vi.fn().mockResolvedValue(true)
     await expect(usersManager.compareUserPassword(1, 'p')).resolves.toBe(true)

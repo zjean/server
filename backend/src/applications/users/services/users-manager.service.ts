@@ -382,16 +382,22 @@ export class UsersManager {
     return { ...appPassword, password: clearPassword }
   }
 
-  async deleteAppPassword(user: UserModel, passwordName: string): Promise<void> {
+  // mod(users): optional `scope`. Names are unique per user but NOT per scope, so a delete that
+  // matched on name alone could reach across scopes — a user who happened to name a WebDAV app
+  // password `mobile-a1b2c3d4` would have had it deleted by the NC logout path instead of their
+  // device's credential (#481). Omitting `scope` keeps upstream's match-any-scope behaviour, which
+  // is what the classic Account screen wants: it deletes the row the user picked, whatever its app.
+  async deleteAppPassword(user: UserModel, passwordName: string, scope?: AUTH_SCOPE): Promise<void> {
+    const matches = (p: UserAppPassword) => p.name === passwordName && (!scope || p.app === scope)
     let appPassword: UserAppPassword | null
     try {
       appPassword = await this.usersQueries.mutateUserSecrets<UserAppPassword | null>(user.id, (secrets) => {
         const appPasswords = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
-        const currentAppPassword = appPasswords.find((p: UserAppPassword) => p.name === passwordName)
+        const currentAppPassword = appPasswords.find(matches)
         if (!currentAppPassword) return { result: null }
         return {
           result: currentAppPassword,
-          secrets: { ...secrets, appPasswords: appPasswords.filter((p: UserAppPassword) => p.name !== passwordName) }
+          secrets: { ...secrets, appPasswords: appPasswords.filter((p: UserAppPassword) => !matches(p)) }
         }
       })
     } catch (e) {

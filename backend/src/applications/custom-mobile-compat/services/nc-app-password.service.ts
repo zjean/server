@@ -118,7 +118,8 @@ export class NcAppPasswordService {
     let removed = 0
     for (const row of toDelete) {
       try {
-        await this.usersManager.deleteAppPassword(user, row.name)
+        // Scoped so a same-named WebDAV row can never be the one pruned (#481).
+        await this.usersManager.deleteAppPassword(user, row.name, AUTH_SCOPE.MOBILE_NC)
         removed++
       } catch (e) {
         // Concurrent delete or schema race — the row is gone or is going

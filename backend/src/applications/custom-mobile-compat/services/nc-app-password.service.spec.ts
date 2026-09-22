@@ -91,6 +91,11 @@ describe(NcAppPasswordService.name, () => {
     const deletedNames = deleteAppPassword.mock.calls.map(([, name]) => name)
     expect(deletedNames).not.toContain('desktop x')
     expect(deletedNames).not.toContain('webdav y')
+    // Belt and braces (#481): the delete is scoped, so even a MOBILE_NC name
+    // that collides with a row in another scope cannot take the wrong row.
+    for (const call of deleteAppPassword.mock.calls) {
+      expect(call[2]).toBe(AUTH_SCOPE.MOBILE_NC)
+    }
   })
 
   it('tolerates a concurrent delete race (deleteAppPassword throws)', async () => {
