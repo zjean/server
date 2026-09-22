@@ -952,4 +952,20 @@ describe(`${NcDavController.name} — space authorization (#515)`, () => {
     })
     expect(webdav.mkcol).not.toHaveBeenCalled()
   })
+
+  // …and the oc:favorite exemption does not reopen it. The exemption's whole
+  // justification is "you may star what you may read", which is a statement
+  // about the FILES tree; the trashbin is read-only by rule rather than by
+  // permission, so an unscoped exemption granted strictly more than its own
+  // reasoning — a trashed file could be starred. Harmless in itself, and
+  // fixed as a scope correction rather than left as a comment that overstated
+  // what the clause allowed.
+  it('does not extend the oc:favorite exemption into the trashbin', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL, { inTrashRepository: true }))
+    const fav = `<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>`
+    await expect(
+      controller.trashbinSubpath('bob', request('PROPPATCH', '/remote.php/dav/trashbin/bob/personal/doc.pdf', fav), res())
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(favoritesReport.respondProppatchFavorite).not.toHaveBeenCalled()
+  })
 })

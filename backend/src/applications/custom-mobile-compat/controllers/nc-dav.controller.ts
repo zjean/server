@@ -296,7 +296,19 @@ export class NcDavController {
     // through SPACE_HTTP_PERMISSION would demand MODIFY and break starring on
     // every read-only share. Everything else — including the mtime PROPPATCH
     // that falls through to WebDAVMethods — takes the normal path.
-    if (req.method === HTTP_METHOD.PROPPATCH && parseFavoriteProppatch(req.body as string | Buffer | null | undefined) !== null) {
+    //
+    // Scoped to the files tree. The exemption's justification is "you may star
+    // what you may read", and the trashbin is read-only by rule rather than by
+    // permission — SpaceGuard.checkPermissions refuses every ADD/MODIFY there
+    // outright. Without this clause the exemption reached it too, so a trashed
+    // file could be starred: harmless in itself, but wider than the reasoning
+    // that grants it, and it would silently widen further if the favorites
+    // bridge ever wrote anything beyond the star row.
+    if (
+      req.method === HTTP_METHOD.PROPPATCH &&
+      !req.space.inTrashRepository &&
+      parseFavoriteProppatch(req.body as string | Buffer | null | undefined) !== null
+    ) {
       return
     }
     // PROPFIND / GET / HEAD / REPORT map to no operation at all
