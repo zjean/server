@@ -60,4 +60,22 @@ describe('destinationHasDotSegments', () => {
   it('does not reject a double-encoded segment (a file named "%2e%2e")', () => {
     expect(destinationHasDotSegments('https://h/remote.php/dav/files/bob/%252e%252e/a.txt')).toBe(false)
   })
+
+  // The two spellings WHATWG resolves but a byte-for-byte path does not show.
+  // Without the tab/backslash normalisation in rawDestinationPath these reach
+  // `new URL()`, which resolves the segment — the exact "reject vs resolve"
+  // inconsistency this module exists to remove, just spelled differently.
+  it.each([
+    ['a backslash separator', 'https://h/remote.php/dav/files/bob/a/..\\b'],
+    ['a backslash dot segment at the end', 'https://h/remote.php/dav/files/bob/a/..\\'],
+    ['a tab inside the dot segment', 'https://h/remote.php/dav/files/bob/a/.\t./b'],
+    ['a newline inside the dot segment', 'https://h/remote.php/dav/files/bob/a/.\n./b']
+  ])('refuses %s', (_label, dest) => {
+    expect(destinationHasDotSegments(dest)).toBe(true)
+  })
+
+  // ...while a filename that merely CONTAINS a dot or a backslash is untouched.
+  it('allows a filename with dots that are not segments', () => {
+    expect(destinationHasDotSegments('https://h/remote.php/dav/files/bob/my..file..txt')).toBe(false)
+  })
 })
