@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
+import { ACTION } from '../../common/constants'
+import { FileEvent } from '../files/events/file-events'
 import { writeFromStream } from '../files/utils/files'
 import { CustomDiagramsService } from './custom-diagrams.service'
 import { Mock } from 'vitest'
@@ -144,6 +146,50 @@ describe('CustomDiagramsService', () => {
       expect(writeFile).not.toHaveBeenCalled()
       expect(result.etag).toBe(sha1(newXml))
       expect(result.etag).not.toBe(baseEtag)
+    })
+
+    // #494. Quota recompute, the NC sync log and Recents all hang off this bus,
+    // and the save emitted nothing — so a diagram could be edited all day
+    // without any of the three noticing. `createNew` emitted ACTION.ADD, which
+    // is what made the omission easy to miss.
+    it('emits an UPDATE FileEvent tagged as an editor save, after the bytes have landed', async () => {
+      const baseXml = '<mxfile><a/></mxfile>'
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(baseXml as any)
+      const emit = vi.spyOn(FileEvent, 'emit').mockReturnValue(true)
+      try {
+        await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><b/></mxfile>', etag: sha1(baseXml) })
+
+        expect(emit).toHaveBeenCalledTimes(1)
+        expect(emit).toHaveBeenCalledWith('event', {
+          user: mockUser,
+          space: mockSpaceRw,
+          action: ACTION.UPDATE,
+          rPath: '/data/test.drawio',
+          source: 'editor'
+        })
+        // An event announcing content that is not on disk yet would have every
+        // subscriber read the OLD bytes.
+        expect(vi.mocked(writeFromStream).mock.invocationCallOrder[0]).toBeLessThan(emit.mock.invocationCallOrder[0])
+      } finally {
+        emit.mockRestore()
+      }
+    })
+
+    it('emits nothing when the save is rejected', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<onDiskNow/>' as any)
+      const emit = vi.spyOn(FileEvent, 'emit').mockReturnValue(true)
+      try {
+        await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
+          status: HttpStatus.CONFLICT
+        })
+        expect(emit).not.toHaveBeenCalled()
+      } finally {
+        emit.mockRestore()
+      }
     })
 
     // `writeFromStream` truncates the destination the moment the stream opens

@@ -83,6 +83,22 @@ export class CustomDiagramsService {
        nothing that is not already known. */
     await writeFromStream(space.realPath, Readable.from([Buffer.from(dto.xml, 'utf-8')]))
 
+    /* Every other write path announces itself on this bus, and three
+       subscribers need it: FilesEventManager (quota recompute + content
+       indexing + upstream's own recents), NcSyncLog (without an entry, stock NC
+       mobile clients are never told the file changed and keep serving the copy
+       their sync token points at) and RecentsTouchService. `createNew` already
+       emitted ACTION.ADD; the save was the half that never did, so a diagram
+       could grow from 1 KB to 10 MB without the storage figure moving.
+
+       `source: 'editor'` because that is what this is — the same claim
+       Collabora and OnlyOffice make from their own save paths, and what gates
+       upstream's `processRecentEditorUpdates`. The fork's own
+       `custom-recents-touch` fires on any source, so the two overlap; that
+       double-write is deliberate and harmless (both go through
+       `FilesQueries.upsertRecent`, see #493). */
+    FileEvent.emit('event', { user, space, action: ACTION.UPDATE, rPath: space.realPath, source: 'editor' })
+
     const stat = await getProps(space.realPath)
     return { etag: contentEtag(dto.xml), mtime: stat.mtime }
   }
