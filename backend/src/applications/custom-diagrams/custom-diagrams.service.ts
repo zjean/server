@@ -1,11 +1,12 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { Readable } from 'node:stream'
 import { ACTION } from '../../common/constants'
 import { FilesManager } from '../files/services/files-manager.service'
 import { FileEvent } from '../files/events/file-events'
-import { getProps } from '../files/utils/files'
+import { getProps, writeFromStream } from '../files/utils/files'
 import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
 import { haveSpaceEnvPermissions } from '../spaces/utils/permissions'
@@ -65,17 +66,22 @@ export class CustomDiagramsService {
       throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
     }
 
-    // Write-tmp + rename = atomic CAS on same filesystem. Readers see the old or
-    // the new bytes, never a half-written file. The recheck closes the window
-    // between the initial readFile and the rename.
-    const tmpPath = `${space.realPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    await writeFile(tmpPath, dto.xml, 'utf-8')
-    const recheckXml = await readFile(space.realPath, 'utf-8')
-    if (contentEtag(recheckXml) !== expectedEtag) {
-      await unlink(tmpPath).catch(() => undefined)
-      throw new HttpException('etag mismatch — file was modified elsewhere', HttpStatus.CONFLICT)
-    }
-    await rename(tmpPath, space.realPath)
+    /* THE LIVE FILE'S INODE MUST SURVIVE (ADR §9, invariant 2). This used to
+       write a sibling `.tmp-<pid>-…` file and rename() it over the target,
+       which replaces the inode — and trash retention indexes trashed entries by
+       inode (`files-trash-retention.service.ts`, `{ id: stats.ino }`), so a
+       re-save could mint a fresh inode and keep a trashed diagram alive past
+       its retention window. The same tmp name was invisible to
+       `isInternalTemporaryEntry`, so a crash between write and rename left an
+       orphan listed, synced and downloadable in the user's folder forever.
+
+       `writeFromStream` with no `start` opens the destination with flag 'w':
+       it truncates IN PLACE and keeps the inode, which is exactly what both
+       editors get out of `copyFileContent`. There is no staging file to orphan
+       because there is no staging file: the payload is already whole in memory
+       and its size has been checked above, so a tmp copy would validate
+       nothing that is not already known. */
+    await writeFromStream(space.realPath, Readable.from([Buffer.from(dto.xml, 'utf-8')]))
 
     const stat = await getProps(space.realPath)
     return { etag: contentEtag(dto.xml), mtime: stat.mtime }

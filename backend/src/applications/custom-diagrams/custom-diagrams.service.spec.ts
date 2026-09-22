@@ -1,7 +1,9 @@
 import { HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { Readable } from 'node:stream'
+import { writeFromStream } from '../files/utils/files'
 import { CustomDiagramsService } from './custom-diagrams.service'
 import { Mock } from 'vitest'
 
@@ -17,14 +19,22 @@ vi.mock('../spaces/services/spaces-manager.service', () => ({
 
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
-  writeFile: vi.fn(),
-  rename: vi.fn(),
-  unlink: vi.fn()
+  writeFile: vi.fn()
 }))
 vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
 vi.mock('../files/utils/files', () => ({
-  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 })
+  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 }),
+  writeFromStream: vi.fn().mockResolvedValue(undefined)
 }))
+
+// Drains what the service handed writeFromStream, so a case can assert on the
+// bytes rather than on the stream object.
+async function writtenPayload(call: number): Promise<{ path: string; content: string }> {
+  const [dstPath, stream] = vi.mocked(writeFromStream).mock.calls[call] as [string, Readable]
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Buffer))
+  return { path: dstPath, content: Buffer.concat(chunks).toString('utf-8') }
+}
 
 const sha1 = (s: string) => createHash('sha1').update(s, 'utf-8').digest('hex')
 
@@ -47,8 +57,8 @@ describe('CustomDiagramsService', () => {
     service = new CustomDiagramsService(spacesManager as any, filesManager as any)
     vi.mocked(readFile).mockReset()
     vi.mocked(writeFile).mockReset()
-    vi.mocked(rename).mockReset()
-    vi.mocked(unlink).mockReset()
+    vi.mocked(writeFromStream).mockReset()
+    vi.mocked(writeFromStream).mockResolvedValue(undefined)
   })
 
   describe('load', () => {
@@ -107,59 +117,48 @@ describe('CustomDiagramsService', () => {
       await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
         status: HttpStatus.CONFLICT
       })
-      // Should not have written or renamed anything before discovering the mismatch.
-      expect(writeFile).not.toHaveBeenCalled()
-      expect(rename).not.toHaveBeenCalled()
+      // Nothing may touch the live file before the mismatch is discovered.
+      expect(writeFromStream).not.toHaveBeenCalled()
     })
 
-    it('writes via tmpfile + rename and returns content-hash etag on success', async () => {
+    // #495 / ADR §9 invariant 2. The old implementation wrote a sibling
+    // `.tmp-<pid>-…` file and rename()d it over the target, which REPLACES the
+    // inode that trash retention keys its records on — and left that tmp file
+    // behind, un-hidden by `isInternalTemporaryEntry`, if the process died in
+    // between. The write must land on the live path itself.
+    it('writes the payload straight into the live path, preserving its inode, and creates no tmp file', async () => {
       const baseXml = '<mxfile><graph/></mxfile>'
       const newXml = '<mxfile><graph><cell/></graph></mxfile>'
       const baseEtag = sha1(baseXml)
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as Mock).mockReturnValue(true)
-      // Same content on both reads = no concurrent writer; recheck passes.
       vi.mocked(readFile).mockResolvedValue(baseXml as any)
-      vi.mocked(writeFile).mockResolvedValue(undefined as any)
-      vi.mocked(rename).mockResolvedValue(undefined as any)
 
       const result = await service.save(mockUser, { path: FILE_PATH, xml: newXml, etag: baseEtag })
 
-      // writeFile targets a tmpfile alongside the real path, NOT the real path.
-      expect(writeFile).toHaveBeenCalledTimes(1)
-      const [tmpPath, contents, encoding] = vi.mocked(writeFile).mock.calls[0]
-      expect(tmpPath).toMatch(/^\/data\/test\.drawio\.tmp-/)
-      expect(contents).toBe(newXml)
-      expect(encoding).toBe('utf-8')
-      // rename moves tmp → real path atomically.
-      expect(rename).toHaveBeenCalledTimes(1)
-      const [fromPath, toPath] = vi.mocked(rename).mock.calls[0]
-      expect(fromPath).toBe(tmpPath)
-      expect(toPath).toBe('/data/test.drawio')
+      expect(writeFromStream).toHaveBeenCalledTimes(1)
+      const written = await writtenPayload(0)
+      expect(written.path).toBe('/data/test.drawio')
+      expect(written.content).toBe(newXml)
+      // No staging file anywhere: nothing to orphan, nothing to rename.
+      expect(writeFile).not.toHaveBeenCalled()
       expect(result.etag).toBe(sha1(newXml))
       expect(result.etag).not.toBe(baseEtag)
     })
 
-    it('throws 409 and unlinks tmpfile when a concurrent writer changes the file between read and rename', async () => {
+    // `writeFromStream` truncates the destination the moment the stream opens
+    // (flag 'w'), so it must never be reached with a `start` offset or a second
+    // destination — the only argument shape that keeps the inode is this one.
+    it('never passes a start offset to writeFromStream', async () => {
       const baseXml = '<mxfile><a/></mxfile>'
-      const concurrentXml = '<mxfile><b/></mxfile>'
-      const baseEtag = sha1(baseXml)
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as Mock).mockReturnValue(true)
-      // First read sees the baseline (etag matches). Second read (after writeFile
-      // to tmp) sees a different version — recheck fails → 409, tmpfile cleaned up.
-      vi.mocked(readFile)
-        .mockResolvedValueOnce(baseXml as any)
-        .mockResolvedValueOnce(concurrentXml as any)
-      vi.mocked(writeFile).mockResolvedValue(undefined as any)
-      vi.mocked(unlink).mockResolvedValue(undefined as any)
+      vi.mocked(readFile).mockResolvedValue(baseXml as any)
 
-      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: baseEtag })).rejects.toMatchObject({
-        status: HttpStatus.CONFLICT
-      })
-      expect(writeFile).toHaveBeenCalledTimes(1)
-      expect(rename).not.toHaveBeenCalled()
-      expect(unlink).toHaveBeenCalledTimes(1)
+      await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: sha1(baseXml) })
+
+      const [, , options] = vi.mocked(writeFromStream).mock.calls[0]
+      expect(options?.start ?? 0).toBe(0)
     })
 
     it('two distinct payloads of equal byte length produce different etags', () => {
