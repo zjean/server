@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, SetMetadata } from '@nestjs/common'
 import { Reflector } from '@nestjs/core'
 import { ThrottlerException } from '@nestjs/throttler'
-import { FastifyRequest } from 'fastify'
+import { FastifyReply, FastifyRequest } from 'fastify'
 import { AUTH_RATE_LIMIT_ERROR_MESSAGE } from '../../../authentication/constants/auth'
 import { genHash } from '../../files/utils/files'
 import { Cache } from '../../../infrastructure/cache/cache.service'
@@ -43,7 +43,8 @@ export class NcRateLimitGuard implements CanActivate {
     ])
     if (!options) return true
 
-    const req = context.switchToHttp().getRequest<FastifyRequest>()
+    const http = context.switchToHttp()
+    const req = http.getRequest<FastifyRequest>()
     // Bucketed on `req.ip` — NOT on the raw X-Forwarded-For this module reads
     // for LOGGING. Read carefully, because the two are not the same claim:
     //
@@ -65,6 +66,7 @@ export class NcRateLimitGuard implements CanActivate {
     const key = `${NcRateLimitGuard.KEY_PREFIX}${NC_RATE_LIMIT_SCOPE}-${bucketOf(context)}-${genHash(req.ip ?? 'unknown', 'sha256')}`
     const result = await this.cache.consumeRateLimit(key, options.ttl, options.limit, options.blockDuration)
     if (result.isBlocked) {
+      setRetryAfter(http.getResponse<FastifyReply>(), result.timeToBlockExpire, options.blockDuration)
       throw new ThrottlerException(AUTH_RATE_LIMIT_ERROR_MESSAGE)
     }
     return true
@@ -75,4 +77,19 @@ export class NcRateLimitGuard implements CanActivate {
 // grant route's budget is not spent by the poll route's traffic.
 function bucketOf(context: ExecutionContext): string {
   return `${context.getClass().name}.${context.getHandler().name}`
+}
+
+// Tell the caller when to come back.
+//
+// `ThrottlerGuard` sets this header before throwing the same exception; a
+// guard that throws `ThrottlerException` directly (this one, and upstream's
+// own `AuthBasicStrategy`) does not, so a blocked client had to guess. RFC
+// 9110 §10.2.3 defines it on 429, and it is the only part of a 429 that a
+// client which does not otherwise special-case the status can still act on.
+export function setRetryAfter(res: FastifyReply | undefined, timeToBlockExpire: number, blockDurationMs: number): void {
+  // `timeToBlockExpire` is seconds remaining; fall back to the configured
+  // block if the adapter reports 0 (a sub-second remainder rounds to nothing,
+  // and `Retry-After: 0` invites an immediate retry).
+  const seconds = timeToBlockExpire > 0 ? timeToBlockExpire : Math.ceil(blockDurationMs / 1000)
+  res?.header?.('Retry-After', String(seconds))
 }

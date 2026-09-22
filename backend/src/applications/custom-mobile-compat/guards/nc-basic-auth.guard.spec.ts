@@ -223,18 +223,36 @@ describe(NcBasicAuthGuard.name, () => {
       )
     })
 
-    it('refuses a blocked caller WITHOUT reaching bcrypt or the DB', async () => {
+    it('refuses a blocked caller WITHOUT reaching bcrypt or the DB, and says when to come back', async () => {
       cache.consumeRateLimit.mockResolvedValue({ totalHits: 61, timeToExpire: 60, isBlocked: true, timeToBlockExpire: 60 })
-      const { ctx } = makeContext(basic('alice', 'anything'))
+      const { ctx, res } = makeContext(basic('alice', 'anything'))
       await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
       expect(usersQueries.from).not.toHaveBeenCalled()
       expect(usersManager.validateAppPassword).not.toHaveBeenCalled()
+      // ThrottlerGuard sets Retry-After before throwing this exception; a
+      // guard that throws it directly has to do so itself. On the DAV surface
+      // it is the one part of a 429 a stock NC client can act on.
+      expect(res.headers['Retry-After']).toBe('60')
     })
 
-    it('buckets on req.ip, not on the caller-controlled X-Forwarded-For', async () => {
-      // The guard reads X-Forwarded-For to LOG a useful address. Keying the
-      // limiter on it would hand every attacker an unlimited supply of fresh
-      // budgets, one per header value.
+    it('falls back to the configured block when the remaining time rounds to zero', async () => {
+      cache.consumeRateLimit.mockResolvedValue({ totalHits: 61, timeToExpire: 60, isBlocked: true, timeToBlockExpire: 0 })
+      const { ctx, res } = makeContext(basic('alice', 'anything'))
+      await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
+      // `Retry-After: 0` reads as "retry immediately", which is the opposite
+      // of what a block means.
+      expect(res.headers['Retry-After']).toBe(String(NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration / 1000))
+    })
+
+    it('never reads X-Forwarded-For itself — the bucket is whatever Fastify resolved', async () => {
+      // The guard reads X-Forwarded-For to LOG a useful address. Reading it
+      // HERE would hand every attacker an unlimited supply of fresh budgets,
+      // one per header value, whatever the deployment looks like.
+      //
+      // What this does NOT prove: `req.ip` is itself derived from the
+      // forwarded chain when `server.trustProxy` is truthy (its default), so
+      // a deployment with no reverse proxy in front remains re-bucketable —
+      // the same deployment contract upstream's own per-IP limiters carry.
       const { ctx } = makeContext(basic('alice', 'good-app-password'))
       const spoofed = makeContext(basic('bob', 'good-app-password'))
       spoofed.req.headers['x-forwarded-for'] = '203.0.113.9'

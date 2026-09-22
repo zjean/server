@@ -35,11 +35,21 @@ describe(NcRateLimitGuard.name, () => {
   let guard: NcRateLimitGuard
   let cache: InMemoryCache
 
+  // Headers the guard set on the last context built by `contextFor`.
+  let lastResHeaders: Record<string, string>
+
   function contextFor(handler: keyof MeteredController, req: Record<string, unknown>): ExecutionContext {
+    const headers: Record<string, string> = {}
+    lastResHeaders = headers
+    const res = {
+      header: (k: string, v: string) => {
+        headers[k] = v
+      }
+    }
     return {
       getHandler: () => MeteredController.prototype[handler],
       getClass: () => MeteredController,
-      switchToHttp: () => ({ getRequest: () => req, getResponse: () => ({}) })
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res })
     } as unknown as ExecutionContext
   }
 
@@ -113,6 +123,15 @@ describe(NcRateLimitGuard.name, () => {
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ThrottlerException)
     cache.advance(61_000)
     await expect(guard.canActivate(ctx)).resolves.toBe(true)
+  })
+
+  it('tells a blocked caller when to come back', async () => {
+    // ThrottlerGuard sets Retry-After before throwing this exception; a guard
+    // that throws it directly has to do so itself.
+    const ctx = contextFor('metered', { ip: '10.0.0.1' })
+    for (let i = 0; i < 4; i++) await guard.canActivate(ctx).catch(() => undefined)
+    await expect(guard.canActivate(contextFor('metered', { ip: '10.0.0.1' }))).rejects.toBeInstanceOf(ThrottlerException)
+    expect(Number(lastResHeaders['Retry-After'])).toBeGreaterThan(0)
   })
 
   it('scopes the bucket per run under test, so parallel e2e workers do not share a counter', async () => {

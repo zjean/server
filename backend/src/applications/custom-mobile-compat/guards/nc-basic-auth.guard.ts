@@ -12,6 +12,7 @@ import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
 import { NC_RATE_LIMIT_OPTIONS, NC_RATE_LIMIT_SCOPE } from '../constants/rate-limit'
 import { NC_AUTH_REALM } from '../constants/routes'
+import { setRetryAfter } from './nc-rate-limit.guard'
 
 // NcBasicAuthGuard
 //
@@ -120,7 +121,39 @@ export class NcBasicAuthGuard implements CanActivate {
       NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.limit,
       NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration
     )
+    // 429 on the DAV surface, checked against stock-client source rather than
+    // assumed. A blocked caller here gets `ThrottlerException` — 429, JSON
+    // body, no `WWW-Authenticate` — which both clients treat as a transient,
+    // per-operation error, and neither can turn into a re-auth prompt:
+    //
+    //   - iOS. The ONLY writer of the account-error lists,
+    //     NextcloudKit `Sources/NextcloudKit/NKCommon.swift`
+    //     `appendServerErrorAccount`, branches on 503 / 401 / 403-with-ToS
+    //     and has no `else`, so 429 persists nothing. The logout path
+    //     (`NCAccount.checkRemoteUser` → `deleteAccount`) is additionally
+    //     gated on `statusCode == 401`. 429 is a display string only
+    //     (`NKError.swift`, "Too many requests"). Throttled uploads are
+    //     re-queued on the 5-minute timer in `NCNetworkingProcess.swift`,
+    //     whose exclusion is `NSURLErrorUserAuthenticationRequired`, not 429.
+    //   - Android. `RemoteOperationResult` has no 429 case, so it becomes
+    //     `UNHANDLED_HTTP_CODE`; the credential wipe in `RemoteOperation.java`
+    //     is `ResultCode.UNAUTHORIZED == result.getCode()`, exact equality, as
+    //     is every re-auth trigger in the app.
+    //
+    // Read at nextcloud/NextcloudKit 1f07840c, nextcloud/ios d8eee779,
+    // nextcloud/android-library 20bcd79a (the exact commits those projects
+    // pin each other to). The same check rules out the obvious alternatives:
+    // 503 is the WORST code here — iOS parks the account in
+    // `groupDefaultsUnavailable` and `NKInterceptor.adapt` then fails every
+    // later request for it client-side until a foreground-only `status.php`
+    // poll clears it — and 401 is the logout trigger itself.
+    //
+    // Two constraints this leaves on the response, both satisfied above:
+    // keep the body JSON without an `ocs.meta.statuscode` (NKError reads that
+    // path first and coerces a 2xx value to "success"), and keep the budget
+    // generous, because neither client backs off on 429.
     if (rateLimit.isBlocked) {
+      setRetryAfter(res, rateLimit.timeToBlockExpire, NC_RATE_LIMIT_OPTIONS.BASIC_AUTH.blockDuration)
       throw new ThrottlerException(AUTH_RATE_LIMIT_ERROR_MESSAGE)
     }
 
