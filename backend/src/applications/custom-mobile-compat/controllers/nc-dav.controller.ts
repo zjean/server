@@ -37,7 +37,7 @@ import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 // Why a COPY/MOVE Destination was refused. mapNcPathToInternal used to answer
 // a bare `null` for all of these and the caller reported one message —
 // "Destination must point at /remote.php/dav/{files,trashbin}/{user}/..." —
-// which is actively misleading for the two cases where it DOES point there.
+// which is actively misleading for the three cases where it DOES point there.
 interface NcDestinationRefusal {
   reason: 'not-nc-path' | 'dot-segment' | 'space-root' | 'unaddressable'
 }
@@ -238,8 +238,8 @@ export class NcDavController {
       }
       const destInternal = await this.mapNcPathToInternal(user, destPath, getMounts)
       if (typeof destInternal !== 'string') {
-        // Three distinct refusals used to share one message that was wrong for
-        // two of them ("must point at /remote.php/dav/{files,trashbin}/{user}/"
+        // Four distinct refusals used to share one message that was wrong for
+        // three of them ("must point at /remote.php/dav/{files,trashbin}/{user}/"
         // for a Destination that does exactly that).
         throw new HttpException(`${DESTINATION_REFUSALS[destInternal.reason]}: ${destRaw}`, HttpStatus.BAD_REQUEST)
       }
@@ -255,8 +255,8 @@ export class NcDavController {
   // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
   // WebDAV-style path WebDAVSpaces.spaceEnv() / WEBDAV_PATH_TO_SPACE_SEGMENTS
   // expects — i.e. rooted at a WEBDAV_SPACES key (personal/spaces/shares/trash).
-  // Returns a refusal reason rather than a bare null: the three ways this can
-  // fail need three different 400 bodies (#512 review).
+  // Returns a refusal reason rather than a bare null: the four ways this can
+  // fail need four different 400 bodies (#512 review).
   //
   // Share-aware via buildUrlSegments: a destination whose first subpath
   // segment matches one of the user's incoming share aliases lands in
