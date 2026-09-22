@@ -1,11 +1,11 @@
 import { HttpService } from '@nestjs/axios'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
-import nodeFs, { type Dirent } from 'node:fs'
+import { type Dirent } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/auth-request.interface'
-import { generateThumbnail, webpMimeType } from '../../../common/image'
+import { generateThumbnail, maxThumbnailFallbackSize, sniffUndecodableImageFormat, webpMimeType } from '../../../common/image'
 import { SERVER_NAME } from '../../../common/shared'
 import { configuration } from '../../../configuration/config.environment'
 import { HTTP_METHOD } from '../../applications.constants'
@@ -918,17 +918,59 @@ export class FilesManager {
       // 404'ing, stream the original bytes so the client (browser, NC iOS
       // 17+ which decodes JXL/HEIC/AVIF natively) can render the image at
       // its real resolution. Trades bandwidth for "thumbnail renders" on
-      // the long tail of formats sharp doesn't handle. We stat the file
-      // for Content-Length — same NC-iOS-cache reason as the happy path.
-      this.logger.warn({
-        tag: this.generateThumbnail.name,
-        msg: `sharp decode failed for ${space.realPath}, falling back to original: ${(e as Error).message}`
-      })
-      const stats = await fs.stat(space.realPath)
-      return {
-        stream: nodeFs.createReadStream(space.realPath),
-        contentType: mimeType.replace('-', '/'),
-        contentLength: stats.size
+      // the long tail of formats sharp doesn't handle.
+      //
+      // #503 bounds that trade on two axes, because as first shipped it was
+      // unbounded in both and the classic + v2 grids inherited it unasked:
+      //
+      //  - WHAT: only a magic-byte-confirmed HEIC/HEIF/AVIF/JXL falls back.
+      //    "Any non-FileError" also caught a disguised SVG in a `.png` (the
+      //    mime here is EXTENSION-derived) and served its source verbatim.
+      //  - HOW MUCH: maxThumbnailFallbackSize, an order of magnitude under
+      //    the 50 MB decode cap. One grid render is one fallback PER TILE.
+      //
+      // Both refusals are FileError(BAD_REQUEST) — the code this endpoint
+      // returned before the fallback existed, and the one NcExtrasController
+      // already maps to NC's "no preview, draw the icon" 404.
+      const fallbackMime = await sniffUndecodableImageFormat(space.realPath)
+      if (!fallbackMime) {
+        this.logger.warn({
+          tag: this.generateThumbnail.name,
+          msg: `sharp decode failed for ${space.realPath} and the bytes are no known undecodable image format: ${(e as Error).message}`
+        })
+        throw new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+      }
+      // Invariant 3/6: pin the descriptor BEFORE sizing, and own it. Statting
+      // the path and then opening it let a write land between the two, so the
+      // advertised Content-Length described a file the body no longer was.
+      // fstat on the open handle cannot disagree with the bytes we go on to
+      // read. `autoClose` (default true) closes THROUGH FileHandle.close(), so
+      // ownership travels with the stream once we hand it over; every throw
+      // path before that must close it here.
+      const handle = await fs.open(space.realPath, 'r')
+      try {
+        const stats = await handle.stat()
+        if (stats.size > maxThumbnailFallbackSize) {
+          this.logger.warn({
+            tag: this.generateThumbnail.name,
+            msg: `sharp decode failed for ${space.realPath} and ${fallbackMime} original is ${stats.size} bytes, above the ${maxThumbnailFallbackSize} fallback cap`
+          })
+          throw new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+        }
+        this.logger.warn({
+          tag: this.generateThumbnail.name,
+          msg: `sharp decode failed for ${space.realPath}, falling back to the ${fallbackMime} original (${stats.size} bytes): ${(e as Error).message}`
+        })
+        return {
+          stream: handle.createReadStream(),
+          // The SNIFFED mime, not the extension-derived one: a HEIC saved as
+          // `.jpg` must not go out as image/jpeg or no client will decode it.
+          contentType: fallbackMime,
+          contentLength: stats.size
+        }
+      } catch (fallbackError) {
+        await handle.close().catch(() => undefined)
+        throw fallbackError
       }
     }
   }

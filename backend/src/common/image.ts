@@ -20,6 +20,16 @@ export const pngMimeType = 'image/png'
 export const svgMimeType = 'image/svg+xml'
 export const webpMimeType = 'image/webp'
 export const maxThumbnailInputSize = 50 * 1024 * 1024
+// Fork (#503): ceiling on the "sharp cannot decode this — stream the original
+// instead" fallback in FilesManager.generateThumbnail. Deliberately an order of
+// magnitude below maxThumbnailInputSize: that one bounds what we are willing to
+// DECODE (the response is a ~tens-of-KB webp either way), this one bounds what
+// we are willing to SEND VERBATIM, once per grid tile. At 50 MB a folder of 30
+// iPhone HEICs was ~1.5 GB of egress for one render. 8 MB still covers real
+// phone captures (HEIC/AVIF are typically 1-3 MB) while capping a full grid at
+// a few hundred MB worst case; past it the client gets the pre-fallback refusal
+// and renders its generic file icon.
+export const maxThumbnailFallbackSize = 8 * 1024 * 1024
 const avatarSize = 512
 const fontPath = path.join(__dirname, 'fonts', 'avatar.ttf')
 const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
@@ -62,6 +72,65 @@ export async function generateThumbnail(filePath: string, size: number): Promise
     })
     .webp({ quality: 80, effort: 0, alphaQuality: 90 })
     .toBuffer()
+}
+
+// Fork (#503): magic-byte sniff for the image formats sharp's prebuilt libvips
+// commonly cannot decode. Returns the canonical `image/*` mime, or null.
+//
+// This gates the stream-the-original fallback. Two reasons it must be a sniff
+// and not `getMimeType(path)`:
+//
+//  1. getMimeType is EXTENSION-based, so "any non-FileError decode failure"
+//     let a non-image with an image extension through — a disguised SVG in a
+//     `.png` was served verbatim as image/png, quietly undoing the rejection
+//     image.spec.ts pins ("blocks file-mode rendering when SVG content is
+//     disguised with another extension"). nosniff stops interpretation, but
+//     serving the source at all is not the behaviour that test describes.
+//  2. The interesting real case is the opposite mislabel — JPEG XL or HEIC
+//     saved as `.jpg` — which only the bytes reveal.
+//
+// Deliberately narrow: a corrupt JPEG, a truncated PNG or a PDF renamed to
+// .png all sniff as null and get the refusal, because no client can render
+// those either.
+export async function sniffUndecodableImageFormat(filePath: string): Promise<string | null> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null
+  try {
+    fh = await fs.open(filePath, 'r')
+    const buf = Buffer.alloc(magicProbeBytes)
+    const { bytesRead } = await fh.read(buf, 0, magicProbeBytes, 0)
+    return sniffMagic(buf.subarray(0, bytesRead))
+  } catch {
+    return null
+  } finally {
+    await fh?.close().catch(() => undefined)
+  }
+}
+
+const magicProbeBytes = 16
+// ISOBMFF major brands (bytes 8..12, after the `ftyp` box type at 4..8).
+const isoBrandMimes: Record<string, string> = {
+  heic: 'image/heic',
+  heix: 'image/heic',
+  hevc: 'image/heic',
+  hevx: 'image/heic',
+  heim: 'image/heic',
+  heis: 'image/heic',
+  mif1: 'image/heif',
+  msf1: 'image/heif',
+  avif: 'image/avif',
+  avis: 'image/avif'
+}
+
+function sniffMagic(head: Buffer): string | null {
+  // JPEG XL, naked codestream.
+  if (head.length >= 2 && head[0] === 0xff && head[1] === 0x0a) return 'image/jxl'
+  // JPEG XL, ISOBMFF container: 12-byte signature box.
+  if (head.length >= 12 && head.subarray(0, 12).toString('hex') === '0000000c4a584c200d0a870a') return 'image/jxl'
+  // HEIC / HEIF / AVIF: `....ftyp<brand>`.
+  if (head.length >= 12 && head.subarray(4, 8).toString('ascii') === 'ftyp') {
+    return isoBrandMimes[head.subarray(8, 12).toString('ascii').toLowerCase()] ?? null
+  }
+  return null
 }
 
 export async function generateAvatar(initials: string): Promise<NodeJS.ReadableStream> {

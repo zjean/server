@@ -4,7 +4,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import sharp from 'sharp'
 import { maxFileSizeExceededError } from '../applications/files/utils/errors'
-import { generateThumbnail, maxThumbnailInputSize } from './image'
+import { generateThumbnail, maxThumbnailFallbackSize, maxThumbnailInputSize, sniffUndecodableImageFormat } from './image'
 
 // 1×1 transparent PNG (smallest valid PNG, hex-encoded).
 const tinyPng = Buffer.from(
@@ -96,5 +96,76 @@ describe(generateThumbnail.name, () => {
     // The Buffer return means this now rejects from the call itself rather than
     // during stream consumption — upstream needed an async IIFE here.
     await expect(generateThumbnail(disguisedSvgPath, 32)).rejects.toThrow()
+  })
+})
+
+// Fork (#503): gate for FilesManager.generateThumbnail's "sharp cannot decode
+// this — stream the original" fallback. The point of sniffing rather than
+// trusting the extension is that BOTH mislabel directions are real: a HEIC
+// saved as .jpg (must fall back) and an SVG saved as .png (must not).
+describe(sniffUndecodableImageFormat.name, () => {
+  let tmpDir: string
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), 'thumbnail-sniff-'))
+  })
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true })
+  })
+
+  async function write(name: string, bytes: Buffer | string): Promise<string> {
+    const file = path.join(tmpDir, name)
+    await writeFile(file, bytes)
+    return file
+  }
+
+  // `....ftyp<brand>` — the ISO base media container both HEIC and AVIF use.
+  function isobmff(brand: string): Buffer {
+    return Buffer.concat([Buffer.from('00000018', 'hex'), Buffer.from('ftyp', 'ascii'), Buffer.from(brand, 'ascii'), Buffer.alloc(8)])
+  }
+
+  it.each([
+    ['heic', 'image/heic'],
+    ['heix', 'image/heic'],
+    ['mif1', 'image/heif'],
+    ['avif', 'image/avif'],
+    ['avis', 'image/avif']
+  ])('recognises the ISOBMFF brand %s as %s', async (brand, mime) => {
+    // Extension deliberately wrong — the whole point is that bytes win.
+    expect(await sniffUndecodableImageFormat(await write(`photo-${brand}.jpg`, isobmff(brand)))).toBe(mime)
+  })
+
+  it('recognises a naked JPEG XL codestream', async () => {
+    expect(await sniffUndecodableImageFormat(await write('shot.jpg', Buffer.from('ff0a' + '00'.repeat(14), 'hex')))).toBe('image/jxl')
+  })
+
+  it('recognises a JPEG XL ISOBMFF signature box', async () => {
+    expect(await sniffUndecodableImageFormat(await write('shot.jxl', Buffer.from('0000000c4a584c200d0a870a' + '00'.repeat(4), 'hex')))).toBe(
+      'image/jxl'
+    )
+  })
+
+  it.each([
+    ['a real PNG', 'real.png', tinyPng],
+    ['an SVG disguised as a PNG', 'disguised.png', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"></svg>')],
+    ['a JPEG', 'photo.jpg', Buffer.from('ffd8ffe000104a46494600' + '00'.repeat(8), 'hex')],
+    ['a PDF renamed to .png', 'doc.png', Buffer.from('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n')],
+    ['an unknown ISOBMFF brand', 'clip.png', isobmff('mp42')],
+    ['an empty file', 'empty.png', Buffer.alloc(0)],
+    ['a file too short to carry any signature', 'stub.png', Buffer.from('ff', 'hex')]
+  ])('returns null for %s', async (_label, name, bytes) => {
+    expect(await sniffUndecodableImageFormat(await write(name, bytes))).toBeNull()
+  })
+
+  it('returns null rather than throwing when the file is gone', async () => {
+    expect(await sniffUndecodableImageFormat(path.join(tmpDir, 'does-not-exist.heic'))).toBeNull()
+  })
+
+  // The fallback ceiling must stay well under the decode ceiling: one bounds
+  // what we DECODE (answer is a tens-of-KB webp), the other what we SEND
+  // VERBATIM, once per grid tile.
+  it('caps the fallback far below the decode input cap', () => {
+    expect(maxThumbnailFallbackSize).toBeLessThan(maxThumbnailInputSize)
   })
 })

@@ -2,7 +2,7 @@ import { HttpService } from '@nestjs/axios'
 import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { lookup } from 'node:dns/promises'
-import nodeFs, { type ReadStream, type Stats } from 'node:fs'
+import { type Stats } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { PassThrough, Readable } from 'node:stream'
@@ -1624,24 +1624,103 @@ describe(FilesManager.name, () => {
     await expect(service.generateThumbnail(space, 256)).rejects.toEqual(new FileError(HttpStatus.BAD_REQUEST, 'File is not an image'))
   })
 
-  it('generateThumbnail falls back to original bytes (with file length) when sharp cannot decode', async () => {
-    // Real-world trigger: JPEG XL (.jpg with `ff 0a` magic) and HEIC files
-    // sharp's prebuilt libvips can't decode. Service streams the raw file
-    // with the original mime instead of 404'ing — modern clients (browsers,
-    // NC iOS 17+) decode these natively. We stat the file for Content-Length
-    // because NC iOS' preview cache rejects responses without one.
-    const space = makeSpace({ realPath: '/data/users/john/files/jxl-as-jpg.jpg' })
-    ;(filesUtils.isPathExists as Mock).mockResolvedValueOnce(true)
-    ;(filesUtils.getMimeType as Mock).mockReturnValueOnce('image-jpeg')
-    vi.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(new Error('Input file contains unsupported image format'))
-    const fakeStream = new PassThrough()
-    vi.spyOn(nodeFs, 'createReadStream').mockReturnValueOnce(fakeStream as unknown as ReadStream)
-    vi.spyOn(fs, 'stat').mockResolvedValueOnce({ size: 12345 } as Stats)
+  // #503: the fallback is bounded on two axes. These four cases pin both,
+  // plus the descriptor ownership the bound introduces.
+  describe('generateThumbnail sharp-decode fallback (#503)', () => {
+    // Stand-in for a node:fs/promises FileHandle. `closed` is what the
+    // descriptor-leak assertions read — invariant 6: acquiring a pinned
+    // handle and then throwing must not drop it.
+    function fakeHandle(size: number) {
+      const stream = new PassThrough()
+      const handle = {
+        size,
+        closed: false,
+        stat: vi.fn(async () => ({ size }) as Stats),
+        createReadStream: vi.fn(() => stream),
+        close: vi.fn(async () => {
+          handle.closed = true
+        })
+      }
+      return { handle, stream }
+    }
 
-    const result = await service.generateThumbnail(space, 256)
+    function decodeFails(realPath: string, extensionMime: string) {
+      const space = makeSpace({ realPath })
+      ;(filesUtils.isPathExists as Mock).mockResolvedValueOnce(true)
+      ;(filesUtils.getMimeType as Mock).mockReturnValueOnce(extensionMime)
+      vi.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(new Error('Input file contains unsupported image format'))
+      return space
+    }
 
-    expect(nodeFs.createReadStream).toHaveBeenCalledWith(space.realPath)
-    expect(result).toEqual({ stream: fakeStream, contentType: 'image/jpeg', contentLength: 12345 })
+    it('streams the original for a magic-confirmed undecodable format, sized from the OPEN handle', async () => {
+      // Real-world trigger: a HEIC or JPEG XL saved with a `.jpg` extension.
+      // sharp's prebuilt libvips can't decode either; NC iOS 17+ and Safari
+      // can. Content-Length is mandatory (NC iOS' preview cache drops
+      // unlengthed responses) and comes from fstat on the pinned handle, not
+      // from a separate stat of the path — a write landing between a stat and
+      // an open would make the declared length describe a body we no longer
+      // send.
+      const space = decodeFails('/data/users/john/files/heic-as-jpg.jpg', 'image-jpeg')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/heic')
+      const { handle, stream } = fakeHandle(1234)
+      vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
+      const statPath = vi.spyOn(fs, 'stat')
+
+      const result = await service.generateThumbnail(space, 256)
+
+      expect(fs.open).toHaveBeenCalledWith(space.realPath, 'r')
+      expect(handle.stat).toHaveBeenCalled()
+      expect(statPath).not.toHaveBeenCalled()
+      // The SNIFFED mime, not the `.jpg` extension's — a client handed
+      // image/jpeg for HEIC bytes decodes nothing.
+      expect(result).toEqual({ stream, contentType: 'image/heic', contentLength: 1234 })
+      // Ownership travels with the stream (autoClose), so we must NOT have
+      // closed the handle on the success path.
+      expect(handle.closed).toBe(false)
+    })
+
+    it('refuses instead of streaming when the bytes are no known undecodable format', async () => {
+      // The second-order hole: getMimeType is EXTENSION-based, so a disguised
+      // SVG in a `.png` reached the fallback and was served verbatim as
+      // image/png — quietly undoing image.spec.ts' disguised-SVG rejection.
+      const space = decodeFails('/data/users/john/files/disguised.png', 'image-png')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce(null)
+      const open = vi.spyOn(fs, 'open')
+
+      await expect(service.generateThumbnail(space, 256)).rejects.toEqual(
+        new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+      )
+      // Never even opened the file, let alone streamed it.
+      expect(open).not.toHaveBeenCalled()
+    })
+
+    it('refuses above maxThumbnailFallbackSize and releases the pinned handle', async () => {
+      // A folder of 30 iPhone HEICs at the old 50 MB ceiling was ~1.5 GB of
+      // egress for ONE grid render, because the fallback is per tile.
+      const space = decodeFails('/data/users/john/files/huge.heic', 'image-heic')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/heic')
+      const { handle } = fakeHandle(imageUtils.maxThumbnailFallbackSize + 1)
+      vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
+
+      await expect(service.generateThumbnail(space, 256)).rejects.toEqual(
+        new FileError(HttpStatus.BAD_REQUEST, 'Unable to generate a thumbnail for this file')
+      )
+      expect(handle.createReadStream).not.toHaveBeenCalled()
+      // Invariant 6: the throw path owns the descriptor it acquired.
+      expect(handle.closed).toBe(true)
+    })
+
+    it('accepts a file exactly at the cap', async () => {
+      const space = decodeFails('/data/users/john/files/edge.avif', 'image-avif')
+      vi.spyOn(imageUtils, 'sniffUndecodableImageFormat').mockResolvedValueOnce('image/avif')
+      const { handle } = fakeHandle(imageUtils.maxThumbnailFallbackSize)
+      vi.spyOn(fs, 'open').mockResolvedValueOnce(handle as never)
+
+      const result = await service.generateThumbnail(space, 256)
+
+      expect(result.contentLength).toBe(imageUtils.maxThumbnailFallbackSize)
+      expect(result.contentType).toBe('image/avif')
+    })
   })
 
   // Ported from upstream's generateThumbnail suite, adapted to the fork's
@@ -1668,10 +1747,10 @@ describe(FilesManager.name, () => {
     ;(filesUtils.isPathExists as Mock).mockResolvedValueOnce(true)
     ;(filesUtils.getMimeType as Mock).mockReturnValueOnce('image-png')
     vi.spyOn(imageUtils, 'generateThumbnail').mockRejectedValueOnce(maxFileSizeExceededError())
-    const createReadStream = vi.spyOn(nodeFs, 'createReadStream')
+    const sniff = vi.spyOn(imageUtils, 'sniffUndecodableImageFormat')
 
     await expect(service.generateThumbnail(space, 256)).rejects.toEqual(maxFileSizeExceededError())
-    expect(createReadStream).not.toHaveBeenCalled()
+    expect(sniff).not.toHaveBeenCalled()
   })
 
   describe('downloadFromUrl', () => {
