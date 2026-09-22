@@ -11,6 +11,8 @@ import { HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { FileError } from '../files/models/file-error'
+import { LockConflict } from '../files/models/file-lock-error'
 import { CustomDiagramsService } from './custom-diagrams.service'
 import { Mock } from 'vitest'
 
@@ -272,8 +274,65 @@ describe('CustomDiagramsService', () => {
     it('refuses a path that climbs out of a known repository', async () => {
       // sanitizePath normalizes first, so this resolves to `etc/passwd` — a
       // repository canAccessToSpaceUrl does not recognise → 403.
+      //
+      // ORDERING CASE. `passwd` is not a diagram extension either, so this also
+      // pins that the repository check runs BEFORE the extension gate: a 400
+      // here would be the wrong answer to "may you look at this at all?".
       await expect(service.load(mockUser, 'files/personal/../../etc/passwd')).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
       expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    })
+
+    // #474 / merge with #525. Without this gate the pair of routes is a generic
+    // read-any-file / replace-any-file primitive: a GET returned up to 10 MB of
+    // a docx as JSON with a sha1 etag, and a PUT with that etag replaced it.
+    describe('extension gate', () => {
+      it.each([
+        ['load', () => service.load(mockUser, 'files/personal/report.docx')],
+        ['save', () => service.save(mockUser, { path: 'files/personal/report.docx', xml: '<mxfile/>', etag: 'x' })]
+      ])('refuses %s of a non-diagram file before resolving the space', async (_name, call) => {
+        ;(existsSync as Mock).mockReturnValue(true)
+        await expect(call()).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+        // ORDERING CASE, the other half: the gate must run BEFORE space
+        // resolution, so a non-diagram path never reaches the resolver.
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+      })
+
+      it('refuses an extensionless path', async () => {
+        await expect(service.load(mockUser, 'files/personal/README')).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+      })
+
+      it.each(['diagram.drawio', 'diagram.DRAWIO', 'board.dwb'])('accepts %s', async (name) => {
+        spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+        ;(existsSync as Mock).mockReturnValue(true)
+        vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+        await expect(service.load(mockUser, `files/personal/${name}`)).resolves.toBeDefined()
+      })
+
+      it('refuses createNew of a non-diagram name', async () => {
+        await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'payload.sh' })).rejects.toMatchObject({
+          status: HttpStatus.BAD_REQUEST
+        })
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+        expect(filesManager.mkFile).not.toHaveBeenCalled()
+      })
+    })
+
+    // The guard wraps `spaceEnv` in try/catch → 400 and maps a null space to
+    // 404. `authorize` claims to reproduce the guard faithfully; without these
+    // two steps both cases escaped as a bare Error / a wrong status.
+    describe('guard-equivalent error shapes', () => {
+      it('turns an unresolvable path into 400, not 500', async () => {
+        // `spacesManager.spaceEnv` throws a bare Error for a repository root
+        // with no space segment (`GET /api/diagrams/load?path=files`).
+        spacesManager.spaceEnv.mockRejectedValue(new Error('unable to resolve space'))
+        await expect(service.load(mockUser, 'files/personal/test.drawio')).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+      })
+
+      it('turns an unknown space into 404, not 403', async () => {
+        spacesManager.spaceEnv.mockResolvedValue(null)
+        await expect(service.load(mockUser, 'files/personal/test.drawio')).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
+      })
     })
   })
 
@@ -299,6 +358,38 @@ describe('CustomDiagramsService', () => {
       expect(contents).toContain('<mxCell id="0"/>')
       expect(contents).toContain('<mxCell id="1" parent="0"/>')
       expect(result.path).toBe('files/personal/test.drawio')
+    })
+
+    it('sanitises the name half of the path, not just dirPath', async () => {
+      // `NewDiagramDto.name` is only @IsString @IsNotEmpty, so it arrives able
+      // to carry separators and `..`. Only `dirPath` may say where the file
+      // goes.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockResolvedValue(undefined)
+      vi.mocked(writeFile).mockResolvedValue(undefined)
+
+      const result = await service.createNew(mockUser, { dirPath: 'files/personal', name: '../../evil.drawio' })
+      expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'evil.drawio'])
+      expect(result.path).toBe('files/personal/evil.drawio')
+    })
+
+    it("translates mkFile's FileError into its own status instead of a 500", async () => {
+      // `FileError` extends Error, not HttpException, and this controller has
+      // no @UseFilters — so an existing name used to answer 500.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockRejectedValue(new FileError(HttpStatus.BAD_REQUEST, 'Resource already exists'))
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST
+      })
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it('translates a LockConflict into 423', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockRejectedValue(new LockConflict({} as any, 'locked'))
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.LOCKED
+      })
     })
   })
 })
