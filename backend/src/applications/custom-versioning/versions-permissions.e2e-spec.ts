@@ -163,14 +163,32 @@ describe('versions permissions (e2e)', () => {
     // path for someone with no access, so it answers before any versioning code
     // runs. 404 rather than 403 is deliberate — a 403 would confirm the file
     // exists.
-    it('cannot reach the endpoints at all', async () => {
-      for (const res of [await outsiderApi.list(rel), await outsiderApi.usage(rel)]) {
-        expect([403, 404]).toContain(res.status)
-      }
+    //
+    // ASSERTED AS EXACTLY 404, not as `[403, 404]`. The disjunction this replaces
+    // pinned nothing: it is satisfied by either guard answering, so the guest
+    // block below could not have leant on it. The exact status is the whole
+    // point of that contrast, and it is derivable rather than guessed — the
+    // fixture's `addUser` grants every USER_PERMISSION, so `canAccessToSpaceUrl`
+    // passes on `files/<alias>` (the SPACES permission) and the 403 branch of
+    // SpaceGuard is never taken; `spacesQueries.permissions` then finds no row
+    // for a non-member, `spaceEnv` returns null, and the guard throws
+    // 'Space not found' with 404. Note that happens BEFORE the per-method
+    // permission check, which is why the writes below answer 404 and not the
+    // read-only member's 403.
+    it('cannot reach the endpoints at all — 404, from path resolution', async () => {
       const [version] = (await ownerApi.list(rel)).body
-      expect([403, 404]).toContain((await outsiderApi.content(version.id, rel)).status)
-      expect([403, 404]).toContain((await outsiderApi.restore(version.id, rel)).status)
-      expect([403, 404]).toContain((await outsiderApi.remove(version.id, rel)).status)
+      // Keyed by route so a failure names the one that diverged rather than
+      // printing two anonymous arrays.
+      expect({
+        list: (await outsiderApi.list(rel)).status,
+        usage: (await outsiderApi.usage(rel)).status,
+        content: (await outsiderApi.content(version.id, rel)).status,
+        diff: (await outsiderApi.diff(version.id, rel)).status,
+        editorHistory: (await outsiderApi.editorHistory(rel)).status,
+        restore: (await outsiderApi.restore(version.id, rel)).status,
+        label: (await outsiderApi.label(version.id, rel, 'nope')).status,
+        remove: (await outsiderApi.remove(version.id, rel)).status
+      }).toEqual({ list: 404, usage: 404, content: 404, diff: 404, editorHistory: 404, restore: 404, label: 404, remove: 404 })
     })
   })
 
@@ -196,11 +214,14 @@ describe('versions permissions (e2e)', () => {
       guestApi = e2e.makeApiFor({ cookie: guest.cookie, csrf: guest.csrf }, `files/${spaceAlias}`)
     })
 
-    // Asserted as EXACTLY 403, and contrasted with the outsider's 404 on the
-    // same urls above, because that difference is the evidence the role guard is
-    // in the request path at all: a guest who is no more a member than the
-    // outsider is would otherwise be refused by SpaceGuard for an unrelated
-    // reason, and this case would pass with the gate removed.
+    // Asserted as EXACTLY 403, and contrasted with the outsider's EXACTLY 404 on
+    // the same urls above, because that difference is the evidence the role guard
+    // is in the request path at all: a guest is no more a member of this space
+    // than the outsider is, so with the @UserHaveRole pair removed SpaceGuard
+    // would refuse them for the same unrelated reason and answer the same 404.
+    // The contrast only carries that weight because the outsider case now pins
+    // one status instead of accepting either — with a disjunction there, both
+    // cases would have stayed green through the gate's removal.
     it('is refused every read, by the role guard rather than by path resolution', async () => {
       const [version] = (await ownerApi.list(rel)).body
 
@@ -211,6 +232,12 @@ describe('versions permissions (e2e)', () => {
       expect((await guestApi.editorHistory(rel)).status).toBe(403)
     })
 
+    // The writes are denied twice over: this controller's role guard, and
+    // `requireInternalPrincipal` inside the service — which is what covers the
+    // two controllers that do not sit behind the guard, NcVersionsController
+    // reaching all three of these (MOVE / PROPPATCH / DELETE). Only the guard
+    // half is observable from here; the backstop half is pinned in
+    // versioning.service.spec.ts.
     it('is refused every write too, and the history is still standing afterwards', async () => {
       const [version] = (await ownerApi.list(rel)).body
 
