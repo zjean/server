@@ -1798,6 +1798,41 @@ describe(VersioningService.name, () => {
     await expect(service.listVersions(user, personalSpace())).resolves.toHaveLength(1)
   })
 
+  // The WRITE half of the same backstop. VersioningController gates these too,
+  // but the gate is on the controller and NcVersionsController reaches all three
+  // of them without it (MOVE / PROPPATCH / DELETE) — so "the controller covers
+  // it" is precisely the reasoning this test exists to stop depending on.
+  //
+  // The unknown-id assertion is the one that proves WHERE the check sits: 999_999
+  // is not this file's version, so requireVersionForWrite would answer 404. A
+  // guest getting 403 for it means the principal check ran BEFORE the version was
+  // resolved — above the `!this.enabled` 404 inside requireVersionFor, and above
+  // restoreVersion's blob descriptor.
+  it('refuses restore, label and delete to a guest or a link principal', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect(queries.rows).toHaveLength(1)
+    const id = queries.rows[0].id
+
+    const writes: ((u: UserModel, versionId: number) => Promise<void>)[] = [
+      (u, versionId) => service.restoreVersion(u, personalSpace(), versionId),
+      (u, versionId) => service.setLabel(u, personalSpace(), versionId, 'x'),
+      (u, versionId) => service.deleteVersion(u, personalSpace(), versionId)
+    ]
+    for (const outsider of [guest, linkUser]) {
+      for (const write of writes) {
+        await expect(write(outsider, id)).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+        await expect(write(outsider, 999_999)).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+      }
+    }
+
+    // Refused, not refused-after-destroying: the row, its label and the live
+    // bytes are all as the owner left them.
+    expect(queries.rows).toHaveLength(1)
+    expect(queries.rows[0].label).toBeNull()
+    expect(await fs.readFile(filePath, 'utf8')).toBe(CONTENT)
+  })
+
   // The identity half of the disclosure, stated on its own because it is what
   // the issue leads with: the row carries the author's login and full name, and
   // the live file a link visitor can already read carries nothing of the kind.

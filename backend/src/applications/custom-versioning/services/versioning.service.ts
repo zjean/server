@@ -541,6 +541,21 @@ export class VersioningService {
   // NcVersionsController (NC basic auth). Both declare
   // VersioningExceptionsFilter, so this FileError becomes a 403 rather than a
   // 500.
+  //
+  // CALLED FROM EVERY PUBLIC BY-USER ENTRY POINT, reads and writes alike — the
+  // three reads below, and restoreVersion / setLabel / deleteVersion. The writes
+  // are NOT covered "because the controller gates them": that reasoning is
+  // exactly what this backstop exists to not depend on, and NcVersionsController
+  // reaches all three of them (MOVE / PROPPATCH / DELETE). They are refused
+  // there today only because `validateAppPassword`'s first check happens to be
+  // `haveRole(USER_ROLE.USER)` — relax the NC surface to admit guests, or
+  // resolve a revision by direct query instead of routing through listVersions,
+  // and without this line guest WRITES would silently re-open.
+  //
+  // Placement is load-bearing in each caller: above anything that acquires a
+  // resource (invariant 6), and above every `!this.enabled` early return — which
+  // is what makes the specs real throw-assertions rather than passes that only
+  // hold while the feature flag is off.
   private requireInternalPrincipal(user: UserModel): void {
     if (user.isGuest || user.isLink) {
       throw new FileError(HttpStatus.FORBIDDEN, 'Version history is not available for this account')
@@ -670,6 +685,9 @@ export class VersioningService {
   // descriptor keeps the bytes alive across an unlink, so eviction can no
   // longer pull them away mid-restore.
   async restoreVersion(user: UserModel, space: SpaceEnv, versionId: number): Promise<void> {
+    // Before the version is even resolved, and before the blob below is opened:
+    // same reason as getVersionStream's, plus this one takes a server lock.
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
 
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
@@ -722,6 +740,7 @@ export class VersioningService {
   }
 
   async setLabel(user: UserModel, space: SpaceEnv, versionId: number, label: string | null): Promise<void> {
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
     await this.queries.setLabel(version.id, label?.trim() ? label.trim() : null)
   }
@@ -730,6 +749,7 @@ export class VersioningService {
   // revision is exempt from every automatic pruning rule, so removing one is
   // always a deliberate act.
   async deleteVersion(user: UserModel, space: SpaceEnv, versionId: number, confirmLabeled = false): Promise<void> {
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionForWrite(user, space, versionId)
     if (version.label && !confirmLabeled) {
       throw new FileError(HttpStatus.CONFLICT, 'This version is named, confirmation is required to delete it')
