@@ -403,6 +403,26 @@ describe('versions write paths and invariants (e2e)', () => {
       expect((await fs.readdir(path.dirname(e2e.filesPath(rel)))).filter((n) => n.includes('.tmp-'))).toEqual([])
     })
 
+    // `mkFile` throws FileError, which extends Error and not HttpException;
+    // with no filter on the controller that reaches the client as a 500. Only
+    // a real request can show the status the user actually gets, which is why
+    // this case is here and not in the unit spec beside its sibling.
+    it('answers a duplicate name with 400, not an opaque 500', async () => {
+      const body = { dirPath: 'files/personal', name: 'e2e-diagram-new.drawio' }
+      const create = () =>
+        e2e.app.inject({
+          method: 'POST',
+          url: '/api/diagrams/new',
+          headers: { cookie: e2e.session.cookie, 'sync-in-csrf': e2e.session.csrf },
+          body
+        } as never)
+
+      expect((await create()).statusCode).toBe(201)
+      const second = await create()
+      expect(second.statusCode).toBe(400)
+      expect(second.json()).toMatchObject({ message: 'Resource already exists' })
+    })
+
     it('refuses to read or replace a file that is not a diagram', async () => {
       const rel = 'e2e-diagram-not-a-diagram.docx'
       await e2e.seed(rel, 'a real document')

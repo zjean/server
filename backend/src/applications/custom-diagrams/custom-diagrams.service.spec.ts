@@ -1,4 +1,4 @@
-import { HttpStatus } from '@nestjs/common'
+import { HttpException, HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -6,6 +6,7 @@ import { Readable } from 'node:stream'
 import { ACTION } from '../../common/constants'
 import { SERVER_NAME } from '../../common/shared'
 import { FileEvent } from '../files/events/file-events'
+import { FileError } from '../files/models/file-error'
 import { LockConflict } from '../files/models/file-lock-error'
 import { writeFromStream } from '../files/utils/files'
 import { CustomDiagramsService } from './custom-diagrams.service'
@@ -208,10 +209,15 @@ describe('CustomDiagramsService', () => {
       }
     })
 
-    // `writeFromStream` truncates the destination the moment the stream opens
-    // (flag 'w'), so it must never be reached with a `start` offset or a second
-    // destination — the only argument shape that keeps the inode is this one.
-    it('never passes a start offset to writeFromStream', async () => {
+    // `writeFromStream` picks its open flag from `options.start`: 'w' (truncate
+    // in place, inode kept) when it is 0 or absent, 'a' (append) otherwise —
+    // `files/utils/files.ts:253`. So the invariant is about the ARGUMENT LIST,
+    // and the obvious way to write this test cannot fail: destructuring
+    // `[, , options]` from a two-argument call binds `undefined`, and
+    // `options?.start ?? 0` is then `0` no matter what production does. Assert
+    // the arity first — that is the assertion with teeth, because the only way
+    // a `start` can ever appear is a third argument appearing.
+    it('calls writeFromStream with just the live path and the stream, so the write cannot become an append', async () => {
       const baseXml = '<mxfile><a/></mxfile>'
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       ;(existsSync as Mock).mockReturnValue(true)
@@ -219,8 +225,12 @@ describe('CustomDiagramsService', () => {
 
       await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><c/></mxfile>', etag: sha1(baseXml) })
 
-      const [, , options] = vi.mocked(writeFromStream).mock.calls[0]
-      expect(options?.start ?? 0).toBe(0)
+      const call = vi.mocked(writeFromStream).mock.calls[0]
+      expect(call).toHaveLength(2)
+      expect(call[0]).toBe('/data/test.drawio')
+      // Belt and braces for the day someone does add an options bag: it must
+      // still resolve to offset 0.
+      expect((call[2] as { start?: number } | undefined)?.start ?? 0).toBe(0)
     })
 
     /* ------------------------------------------------------- #474 versioning */
@@ -364,6 +374,53 @@ describe('CustomDiagramsService', () => {
   })
 
   describe('createNew', () => {
+    /* `mkFile` throws FileError / LockConflict, and BOTH extend Error rather
+       than HttpException. The controller has no `@UseFilters` and the app has
+       no global filter, so an untranslated one is a 500 with an opaque body.
+       `save` translated LockConflict from the very first commit; `createNew`,
+       one method below, did not — POSTing a name that already exists answered
+       500 where mkFile itself says 400. */
+    it.each([
+      [
+        'a name that is already taken',
+        new FileError(HttpStatus.BAD_REQUEST, 'Resource already exists'),
+        HttpStatus.BAD_REQUEST,
+        'Resource already exists'
+      ],
+      [
+        "someone else's lock on the parent",
+        new LockConflict({ key: 'someone-else' } as any, 'Conflicting lock'),
+        HttpStatus.LOCKED,
+        'The file is locked'
+      ]
+    ])('answers %s with an HTTP status, not a 500', async (_label, thrown, status, message) => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockRejectedValue(thrown)
+      const emit = vi.spyOn(FileEvent, 'emit').mockReturnValue(true)
+      try {
+        const err = await service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' }).catch((e: unknown) => e)
+        expect(err).toBeInstanceOf(HttpException)
+        expect((err as HttpException).getStatus()).toBe(status)
+        expect((err as HttpException).message).toBe(message)
+        // Nothing was seeded and nothing was announced.
+        expect(writeFile).not.toHaveBeenCalled()
+        expect(emit).not.toHaveBeenCalled()
+      } finally {
+        emit.mockRestore()
+      }
+    })
+
+    // Only the two typed file errors are translated. A disk failure really is
+    // a 500 and must not be dressed up as a client error.
+    it('lets an unrecognised error through untouched', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockResolvedValue(undefined)
+      const ioError = Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' })
+      vi.mocked(writeFile).mockRejectedValue(ioError)
+
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toBe(ioError)
+    })
+
     it('creates file seeded with a valid mxGraph skeleton', async () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
       filesManager.mkFile.mockResolvedValue(undefined)
