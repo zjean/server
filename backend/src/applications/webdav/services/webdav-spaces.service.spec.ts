@@ -248,6 +248,55 @@ describe(WebDAVSpaces.name, () => {
     })
   })
 
+  // #505: the `withDetails` argument is a one-word difference from upstream's
+  // `browse(req.user, space)` and losing it in a merge is silent in both
+  // directions — dropped, NC mobile loses <nc:has-comments> / <oc:share-types>
+  // / <nc:lock>; hardcoded `true`, every classic PROPFIND Depth:1 pays for
+  // four extra queries it filters off the wire. Pin both ends.
+  describe('propfind - browse details are caller-driven (#505)', () => {
+    const detailsReq = () =>
+      ({
+        user,
+        dav: { url: '/webdav/files/personal/current', depth: DEPTH.MEMBERS },
+        space: { inSharesList: false, realPath: '/path/current' }
+      }) as unknown as FastifyDAVRequest
+
+    beforeEach(() => {
+      vi.mocked(isPathExists).mockResolvedValue(true)
+      vi.mocked(isPathIsDir).mockResolvedValue(true)
+      vi.mocked(getProps).mockResolvedValue({
+        id: 100,
+        name: 'current',
+        isDir: true,
+        size: 0,
+        ctime: Date.now(),
+        mtime: Date.now(),
+        mime: undefined
+      })
+      vi.mocked(spacesBrowser.browse).mockResolvedValue({ files: [] } as any)
+    })
+
+    it('does not request details by default (classic WebDAV)', async () => {
+      await collectGenerator(service.propfind(detailsReq(), SPACE_REPOSITORY.FILES))
+      expect(spacesBrowser.browse).toHaveBeenCalledWith(user, expect.anything(), false)
+    })
+
+    it('requests details when the caller asks for them (NC compat)', async () => {
+      await collectGenerator(service.propfind(detailsReq(), SPACE_REPOSITORY.FILES, true))
+      expect(spacesBrowser.browse).toHaveBeenCalledWith(user, expect.anything(), true)
+    })
+
+    it('threads the flag through the shares-list branch too', async () => {
+      const req = {
+        user,
+        dav: { url: '/webdav/files/personal', depth: DEPTH.MEMBERS },
+        space: { inSharesList: true, realPath: '/any/ignored' }
+      } as unknown as FastifyDAVRequest
+      await collectGenerator(service.propfind(req, SPACE_REPOSITORY.FILES, true))
+      expect(spacesBrowser.browse).toHaveBeenCalledWith(user, expect.anything(), true)
+    })
+  })
+
   describe('propfind - unknown space', () => {
     it('throws not found for unknown space', () => {
       const req = { user, dav: { url: '/webdav/unknown', depth: DEPTH.RESOURCE } } as unknown as FastifyDAVRequest

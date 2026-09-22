@@ -20,6 +20,23 @@ export const pngMimeType = 'image/png'
 export const svgMimeType = 'image/svg+xml'
 export const webpMimeType = 'image/webp'
 export const maxThumbnailInputSize = 50 * 1024 * 1024
+// Fork (#503): ceiling on the "sharp cannot decode this — stream the original
+// instead" fallback in FilesManager.generateThumbnail. Deliberately an order of
+// magnitude below maxThumbnailInputSize: that one bounds what we are willing to
+// DECODE (the response is a ~tens-of-KB webp either way), this one bounds what
+// we are willing to SEND VERBATIM, once per grid tile — and a grid render is
+// one fallback PER TILE, so without a cap a single folder view is bounded only
+// by maxThumbnailInputSize times the tile count (30 × 50 MB ≈ 1.5 GB).
+//
+// What actually reaches the fallback in THIS build (libvips 8.18.6, measured
+// 2026-09-22): BMP and ICO (no loader at all), JPEG XL (`input.buffer` false)
+// and HEVC-coded HEIC — the `heif` loader is present but AVIF-only
+// (`fileSuffix: ['.avif']`), so an AVIF decodes normally and never gets here.
+// 8 MB still covers real phone captures (HEIC is typically 1-3 MB) and any
+// plausible BMP or favicon, while capping a full grid at a few hundred MB
+// worst case; past it the client gets the pre-fallback refusal and renders its
+// generic file icon.
+export const maxThumbnailFallbackSize = 8 * 1024 * 1024
 const avatarSize = 512
 const fontPath = path.join(__dirname, 'fonts', 'avatar.ttf')
 const loadTextToSVG = promisify(TextToSVG.load.bind(TextToSVG))
@@ -62,6 +79,112 @@ export async function generateThumbnail(filePath: string, size: number): Promise
     })
     .webp({ quality: 80, effort: 0, alphaQuality: 90 })
     .toBuffer()
+}
+
+// Fork (#503): magic-byte sniff for the image formats sharp's prebuilt libvips
+// cannot decode but a browser (or NC iOS) still can. Returns the canonical
+// `image/*` mime, or null.
+//
+// This gates the stream-the-original fallback. Two reasons it must be a sniff
+// and not `getMimeType(path)`:
+//
+//  1. getMimeType is EXTENSION-based, so "any non-FileError decode failure"
+//     let a non-image with an image extension through — a disguised SVG in a
+//     `.png` was served verbatim as image/png, quietly undoing the rejection
+//     image.spec.ts pins ("blocks file-mode rendering when SVG content is
+//     disguised with another extension"). nosniff stops interpretation, but
+//     serving the source at all is not the behaviour that test describes.
+//  2. The interesting real case is the opposite mislabel — JPEG XL or HEIC
+//     saved as `.jpg` — which only the bytes reveal.
+//
+// The allow-list is "browser-renderable AND not decodable by this build of
+// sharp", derived by diffing every `image/*` extension mime-types knows
+// against `sharp.format`'s input suffixes (measured 2026-09-22, libvips
+// 8.18.6): BMP and ICO have NO libvips loader at all, JXL reports
+// `input.buffer === false`, and the `heif` loader is AVIF-only
+// (`fileSuffix: ['.avif']`) so HEVC-coded HEIC still fails. Every other
+// undecodable `image/*` in that diff (PSD, DNG, TGA, PCX, XBM, DjVu, …) is
+// one no browser renders either, so the refusal is the right answer there.
+//
+// BMP and ICO matter because they were the SILENT half of #503's first cut:
+// `.bmp` and `.ico` pass FilesManager's `startsWith('image-')` gate, sharp
+// throws a plain Error on both, and before the allow-list existed they were
+// streamed verbatim and rendered. A narrower sniff turns those grids into
+// generic file icons with nothing in the response to say why.
+//
+// Still deliberately narrow: a corrupt JPEG, a truncated PNG or a PDF renamed
+// to .png all sniff as null and get the refusal, because no client can render
+// those either.
+export async function sniffUndecodableImageFormat(filePath: string): Promise<string | null> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null
+  try {
+    fh = await fs.open(filePath, 'r')
+    return await sniffUndecodableImageFormatFromHandle(fh)
+  } catch {
+    return null
+  } finally {
+    await fh?.close().catch(() => undefined)
+  }
+}
+
+// Fork (#503 review): the same sniff against an ALREADY-PINNED descriptor.
+// FilesManager's fallback opens the file to serve it; sniffing the path
+// separately reopened it, so a write landing between the two made the
+// advertised contentType describe bytes we no longer serve — invariant 3's
+// defect class, the one the content-length pinning in the same hunk exists to
+// close. Reads at an explicit position, so the handle's own file position
+// stays at 0 for the caller's createReadStream.
+export async function sniffUndecodableImageFormatFromHandle(fh: Awaited<ReturnType<typeof fs.open>>): Promise<string | null> {
+  try {
+    const buf = Buffer.alloc(magicProbeBytes)
+    const { bytesRead } = await fh.read(buf, 0, magicProbeBytes, 0)
+    return sniffMagic(buf.subarray(0, bytesRead))
+  } catch {
+    return null
+  }
+}
+
+// 32 rather than 16: BMP is only two bytes of magic ("BM"), far too weak on
+// its own, so it is confirmed against the DIB header size at offset 14..18.
+const magicProbeBytes = 32
+// ISOBMFF major brands (bytes 8..12, after the `ftyp` box type at 4..8).
+const isoBrandMimes: Record<string, string> = {
+  heic: 'image/heic',
+  heix: 'image/heic',
+  hevc: 'image/heic',
+  hevx: 'image/heic',
+  heim: 'image/heic',
+  heis: 'image/heic',
+  mif1: 'image/heif',
+  msf1: 'image/heif',
+  avif: 'image/avif',
+  avis: 'image/avif'
+}
+// Every DIB header version a BMP file can declare at offset 14: BITMAPCOREHEADER
+// (12), OS22XBITMAPHEADER (16 and 64), BITMAPINFOHEADER (40) and its V2/V3/V4/V5
+// extensions (52, 56, 108, 124).
+const bmpDibHeaderSizes = new Set([12, 16, 40, 52, 56, 64, 108, 124])
+
+function sniffMagic(head: Buffer): string | null {
+  // JPEG XL, naked codestream.
+  if (head.length >= 2 && head[0] === 0xff && head[1] === 0x0a) return 'image/jxl'
+  // JPEG XL, ISOBMFF container: 12-byte signature box.
+  if (head.length >= 12 && head.subarray(0, 12).toString('hex') === '0000000c4a584c200d0a870a') return 'image/jxl'
+  // HEIC / HEIF / AVIF: `....ftyp<brand>`.
+  if (head.length >= 12 && head.subarray(4, 8).toString('ascii') === 'ftyp') {
+    return isoBrandMimes[head.subarray(8, 12).toString('ascii').toLowerCase()] ?? null
+  }
+  // BMP: "BM", then a 4-byte file size, 4 reserved bytes, a 4-byte pixel-data
+  // offset, and the DIB header size. "BM" alone matches any text starting with
+  // those letters, so the DIB size is what makes this a signature.
+  if (head.length >= 18 && head[0] === 0x42 && head[1] === 0x4d && bmpDibHeaderSizes.has(head.readUInt32LE(14))) return 'image/bmp'
+  // ICO: ICONDIR = reserved uint16 0, image type uint16 1 (2 would be a .cur
+  // cursor, which is not an image mime), then an image count of at least one.
+  if (head.length >= 6 && head.readUInt16LE(0) === 0 && head.readUInt16LE(2) === 1 && head.readUInt16LE(4) >= 1) {
+    // The mime `getMimeType('.ico')` derives, and what browsers are served.
+    return 'image/vnd.microsoft.icon'
+  }
+  return null
 }
 
 export async function generateAvatar(initials: string): Promise<NodeJS.ReadableStream> {
