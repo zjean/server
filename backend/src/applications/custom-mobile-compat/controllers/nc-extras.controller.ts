@@ -263,8 +263,19 @@ export class NcExtrasController {
         break
       }
     }
-    // Safely decode — NcPathResolver also does its own normalization.
-    const resolved = this.resolver.resolve(user, { mode: 'files', subpath })
+    // #484, from the other side. Every caller of NcPathResolver hands it a
+    // STILL-ENCODED subpath, because normalize() owns the one decode — but
+    // `filePath` arrives from `@Query('file')`, and Fastify's query parser has
+    // already decoded it once (measured: `?file=…/50%2520off.jpg` reaches the
+    // handler as `…/50%20off.jpg`). Letting normalize() decode that again
+    // yields `50 off.jpg`, spaceEnv then fails, and the client caches a
+    // permanent 404 thumbnail for a file literally named `50%20off.jpg`.
+    // Re-encode per segment so normalize()'s decode nets out to identity.
+    const encoded = subpath
+      .split('/')
+      .map((s) => encodeURIComponent(s))
+      .join('/')
+    const resolved = this.resolver.resolve(user, { mode: 'files', subpath: encoded })
     // null = the path carries a `.`/`..` segment. It used to resolve to the
     // home root (#483); there is no preview to render for that, so bail.
     if (!resolved) {

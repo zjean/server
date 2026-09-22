@@ -306,5 +306,33 @@ describe(NcExtrasController.name, () => {
       const call2 = spaceEnv.mock.calls.at(-1)
       expect(call2?.[1]).toEqual(['files', 'personal', 'photos', 'b.jpg'])
     })
+
+    // #484 from the other side. Fastify's query parser decodes `?file=` once
+    // before the handler sees it (measured: `?file=…/50%2520off.jpg` arrives as
+    // `…/50%20off.jpg`), and NcPathResolver.normalize() then decoded a second
+    // time — so a file literally named `50%20off.jpg` resolved to `50 off.jpg`,
+    // spaceEnv failed, and the client cached a permanent 404 thumbnail.
+    it('does not decode the ?file= query a second time (#484)', async () => {
+      spaceEnv.mockResolvedValue({ realPath: '/tmp/b.jpg' })
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp', contentLength: 1 })
+
+      const req = fakePreviewReq('alice')
+      const res = fakeRes()
+      // What Fastify hands the handler for wire `?file=…%2F50%2520off.jpg`.
+      await controller.preview(req, res, '/remote.php/dav/files/alice/50%20off.jpg')
+
+      expect(spaceEnv.mock.calls.at(-1)?.[1]).toEqual(['files', 'personal', '50%20off.jpg'])
+    })
+
+    it('still resolves an already-decoded path containing a real space', async () => {
+      spaceEnv.mockResolvedValue({ realPath: '/tmp/b.jpg' })
+      generateThumbnail.mockResolvedValue({ stream: Readable.from([Buffer.from('x')]), contentType: 'image/webp', contentLength: 1 })
+
+      const req = fakePreviewReq('alice')
+      const res = fakeRes()
+      await controller.preview(req, res, '/remote.php/dav/files/alice/My folder/a.jpg')
+
+      expect(spaceEnv.mock.calls.at(-1)?.[1]).toEqual(['files', 'personal', 'My folder', 'a.jpg'])
+    })
   })
 })
