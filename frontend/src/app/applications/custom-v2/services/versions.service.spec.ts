@@ -2,9 +2,13 @@
 //
 // `probe()` is called on EVERY non-directory selection in the file detail panel
 // and on every editor open, and it is a real HTTP request until `availability`
-// settles. So what does and does not latch is the difference between one request
-// per session and one per file click — which is why this narrow behaviour gets a
-// spec of its own while the rest of the service is plain url assembly.
+// settles. So what does and does not settle it is the difference between one
+// request per session and one per file click — which is why this narrow behaviour
+// gets a spec of its own while the rest of the service is plain url assembly.
+//
+// Two different terminal answers, deliberately not treated alike: the feature
+// being off is global and latches; a 403 is not necessarily global and only
+// suppresses the root it came from.
 //
 // Same no-TestBed approach as the rest of the v2 specs: a plain Injector, no
 // platform. See screens/files/testing/file-browser-harness.ts for the rationale.
@@ -48,27 +52,45 @@ describe('VersionsService availability', () => {
   })
 
   // #492. The role gate refuses a guest or link principal EVERY versions route,
-  // before any path is resolved — a per-principal, session-long answer, exactly
-  // as terminal as the feature being off. Left unlatched it is not a rendering
-  // bug (the panel is hidden either way) but an unbounded one: `probe()` only
-  // no-ops once availability is settled, so the next file click asks again.
-  it('latches unavailable on a 403 from the role gate, so the probe stops re-firing', () => {
+  // before any path is resolved. That really is per-principal and session-long —
+  // but it is NOT the only 403 these calls return: SpaceGuard throws 403 for a
+  // disabled space and for an insufficient grant, both per-SPACE and both
+  // reachable by an ordinary USER. So a 403 suppresses the ROOT it came from
+  // rather than latching availability, which would have hidden the panel in every
+  // other space for the rest of the session.
+  it('a 403 suppresses further probes of that root without latching globally', () => {
     const { service, http } = mount(failing(403, 'Version history is not available for this account'))
 
     service.probe(PATH)
-    expect(service.availability()).toBe('unavailable')
+    // NOT 'unavailable' — every consumer tests `=== 'available'`, so the panel is
+    // hidden either way, and 'unknown' keeps the other spaces answerable.
+    expect(service.availability()).toBe('unknown')
 
     // The assertion that actually matters: ten more selections, still one request.
     for (let i = 0; i < 10; i++) service.probe(`files/personal/file-${i}.md`)
     expect(http.get).toHaveBeenCalledTimes(1)
   })
 
-  // No message check on the 403 branch, so it must not depend on one: the gate's
+  // The regression this replaced: one refused space must not answer for the next.
+  it('a 403 in one space does not silence the probe in another', () => {
+    const { service, http } = mount(failing(403, 'Space is disabled'))
+
+    service.probe('files/disabled-space/doc.md')
+    expect(http.get).toHaveBeenCalledTimes(1)
+
+    service.probe('files/personal/report.md')
+    expect(http.get).toHaveBeenCalledTimes(2)
+    expect(service.availability()).toBe('unknown')
+  })
+
+  // The 403 branch reads no message, so it must not depend on one: the gate's
   // wording is a backend string this service deliberately does not import.
-  it('latches on a 403 whatever body it carries', () => {
-    const { service } = mount(failing(403))
+  it('suppresses on a 403 whatever body it carries', () => {
+    const { service, http } = mount(failing(403))
     service.probe(PATH)
-    expect(service.availability()).toBe('unavailable')
+    service.probe('files/personal/other.md')
+    expect(http.get).toHaveBeenCalledTimes(1)
+    expect(service.availability()).toBe('unknown')
   })
 
   // The other half of the rule: a per-FILE failure must never disable the panel

@@ -58,6 +58,13 @@ export class VersionsService {
   readonly availability = signal<VersionsAvailability>('unknown')
 
   /**
+   * Versions roots that answered 403. Per-root, NOT global: a 403 is not proof
+   * the feature is unavailable to this principal everywhere — see
+   * `noteAvailability`. Membership only suppresses further probing of that root.
+   */
+  private readonly deniedRoots = new Set<string>()
+
+  /**
    * Settles `availability` by making one real call, discarding its result.
    *
    * A host that decides whether to show a versions affordance at all cannot wait
@@ -70,13 +77,14 @@ export class VersionsService {
    */
   probe(spacePath: string): void {
     if (this.availability() !== 'unknown') return
+    if (this.deniedRoots.has(versionsRootKey(spacePath))) return
     this.usage(spacePath).subscribe({ next: () => undefined, error: () => undefined })
   }
 
   list(spacePath: string): Observable<VersionModel[]> {
     return this.http
       .get<VersionApiProps[]>(`${API_VERSIONS_LIST}/${encodeUrl(spacePath)}`)
-      .pipe(tap({ next: () => this.availability.set('available'), error: (e) => this.noteAvailability(e) }), map(toVersionModels))
+      .pipe(tap({ next: () => this.availability.set('available'), error: (e) => this.noteAvailability(e, spacePath) }), map(toVersionModels))
   }
 
   /**
@@ -90,7 +98,7 @@ export class VersionsService {
   usage(spacePath: string): Observable<VersionsUsage> {
     return this.http
       .get<VersionsUsage>(`${API_VERSIONS_USAGE}/${encodeUrl(spacePath)}`)
-      .pipe(tap({ next: () => this.availability.set('available'), error: (e) => this.noteAvailability(e) }))
+      .pipe(tap({ next: () => this.availability.set('available'), error: (e) => this.noteAvailability(e, spacePath) }))
   }
 
   /**
@@ -168,23 +176,46 @@ export class VersionsService {
    *   server, so no file has history. Matched on the message because these routes
    *   also 404 with 'Space not found' when SpaceGuard cannot resolve the path,
    *   and that one is per-file.
-   * - a **403** — the whole VersioningController is gated on the USER role
-   *   (#492), so a guest or link principal is refused every version route before
-   *   any path is resolved. No message check: unlike the 404 there is no
-   *   per-file 403 to confuse it with. `SpaceGuard` answers 404 for a path it
-   *   cannot resolve, and the only in-feature 403 is the MODIFY refusal on
-   *   restore/label/delete — which never reaches here, because those three do not
-   *   report availability.
+   * A **403** is NOT latched globally, and that is deliberate. It looks like it
+   * could be — the whole VersioningController is gated on the USER role (#492),
+   * so a guest or link principal is refused every version route before any path
+   * is resolved, which really is per-principal and session-long. But it is not
+   * the only 403 these two calls can return: `SpaceGuard` throws
+   * `'Space is disabled'` before any permission check, and
+   * `'You are not allowed to do this action'` from `checkPermissions` — both
+   * per-SPACE, both reachable by an ordinary USER. Latching either of those
+   * would hide the versions panel for the rest of the session in every OTHER
+   * space too, with nothing on screen to explain it. A noisy but correct UI is
+   * better than a quiet wrong one.
    *
-   * Both are per-principal and session-long, which is what makes latching right:
-   * without this, `probe()` never settles and re-fires on every file selection
-   * (`file-detail.component.ts`) and every editor open — hundreds of refused
-   * requests, each writing a role-guard warning server-side.
+   * So a 403 marks just that ROOT as denied. The storm the latch existed to stop
+   * is still stopped — `probe()` re-fires on every file selection
+   * (`file-detail.component.ts`) and every editor open, and one entry here turns
+   * that back into one request per root — while a refusal in one space says
+   * nothing about the next. `availability` stays `'unknown'`, which every
+   * consumer already treats as "do not offer the panel" (they all test
+   * `=== 'available'`), so a denied principal sees no versions affordance either
+   * way.
    */
-  private noteAvailability(e: unknown): void {
+  private noteAvailability(e: unknown, spacePath: string): void {
     if (!(e instanceof HttpErrorResponse)) return
-    if (e.status === 403 || (e.status === 404 && e.error?.message === VERSIONS_DISABLED_MESSAGE)) {
+    if (e.status === 403) {
+      this.deniedRoots.add(versionsRootKey(spacePath))
+      return
+    }
+    if (e.status === 404 && e.error?.message === VERSIONS_DISABLED_MESSAGE) {
       this.availability.set('unavailable')
     }
   }
+}
+
+/**
+ * The versions ROOT a file path belongs to — `<repository>/<alias>`.
+ *
+ * Refusals are attributed at this granularity because `usage` is root-scoped:
+ * its answer is identical for every file under one root, so one refused probe
+ * settles the question for all of them without over-reaching to the next space.
+ */
+function versionsRootKey(spacePath: string): string {
+  return spacePath.split('/').slice(0, 2).join('/')
 }
