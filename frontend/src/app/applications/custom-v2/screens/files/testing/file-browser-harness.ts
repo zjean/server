@@ -27,11 +27,12 @@ import { HttpClient } from '@angular/common/http'
 import { DestroyRef, Injector, runInInjectionContext, signal, ɵChangeDetectionScheduler, ɵEffectScheduler } from '@angular/core'
 import { L10N_LOCALE, L10nTranslationService } from 'angular-l10n'
 import type { FileProps } from '@sync-in-server/backend/src/applications/files/interfaces/file-props.interface'
-import { BehaviorSubject, Observable, of, Subject, throwError } from 'rxjs'
+import { BehaviorSubject, map, Observable, of, Subject, throwError } from 'rxjs'
 import { StoreService } from '../../../../../store/store.service'
 import { FilesService } from '../../../../files/services/files.service'
 import { FilesUploadService } from '../../../../files/services/files-upload.service'
 import { SpacesService } from '../../../../spaces/services/spaces.service'
+import { DomSanitizer } from '@angular/platform-browser'
 import { CompressDialogService } from '../../../components/compress-dialog.service'
 import { ConfirmDialogService } from '../../../components/confirm-dialog.service'
 import { LockDialogService } from '../../../components/lock-dialog.service'
@@ -46,6 +47,8 @@ import { TransfersService } from '../../../services/transfers.service'
 import { FavoritesService } from '../../../services/favorites.service'
 import { FolderSizeService } from '../../../services/folder-size.service'
 import { V2DragService } from '../../../services/drag.service'
+import { VersionsService } from '../../../services/versions.service'
+import { CloseGuardService } from '../../../preview/close-guard.service'
 import { ActivatedRoute, Router } from '@angular/router'
 
 // ---------------------------------------------------------------------------
@@ -151,6 +154,8 @@ export function urlSegments(...paths: string[]): UrlSegmentLike[] {
 export interface WindowStub {
   opened: { url: string; target?: string; features?: string }[]
   storage: Map<string, string>
+  /** sessionStorage, which is where the uiVersionGuard suspension lives. */
+  session: Map<string, string>
 }
 
 /**
@@ -160,9 +165,13 @@ export interface WindowStub {
  * of the harness (no window at all) exercises the SSR branch; call this when a
  * spec needs the browser branch.
  */
-export function installWindowStub(initialStorage: Record<string, string> = {}): { win: WindowStub; restore: () => void } {
+export function installWindowStub(
+  initialStorage: Record<string, string> = {},
+  initialSession: Record<string, string> = {}
+): { win: WindowStub; restore: () => void } {
   const storage = new Map<string, string>(Object.entries(initialStorage))
-  const win: WindowStub = { opened: [], storage }
+  const session = new Map<string, string>(Object.entries(initialSession))
+  const win: WindowStub = { opened: [], storage, session }
   const g = globalThis as Record<string, unknown>
   const had = 'window' in g
   const previous = g['window']
@@ -171,6 +180,11 @@ export function installWindowStub(initialStorage: Record<string, string> = {}): 
       getItem: (k: string) => (storage.has(k) ? storage.get(k)! : null),
       setItem: (k: string, v: string) => void storage.set(k, v),
       removeItem: (k: string) => void storage.delete(k)
+    },
+    sessionStorage: {
+      getItem: (k: string) => (session.has(k) ? session.get(k)! : null),
+      setItem: (k: string, v: string) => void session.set(k, v),
+      removeItem: (k: string) => void session.delete(k)
     },
     open: (url: string, target?: string, features?: string) => {
       win.opened.push({ url, target, features })
@@ -233,6 +247,9 @@ export class HarnessDeps {
   // Static route `data`. The file browsers don't read it; the Shared screen takes
   // its variant from there, which is how one component serves three routes.
   readonly routeData = new BehaviorSubject<Record<string, unknown>>({})
+  // `?path=` / `?tab=`. The file-detail screen is driven entirely from here, so a
+  // spec pushes a query map rather than calling a method.
+  readonly routeQueryParams = new BehaviorSubject<Record<string, string>>({})
   readonly filesOnEvent = new Subject<unknown>()
   // `login` matters as well as `id`: it is what the lock flow compares against
   // `file.lock.owner.login` / `file.root.owner.login`.
@@ -348,8 +365,16 @@ export class HarnessDeps {
       { provide: HttpClient, useValue: http },
       {
         provide: ActivatedRoute,
-        useValue: { url: this.routeUrl.asObservable(), params: this.routeParams.asObservable(), data: this.routeData.asObservable() }
+        useValue: {
+          url: this.routeUrl.asObservable(),
+          params: this.routeParams.asObservable(),
+          data: this.routeData.asObservable(),
+          queryParamMap: this.routeQueryParams.pipe(map((p: Record<string, string>) => ({ get: (k: string) => p[k] ?? null })))
+        }
       },
+      { provide: DomSanitizer, useValue: { bypassSecurityTrustResourceUrl: (url: string) => url } },
+      { provide: CloseGuardService, useValue: { canClose: () => Promise.resolve(true) } },
+      { provide: VersionsService, useValue: { probe: (path: string) => log.record('versions.probe', path), enabled: signal(false) } },
       {
         provide: Router,
         useValue: {
@@ -455,7 +480,16 @@ export class HarnessDeps {
         }
       },
       { provide: StoreService, useValue: { filesOnEvent: this.filesOnEvent, user: this.user, server: this.serverConfig } },
-      { provide: LayoutV2Service, useValue: { isMobile: this.isMobile } },
+      {
+        provide: LayoutV2Service,
+        useValue: {
+          isMobile: this.isMobile,
+          setDockTab: (tab: string) => log.record('layout.setDockTab', tab),
+          openDock: () => log.record('layout.openDock'),
+          beginAutoCollapse: () => log.record('layout.beginAutoCollapse'),
+          endAutoCollapse: () => log.record('layout.endAutoCollapse')
+        }
+      },
       {
         // The base asks it which uploads are landing in the current folder, for the
         // gallery's in-place tiles. Backed by a signal so a case can push tiles in.

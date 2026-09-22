@@ -6,11 +6,12 @@ import type { FileProps } from '@sync-in-server/backend/src/applications/files/i
 import { API_SHARES_LINKS_LIST, API_SHARES_LIST } from '@sync-in-server/backend/src/applications/shares/constants/routes'
 import type { ShareFile } from '@sync-in-server/backend/src/applications/shares/interfaces/share-file.interface'
 import type { ShareLink } from '@sync-in-server/backend/src/applications/shares/interfaces/share-link.interface'
+import type { ShareProps } from '@sync-in-server/backend/src/applications/shares/interfaces/share-props.interface'
 import { API_SPACES_BROWSE } from '@sync-in-server/backend/src/applications/spaces/constants/routes'
 import { SPACE_REPOSITORY } from '@sync-in-server/backend/src/applications/spaces/constants/spaces'
 import type { SpaceFiles } from '@sync-in-server/backend/src/applications/spaces/interfaces/space-files.interface'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
-import { map, Observable, Subscription } from 'rxjs'
+import { catchError, forkJoin, map, Observable, of, Subscription, switchMap } from 'rxjs'
 import { SPACES_PATH } from '../../../spaces/spaces.constants'
 import { EmptyStateComponent } from '../../components/empty-state.component'
 import { FileGlyphComponent } from '../../components/file-glyph.component'
@@ -21,8 +22,9 @@ import { ToastService } from '../../components/toast.service'
 import { IconV2Name } from '../../icons/icon-v2.component'
 import { V2BreadcrumbService } from '../../layout/breadcrumb.service'
 import { InspectorService } from '../../layout/inspector.service'
-import { clearUiVersion } from '../../ui-version'
+import { suspendUiVersion } from '../../ui-version'
 import { mimeToGlyph } from '../../utils/mime-to-glyph'
+import { getShare } from '../../utils/share-crud'
 import { V2_PATH, V2_ROUTES } from '../../v2.constants'
 
 export type SharedVariant = 'with-me' | 'with-others' | 'via-links'
@@ -36,11 +38,13 @@ function asArray<T>(value: T[] | null | undefined): T[] {
 /**
  * One line of the Shared list, whichever tab produced it.
  *
- * The three tabs are three DIFFERENT server collections — not three filters over
- * one (issues #429 / #430). `/api/app/shares/list` is scoped to shares you OWN and
- * to `SHARE_TYPE.COMMON`, so an incoming share and a public link are both absent
- * from it by construction and no client-side predicate can bring them back. Each
- * variant therefore has its own endpoint and its own mapper into this shape.
+ * The three tabs read DIFFERENT server collections — not three filters over one
+ * (issues #429 / #430). `/api/app/shares/list` is scoped to shares you OWN and to
+ * `SHARE_TYPE.COMMON`, so an incoming share is absent from it by construction and
+ * no client-side predicate can bring it back.
+ *
+ * "Via links" reads TWO collections, because a share carrying a public link can be
+ * either type. See `loadViaLinks`.
  */
 export interface SharedRow {
   /** Stable row identity; unique across a listing (a share may own several links). */
@@ -161,7 +165,11 @@ export class SharedComponent implements OnInit, OnDestroy {
         this.loading.set(false)
       },
       error: (e: HttpErrorResponse) => {
-        console.error(e)
+        // Logged with the tab that failed, because the three tabs hit different
+        // endpoints and a bare `console.error(e)` said nothing about which. No
+        // toast: the failure already renders in place (`errorMessage`), and this
+        // screen has a Refresh button next to it.
+        console.error(`v2 shared: "${this.variant()}" failed to load`, e)
         this.rows.set([])
         this.errorMessage.set('Failed to load shares.')
         this.loading.set(false)
@@ -176,14 +184,63 @@ export class SharedComponent implements OnInit, OnDestroy {
       // Same source the classic `spaces/shares` screen browses.
       return this.http
         .get<SpaceFiles>(`${API_SPACES_BROWSE}/${SPACE_REPOSITORY.SHARES}`)
-        .pipe(map((result: SpaceFiles) => this.rowsFromSharesRepository(Array.isArray(result?.files) ? result.files : [])))
+        .pipe(map((result: SpaceFiles) => this.rowsFromSharesRepository(asArray(result?.files))))
     }
     if (variant === 'via-links') {
-      // A public link is a SHARE_TYPE.LINK share, which the common list excludes
-      // server-side; `links/list` is the endpoint classic's Links screen uses.
-      return this.http.get<ShareLink[]>(API_SHARES_LINKS_LIST).pipe(map((links: ShareLink[]) => this.rowsFromShareLinks(asArray(links))))
+      return this.loadViaLinks()
     }
     return this.http.get<ShareFile[]>(API_SHARES_LIST).pipe(map((shares: ShareFile[]) => this.rowsFromShares(asArray(shares))))
+  }
+
+  /**
+   * Every share of mine that carries a public link — from BOTH collections that can
+   * hold one.
+   *
+   * `shares.type` is a whole-share discriminator and the two list endpoints partition
+   * on it: `links/list` pins `SHARE_TYPE.LINK` (`shares-queries.service.ts:205`) and
+   * `shares/list` pins `SHARE_TYPE.COMMON` (`:529`). Classic puts a share in the first
+   * bucket only when it was created BY the link dialog, which sets `type` explicitly
+   * (`link-dialog.component.ts:197`); a link added to an existing share from the
+   * classic share dialog's Links tab lands in the second and never shows on classic's
+   * own Links screen.
+   *
+   * v2 is always in the second bucket. Its share dialog is merged — ONE share holds
+   * both people and links — so it posts no `type` at all and the server defaults it to
+   * COMMON (`shares-manager.service.ts:136`). Stamping LINK on it instead would be
+   * worse than this bug: the same share would vanish from "With others" and from
+   * classic's Shares screen, and it would drop out of content indexing, which also
+   * filters on COMMON (`files-content-parser.service.ts:129`). A share with people AND
+   * a link has no correct value for a field that only says "people" or "link".
+   *
+   * So the tab unions the two, which needs no migration for the shares v2 has already
+   * created. The two are disjoint by construction (the type filters are complementary),
+   * so there is nothing to de-duplicate.
+   *
+   * `shares/list` reports only a COUNT of link members, so the link's own name comes
+   * from `GET /shares/:id`, whose members carry `linkId` and the link name
+   * (`shares-queries.service.ts:271-280`) — one request per share that has a link, none
+   * when none does.
+   */
+  private loadViaLinks(): Observable<SharedRow[]> {
+    return forkJoin({
+      links: this.http.get<ShareLink[]>(API_SHARES_LINKS_LIST),
+      shares: this.http.get<ShareFile[]>(API_SHARES_LIST)
+    }).pipe(
+      switchMap(({ links, shares }: { links: ShareLink[]; shares: ShareFile[] }) => {
+        const linkRows: SharedRow[] = this.rowsFromShareLinks(asArray(links))
+        const withLinks: ShareFile[] = asArray(shares).filter((s: ShareFile) => (s.counts?.links ?? 0) > 0)
+        if (!withLinks.length) return of(linkRows)
+        return forkJoin(withLinks.map((s: ShareFile) => getShare(this.http, s.id).pipe(catchError(() => of(null as ShareProps | null))))).pipe(
+          map((details: (ShareProps | null)[]) => [
+            ...linkRows,
+            ...withLinks.flatMap((s: ShareFile, i: number) => this.rowsFromCommonShareLinks(s, details[i]))
+          ])
+        )
+      }),
+      // One tab, one ordering. Sorted by name only, and Array#sort is stable, so the
+      // several links of one share keep the order their source returned them in.
+      map((rows: SharedRow[]) => [...rows].sort((a, b) => a.name.localeCompare(b.name)))
+    )
   }
 
   // Outgoing shares, exactly as classic's Shared screen lists them: every row the
@@ -229,6 +286,47 @@ export class SharedComponent implements OnInit, OnDestroy {
     }))
   }
 
+  /**
+   * One COMMON share that carries at least one link — the shape every link v2
+   * creates has. See `loadViaLinks` for why they are COMMON.
+   *
+   * `detail` is null when the per-share lookup failed. The share still gets a row
+   * then: a row with an empty Link column is recoverable (its editor opens and shows
+   * the link), a missing row is the bug being fixed.
+   */
+  private rowsFromCommonShareLinks(share: ShareFile, detail: ShareProps | null): SharedRow[] {
+    const linkMembers = (detail?.members ?? []).filter((m: { linkId?: number }) => !!m.linkId)
+    if (!linkMembers.length) {
+      return [{ ...this.commonLinkRow(share), key: `share-${share.id}-links`, links: share.counts?.links ?? 1 }]
+    }
+    return linkMembers.map((m: { linkId?: number; name?: string }) => ({
+      ...this.commonLinkRow(share),
+      key: `link-${m.linkId}`,
+      secondary: m.name ?? ''
+    }))
+  }
+
+  private commonLinkRow(share: ShareFile): SharedRow {
+    return {
+      key: '',
+      shareId: share.id,
+      name: share.name,
+      description: share.description ?? '',
+      mime: share.file?.mime ?? '',
+      isDir: share.file?.isDir ?? !share.file?.id,
+      // Deliberately blank. `/shares/list` carries no link access time, and fetching
+      // one per link would be a second round trip per row; printing the share's
+      // `modifiedAt` under an "Accessed" heading would be worse than printing nothing.
+      when: null,
+      users: 0,
+      groups: 0,
+      links: 1,
+      secondary: '',
+      alias: share.alias ?? '',
+      filePath: ''
+    }
+  }
+
   private rowsFromSharesRepository(files: FileProps[]): SharedRow[] {
     return files.map((f: FileProps) => ({
       // The shares repository root has one entry per incoming share, so the file id
@@ -246,9 +344,15 @@ export class SharedComponent implements OnInit, OnDestroy {
       links: 0,
       secondary: f.root?.owner?.fullName || f.root?.owner?.login || '',
       alias: f.root?.alias ?? '',
-      // A shared FILE is addressable by the v2 file screen, which browses the
-      // parent and matches by name — `shares` is exactly the listing above.
-      filePath: f.isDir ? '' : [SPACE_REPOSITORY.SHARES, f.name].join('/')
+      // A shared FILE is addressable by the v2 file screen — by its share ALIAS, not
+      // its name (#429). `spaceEnv(['shares', <segment>])` resolves the segment through
+      // `sharesManager.permissions(user, spaceAlias)`, i.e. `shares.alias`, and an alias
+      // is a slug (`uniqueShareAlias` → `createSlug`), so "Sync engine notes.md" never
+      // matches `sync-engine-notes-md`. Classic addresses a root entry the same way:
+      // `root?.alias || name` (files/models/file.model.ts:93). Its other half is in
+      // `file-detail.component.ts::loadFile`, which must resolve the listing row by the
+      // same convention — the browse response names the row after the SHARE.
+      filePath: f.isDir ? '' : [SPACE_REPOSITORY.SHARES, f.root?.alias || f.name].join('/')
     }))
   }
 
@@ -269,14 +373,21 @@ export class SharedComponent implements OnInit, OnDestroy {
       this.router.navigate(['/', V2_PATH, V2_ROUTES.FILE], { queryParams: { path: row.filePath } }).catch(console.error)
       return
     }
-    if (!row.alias) return
-    // v2 has no browser for the shares repository yet, so a shared FOLDER hands off
-    // to the classic one — the same hand-off the v2 placeholder screens make. It has
-    // to clear `ui.version` first: uiVersionGuard bounces every classic URL back to
-    // /v2 while that preference says 'v2', so navigating without clearing it would
-    // land the user back on the screen they just left. Announced, because it also
-    // means their next login opens classic.
-    clearUiVersion()
+    if (!row.alias) {
+      // Not reachable from a well-formed listing — every shares-repository entry has a
+      // root alias — but a silent `return` on a row the user just clicked is the worst
+      // possible answer, so say so rather than doing nothing.
+      this.toast.error('This share cannot be opened')
+      console.error('v2 shared: incoming row has neither a file path nor a share alias', row)
+      return
+    }
+    // v2 has no browser for the shares repository yet, so a shared FOLDER hands off to
+    // the classic one. uiVersionGuard bounces every classic URL back to /v2 while
+    // `ui.version` says 'v2', so the hand-off has to get past it — but it no longer
+    // CLEARS the preference. Clearing it ejected the user from v2 for good over one
+    // folder click; `suspendUiVersion()` stands the guard down for this browser tab
+    // only, and reaching any /v2 route lifts the suspension again.
+    suspendUiVersion()
     this.toast.info('Opening the classic interface')
     this.router.navigate([`/${SPACES_PATH.SPACES_SHARES}`, row.alias]).catch(console.error)
   }

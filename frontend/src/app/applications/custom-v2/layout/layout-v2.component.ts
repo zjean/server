@@ -13,6 +13,7 @@ import { TreePickerComponent } from '../components/tree-picker.component'
 import { TwoFaDialogComponent } from '../components/two-fa-dialog.component'
 import { BottomTabBarComponent } from './bottom-tab-bar.component'
 import { InspectorPanelComponent } from './inspector-panel.component'
+import { resumeUiVersion } from '../ui-version'
 import { DOCK_WIDTH_MAX, DOCK_WIDTH_MIN, LayoutV2Service } from './layout-v2.service'
 import { LeftNavComponent } from './left-nav.component'
 import { PageBreadcrumbComponent } from './page-breadcrumb.component'
@@ -72,6 +73,15 @@ export class LayoutV2Component {
   protected readonly dockWidthMax = DOCK_WIDTH_MAX
   private resizeRaf: number | null = null
   private dockResizeCleanup: (() => void) | null = null
+
+  constructor() {
+    // The one preference write this layout may make, and it only ever REMOVES state:
+    // a hand-off to classic (a shared folder, a placeholder screen) suspends
+    // uiVersionGuard for the tab, and being back on a /v2 route is what ends that
+    // excursion. It cannot opt anyone in — `ui.version` is untouched, which is the
+    // invariant #502 established and `ui-version.spec.ts` pins.
+    resumeUiVersion()
+  }
 
   // Skip link target. The sidebar puts ~20 focusable items between the top of
   // the document and the content on every route, and there was no way past
