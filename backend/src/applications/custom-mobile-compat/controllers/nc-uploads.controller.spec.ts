@@ -1,4 +1,5 @@
 import * as filesUtils from '../../files/utils/files'
+import { NcPathResolverService } from '../services/nc-path-resolver.service'
 import { buildUploadDirPropfindBody, NcUploadsController, parseOcTotalLength } from './nc-uploads.controller'
 
 // OC-Total-Length is part of the NC chunked-upload protocol — clients are
@@ -175,5 +176,128 @@ describe('NcUploadsController assembly versioning', () => {
 
     expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
     expect(filesUtils.moveFiles).toHaveBeenCalled()
+  })
+})
+
+// The assembly MOVE's Destination header, end to end through the real path
+// resolver. Two defects lived here:
+//
+//   #484 — parseDestination did its own decodeURIComponent and then handed the
+//          result to resolve(), whose normalize() decodes again. A file named
+//          `50%20off.txt` travels the wire as `50%2520off.txt` and assembled as
+//          `50 off.txt`. nc-dav.controller has always passed the still-encoded
+//          subpath; this one disagreed.
+//
+//   #483 — a Destination that normalizes to nothing resolved to the space ROOT,
+//          and the assembly ends in `moveFiles(tmp, space.realPath, true)` —
+//          i.e. the user's whole home replaced by the uploaded file.
+describe('NcUploadsController assembly destination', () => {
+  const user = { id: 7, login: 'alice' } as any
+
+  function buildController() {
+    const staging = {
+      concatenate: vi.fn().mockResolvedValue(1024),
+      remove: vi.fn().mockResolvedValue(undefined),
+      exists: vi.fn().mockReturnValue(true),
+      ensureDir: vi.fn()
+    }
+    const spacesManager = {
+      spaceEnv: vi.fn().mockResolvedValue({
+        realPath: '/data/users/alice/files/x',
+        dbFile: { ownerId: 7, path: 'x', inTrash: false },
+        envPermissions: 'a:m:d',
+        url: 'files/personal/x'
+      })
+    }
+    const versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
+
+    vi.spyOn(filesUtils, 'isPathExists').mockResolvedValue(false)
+    vi.spyOn(filesUtils, 'makeDir').mockResolvedValue('' as any)
+    vi.spyOn(filesUtils, 'moveFiles').mockResolvedValue(undefined)
+
+    // Real resolver: the decode-count and the null-vs-root distinction are its
+    // behaviour, and mocking it would hide both defects.
+    const controller = new NcUploadsController(staging as any, new NcPathResolverService() as any, spacesManager as any, versioning as any)
+    return { controller, spacesManager }
+  }
+
+  const moveReq = (destination: string) =>
+    ({
+      user,
+      method: 'MOVE',
+      url: '/remote.php/dav/uploads/alice/up-1/.file',
+      headers: { destination, 'oc-total-length': '1024' }
+    }) as any
+
+  const res = () => ({ status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), send: vi.fn() }) as any
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('decodes the Destination exactly once (#484)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    // On the wire for a file literally named `50%20off.txt`.
+    await controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/50%2520off.txt'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', '50%20off.txt'])
+  })
+
+  it('decodes an ordinary escaped space once, not zero times', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/My%20folder/a.txt'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'My folder', 'a.txt'])
+  })
+
+  it('refuses a Destination carrying a "." segment rather than assembling onto the home root (#483)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice/a/./b'), res())).rejects.toMatchObject({
+      status: 400
+    })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // `…/files/alice/` (one trailing slash) is caught by the PRE-EXISTING
+  // `if (!destPath)` — parseDestination returns '' for it — so it proves
+  // nothing about the `!resolved.relativePath` guard. The shape that guard
+  // exists for is the DOUBLE slash: destPath is '/', which is truthy, so it
+  // reached resolve(), came back with relativePath '' (the space ROOT), and
+  // the assembly's `moveFiles(tmp, space.realPath, true)` replaced the user's
+  // whole home with the uploaded file.
+  it('refuses a Destination that resolves to the home root (#483)', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq('/remote.php/dav/files/alice//'), res())).rejects.toMatchObject({
+      status: 400
+    })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  // parseDestination ran `new URL(dest).pathname` for the absolute form, and
+  // WHATWG URL parsing erases dot segments (treating `%2e` as a dot) — so the
+  // refusal above applied only to the path-relative form.
+  it.each([
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/../b', 'plain ".."'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/./b', 'plain "."'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/%2e%2e/b', 'lowercase "%2e%2e"'],
+    ['https://cloud.example.org/remote.php/dav/files/alice/a/%2E%2E/b', 'uppercase "%2E%2E"']
+  ])('refuses an ABSOLUTE Destination carrying %s (%s)', async (destination) => {
+    const { controller, spacesManager } = buildController()
+
+    await expect(controller.chunkHandler('alice', 'up-1', moveReq(destination), res())).rejects.toMatchObject({ status: 400 })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    expect(filesUtils.moveFiles).not.toHaveBeenCalled()
+  })
+
+  it('still assembles an ordinary ABSOLUTE Destination', async () => {
+    const { controller, spacesManager } = buildController()
+
+    await controller.chunkHandler('alice', 'up-1', moveReq('https://cloud.example.org/remote.php/dav/files/alice/photos/a.jpg'), res())
+
+    expect(spacesManager.spaceEnv).toHaveBeenCalledWith(user, ['files', 'personal', 'photos', 'a.jpg'])
   })
 })

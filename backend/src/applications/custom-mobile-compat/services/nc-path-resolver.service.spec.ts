@@ -1,5 +1,5 @@
 import { SPACE_ALIAS, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
-import { NcPathResolverService } from './nc-path-resolver.service'
+import { NcPathResolverService, normalizeNcSubpath } from './nc-path-resolver.service'
 
 // The service accepts a user-with-settings shape that is a loose subset of
 // UserModel. We build minimal fixtures to keep the tests focused on path
@@ -78,12 +78,29 @@ describe(NcPathResolverService.name, () => {
       expect(svc.resolve(user(null), { mode: 'files', subpath: 'a//b///c' }).relativePath).toBe('a/b/c')
     })
 
-    it('rejects paths containing ".." segments (maps to empty)', () => {
-      expect(svc.resolve(user(null), { mode: 'files', subpath: 'foo/../etc' }).relativePath).toBe('')
+    // #483: a rejected path used to come back as relativePath '' — the space
+    // ROOT — so COPY/MOVE, PROPFIND and the chunked-upload assembly all acted
+    // on the user's whole home instead of refusing. Rejection is now null, and
+    // null must stay distinguishable from the (legitimate) root.
+    it('returns null for paths containing ".." segments — NOT the root', () => {
+      expect(svc.resolve(user(null), { mode: 'files', subpath: 'foo/../etc' })).toBeNull()
     })
 
-    it('rejects paths containing "." segments (maps to empty)', () => {
-      expect(svc.resolve(user(null), { mode: 'files', subpath: 'foo/./bar' }).relativePath).toBe('')
+    it('returns null for paths containing "." segments — NOT the root', () => {
+      expect(svc.resolve(user(null), { mode: 'files', subpath: 'foo/./bar' })).toBeNull()
+    })
+
+    it('returns null for a bare "." and a bare ".."', () => {
+      expect(svc.resolve(user(null), { mode: 'files', subpath: '.' })).toBeNull()
+      expect(svc.resolve(user(null), { mode: 'files', subpath: '..' })).toBeNull()
+    })
+
+    it('rejects a percent-encoded dot segment too (decode happens first)', () => {
+      expect(svc.resolve(user(null), { mode: 'files', subpath: 'foo/%2E%2E/etc' })).toBeNull()
+    })
+
+    it('still resolves a leading-dot NAME — only whole "." / ".." segments are rejected', () => {
+      expect(svc.resolve(user(null), { mode: 'files', subpath: '.hidden/..stuff' }).relativePath).toBe('.hidden/..stuff')
     })
 
     it('URL-decodes percent-escapes (foo%20bar → "foo bar")', () => {
@@ -97,6 +114,25 @@ describe(NcPathResolverService.name, () => {
 
     it('empty subpath stays empty', () => {
       expect(svc.resolve(user(null), { mode: 'files', subpath: '' }).relativePath).toBe('')
+    })
+  })
+
+  // normalizeNcSubpath is the same normalizer, exported for callers that peek
+  // at the first segment (share-mount routing). Its null-vs-'' distinction is
+  // what NcDavController keys its 400s on, so pin it here as well.
+  describe('normalizeNcSubpath', () => {
+    it("returns '' for the space root", () => {
+      expect(normalizeNcSubpath('')).toBe('')
+      expect(normalizeNcSubpath('/')).toBe('')
+    })
+
+    it('returns null — not the empty string — for a rejected dot segment', () => {
+      expect(normalizeNcSubpath('a/./b')).toBeNull()
+      expect(normalizeNcSubpath('a/../b')).toBeNull()
+    })
+
+    it('normalizes an ordinary path', () => {
+      expect(normalizeNcSubpath('/a//b/')).toBe('a/b')
     })
   })
 
