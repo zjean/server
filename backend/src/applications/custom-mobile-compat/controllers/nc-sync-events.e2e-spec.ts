@@ -175,7 +175,7 @@ describe('nc_sync_events: emit → log → sync-collection REPORT (e2e)', () => 
   // completely empty and a stock client never learns about a rename or an
   // in-home move.
   //
-  // FilesManager.copyMove (files/services/files-manager.service.ts:606) emits
+  // FilesManager.copyMove (files/services/files-manager.service.ts:609) emits
   // its DELETE_PERMANENTLY + ADD pair only `if (srcSpace.realBasePath !==
   // dstSpace.realBasePath)`, which is false for every move inside one space.
   // The destination-overwrite delete just above it is deliberately suppressed

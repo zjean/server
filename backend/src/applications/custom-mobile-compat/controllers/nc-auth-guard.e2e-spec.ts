@@ -2,7 +2,11 @@ import { GUARDS_METADATA, METHOD_METADATA, MODULE_METADATA, PATH_METADATA } from
 import { RequestMethod } from '@nestjs/common'
 import { NestFastifyApplication } from '@nestjs/platform-fastify'
 import fs from 'node:fs/promises'
+import { readdirSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import { appBootstrap } from '../../../app.bootstrap'
+import { AUTH_PROVIDER } from '../../../authentication/providers/auth-providers.constants'
+import { configuration } from '../../../configuration/config.environment'
 import { USER_PERMISSION, USER_PERMS_SEP, USER_ROLE } from '../../users/constants/user'
 import { UserModel } from '../../users/models/user.model'
 import { AdminUsersManager } from '../../users/services/admin-users-manager.service'
@@ -11,6 +15,23 @@ import { CustomMobileCompatModule } from '../custom-mobile-compat.module'
 import { NC_AUTH_REALM } from '../constants/routes'
 import { NcBasicAuthGuard } from '../guards/nc-basic-auth.guard'
 import { NcAppPasswordService } from '../services/nc-app-password.service'
+import { NcActivityController } from './nc-activity.controller'
+import { NcCommentsController } from './nc-comments.controller'
+import { NcDavController } from './nc-dav.controller'
+import { NcDirectEditingController } from './nc-direct-editing.controller'
+import { NcDiscoveryController } from './nc-discovery.controller'
+import { NcExtrasController } from './nc-extras.controller'
+import { NcLoginV2Controller } from './nc-login-v2.controller'
+import { NcMobileOidcController } from './nc-mobile-oidc.controller'
+import { NcOcsController } from './nc-ocs.controller'
+import { NcOcsSharesController } from './nc-ocs-shares.controller'
+import { NcOfficeEditorController } from './nc-office-editor.controller'
+import { NcOnlyOfficeCallbackController, NcOnlyOfficeController } from './nc-onlyoffice.controller'
+import { NcRecommendationsController } from './nc-recommendations.controller'
+import { NcTextEditorController } from './nc-text-editor.controller'
+import { NcThemingController } from './nc-theming.controller'
+import { NcUploadsController } from './nc-uploads.controller'
+import { NcVersionsController } from './nc-versions.controller'
 
 // Is NcBasicAuthGuard actually IN THE REQUEST PATH?
 //
@@ -29,11 +50,107 @@ import { NcAppPasswordService } from '../services/nc-app-password.service'
 // with no credentials, plus an assertion that the SIDE EFFECT did not happen. A
 // status code on its own cannot tell "refused" from "refused after doing it".
 //
-// The route table is DISCOVERED by reflecting over the module rather than typed
-// out, so a new route cannot slip past by not being listed. Routes that declare
-// the guard must answer 401; routes that do not must be named in
-// UNGUARDED_ROUTES with a policy, and that list is asserted to have no strays in
-// either direction.
+// The route table is DISCOVERED by reflection rather than typed out, so a new
+// route cannot slip past by not being listed. Routes that declare the guard
+// must answer 401; routes that do not must be named in UNGUARDED_ROUTES with a
+// policy, and that list is asserted to have no strays in either direction.
+
+type Ctor = new (...args: never[]) => object
+
+// ── the controller table, and why it is not read off the module ─────────────
+//
+// custom-mobile-compat.module.ts spreads four of its controllers in
+// CONDITIONALLY: NcMobileOidcController behind `auth.provider === 'oidc'`, and
+// NcOnlyOfficeController / NcOnlyOfficeCallbackController /
+// NcOfficeEditorController behind `editors.onlyoffice|eurooffice.enabled`.
+//
+// So reflecting `MODULE_METADATA.CONTROLLERS` — which is what this file used to
+// do — makes the completeness claim above silently CONFIG-DEPENDENT: with a flag
+// off, a new unguarded route inside one of those four controllers is not merely
+// unprobed, it is never discovered, and the "classifies every route" case passes
+// by not looking. That is the exact failure mode this file exists to prevent.
+// (It was green only because .github/workflows/test-e2e.yml sed-enables
+// onlyoffice for an unrelated reason — versions-editors.e2e-spec.ts.)
+//
+// Controllers are therefore enumerated here by direct import, and the
+// classification suites run over every route in all of them regardless of what
+// this run mounted. Mounting still matters for the HTTP probes — an unmounted
+// route answers 404, which proves nothing — so each route also carries
+// `mounted`, read from the module metadata (the ground truth for what Nest
+// actually wired), and the probe suites run over the mounted subset only.
+//
+// The one hole a hand-written list could still have — a whole new controller
+// FILE that nobody adds here — is closed by scanning the directory; see
+// 'accounts for every controller class on disk' below.
+const UNCONDITIONAL_CONTROLLERS: Ctor[] = [
+  NcActivityController,
+  NcCommentsController,
+  NcDavController,
+  NcDirectEditingController,
+  NcDiscoveryController,
+  NcExtrasController,
+  NcLoginV2Controller,
+  NcOcsController,
+  NcOcsSharesController,
+  NcRecommendationsController,
+  NcTextEditorController,
+  NcThemingController,
+  NcUploadsController,
+  NcVersionsController
+]
+
+// Mounted only when their flag is on. Named explicitly so 'not mounted in this
+// run' is an expected state rather than an unexplained absence.
+const CONDITIONAL_CONTROLLERS: Ctor[] = [
+  NcMobileOidcController, // auth.provider === 'oidc'
+  NcOnlyOfficeController, // editors.onlyoffice.enabled || editors.eurooffice.enabled
+  NcOnlyOfficeCallbackController,
+  NcOfficeEditorController
+]
+
+const ALL_CONTROLLERS: Ctor[] = [...UNCONDITIONAL_CONTROLLERS, ...CONDITIONAL_CONTROLLERS]
+const CONDITIONAL_NAMES = new Set(CONDITIONAL_CONTROLLERS.map((c) => c.name))
+const MOUNTED_CONTROLLERS = new Set<unknown>(Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, CustomMobileCompatModule) ?? [])
+
+// The same two conditions custom-mobile-compat.module.ts evaluates, restated
+// from the same `configuration` object. Not used to BUILD the route table — the
+// whole point above is that the table does not depend on config — but asserted
+// against what Nest actually mounted, so 'this controller is missing' is always
+// either explained by a flag or a failure.
+const EXPECTED_MOUNTED = (controller: Ctor): boolean => {
+  if (controller === NcMobileOidcController) return configuration.auth?.provider === AUTH_PROVIDER.OIDC
+  if (controller === NcOnlyOfficeController || controller === NcOnlyOfficeCallbackController || controller === NcOfficeEditorController) {
+    return (
+      configuration.applications.files.editors.onlyoffice?.enabled === true || configuration.applications.files.editors.eurooffice?.enabled === true
+    )
+  }
+  return true
+}
+
+// Resolved against the vitest root (backend/), which is where `npm -w backend
+// run test:e2e` puts the cwd. A missing directory throws rather than yielding an
+// empty list — a scan that silently finds nothing would re-open the very hole it
+// is here to close.
+const CONTROLLERS_DIR = path.resolve(process.cwd(), 'src/applications/custom-mobile-compat/controllers')
+
+// Every `@Controller()`-decorated exported class in the directory, by name. Read
+// from source rather than by importing, so this stays synchronous (the route
+// table is built at collect time for `it.each`) and so it cannot be fooled by a
+// controller that fails to import.
+function controllerClassNamesOnDisk(): string[] {
+  const names: string[] = []
+  for (const file of readdirSync(CONTROLLERS_DIR).filter((f) => f.endsWith('.controller.ts'))) {
+    const source = readFileSync(path.join(CONTROLLERS_DIR, file), 'utf8')
+    // Each `@Controller(...)` owns the next `export class X` below it; a file
+    // may hold several (nc-onlyoffice.controller.ts holds two).
+    for (const decorator of source.matchAll(/@Controller\s*\(/g)) {
+      const rest = source.slice(decorator.index)
+      const declaration = /export\s+(?:abstract\s+)?class\s+(\w+)/.exec(rest)
+      if (declaration) names.push(declaration[1])
+    }
+  }
+  return names
+}
 
 // Nest's RequestMethod ordinals → the verb to probe a route with.
 const METHOD_NAMES: Record<number, string> = {
@@ -42,7 +159,7 @@ const METHOD_NAMES: Record<number, string> = {
   [RequestMethod.PUT]: 'PUT',
   [RequestMethod.DELETE]: 'DELETE',
   [RequestMethod.PATCH]: 'PATCH',
-  // @All() accepts every verb; GET is enough to reach the guard.
+  // @All() accepts every verb; GET is the representative one. See ALL_VERB_PROBES.
   [RequestMethod.ALL]: 'GET',
   [RequestMethod.OPTIONS]: 'OPTIONS',
   [RequestMethod.HEAD]: 'HEAD',
@@ -56,6 +173,14 @@ const METHOD_NAMES: Record<number, string> = {
   [RequestMethod.UNLOCK]: 'UNLOCK'
 }
 
+// `@All` expands to every verb Fastify exposes. For a route whose CLASS carries
+// NcBasicAuthGuard one verb is enough — a class-level guard runs on all of them,
+// so the guarded assertions lose nothing. An UNGUARDED `@All` is different: its
+// policy is a property of the handler's own `req.method` dispatch, which is
+// per-verb (nc-discovery's dav root answers 401 flat for everything but SEARCH,
+// which it inline-invokes the guard for). Those get probed across a spread.
+const ALL_VERB_PROBES = ['GET', 'POST', 'PUT', 'DELETE', 'PROPFIND', 'MKCOL']
+
 // Policies for the routes that deliberately do NOT carry NcBasicAuthGuard.
 // Every one of them has to be here, with the reason it is safe, or the
 // completeness assertion fails.
@@ -65,6 +190,14 @@ type Policy =
   | 'other-guard' // a different guard owns it (the document server's JWT)
   | 'token-401' // authenticated by a ?token= JWT; refuses with 401 without one
   | 'token-error-page' // same, but must answer 200 with an error page (a webview blanks on a 4xx)
+
+// What a 'public' route is allowed to answer to an anonymous probe. The claim is
+// REACHABILITY, not success: an unbuilt bundle 404s, a flow token of 32 zeros
+// matches nothing, a POST with no body is a 400 — all fine. What is NOT fine is
+// being refused for want of a credential (401/403) or being throttled (429).
+// The old assertion here was a bare `not.toBe(401)`, which a permanent 429 would
+// satisfy — and #523 puts a per-IP rate limiter on exactly the login-v2 routes.
+const PUBLIC_STATUSES = [200, 201, 204, 302, 303, 400, 404, 415]
 
 const UNGUARDED_ROUTES: Record<string, { policy: Policy; why: string }> = {
   // ── discovery / probes
@@ -112,8 +245,9 @@ const UNGUARDED_ROUTES: Record<string, { policy: Policy; why: string }> = {
     why: 'OnlyOfficeGuard — the caller is the document server, which holds a JWT, not a user'
   },
 
-  // ── mounted only when auth.provider === 'oidc'; listed so enabling OIDC does
-  //    not trip the completeness check with an unclassified route
+  // ── NcMobileOidcController, mounted only when auth.provider === 'oidc'. CI
+  //    leaves the provider local, so these two are classified here but NOT
+  //    probed over HTTP in that configuration — see the visibility case below.
   'GET /custom-mobile/oidc/login/:token': { policy: 'public', why: 'the browser hop to the IdP; the flow token is the secret' },
   'GET /custom-mobile/oidc/callback': { policy: 'public', why: 'the IdP redirects here with its own code; no Basic credential exists yet' }
 }
@@ -124,20 +258,37 @@ interface DiscoveredRoute {
   path: string
   controller: string
   guarded: boolean // declares NcBasicAuthGuard on the handler or the class
+  mounted: boolean // this configuration actually wired the controller into Nest
+  isAll: boolean // declared with @All, so the verb above is only representative
+}
+
+// Every method name on the class AND on anything it extends. No controller in
+// this module uses inheritance today, so this is latent — but a handler moved to
+// a shared base class would otherwise vanish from the table, silently, which is
+// the same failure mode as the conditional mounting above.
+function methodNames(ctor: Ctor): string[] {
+  const names = new Set<string>()
+  for (let proto = ctor.prototype; proto && proto !== Object.prototype; proto = Object.getPrototypeOf(proto)) {
+    for (const name of Object.getOwnPropertyNames(proto)) {
+      if (name !== 'constructor') names.add(name)
+    }
+  }
+  return [...names]
 }
 
 function discoverRoutes(): DiscoveredRoute[] {
-  const controllers: (new (...args: never[]) => object)[] = Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, CustomMobileCompatModule) ?? []
   const routes: DiscoveredRoute[] = []
 
-  for (const controller of controllers) {
+  for (const controller of ALL_CONTROLLERS) {
     const prefixMeta = Reflect.getMetadata(PATH_METADATA, controller) ?? '/'
     const prefixes = (Array.isArray(prefixMeta) ? prefixMeta : [prefixMeta]).map(String)
+    // Reflect.getMetadata walks the prototype chain for classes, so a guard
+    // declared on a base class is seen here too.
     const classGuards: unknown[] = Reflect.getMetadata(GUARDS_METADATA, controller) ?? []
     const proto = controller.prototype as Record<string, unknown>
+    const mounted = MOUNTED_CONTROLLERS.has(controller)
 
-    for (const name of Object.getOwnPropertyNames(proto)) {
-      if (name === 'constructor') continue
+    for (const name of methodNames(controller)) {
       const handler = proto[name]
       if (typeof handler !== 'function') continue
       const pathMeta = Reflect.getMetadata(PATH_METADATA, handler)
@@ -154,7 +305,15 @@ function discoverRoutes(): DiscoveredRoute[] {
             .map((s) => s.replace(/^\/+|\/+$/g, ''))
             .filter(Boolean)
             .join('/')}`
-          routes.push({ key: `${verb} ${path}`, method: verb, path, controller: controller.name, guarded })
+          routes.push({
+            key: `${verb} ${path}`,
+            method: verb,
+            path,
+            controller: controller.name,
+            guarded,
+            mounted,
+            isAll: methodMeta === RequestMethod.ALL
+          })
         }
       }
     }
@@ -227,26 +386,66 @@ describe('NcBasicAuthGuard is in the request path for every NC route that claims
   it('discovered a non-trivial route table (the reflection itself must not go vacuous)', () => {
     expect(routes.length).toBeGreaterThan(30)
     expect(routes.filter((r) => r.guarded).length).toBeGreaterThan(15)
+    // The HTTP probes only cover mounted routes, so that subset must be
+    // substantial too — otherwise a misconfigured run would classify everything
+    // and prove nothing.
+    expect(routes.filter((r) => r.mounted).length).toBeGreaterThan(30)
+  })
+
+  it('accounts for every controller class on disk — a new controller file cannot escape the table', () => {
+    const onDisk = controllerClassNamesOnDisk()
+    const declared = ALL_CONTROLLERS.map((c) => c.name)
+    // Anti-vacuity: an empty or truncated scan must not read as agreement.
+    expect(onDisk.length).toBeGreaterThan(15)
+    expect(onDisk.filter((n) => !declared.includes(n)).sort()).toEqual([])
+    expect(declared.filter((n) => !onDisk.includes(n)).sort()).toEqual([])
+  })
+
+  it('states which controllers this run mounted, and only the conditional ones may be absent', () => {
+    const mounted = ALL_CONTROLLERS.filter((c) => MOUNTED_CONTROLLERS.has(c)).map((c) => c.name)
+    const notMounted = ALL_CONTROLLERS.filter((c) => !MOUNTED_CONTROLLERS.has(c)).map((c) => c.name)
+    // Say it out loud. The classification cases cover every controller, but the
+    // HTTP probes only reach the mounted ones, and which those are is config —
+    // so a reader of the output should never have to infer it. (Written to
+    // stdout directly: the app bootstrap swaps the Nest logger in and console.*
+    // does not survive it.)
+    process.stdout.write(
+      `\n[nc-auth-guard] mounted in this run (${mounted.length}): ${mounted.join(', ')}\n` +
+        `[nc-auth-guard] NOT mounted (${notMounted.length}) — classified below, but NOT probed over HTTP: ${notMounted.join(', ') || 'none'}\n`
+    )
+    // An unconditional controller that failed to mount means the module changed
+    // under this file, not that the configuration differs.
+    expect(notMounted.filter((n) => !CONDITIONAL_NAMES.has(n))).toEqual([])
+    // Nest must not have mounted anything this table does not know about.
+    const declared = new Set<unknown>(ALL_CONTROLLERS)
+    expect([...MOUNTED_CONTROLLERS].filter((c) => !declared.has(c)).map((c) => (c as Ctor).name)).toEqual([])
+    // ...and every absence is explained by the flag the module actually reads,
+    // so a controller silently dropped from the module's `controllers` array
+    // fails here rather than quietly losing its HTTP coverage.
+    expect(ALL_CONTROLLERS.filter((c) => MOUNTED_CONTROLLERS.has(c) !== EXPECTED_MOUNTED(c)).map((c) => c.name)).toEqual([])
   })
 
   it('classifies every route that does NOT declare the guard — a new unguarded route fails here', () => {
+    // Deliberately over ALL routes, mounted or not: a new unguarded route inside
+    // a conditionally-mounted controller must fail this even with its flag off.
     const unclassified = routes.filter((r) => !r.guarded && !UNGUARDED_ROUTES[r.key]).map((r) => `${r.key}  (${r.controller})`)
     expect(unclassified).toEqual([])
   })
 
   it('has no stale entries in the unguarded list either — a route that GAINED the guard must be removed from it', () => {
-    const mounted = new Set(routes.map((r) => r.key))
+    const known = new Set(routes.map((r) => r.key))
     const guardedButListed = routes.filter((r) => r.guarded && UNGUARDED_ROUTES[r.key]).map((r) => r.key)
     expect(guardedButListed).toEqual([])
-    // Entries for routes that are not mounted in this configuration are allowed
-    // (the OIDC pair), but nothing else may be listed that does not exist at all.
-    const optional = new Set(['GET /custom-mobile/oidc/login/:token', 'GET /custom-mobile/oidc/callback'])
-    const phantom = Object.keys(UNGUARDED_ROUTES).filter((k) => !mounted.has(k) && !optional.has(k))
+    // No allow-list of "might not be mounted" entries is needed any more: the
+    // route table is built from the controller classes, not from what Nest
+    // wired, so a conditionally-mounted route is still a known route. A phantom
+    // is therefore a genuinely dead entry.
+    const phantom = Object.keys(UNGUARDED_ROUTES).filter((k) => !known.has(k))
     expect(phantom).toEqual([])
   })
 
   describe('routes that declare NcBasicAuthGuard refuse an anonymous request', () => {
-    const guarded = discoverRoutes().filter((r) => r.guarded)
+    const guarded = routes.filter((r) => r.guarded && r.mounted)
 
     it.each(guarded.map((r) => [r.key, r] as const))('%s → 401 with a Basic challenge', async (_key, route) => {
       const res = await anon(route.method, concretize(route.path, user.login))
@@ -265,29 +464,37 @@ describe('NcBasicAuthGuard is in the request path for every NC route that claims
   })
 
   describe('routes that do not declare the guard behave as their policy says', () => {
-    const unguarded = discoverRoutes().filter((r) => !r.guarded && UNGUARDED_ROUTES[r.key])
+    const unguarded = routes.filter((r) => !r.guarded && r.mounted && UNGUARDED_ROUTES[r.key])
 
-    it.each(unguarded.map((r) => [`${r.key} [${UNGUARDED_ROUTES[r.key].policy}]`, r] as const))('%s', async (_key, route) => {
-      const { policy } = UNGUARDED_ROUTES[route.key]
-      const res = await anon(route.method, concretize(route.path, user.login))
+    const assertPolicy = (policy: Policy, res: { statusCode: number; body: string }, where: string) => {
       switch (policy) {
         case 'public':
-          // The point is that it is REACHABLE without credentials. It may 404
-          // (an unbuilt bundle, a flow token that matches nothing) but it must
-          // not be refused for want of a credential.
-          expect(res.statusCode).not.toBe(401)
+          // REACHABLE without credentials is the claim — not success. See
+          // PUBLIC_STATUSES for why this is an allow-list and not `not.toBe(401)`.
+          expect(PUBLIC_STATUSES, `${where} answered ${res.statusCode}`).toContain(res.statusCode)
           break
         case 'always-401':
         case 'other-guard':
         case 'token-401':
-          expect(res.statusCode).toBe(401)
+          expect(res.statusCode, where).toBe(401)
           break
         case 'token-error-page':
           // A 4xx makes the host webview show its own blank page, so the refusal
           // has to arrive as a readable 200.
-          expect(res.statusCode).toBe(200)
+          expect(res.statusCode, where).toBe(200)
           expect(res.body).toContain('expired')
           break
+      }
+    }
+
+    it.each(unguarded.map((r) => [`${r.key} [${UNGUARDED_ROUTES[r.key].policy}]`, r] as const))('%s', async (_key, route) => {
+      const { policy } = UNGUARDED_ROUTES[route.key]
+      // An unguarded @All dispatches per-verb inside the handler, so one verb is
+      // not the whole contract.
+      const verbs = route.isAll ? ALL_VERB_PROBES : [route.method]
+      for (const verb of verbs) {
+        const res = await anon(verb, concretize(route.path, user.login))
+        assertPolicy(policy, res as unknown as { statusCode: number; body: string }, `${verb} ${route.path}`)
       }
     })
   })
