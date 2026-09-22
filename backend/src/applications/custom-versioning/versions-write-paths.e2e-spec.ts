@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { setupVersionsE2E, type VersionsE2EContext } from './utils/versions-e2e.fixture'
@@ -7,7 +8,8 @@ import { setupVersionsE2E, type VersionsE2EContext } from './utils/versions-e2e.
 //
 // Cases covered here: E2E-3 (WebDAV), E2E-6 (trash), E2E-9 (dedup/refcount),
 // E2E-13 (flag off), E2E-16 (copyMove), E2E-18 (mkFile truncate),
-// E2E-19 (rename/move anchor) and E2E-20 (row ensuring).
+// E2E-19 (rename/move anchor), E2E-20 (row ensuring) and the diagram save
+// (#474), the eighth path.
 //
 // The write paths are driven at SERVICE level rather than over each protocol.
 // That is deliberate: the seven destructive entry points are reached over five
@@ -348,6 +350,91 @@ describe('versions write paths and invariants (e2e)', () => {
       const after = await e2e.api.list(rel)
       expect(after.status).toBe(200)
       expect(after.body.map((v) => v.id)).toEqual(before.map((v) => v.id))
+    })
+  })
+
+  /* ------------------------------------------------- diagram save (#474) */
+
+  // THE EIGHTH DESTRUCTIVE WRITE PATH. `/api/diagrams/save` overwrites live
+  // bytes and was in none of the tables: no snapshot, no lock, and no gate
+  // keeping it pointed at a diagram, so a .docx could be read out and replaced
+  // through it. Driven over real HTTP rather than at service level because the
+  // extension gate and the 400 it raises are controller-visible behaviour, and
+  // because the whole point of the case is that the DI wiring for the new
+  // VersioningService / FilesLockManager dependencies actually resolves.
+  describe('diagram save', () => {
+    const save = (relPath: string, xml: string, etag: string) =>
+      e2e.app.inject({
+        method: 'PUT',
+        url: '/api/diagrams/save',
+        headers: { cookie: e2e.session.cookie, 'sync-in-csrf': e2e.session.csrf },
+        body: { path: `files/personal/${relPath}`, xml, etag }
+      } as never)
+
+    const load = (relPath: string) =>
+      e2e.app.inject({
+        method: 'GET',
+        url: `/api/diagrams/load?path=${encodeURIComponent(`files/personal/${relPath}`)}`,
+        headers: { cookie: e2e.session.cookie }
+      } as never)
+
+    it('versions the superseded diagram and keeps the live file on its inode', async () => {
+      const rel = 'e2e-diagram.drawio'
+      await e2e.seed(rel, '<mxfile><one/></mxfile>')
+      const inodeBefore = (await fs.stat(e2e.filesPath(rel))).ino
+
+      const loaded = await load(rel)
+      expect(loaded.statusCode).toBe(200)
+      const { etag } = loaded.json() as { etag: string }
+      const res = await save(rel, '<mxfile><two/></mxfile>', etag)
+      expect(res.statusCode).toBe(200)
+
+      const versions = await e2e.versionsOf(rel)
+      expect(versions).toHaveLength(1)
+      expect(versions[0].origin).toBe('web')
+      expect((await e2e.api.content(versions[0].id, rel)).body).toBe('<mxfile><one/></mxfile>')
+
+      expect(await fs.readFile(e2e.filesPath(rel), 'utf8')).toBe('<mxfile><two/></mxfile>')
+      // Invariant 2: trash retention keys on the inode, so a rename-over would
+      // silently break it.
+      expect((await fs.stat(e2e.filesPath(rel))).ino).toBe(inodeBefore)
+      // And no `.tmp-…` orphan beside it — that name is invisible to
+      // isInternalTemporaryEntry, so one would be listed, synced and permanent.
+      expect((await fs.readdir(path.dirname(e2e.filesPath(rel)))).filter((n) => n.includes('.tmp-'))).toEqual([])
+    })
+
+    // `mkFile` throws FileError, which extends Error and not HttpException;
+    // with no filter on the controller that reaches the client as a 500. Only
+    // a real request can show the status the user actually gets, which is why
+    // this case is here and not in the unit spec beside its sibling.
+    it('answers a duplicate name with 400, not an opaque 500', async () => {
+      const body = { dirPath: 'files/personal', name: 'e2e-diagram-new.drawio' }
+      const create = () =>
+        e2e.app.inject({
+          method: 'POST',
+          url: '/api/diagrams/new',
+          headers: { cookie: e2e.session.cookie, 'sync-in-csrf': e2e.session.csrf },
+          body
+        } as never)
+
+      expect((await create()).statusCode).toBe(201)
+      const second = await create()
+      expect(second.statusCode).toBe(400)
+      expect(second.json()).toMatchObject({ message: 'Resource already exists' })
+    })
+
+    it('refuses to read or replace a file that is not a diagram', async () => {
+      const rel = 'e2e-diagram-not-a-diagram.docx'
+      await e2e.seed(rel, 'a real document')
+
+      expect((await load(rel)).statusCode).toBe(400)
+      // The etag `save` wants is content-derived, so it can be computed without
+      // `load` — which is exactly why gating only `load` would not have been
+      // enough.
+      const etag = createHash('sha1').update('a real document', 'utf-8').digest('hex')
+      expect((await save(rel, 'destroyed', etag)).statusCode).toBe(400)
+      expect(await fs.readFile(e2e.filesPath(rel), 'utf8')).toBe('a real document')
+      expect(await e2e.versionsOf(rel)).toHaveLength(0)
     })
   })
 

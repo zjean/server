@@ -53,10 +53,14 @@ export class WebDAVSpaces {
     return null
   }
 
-  propfind(req: FastifyDAVRequest, space: string): AsyncGenerator<WebDAVFile> {
+  // `withDetails` asks SpacesBrowser for the extra per-file joins the NC
+  // mobile prop builder needs (see listFiles). It defaults to OFF so the
+  // classic WebDAV surface — WebDAVMethods.propfind — pays nothing for them;
+  // only NcPropfindService opts in. See #505.
+  propfind(req: FastifyDAVRequest, space: string, withDetails = false): AsyncGenerator<WebDAVFile> {
     switch (space) {
       case SPACE_REPOSITORY.FILES:
-        return this.listFiles(req, req.space)
+        return this.listFiles(req, req.space, withDetails)
       case WEBDAV_NS.SERVER:
         return this.listServer(req)
       case WEBDAV_NS.WEBDAV:
@@ -139,7 +143,7 @@ export class WebDAVSpaces {
     }
   }
 
-  private async *listFiles(req: FastifyDAVRequest, space: SpaceEnv): AsyncGenerator<WebDAVFile> {
+  private async *listFiles(req: FastifyDAVRequest, space: SpaceEnv, withDetails: boolean): AsyncGenerator<WebDAVFile> {
     let isDir: boolean
 
     if (space.inSharesList) {
@@ -162,7 +166,18 @@ export class WebDAVSpaces {
       // single `withDetails` boolean (2.5.0) which enables exactly those,
       // plus syncs (permission-gated) and isFavorite. All are read-only
       // additive DB joins — they don't change the file set.
-      const { files } = await this.spacesBrowser.browse(req.user, space, true)
+      //
+      // #505: this MUST stay caller-driven rather than a hardcoded `true`.
+      // A hardcoded `true` made every classic `PROPFIND Depth: 1` pay for a
+      // shares aggregation, a fileHasComments correlated subquery, a
+      // favorites join AND `SpacesBrowser.enrichWithLocks` — the last being
+      // pure waste, because WebDAVMethods.propfind already runs its own
+      // `browseParentChildLocks` for the same request and assembles
+      // <lockdiscovery> from THAT map. None of the extra fields reach the
+      // classic wire either: WebDAVMethods filters props against
+      // STANDARD_PROPS. The NC surface is the only consumer, so only
+      // NcPropfindService passes `true`.
+      const { files } = await this.spacesBrowser.browse(req.user, space, withDetails)
       for (const f of files) {
         yield new WebDAVFile(f, req.dav.url)
       }

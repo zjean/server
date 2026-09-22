@@ -16,6 +16,18 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop'
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
+import {
+  buildEditorSrc,
+  buildPrintDocument,
+  buildPrintPlaceholderDocument,
+  isAllowedExportDataUrl,
+  isForbiddenSvgAttribute,
+  isForbiddenSvgElement,
+  printNonce
+} from '../utils/diagram-embed'
+
+// Passes of the SVG scrub before it is declared non-convergent. See sanitizeSvg.
+const SANITIZE_MAX_PASSES = 5
 
 interface DrawioEvent {
   event: string
@@ -57,6 +69,14 @@ export class DiagramViewComponent implements OnInit {
   protected readonly iframeSrc = signal<SafeResourceUrl | null>(null)
 
   protected readonly conflict = signal<{ theirEtag: string; theirXml: string } | null>(null)
+  // Mirrors `isWritable` for the template. The private field stays the source of
+  // truth for the save path so a stray signal write cannot re-enable writing.
+  protected readonly readOnly = signal(false)
+  // Host of the drawio deployment when it is NOT this server. The default
+  // editor is `embed.diagrams.net`, a third party that receives the complete
+  // XML of every diagram opened; shipping that undisclosed is the substance of
+  // #499. Null when the editor is same-origin and nothing leaves.
+  protected readonly externalEditorHost = signal<string | null>(null)
 
   private etag = ''
   private editorOrigin = '__unset__'
@@ -87,6 +107,9 @@ export class DiagramViewComponent implements OnInit {
             const url = new URL(res.editorUrl)
             if (!['http:', 'https:'].includes(url.protocol)) throw new Error('invalid scheme')
             this.editorOrigin = url.origin
+            // `globalThis.location` rather than `window`: this component is
+            // SSR-guarded like the rest of v2 and must not assume a browser.
+            this.externalEditorHost.set(url.origin === globalThis.location?.origin ? null : url.host)
           } catch {
             this.errorMessage.set('Failed to load diagram.')
             this.loading.set(false)
@@ -94,9 +117,9 @@ export class DiagramViewComponent implements OnInit {
           }
           this.etag = res.etag
           this.isWritable = res.isWritable
+          this.readOnly.set(!res.isWritable)
           this.pendingXml = res.xml
-          const src = `${res.editorUrl}?embed=1&spin=1&proto=json&autosave=1&keepmodified=1&dark=1`
-          this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(src))
+          this.iframeSrc.set(this.sanitizer.bypassSecurityTrustResourceUrl(buildEditorSrc(res.editorUrl, res.isWritable)))
           this.loading.set(false)
         },
         error: () => {
@@ -123,6 +146,11 @@ export class DiagramViewComponent implements OnInit {
   @HostListener('window:message', ['$event'])
   onMessage(event: MessageEvent): void {
     if (event.origin !== this.editorOrigin) return
+    // The origin check carries the real weight; this narrows it from "any window
+    // served by the editor origin" to "our iframe". Skipped when no frame is
+    // mounted yet, since `source` cannot then be compared to anything.
+    const frameWindow = this.editorFrame()?.nativeElement?.contentWindow
+    if (frameWindow && event.source !== frameWindow) return
     let data: DrawioEvent
     try {
       data = typeof event.data === 'string' ? JSON.parse(event.data) : (event.data as DrawioEvent)
@@ -137,6 +165,11 @@ export class DiagramViewComponent implements OnInit {
         // a blank tab in our iframe-embedded context and never produces a
         // download. See drawio embed-mode docs (UI-triggered exports section).
         this.postToEditor({ action: 'load', xml: this.pendingXml, exportProtocol: true })
+        // Second channel for the same fact as the host banner: `chrome=0`
+        // already removes the editing UI, but a status line inside the canvas
+        // is where drawio itself reports document state, so that is where a
+        // user who wonders why the toolbar is gone will look.
+        if (!this.isWritable) this.postToEditor({ action: 'status', message: 'Read-only' })
         break
       case 'save':
       case 'autosave':
@@ -154,6 +187,12 @@ export class DiagramViewComponent implements OnInit {
 
   private downloadExport(data: DrawioEvent): void {
     if (!data.data) return
+    // `data.data` is third-party-supplied and lands on an anchor we then click.
+    // A `javascript:` href there would run in OUR origin (#498).
+    if (!isAllowedExportDataUrl(data.data)) {
+      console.warn('diagram export rejected: unexpected payload scheme')
+      return
+    }
     const a = document.createElement('a')
     a.href = data.data
     a.download = data.filename ?? this.deriveExportFilename(data.format)
@@ -174,14 +213,9 @@ export class DiagramViewComponent implements OnInit {
     if (!w) return
     if (this.printWindow && !this.printWindow.closed) this.printWindow.close()
     this.printWindow = w
-    // raw-colour-ok: this HTML is a separate print document, not app DOM. It
-    // must not inherit the app theme — a diagram printed on a dark ground
-    // wastes ink and loses stroke contrast on paper.
     try {
       w.document.open()
-      w.document.write(
-        '<!doctype html><meta charset="utf-8"><title>Print</title><body style="margin:0;font:14px/1.4 system-ui;display:flex;align-items:center;justify-content:center;height:100vh;color:#666">Preparing print preview…</body>'
-      )
+      w.document.write(buildPrintPlaceholderDocument())
       w.document.close()
     } catch {
       // Some browsers throw before navigation completes — ignore, we'll write again.
@@ -193,7 +227,9 @@ export class DiagramViewComponent implements OnInit {
     const w = this.printWindow
     this.printWindow = null
     if (!w || w.closed) return
-    const svg = data.data ?? ''
+    // Same reason as the `typeof` test in isAllowedExportDataUrl: the payload is
+    // JSON.parse of a cross-origin message, typed but not validated.
+    const svg = typeof data.data === 'string' && data.data ? this.sanitizeSvg(data.data) : ''
     if (!svg) {
       try {
         w.close()
@@ -202,25 +238,10 @@ export class DiagramViewComponent implements OnInit {
       }
       return
     }
-    // Inline the SVG so the browser can vectorise it at print DPI. We wrap it
-    // in print-friendly CSS that fits one page and triggers print() after the
-    // SVG has laid out (rAF gives layout a tick to settle).
-    // raw-colour-ok: the print document again — see printWindow above.
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${this.escapeHtml(this.deriveBaseName())}</title>
-<style>
-  html, body { margin: 0; padding: 0; }
-  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #fff; }
-  svg { max-width: 100%; max-height: 100vh; height: auto; width: auto; }
-  @media print {
-    body { min-height: auto; }
-    svg { max-height: none; }
-  }
-</style></head><body>${svg}<script>
-  window.addEventListener('load', function () {
-    requestAnimationFrame(function () { requestAnimationFrame(function () { window.focus(); window.print(); }); });
-  });
-  window.addEventListener('afterprint', function () { window.close(); });
-</script></body></html>`
+    // Inline the SVG so the browser can vectorise it at print DPI. The document
+    // carries its own nonce'd CSP — see buildPrintDocument for why that matters
+    // more here than the sanitiser above does.
+    const html = buildPrintDocument(this.deriveBaseName(), svg, printNonce())
     try {
       w.document.open()
       w.document.write(html)
@@ -234,8 +255,56 @@ export class DiagramViewComponent implements OnInit {
     }
   }
 
-  private escapeHtml(s: string): string {
-    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string)
+  // Strip anything executable out of the export before it is written into a
+  // document that inherits our origin. Parsed as HTML rather than as XML on
+  // purpose: the HTML parser is lenient and applies the foreign-content rules,
+  // so a slightly malformed export still prints instead of silently failing,
+  // and `<foreignObject>` (drawio's HTML labels) is walked rather than dropped.
+  // Returns null when there is nothing recognisable to print.
+  //
+  // LOOPS UNTIL THE OUTPUT IS STABLE. A single parse → scrub → serialise is the
+  // canonical mXSS shape: the string this returns is re-parsed by
+  // `document.write`, and HTML serialisation is not a round trip — a construct
+  // that parsed one way can serialise to text that parses a DIFFERENT way the
+  // second time, resurrecting an element the scrub removed. Nobody has built a
+  // working payload against this particular pair of parsers and the nonce'd CSP
+  // is what actually holds the line, but "sanitise once and hand the string to a
+  // write sink" is the shape DOMPurify loops for, so this loops too. Two passes
+  // is the normal case (the second only confirms stability); the cap stops a
+  // pathological input from spinning.
+  private sanitizeSvg(markup: string): string | null {
+    let current = markup
+    for (let pass = 0; pass < SANITIZE_MAX_PASSES; pass++) {
+      const scrubbed = this.scrubSvgOnce(current)
+      if (scrubbed === null) return null
+      if (scrubbed === current) return scrubbed
+      current = scrubbed
+    }
+    // Never converged. Refuse rather than print the last iteration — an input
+    // that keeps changing under an idempotent scrub is not one to trust.
+    console.warn('diagram print rejected: sanitiser did not converge')
+    return null
+  }
+
+  private scrubSvgOnce(markup: string): string | null {
+    let root: SVGSVGElement | null
+    try {
+      root = new DOMParser().parseFromString(markup, 'text/html').body.querySelector('svg')
+    } catch {
+      return null
+    }
+    if (!root) return null
+    const scrub = (el: Element): void => {
+      for (const attr of Array.from(el.attributes)) {
+        if (isForbiddenSvgAttribute(attr.name, attr.value)) el.removeAttribute(attr.name)
+      }
+      for (const child of Array.from(el.children)) {
+        if (isForbiddenSvgElement(child.localName)) child.remove()
+        else scrub(child)
+      }
+    }
+    scrub(root)
+    return root.outerHTML
   }
 
   private deriveBaseName(): string {
@@ -257,6 +326,9 @@ export class DiagramViewComponent implements OnInit {
   }
 
   private saveXml(xml: string): void {
+    // Defence in depth. `buildEditorSrc` mounts the viewer when the file is not
+    // writable, so drawio should never emit a save at all — but a save that did
+    // arrive must not reach the backend, which would refuse it anyway (#473).
     if (!this.isWritable) return
     if (this.conflict() !== null) {
       // Dialog is open. Don't touch the backend — just remember the latest
@@ -289,12 +361,25 @@ export class DiagramViewComponent implements OnInit {
         },
         error: (e) => {
           this.saving = false
-          this.queuedXml = null
           if (e?.status === 409) {
-            this.latestXmlWhileConflicted = xml
+            // `queuedXml` is what the user drew WHILE this save was in flight,
+            // so it is strictly newer than `xml` — the payload that just lost.
+            // Recording the loser here (and dropping the queue) meant "Keep
+            // mine" re-sent a stale canvas: the newest shapes were still
+            // visible, so nothing looked wrong, but they were not in the file
+            // and drawio's autosave only fires on the NEXT change. Close the
+            // tab and they were gone.
+            //
+            // The queue is still cleared, deliberately: `keepMine` resumes
+            // through `doSave`, whose success branch drains `queuedXml` — a
+            // leftover entry there would re-save the same stale payload on top
+            // of the resolution.
+            this.latestXmlWhileConflicted = this.queuedXml ?? xml
+            this.queuedXml = null
             this.recoverFromConflict()
             return
           }
+          this.queuedXml = null
           this.postToEditor({ action: 'status', message: 'Save failed.' })
         }
       })

@@ -152,6 +152,41 @@ The destructive moment differs per path, and each hook targets it exactly (§B3 
 | OnlyOffice `saveDocument` | `copyFileContent(tmpFilePath, space.realPath)` | `only-office-manager.service.ts:409` |
 | NC `assembleAndMove` | `moveFiles(tmpPath, space.realPath, true)` | `nc-uploads.controller.ts:212` |
 | `mkFile(overwrite=true)` | `copyFileContent(srcSample, ...)` or `createEmptyFile(...)` | `files-manager.service.ts:365` / `:369` |
+| `CustomDiagramsService.save` | `writeFromStream(space.realPath, …)` | `custom-diagrams.service.ts` |
+
+**AMENDED (#474): there are EIGHT, and the eighth is the fork's own.** `/api/diagrams/save` shipped after this table
+was written and was never added to it: no snapshot, no lock check, and no gate keeping it pointed at a diagram, so it
+also doubled as a read-any-file / replace-any-file primitive. It writes with `writeFromStream` onto the live path
+(flag `'w'`, start 0), so the inode survives invariant 2. Three things about it are easy to state too strongly, and
+the first version of this paragraph stated all three too strongly:
+
+- **The snapshot is not a crash safety net.** The pre-write `snapshotBeforeOverwrite` makes the superseded content
+  recoverable *only when `files.versions.enabled` is true and `isCoalesced` did not suppress this particular save* —
+  i.e. not in the shipped default (`enabled: false`), and not for most of a drawio autosave burst even when enabled.
+  The write truncates the live file in place before the first byte lands, so a disk-full or a kill mid-write leaves a
+  truncated diagram. The previous rename-over-inode implementation did survive that one case; it was traded away for
+  invariant 2, knowingly, and the payload is whole in memory and size-checked beforehand so a staging copy would
+  validate nothing. `copyFileContent` — the helper both editors' save paths use — has the identical exposure, so this
+  is a property of §4 as a whole, not of the diagram path.
+- **The lock is mutual exclusion against OTHER principals only.** Holding `createOrRefresh` across the compare and the
+  write is what stops a WebDAV client or an editor session clobbering the file mid-save, and that is a real gain over
+  the non-DAV `saveStream` branch. It is **not** a CAS for the caller's own concurrent saves: `createOrRefresh` returns
+  `[false, existingLock]` when the existing lock is the same user's, so two tabs both enter the critical section, both
+  match the etag, both write, and the loser gets a `200` carrying an etag that no longer describes the file. The race
+  is narrowed, not closed — and the window is *wider* than the old code's, since the snapshot (blob copy, hash, insert)
+  now sits inside it. A genuine same-user CAS needs a compare-and-swap in the store; the lock manager has no same-owner
+  barrier and `create` would reject the ordinary "same user, two windows" case outright.
+- **`origin: 'web'` is a cost decision, not a semantic match.** By §5.1's own rule drawio under `autosave=1` belongs
+  with the editors: its cadence is set by the client's timer, not by a human pressing Save. It gets `web` because
+  `origin` is a `mysqlEnum` and a ninth value is a schema migration, and because what that costs is a version *rate*
+  rather than correctness — the 60 s scalar against the editors' 300 s, so ~5x the rows for the same hour of editing,
+  all of it bounded by §5.3 thinning. The real bill is operator tuning: `web` has no entry in
+  `minIntervalSecondsByOrigin`, so the diagram rate cannot be lowered without lowering it for every ordinary browser
+  upload. Revisit with the next migration that touches this table.
+
+`CustomDiagramsService.createNew` is deliberately **not** a ninth entry. It writes the empty-diagram skeleton with
+`fs.writeFile`, but `mkFile(overwrite=false)` throws `Resource already exists` before that line, so no live content is
+ever superseded. The exemption is one argument wide: flipping `overwrite` makes it destructive.
 
 **Resumed chunks are never snapshotted.** In the direct branch, `writeFromStream` uses flag `'a'` when `start > 0` (`files/utils/files.ts:253`), and `saveStream` validates `startRange === fileSize` (`files-manager.service.ts:147-150`). A `startRange > 0` request therefore sees `fExists === true` while the live file **already holds partial new content** — snapshotting there would capture a half-written frankenfile. The gate is `fExists && !isDir && startRange === 0`.
 
@@ -291,6 +326,15 @@ This section replaces the draft's claim that snapshotting "never blocks the user
 
 **Rationale (verified).** `UserModel.getHomePath(login, isGuest, isLink)` puts guests under `tmpPath/guests/<login>` and links under `tmpPath/links/<login>` (`user.model.ts:135-148`), whereas `getTrashPath(login)` calls `getHomePath(login)` **without those flags** (:154-156) and so resolves into `usersPath`. A `getVersionsPath` modeled on it would inherit the same split: versions for a guest upload would be written outside the ephemeral tree that holds the live files, outliving the guest home and accumulating unreferenced blobs. Skipping also avoids a guaranteed cross-device copy on every public-link upload. Public links are a sharing surface, not a document-authoring surface; version history there has no user to show it to.
 
+**CORRECTED (#517): the guest half of that rule was too wide, and the excess was silent data loss.** The rationale above is about the **root**, not about the account — and it only holds where the resolved root is the acting guest's **own user root**. For a file in a **shared space** `versionsRootFromSpace` returns `space:<alias>`, under `spacesPath`, which a guest's tmp home has nothing to do with. Skipping there meant a guest with MODIFY overwrote a shared file and the previous content was unrecoverable for **everyone in that space, its owner included**, while the identical overwrite by an internal member was versioned — a hole in the timeline nobody in the space could see or repair.
+
+The rule is now, in `VersioningService.mintsNoVersions`:
+
+- **link** → never mints, unchanged (whoever holds the url; nothing durable to attribute a revision to).
+- **guest** → skips only when `versionsRootFromSpace(user, space) === userVersionsRoot(user.login)`, which covers both branches that return the acting user's own root (personal space, and a share with an external path and no owner) and nothing else.
+
+Reading history stays denied to both (#492): the capture protects the file's **other** members, not the guest.
+
 ## 9. Restore — `copyFileContent`, never `moveFiles`; the inode must survive
 
 **Decision.** Restore is: acquire a lock → snapshot the *current* content as a new version with origin `restore` → replace live content with **`copyFileContent(blobPath, realPath)`** → update the `files` row (size/mtime) → emit `FileEvent` UPDATE → release the lock.
@@ -313,6 +357,12 @@ Three fixes, all now in the code:
 - **Verify the blob's size against its row before touching the live file.** `writeFromStream` truncates the destination the moment the stream opens, so a short or corrupt source has to be caught while the live content is still intact.
 
 The general lesson, worth more than the specific bug: **anything that reads a blob must pin it before running code that can evict.** Eviction and reads share no lock.
+
+**A FAILED pre-restore snapshot ABORTS the restore (#472).** The first implementation took that snapshot through `snapshotBeforeOverwrite`, which catches everything and logs *"the save proceeds unversioned"*. That is the correct trade for the seven save paths — availability over durability, §4 — and the wrong one here, because for a restore the snapshot is not a side benefit, it IS this section's promise, and the bytes it failed to capture are truncated on the next line. The motivating case is mundane: `stageBlob`'s `fs.copyFile` fails `ENOSPC` on a full volume, and since versions count against quota a full volume is exactly *when* someone reaches for Restore. The API answered **200** while the content the user had thirty seconds ago ceased to exist anywhere.
+
+Restore now calls `VersioningService.snapshotOrThrow`, which rethrows a `FileError` as it stands (so `enforceQuotaShare`'s 507 survives), maps `ENOSPC`/`EDQUOT` to **507**, InnoDB's `ER_LOCK_WAIT_TIMEOUT`/`ER_LOCK_DEADLOCK` to **503** (transient, and the one abort a client may reasonably retry unaided — reachable once the nightly sweep takes gap locks over the same table, #471), and anything else to **500**, and does so inside the lock's `try/finally` — the lock is released, the pinned descriptor closed, and the live file never touched. What is *not* a failure is `snapshot` finding nothing to capture: those paths return normally.
+
+**The link/guest half of #472 was already closed by #492**, which refuses `restoreVersion`, `setLabel` and `deleteVersion` to those principals in the service itself, above the blob descriptor — so the "a write-enabled public link can roll a shared document back, destructively" path is refused before any of the above runs.
 
 The lock is created the way non-DAV `saveStream` does it (`filesLockManager.create`, `files-manager.service.ts:127`) — restore is always an app-initiated action, never a DAV write, so it always runs under a real lock.
 
@@ -389,6 +439,21 @@ Trash coverage is the mechanism; document it rather than duplicating it. Revisit
 
 **The `FileRowEnsurer` is explicitly NOT gated by this flag.** Mobile-compat's `oc:fileid` correctness depends on it regardless of whether versioning is enabled — gating it would regress NC iOS previews (see the `nc-file-row-ensurer.service.ts:14-40` comment for what breaks). E2E-13 asserts the flag-off state *and* that the ensurer still functions.
 
+**CORRECTED (#490): "everything gates on the flag" stranded the store.** Turning the flag off after the feature had been used disabled every RECLAIM path at once — `purgeForFile` / `purgeForPath` on a permanent delete, the whole nightly sweep, and both admin routes — while `files-quota-manager`'s `dirSize` walk kept charging every byte under `versions/` to the user. Since the `files` FK cascade still removed the rows that were the only pointer to those blobs, the bytes became unreachable, and the only remedy left was the `rm -rf` + `DELETE FROM` surgery `VersionsRetention.purgeRoot` exists to make unnecessary. Operators disable this flag *because of* a quota complaint, so the failure is aimed squarely at the case it is used in.
+
+**What the flag gates now: creation, and the per-file API.** Specifically:
+
+| Path | Gated? |
+|---|---|
+| `snapshotBeforeOverwrite` (creation) | **yes** |
+| the per-file REST routes, and the NC `files_versions` capability | **yes** (unchanged — ADR §13's 404 contract) |
+| `retentionDays`, `thinning`, `quotaShare` (the nightly **shaping** rules) | **yes** — they delete history that is still addressable, and applying a shaping policy to a store taken out of service would remove revisions the operator would find missing on re-enabling |
+| `orphanBlobs`, `danglingRows` (the nightly **GC** rules) | **no** — pure reclaim: bytes no row points at, and rows whose `files` row is already gone |
+| `purgeForFile` / `purgeForPath` (permanent delete) | **no** |
+| `VersionsAdminController` — storage summary and per-root purge | **no** — the operator's only instrument for a store that already exists |
+
+**Still open (maintainer):** whether version bytes should stop counting against quota while the flag is off. §7 charges them deliberately, and excluding them would need a `mod()` on the quota manager. The admin purge being reachable again gives the operator a way out that does not require that decision.
+
 ## 14. Frontend target — `custom-v2` only
 
 **Decision.** Version history ships **only** in `frontend/src/app/applications/custom-v2/`. No file under `frontend/src/app/applications/files/` is modified.
@@ -445,6 +510,9 @@ Upstream left versioning TODOs and may ship their own implementation. The contai
 | `infrastructure/database/utils.ts` | `getTablesWithFileIdColumn` — the reflection §20 depends on |
 | `infrastructure/database/schema.ts` | `custom_files_versions` export |
 | `files/services/files-event-manager.service.ts` | the replaced `todo` comment (:20) |
+| `users/services/admin-users-manager.service.ts` | `mod(users)` — constructor injects `VersioningService`, and `renameUserSpace` calls `renameUserRoot(oldLogin, newLogin)` INSIDE the `try` whose `catch` moves the home directory back (:389 region). The placement is the contract: a throw must refuse the rename, because rows naming a root whose store has moved make every download and restore 404 and hand the 3AM orphan sweep an entire history to unlink (#471). |
+| `spaces/services/spaces-manager.service.ts` | `mod(spaces)` — the space-alias half of the same fact: constructor injects `VersioningService`, and `renameSpaceLocation` calls `renameSpaceRoot(oldAlias, newAlias)` after `moveFiles`, inside the same try/restore (:755 region). |
+| eight upstream `*.spec.ts` files | `comments.controller`, `spaces.controller`, `spaces-browser.service`, `space.guard`, `admin-users.controller`, `users.controller`, `users-manager.service`, `files-methods.service` — each builds one of the two managers above in a bare testing module and therefore provides a `VersioningService` stub. Pure plumbing; if a sync drops one, that spec fails to instantiate rather than failing silently. |
 
 Fork-owned, no `mod()` needed: `custom-mobile-compat/controllers/nc-uploads.controller.ts` (:212).
 

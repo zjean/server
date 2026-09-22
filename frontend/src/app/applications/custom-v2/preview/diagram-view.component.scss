@@ -12,6 +12,36 @@
   height: 100%;
 }
 
+.diagram-view__notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--si-space-3);
+  padding: var(--si-space-3) var(--si-space-6);
+  font-size: var(--si-text-7);
+  border-bottom: 1px solid var(--si-line);
+}
+
+// Info, not warning: _tokens.scss assigns --si-cyan to "read-only notice"
+// by name. Nothing has gone wrong here — the file simply is not yours to edit.
+.diagram-view__notice--readonly {
+  background: var(--si-cyan-soft);
+  color: var(--si-cyan-ink);
+}
+
+// Warning, because something IS leaving: the diagram's full XML is handed to a
+// server outside this installation.
+.diagram-view__notice--external {
+  background: var(--si-amber-soft);
+  color: var(--si-amber-ink);
+}
+
+.diagram-view__notice-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .diagram-view__state {
   display: flex;
   align-items: center;

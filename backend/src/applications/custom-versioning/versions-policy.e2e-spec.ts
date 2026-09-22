@@ -423,7 +423,9 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       const rel = 'e2e15-failure.txt'
       await e2e.seed(rel, 'crash case original')
 
-      const spy = vi.spyOn(e2e.versioningQueries, 'insertVersion').mockRejectedValueOnce(new Error('injected DB failure'))
+      // The write seam is `insertVersionPublishing` since #489 — it is the call
+      // that commits the row and publishes the blob as one step.
+      const spy = vi.spyOn(e2e.versioningQueries, 'insertVersionPublishing').mockRejectedValueOnce(new Error('injected DB failure'))
       try {
         await e2e.overwrite(rel, 'crash case replacement', 'web')
       } finally {
@@ -436,15 +438,20 @@ describe('versions retention, quota and crash safety (e2e)', () => {
       expect(await e2e.versionsOf(rel)).toHaveLength(0)
     })
 
-    // Blob first, row second, on purpose: a crash between the two leaves an
-    // orphan blob that the GC sweeps, whereas the reverse order would leave a
-    // row pointing at nothing — a version that lists but can never be
-    // downloaded. This asserts the direction of the failure.
+    // NO ROW WITHOUT BYTES — the invariant, unchanged; the mechanism behind it
+    // is not. It used to be "blob first, row second", so a crash between the
+    // two left an orphan blob the GC sweeps rather than a row pointing at
+    // nothing. Since #489 the row goes in first and the rename runs inside the
+    // same transaction, which buys the same invariant plus the one the old
+    // order could not give: no window in which the blob is on disk while its
+    // row is invisible to a concurrent eviction. The failure direction is now
+    // strictly cleaner — a dead insert leaves neither a row NOR a blob — and
+    // the assertion below is the one that matters either way.
     it('leaves at most a collectable orphan blob when the row insert dies, never a row without bytes', async () => {
       const rel = 'e2e15-orphan.txt'
       await e2e.seed(rel, 'orphan case original')
 
-      const spy = vi.spyOn(e2e.versioningQueries, 'insertVersion').mockRejectedValueOnce(new Error('injected DB failure'))
+      const spy = vi.spyOn(e2e.versioningQueries, 'insertVersionPublishing').mockRejectedValueOnce(new Error('injected DB failure'))
       try {
         await e2e.overwrite(rel, 'orphan case replacement', 'web')
       } finally {

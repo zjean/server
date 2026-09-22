@@ -6,6 +6,8 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-skip.decorator'
 import { FilesManager } from '../../files/services/files-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
+import { FileError } from '../../files/models/file-error'
+import { LockConflict } from '../../files/models/file-lock-error'
 import type { FileProps } from '../../files/interfaces/file-props.interface'
 import { genEtag, getProps } from '../../files/utils/files'
 import type { SpaceEnv } from '../../spaces/models/space-env.model'
@@ -196,12 +198,38 @@ export class NcTextEditorController {
     // saveStream reads from req.raw, so it would pipe an empty stream and
     // truncate the file to 0 bytes. Reconstruct req.raw from req.body so
     // saveStream gets the actual content.
-    const bodyText = typeof req.body === 'string' ? req.body : ''
+    //
+    // The `typeof` test is a REFUSAL, not a default. Falling back to '' meant
+    // that any request whose content type this route does not assume — JSON
+    // (parsed to an object), or anything at all under app.bootstrap's
+    // catch-all `*` parser, which sets req.body to undefined and leaves
+    // req.raw intact (text/markdown, application/octet-stream, multipart) —
+    // silently truncated the file to 0 bytes and answered 204 with a fresh
+    // ETag. The #518 short-write assertion could not catch it either, because
+    // the content-length re-derivation below recomputed the declaration from
+    // the same empty buffer: 0 >= 0 passes. Both shipped editor clients send
+    // `text/plain; charset=utf-8` (text-editor-page.ts, markdown-editor-page.ts),
+    // so 415 is the honest answer for anything else.
+    if (typeof req.body !== 'string') {
+      throw new HttpException('body must be sent as text/plain', HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+    }
+    const bodyBytes = Buffer.from(req.body, 'utf-8')
     // Fastify's req.headers and req.method are getters that read from req.raw.
     // Preserve them on the replacement stream so saveStream can still access
     // req.headers['content-range'] and req.method without a TypeError.
+    //
+    // content-length is RE-DERIVED from the replacement buffer rather than
+    // forwarded: the incoming value describes the bytes on the wire, and what
+    // saveStream will now see is our re-encoded copy of Fastify's parse of
+    // them. The two agree for plain UTF-8 and disagree for anything else (a
+    // BOM, a charset parameter). Since #518 saveStream asserts the body
+    // delivers what content-length declared, so a stale header here would
+    // turn a save that works today into a 400.
     const { headers: rawHeaders, method: rawMethod } = req.raw
-    const newRaw = Object.assign(Readable.from([Buffer.from(bodyText, 'utf-8')]), { headers: rawHeaders, method: rawMethod })
+    const newRaw = Object.assign(Readable.from([bodyBytes]), {
+      headers: { ...rawHeaders, 'content-length': String(bodyBytes.length) },
+      method: rawMethod
+    })
     ;(req as unknown as { raw: Readable }).raw = newRaw
 
     try {
@@ -209,6 +237,19 @@ export class NcTextEditorController {
       // saveStream's own options (no dav, no tmpPath), so it labels itself.
       await this.filesManager.saveStream(user, space, req as Parameters<FilesManager['saveStream']>[2], { versionOrigin: 'nc-text' })
     } catch (e) {
+      // FileError extends Error, not HttpException, so letting one escape a
+      // controller is a 500. The other two saveStream callers translate it
+      // (WebDAVMethods.handleError, FilesMethods.handleError); this one has to
+      // do the same or every deliberate refusal saveStream makes — the #518
+      // short-write 400, a quota or max-size 4xx, "parent must exists" — comes
+      // back as a server error the client cannot act on. LockConflict has the
+      // same shape and is mapped to 423 for the same reason.
+      if (e instanceof FileError) {
+        throw new HttpException(e.message, e.httpCode)
+      }
+      if (e instanceof LockConflict) {
+        throw new HttpException(e.message, HttpStatus.LOCKED)
+      }
       const msg = e instanceof Error ? e.message : 'save failed'
       throw new HttpException(msg, HttpStatus.INTERNAL_SERVER_ERROR)
     }

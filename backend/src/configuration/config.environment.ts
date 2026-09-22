@@ -27,6 +27,7 @@ export const exportConfiguration: (reload?: boolean) => GlobalConfig = (reload =
 
 function loadConfiguration(): GlobalConfig {
   deprecatedFilesEditorsEnvConfig()
+  removedDrawioUrlEnvConfig()
   const config: GlobalConfig = configLoader()
   // LOGGER
   if (config.logger?.stdout === false) {
@@ -64,6 +65,38 @@ function loadConfiguration(): GlobalConfig {
     { exposeDefaultValues: true },
     { skipMissingProperties: false },
     'Invalid configuration in environment.yaml'
+  )
+}
+
+// `DRAWIO_URL` was REMOVED in favour of applications.files.diagrams.editorUrl
+// (#499). It has to be warned about EXPLICITLY, and it is the one removed
+// setting in this file that cannot reuse any existing mechanism:
+//
+//  - it carries no ENVIRONMENT_PREFIX, so `config.loader` never looks at it and
+//    its "Ignoring unknown environment variable" warning never fires;
+//  - it never appeared in environment.yaml, so `removedMaxVersionsPerFileConfig`'s
+//    "look for the key on the config object" shape finds nothing either.
+//
+// Silence here is not cosmetic. An operator who set `DRAWIO_URL` did so to keep
+// diagram XML off a third party; after the upgrade the value is ignored, the
+// default `https://embed.diagrams.net` applies, the CSP frame-src follows it,
+// and NOTHING VISIBLY BREAKS while every diagram opened is posted to JGraph.
+//
+// The value is not auto-migrated: the replacement is validated as an http(s)
+// URL and feeds the CSP, and quietly adopting an unvalidated legacy value would
+// swap a loud misconfiguration for a silent one.
+//
+// EXPORTED only so it can be unit-tested, same as `removedMaxVersionsPerFileConfig`.
+export function removedDrawioUrlEnvConfig(): void {
+  if (process.env['DRAWIO_URL'] === undefined) {
+    return
+  }
+  console.warn(
+    '[REMOVED][ENVIRONMENT] "DRAWIO_URL" is no longer read and has been IGNORED. ' +
+      'The diagram editor location is now applications.files.diagrams.editorUrl in environment.yaml, ' +
+      `or the environment variable "${ENVIRONMENT_PREFIX}APPLICATIONS_FILES_DIAGRAMS_EDITORURL" ` +
+      '(one segment: EDITORURL, not EDITOR_URL). ' +
+      'Until you set it, diagrams are opened in the default third-party editor https://embed.diagrams.net.'
   )
 }
 

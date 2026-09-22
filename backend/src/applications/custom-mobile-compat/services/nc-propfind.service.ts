@@ -87,7 +87,13 @@ export class NcPropfindService {
       }
     }
     try {
-      for await (const f of this.webdavSpaces.propfind(req, repository)) {
+      // `true` = withDetails: ask SpacesBrowser for the shares aggregation,
+      // the fileHasComments subquery, the favorites join and the per-file
+      // lock so buildNcPropResponse can emit <oc:share-types>,
+      // <nc:has-comments> and <nc:lock> without a second round-trip. This is
+      // the ONLY caller that wants them — classic WebDAV filters them off the
+      // wire anyway and would just pay the queries (#505).
+      for await (const f of this.webdavSpaces.propfind(req, repository, true)) {
         // The first yielded entry from `webdavSpaces.listFiles` is the
         // collection itself (with `isCurrent=true`); the rest are its
         // children. Sync-in's "virtual endpoint protection" strips DELETE

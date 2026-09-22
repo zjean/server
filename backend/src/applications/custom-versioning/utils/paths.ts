@@ -70,9 +70,13 @@ export function spaceVersionsRoot(alias: string): string {
 // guest/link flags, exactly as UserModel.getTrashPath does (user.model.ts:154).
 // That resolves into `usersPath`, whereas a guest's or link's live files sit
 // under `tmpPath/{guests,links}/<login>`. Rather than let versions land outside
-// the ephemeral tree holding the files they describe, the service skips guest
-// and link users entirely (ADR §8) — so this asymmetry is unreachable, and is
-// documented here so nobody "fixes" it by passing the flags through.
+// the ephemeral tree holding the files they describe, the service skips a
+// snapshot whenever the resolved root is the ACTING guest's or link's own user
+// root (VersioningService.mintsNoVersions) — so this asymmetry is unreachable,
+// and is documented here so nobody "fixes" it by passing the flags through.
+// Note the skip is keyed on the root, not on the account: a guest writing in a
+// SHARED SPACE resolves to 'space:<alias>' under spacesPath, mints a version
+// like any other member, and none of the above applies (#517).
 //
 // Returns null — never throws — for an unrecognized discriminator or an unsafe
 // login/alias. Every caller is written for null (skip versioning, or 404 the

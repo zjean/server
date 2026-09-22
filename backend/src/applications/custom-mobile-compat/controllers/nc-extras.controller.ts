@@ -137,10 +137,12 @@ export class NcExtrasController {
       return new StreamableFile(stream, { type: contentType, length: contentLength })
     } catch (e) {
       // FilesManager.generateThumbnail throws FileError, which exposes its
-      // HTTP code as `httpCode` (see file-error.ts). The fallback path
-      // means BAD_REQUEST now only fires for genuinely non-image files
-      // (PDFs, archives, etc.) — sharp decode failures are absorbed
-      // upstream.
+      // HTTP code as `httpCode` (see file-error.ts). BAD_REQUEST covers
+      // three refusals, all of which mean the same thing to an NC client —
+      // "no preview, draw the icon": a genuinely non-image file (PDF,
+      // archive), a decode failure whose bytes are no known undecodable
+      // image format, and an undecodable original above the #503 fallback
+      // size cap. The 404 below is that answer.
       const err = e as { httpCode?: number; message?: string }
       // First 16 bytes as hex — useful when a non-image slips through and
       // we want to know what format it really was without re-reading the
