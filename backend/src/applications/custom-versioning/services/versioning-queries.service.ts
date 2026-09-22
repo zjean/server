@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { and, asc, count, countDistinct, desc, eq, inArray, isNull, lt, sql, sum } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/mysql-core'
 import { DB_TOKEN_PROVIDER } from '../../../infrastructure/database/constants'
 import type { DBSchema } from '../../../infrastructure/database/interfaces/database.interface'
 import { convertToWhere, dbGetInsertedId } from '../../../infrastructure/database/utils'
@@ -41,18 +42,59 @@ export class VersioningQueries {
     return row
   }
 
-  // History for a file, newest first, with the author joined for display.
-  async listByFileId(fileId: number): Promise<(VersionRow & { authorLogin: string | null; authorFullName: string | null })[]> {
+  // History for a file, newest first, with BOTH author identities joined.
+  //
+  // Two joins because the row carries two different people and each has a
+  // reader (#491):
+  //   - `contentAuthorId` wrote the bytes this row holds. That is the author a
+  //     version list must show, and showing `authorId` instead is what
+  //     attributed every revision to whoever came next.
+  //   - `authorId` replaced them. Only the NEWEST row's value is interesting,
+  //     and it is interesting precisely because it names the author of the
+  //     content that is live right now — which is what the OnlyOffice history
+  //     panel labels its "current" entry with.
+  async listByFileId(fileId: number): Promise<
+    (VersionRow & {
+      authorLogin: string | null
+      authorFullName: string | null
+      supersededByLogin: string | null
+      supersededByFullName: string | null
+    })[]
+  > {
+    const contentAuthor = alias(users, 'contentAuthor')
     return this.db
       .select({
         ...columnsOf(),
-        authorLogin: users.login,
-        authorFullName: userFullNameSQL(users)
+        authorLogin: contentAuthor.login,
+        authorFullName: userFullNameSQL(contentAuthor),
+        supersededByLogin: users.login,
+        supersededByFullName: userFullNameSQL(users)
       })
       .from(customFilesVersions)
+      .leftJoin(contentAuthor, eq(contentAuthor.id, customFilesVersions.contentAuthorId))
       .leftJoin(users, eq(users.id, customFilesVersions.authorId))
       .where(eq(customFilesVersions.fileId, fileId))
       .orderBy(desc(customFilesVersions.createdAt), desc(customFilesVersions.id))
+  }
+
+  // The `authorId` of the LAST row inserted for this file — i.e. whoever
+  // performed the write that produced the content a snapshot is about to
+  // supersede (#491). Null when the file has no history yet, or when that
+  // write had no acting user.
+  //
+  // Ordered by `id`, not by `createdAt` or `mtime`. The question is strictly
+  // "which row was written most recently", the primary key answers it
+  // unambiguously, and `mtime` in particular is client-controlled and not
+  // monotonic. Not root-scoped either: a file moved between spaces has rows in
+  // two roots, and its authorship chain runs through both.
+  async lastAuthorIdForFile(fileId: number): Promise<number | null> {
+    const [row] = await this.db
+      .select({ authorId: customFilesVersions.authorId })
+      .from(customFilesVersions)
+      .where(eq(customFilesVersions.fileId, fileId))
+      .orderBy(desc(customFilesVersions.id))
+      .limit(1)
+    return row?.authorId ?? null
   }
 
   async getById(versionId: number): Promise<VersionRow | undefined> {
@@ -381,6 +423,7 @@ function columnsOf() {
     mtime: customFilesVersions.mtime,
     createdAt: customFilesVersions.createdAt,
     authorId: customFilesVersions.authorId,
+    contentAuthorId: customFilesVersions.contentAuthorId,
     origin: customFilesVersions.origin,
     label: customFilesVersions.label
   }

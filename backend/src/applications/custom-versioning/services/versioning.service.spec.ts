@@ -77,11 +77,26 @@ class FakeQueries {
       .filter((r) => r.fileId === fileId && (r.authorId ?? null) === authorId && r.origin === origin)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)[0]
   }
+  // Mirrors the real query's TWO joins (#491): `author*` resolves the row's
+  // CONTENT author, `supersededBy*` the user who replaced that content.
   async listByFileId(fileId: number) {
+    const who = (id: number | null | undefined) =>
+      ({ 7: { login: 'alice', fullName: 'Alice A' }, 8: { login: 'bob', fullName: 'Bob Brown' } })[id] ?? { login: null, fullName: null }
     return this.rows
       .filter((r) => r.fileId === fileId)
-      .map((r) => ({ ...r, authorLogin: r.authorId ? 'alice' : null, authorFullName: r.authorId ? 'Alice A' : null }))
+      .map((r) => ({
+        ...r,
+        authorLogin: who(r.contentAuthorId).login,
+        authorFullName: who(r.contentAuthorId).fullName,
+        supersededByLogin: who(r.authorId).login,
+        supersededByFullName: who(r.authorId).fullName
+      }))
       .sort((a, b) => b.id - a.id)
+  }
+  // The `authorId` of the LAST row inserted for this file — the write that
+  // produced the content the next snapshot will supersede.
+  async lastAuthorIdForFile(fileId: number) {
+    return [...this.rows].filter((r) => r.fileId === fileId).sort((a, b) => b.id - a.id)[0]?.authorId ?? null
   }
   async getById(id: number) {
     return this.rows.find((r) => r.id === id)
@@ -1359,6 +1374,59 @@ describe(VersioningService.name, () => {
 
     const list = await service.listVersions(user, personalSpace())
     expect(list.map((v) => v.origin)).toEqual(['webdav', 'web'])
+    // The newest row holds the content alice wrote in the FIRST save, so alice
+    // is its author; the oldest row holds content nobody recorded, so it has
+    // none (#491). Before the fix both rows claimed alice, including the one
+    // she only destroyed.
+    expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
+    expect(list[1].author).toBeUndefined()
+    // And both name her as the person who replaced their content.
+    expect(list.map((v) => v.supersededBy?.login)).toEqual(['alice', 'alice'])
+  })
+
+  // #491: a row's `created` describes the content it HOLDS, while `authorId`
+  // names whoever REPLACED that content. Rendering `authorId` attributed every
+  // revision to the next person to touch the file — in a two-person space, the
+  // revision alice wrote was labelled bob.
+  it('attributes a version to whoever WROTE its content, not to whoever destroyed it', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const bob = { id: 8, login: 'bob', isGuest: false, isLink: false } as unknown as UserModel
+
+    // alice writes v1 over the original, then bob writes v2 over alice's.
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by alice')
+    await ageFile(150)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by bob')
+    await ageFile(30)
+    await service.snapshotBeforeOverwrite(bob, personalSpace(), { origin: 'web' })
+
+    const list = await service.listVersions(user, personalSpace())
+    // Newest first: the row bob minted holds alice's bytes.
+    expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
+    expect(list[0].supersededBy?.login).toBe('bob')
+  })
+
+  // The chain is read at WRITE time on purpose: by the time the list is
+  // rendered, thinning may have removed the row that actually preceded a given
+  // one, so a read-time shift by one would silently start naming the wrong
+  // person (thinning spec §8).
+  it('keeps the recorded author after the preceding row is thinned away', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    const bob = { id: 8, login: 'bob', isGuest: false, isLink: false } as unknown as UserModel
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'written by alice')
+    await ageFile(150)
+    await service.snapshotBeforeOverwrite(bob, personalSpace(), { origin: 'web' })
+
+    // Whatever removed it — thinning, retention, an admin purge — the surviving
+    // row must not change its story.
+    await service.deleteVersion(user, personalSpace(), queries.rows[0].id)
+
+    const list = await service.listVersions(user, personalSpace())
+    expect(list).toHaveLength(1)
     expect(list[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
   })
 
@@ -1858,6 +1926,13 @@ describe(VersioningService.name, () => {
   // the live file a link visitor can already read carries nothing of the kind.
   it('never hands an author identity to a guest or a link principal', async () => {
     versionsConfig.minIntervalSeconds = 0
+    // Two saves, so the newest row has a recorded CONTENT author to leak (#491):
+    // a file's first version names nobody, which would make this pass for the
+    // wrong reason.
+    await ageFile(300)
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    await fs.writeFile(filePath, 'v2')
+    await ageFile(150)
     await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
     expect((await service.listVersions(user, personalSpace()))[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
 

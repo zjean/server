@@ -55,9 +55,21 @@ export interface VersionProps {
   origin: VersionOrigin
   label: string | null
   checksum: string
-  // Absent for system-originated snapshots, or when the author account is gone
-  // (authorId is ON DELETE SET NULL).
+  // WHO WROTE THE BYTES THIS VERSION HOLDS (#491) — the row's
+  // `contentAuthorId`, not the person who replaced them.
+  //
+  // Absent for a file's first version, after a system-originated write, when
+  // the account is gone (ON DELETE SET NULL), and for every row written before
+  // that column existed — those were deliberately not backfilled, because the
+  // only available backfill is the read-time shift thinning makes unsound.
   author?: { login: string; fullName: string }
+  // WHO REPLACED THEM, i.e. the row's `authorId`.
+  //
+  // Exposed for exactly one reader: on the NEWEST row it names the author of
+  // the content that is LIVE, which is what the OnlyOffice history panel labels
+  // its "current" entry with (EditorHistoryService.liveEntry). Nothing should
+  // render it against the version itself — that is the off-by-one #491 fixed.
+  supersededBy?: { login: string; fullName: string }
 }
 
 // Backs the versions-usage display, which ADR §7 makes a release blocker:
