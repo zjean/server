@@ -1,6 +1,7 @@
 import { HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
-import { SPACE_REPOSITORY } from '../../spaces/constants/spaces'
+import { SPACE_ALL_OPERATIONS, SPACE_OPERATION, SPACE_PERMS_SEP, SPACE_REPOSITORY } from '../../spaces/constants/spaces'
+import { USER_PERMISSION } from '../../users/constants/user'
 import { getProps } from '../../files/utils/files'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
@@ -21,9 +22,14 @@ import { NO_CLIENT_FILE_ID } from '../../custom-shared/constants/file-ids'
 // Partial mock (importActual): vitest is stricter than jest about missing named
 // exports — transitive importers of this module reference other exports (fileName, …),
 // so keep the real module and override only getProps.
+//
+// `isPathExists` / `isPathIsDir` are mocked for the same reason: SpaceGuard's
+// PUT branch stats the target to decide between ADD and MODIFY (#515).
 vi.mock('../../files/utils/files', async (importActual) => ({
   ...(await importActual<typeof import('../../files/utils/files')>()),
-  getProps: vi.fn()
+  getProps: vi.fn(),
+  isPathExists: vi.fn().mockResolvedValue(false),
+  isPathIsDir: vi.fn().mockResolvedValue(false)
 }))
 
 // `dbFileFromSpace` reads several SpaceEnv branches; mock it to return a known
@@ -31,6 +37,12 @@ vi.mock('../../files/utils/files', async (importActual) => ({
 vi.mock('../../spaces/utils/paths', () => ({
   dbFileFromSpace: vi.fn()
 }))
+
+// A stand-in for the UserModel NcBasicAuthGuard attaches to the request.
+// attachSpace runs `canAccessToSpaceUrl`, which calls `user.havePermission`,
+// so the fake has to answer it (#515). `allow` narrows what the fake holds.
+const ncUser = (login: string, allow: (p: string) => boolean = () => true) =>
+  ({ id: 7, login, settings: null, havePermission: allow }) as unknown as { id: number; login: string }
 
 const mockedGetProps = getProps as Mock
 const mockedDbFileFromSpace = dbFileFromSpace as Mock
@@ -187,7 +199,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true, envPermissions: SPACE_ALL_OPERATIONS } as unknown)
   })
 
   it('decodes %20 in req.dav.url so PROPFIND hrefs are not double-encoded', async () => {
@@ -195,7 +207,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
       url: '/remote.php/dav/files/john/My%20folder',
       headers: {},
       params: {},
-      user: { login: 'john', settings: null }
+      user: ncUser('john')
     } as unknown as FastifyDAVRequest
     await (controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files'; subpath: string }) => Promise<void> }).attachSpace(
       req,
@@ -209,7 +221,7 @@ describe(`${NcDavController.name} — attachSpace URL decoding`, () => {
       url: '/remote.php/dav/files/john/My%20folder?token=abc',
       headers: {},
       params: {},
-      user: { login: 'john', settings: null }
+      user: ncUser('john')
     } as unknown as FastifyDAVRequest
     await (controller as unknown as { attachSpace: (r: FastifyDAVRequest, i: { mode: 'files'; subpath: string }) => Promise<void> }).attachSpace(
       req,
@@ -266,7 +278,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true, envPermissions: SPACE_ALL_OPERATIONS } as unknown)
     shareMounts.listMounts.mockResolvedValue([])
   })
 
@@ -281,7 +293,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       url: '/remote.php/dav/files/bob/alice-photos/vacation.jpg',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'alice-photos/vacation.jpg' })
     expect(shareMounts.listMounts).toHaveBeenCalledWith(req.user)
@@ -294,7 +306,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       url: '/remote.php/dav/files/bob/Documents/notes.txt',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'Documents/notes.txt' })
     expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal', 'Documents', 'notes.txt'])
@@ -305,7 +317,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       url: '/remote.php/dav/trashbin/bob/something',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'trashbin', subpath: 'something' })
     expect(shareMounts.listMounts).not.toHaveBeenCalled()
@@ -317,7 +329,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       url: '/remote.php/dav/files/bob',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: '' })
     expect(shareMounts.listMounts).not.toHaveBeenCalled()
@@ -329,7 +341,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       url: '/remote.php/dav/files/bob/p%C3%B4t%20commun/x.txt',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'p%C3%B4t%20commun/x.txt' })
     expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['shares', 'pôt commun', 'x.txt'])
@@ -342,7 +354,7 @@ describe(`${NcDavController.name} — attachSpace share-mount routing`, () => {
       method: 'MOVE',
       headers: { destination: 'https://host/remote.php/dav/files/bob/alice-photos/renamed.jpg' },
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: 'alice-photos/source.jpg' })
     // attachSpace path + mapNcPathToInternal path together should produce
@@ -406,7 +418,7 @@ describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, (
 
   beforeEach(() => {
     vi.clearAllMocks()
-    spacesManager.spaceEnv.mockResolvedValue({ enabled: true } as unknown)
+    spacesManager.spaceEnv.mockResolvedValue({ enabled: true, envPermissions: SPACE_ALL_OPERATIONS } as unknown)
   })
 
   const attach = (req: FastifyDAVRequest, input: { mode: 'files' | 'trashbin'; subpath: string }) =>
@@ -420,7 +432,7 @@ describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, (
       method: 'MOVE',
       headers: { destination },
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     }) as unknown as FastifyDAVRequest
 
   const expect400 = async (req: FastifyDAVRequest, subpath = 'Documents/report.pdf') => {
@@ -515,7 +527,7 @@ describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, (
       method: 'PROPFIND',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await expect(attach(req, { mode: 'files', subpath: 'a/./b' })).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
     // The load-bearing half: we never asked for a space at all, so there is no
@@ -529,7 +541,7 @@ describe(`${NcDavController.name} — attachSpace destination refusal (#483)`, (
       method: 'PROPFIND',
       headers: {},
       params: {},
-      user: { login: 'bob', settings: null }
+      user: ncUser('bob')
     } as unknown as FastifyDAVRequest
     await attach(req, { mode: 'files', subpath: '' })
     expect(spacesManager.spaceEnv).toHaveBeenCalledWith(req.user, ['files', 'personal'])
@@ -764,5 +776,180 @@ describe(`${NcDavController.name} — legacy /remote.php/webdav redirect`, () =>
     const r = res()
     await controller.legacyWebdavRest(req('/remote.php/webdav/a.docx?x=1'), r as never)
     expect(r.headers.location).toBe('/remote.php/dav/files/bob/a.docx')
+  })
+})
+
+// #515 — the NC DAV surface performed NO permission check at all.
+//
+// `attachSpace` reimplemented the SpaceGuard prelude (spaceEnv + `enabled`)
+// and stopped there: it never called `canAccessToSpaceUrl` and never called
+// `SpaceGuard.checkPermissions`. The handlers it dispatches into do not
+// compensate — `WebDAVMethods.delete` / `.put` / `.mkcol` rely entirely on the
+// `@UseGuards(SpaceGuard)` declared on webdav.controller.ts, and
+// `FilesManager.delete` runs no check of its own.
+//
+// These cases drive the controller's ROUTE HANDLERS (filesRootBare /
+// filesSubpath), not attachSpace directly, so they prove the decision is on
+// the path a request takes through this controller — everything short of the
+// HTTP layer and the guard chain. An e2e is still the right check for the
+// chain itself (NcBasicAuthGuard → handler) and is noted in the PR.
+describe(`${NcDavController.name} — space authorization (#515)`, () => {
+  let moduleRef: TestingModule
+  let controller: NcDavController
+  let spacesManager: { spaceEnv: Mock }
+  let shareMounts: { listMounts: Mock; findByAlias: Mock }
+  let webdav: { delete: Mock; put: Mock; mkcol: Mock; copyMove: Mock; proppatch: Mock }
+  let propfind: { respond: Mock }
+  let favoritesReport: { respondProppatchFavorite: Mock; respond: Mock }
+
+  // Sync-in permission strings are ':'-separated operation letters.
+  const READ_ONLY = ''
+  const ADD_ONLY = SPACE_OPERATION.ADD
+  const FULL = [SPACE_OPERATION.ADD, SPACE_OPERATION.DELETE, SPACE_OPERATION.MODIFY].join(SPACE_PERMS_SEP)
+
+  const res = () => ({ status: vi.fn().mockReturnThis(), header: vi.fn().mockReturnThis(), send: vi.fn().mockReturnThis() }) as never
+
+  const space = (envPermissions: string, extra: Record<string, unknown> = {}) =>
+    ({
+      enabled: true,
+      envPermissions,
+      id: 5,
+      alias: 'ReadOnlyShare',
+      url: 'shares/ReadOnlyShare/doc.pdf',
+      realPath: '/data/spaces/alice/Photos/doc.pdf',
+      inTrashRepository: false,
+      quotaIsExceeded: false,
+      ...extra
+    }) as unknown
+
+  const request = (method: string, url: string, body: string | null = null) =>
+    ({ method, url, headers: {}, params: {}, body, user: ncUser('bob') }) as unknown as FastifyDAVRequest
+
+  beforeAll(async () => {
+    spacesManager = { spaceEnv: vi.fn() }
+    shareMounts = { listMounts: vi.fn(), findByAlias: vi.fn() }
+    webdav = {
+      delete: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockResolvedValue(undefined),
+      mkcol: vi.fn().mockResolvedValue(undefined),
+      copyMove: vi.fn().mockResolvedValue(undefined),
+      proppatch: vi.fn().mockResolvedValue(undefined)
+    }
+    propfind = { respond: vi.fn().mockResolvedValue(undefined) }
+    favoritesReport = { respondProppatchFavorite: vi.fn().mockResolvedValue(undefined), respond: vi.fn() }
+    moduleRef = await Test.createTestingModule({
+      controllers: [NcDavController],
+      providers: [
+        NcPathResolverService,
+        { provide: NcShareMountResolverService, useValue: shareMounts },
+        { provide: SpacesManager, useValue: spacesManager },
+        { provide: SpacesQueries, useValue: { getOrCreateUserFile: vi.fn(), getOrCreateSpaceFile: vi.fn() } },
+        { provide: WebDAVMethods, useValue: webdav },
+        { provide: NcPropfindService, useValue: propfind },
+        { provide: NcSyncReportService, useValue: {} },
+        { provide: NcFavoritesReportService, useValue: favoritesReport }
+      ]
+    })
+      .overrideGuard(NcBasicAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile()
+    moduleRef.useLogger(['fatal'])
+    controller = moduleRef.get(NcDavController)
+  })
+
+  afterAll(async () => {
+    await moduleRef.close()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    shareMounts.listMounts.mockResolvedValue([{ alias: 'ReadOnlyShare' }])
+    mockedGetProps.mockResolvedValue({ isDir: false })
+  })
+
+  // Consequence 1 of the issue. The home root's SpaceEnv already has DELETE
+  // stripped by the virtual-endpoint overlay (space-env.model.ts) — what was
+  // missing was anyone READING that overlay.
+  it('refuses DELETE on the home root instead of trashing the whole tree', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(ADD_ONLY, { alias: 'personal', url: 'files/personal' }))
+    const req = request('DELETE', '/remote.php/dav/files/bob')
+    await expect(controller.filesRootBare('bob', req, res())).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(webdav.delete).not.toHaveBeenCalled()
+  })
+
+  // Consequence 2. A read-only share mount accepted every write verb.
+  it.each([
+    ['DELETE', () => webdav.delete],
+    ['MKCOL', () => webdav.mkcol],
+    ['PUT', () => webdav.put]
+  ])('refuses %s on a read-only share mount', async (method, handler) => {
+    spacesManager.spaceEnv.mockResolvedValue(space(READ_ONLY))
+    const req = request(method, '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf')
+    await expect(controller.filesSubpath('bob', req, res())).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(handler()).not.toHaveBeenCalled()
+  })
+
+  it('still allows DELETE on a share mount that grants it', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL))
+    await controller.filesSubpath('bob', request('DELETE', '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf'), res())
+    expect(webdav.delete).toHaveBeenCalled()
+  })
+
+  it('leaves read verbs alone — PROPFIND on a read-only mount still answers', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(READ_ONLY))
+    await controller.filesSubpath('bob', request('PROPFIND', '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf'), res())
+    expect(propfind.respond).toHaveBeenCalled()
+  })
+
+  // The user-level repository gate — the other half of what SpaceGuard does.
+  it('refuses a share-mount path when the user has no SHARES application permission', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL))
+    const req = { ...request('PROPFIND', '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf') } as FastifyDAVRequest
+    ;(req as { user: unknown }).user = ncUser('bob', (p) => p !== USER_PERMISSION.SHARES)
+    await expect(controller.filesSubpath('bob', req, res())).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+  })
+
+  it('refuses the personal home when the user has no PERSONAL_SPACE application permission', async () => {
+    shareMounts.listMounts.mockResolvedValue([])
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL))
+    const req = { ...request('PROPFIND', '/remote.php/dav/files/bob/Documents') } as FastifyDAVRequest
+    ;(req as { user: unknown }).user = ncUser('bob', (p) => p !== USER_PERMISSION.PERSONAL_SPACE)
+    await expect(controller.filesSubpath('bob', req, res())).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+  })
+
+  // oc:favorite is per-user metadata. Real Nextcloud lets you star something
+  // you can only read, so it must NOT be mapped through SPACE_HTTP_PERMISSION
+  // (which would demand MODIFY and break starring on every read-only share).
+  it('allows an oc:favorite PROPPATCH on a read-only mount but refuses an mtime PROPPATCH', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(READ_ONLY))
+    const fav = `<d:propertyupdate xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:set><d:prop><oc:favorite>1</oc:favorite></d:prop></d:set></d:propertyupdate>`
+    await controller.filesSubpath('bob', request('PROPPATCH', '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf', fav), res())
+    expect(favoritesReport.respondProppatchFavorite).toHaveBeenCalledWith(expect.anything(), expect.anything(), true)
+
+    const mtime = `<d:propertyupdate xmlns:d="DAV:"><d:set><d:prop><d:getlastmodified>x</d:getlastmodified></d:prop></d:set></d:propertyupdate>`
+    await expect(
+      controller.filesSubpath('bob', request('PROPPATCH', '/remote.php/dav/files/bob/ReadOnlyShare/doc.pdf', mtime), res())
+    ).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    expect(webdav.proppatch).not.toHaveBeenCalled()
+  })
+
+  // Carried in from SpaceGuard.checkPermissions rather than restated here —
+  // which is the point of reusing it.
+  it('answers 507 rather than 403 when the destination space is over quota', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL, { quotaIsExceeded: true }))
+    await expect(controller.filesSubpath('bob', request('MKCOL', '/remote.php/dav/files/bob/ReadOnlyShare/new'), res())).rejects.toMatchObject({
+      status: HttpStatus.INSUFFICIENT_STORAGE
+    })
+    expect(webdav.mkcol).not.toHaveBeenCalled()
+  })
+
+  it('refuses a write into the trash repository with the trash-is-read-only rule', async () => {
+    spacesManager.spaceEnv.mockResolvedValue(space(FULL, { inTrashRepository: true }))
+    await expect(controller.trashbinSubpath('bob', request('MKCOL', '/remote.php/dav/trashbin/bob/personal/x'), res())).rejects.toMatchObject({
+      status: HttpStatus.FORBIDDEN
+    })
+    expect(webdav.mkcol).not.toHaveBeenCalled()
   })
 })

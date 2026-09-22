@@ -4,9 +4,12 @@ import { AuthTokenSkip } from '../../../authentication/decorators/auth-token-ski
 import { decodeUrl } from '../../../common/shared'
 import { HTTP_METHOD } from '../../applications.constants'
 import { getProps } from '../../files/utils/files'
+import { SpaceGuard } from '../../spaces/guards/space.guard'
+import { FastifySpaceRequest } from '../../spaces/interfaces/space-request.interface'
 import { SpacesManager } from '../../spaces/services/spaces-manager.service'
 import { SpacesQueries } from '../../spaces/services/spaces-queries.service'
 import { SpaceEnv } from '../../spaces/models/space-env.model'
+import { canAccessToSpaceUrl } from '../../spaces/utils/permissions'
 import { dbFileFromSpace } from '../../spaces/utils/paths'
 import { UserModel } from '../../users/models/user.model'
 import { DEPTH } from '../../webdav/constants/webdav'
@@ -160,6 +163,13 @@ export class NcDavController {
     if (urlSegments === null) {
       throw new HttpException(`Path is not valid: ${input.subpath}`, HttpStatus.BAD_REQUEST)
     }
+    // Authorization, half one: the user-level repository gate. Exactly what
+    // SpaceGuard.checkAccessToSpace does on the native WebDAV surface — a
+    // user without USER_PERMISSION.SHARES must not reach shares/<alias>,
+    // without PERSONAL_SPACE must not reach files/personal, and so on.
+    // Nothing in the NC chain checked this before #515: NcBasicAuthGuard
+    // authenticates the app password and stops there.
+    this.assertRepositoryAccess(user, urlSegments, input.subpath)
     // Flag the home-root case so NcPropfindService can decide whether to
     // append virtual share-mount entries. We compute this against the raw
     // (normalized) subpath rather than the resolved segments: a user whose
@@ -184,6 +194,12 @@ export class NcDavController {
     if (!space.enabled) throw new HttpException('Space is disabled', HttpStatus.FORBIDDEN)
 
     req.space = space
+    // Authorization, half two: the space/root permission overlay, the
+    // trash-read-only rule and the quota rule — i.e. everything
+    // @UseGuards(SpaceGuard) applies to webdav.controller.ts. We cannot use
+    // the guard itself (it derives its SpaceEnv from a Sync-in-shaped URL),
+    // so we call the same static it calls.
+    await this.assertSpacePermissions(req)
     // WebDAV body handlers read req.params['*'] for Destination-relative logic
     // inside COPY/MOVE. We repopulate it so they see the Sync-in-style path.
     ;(req as FastifyRequest & { params: Record<string, string> }).params['*'] = urlSegments.join('/')
@@ -250,6 +266,42 @@ export class NcDavController {
         isMove: req.method === HTTP_METHOD.MOVE
       }
     }
+  }
+
+  // ───────── authorization ─────────
+  //
+  // The NC DAV surface reuses Sync-in's own space authorization rather than
+  // growing a second permission model. Before #515 it had NEITHER half, and
+  // the handlers it dispatches into do not compensate: WebDAVMethods.delete /
+  // .put / .mkcol rely entirely on the `@UseGuards(SpaceGuard)` declared on
+  // webdav.controller.ts, and FilesManager.delete runs no check of its own.
+  // Two things followed. `DELETE /remote.php/dav/files/{user}` moved the
+  // user's whole home to trash, and every write verb succeeded against a
+  // READ-ONLY share mount — the PROPFIND response said the user could not
+  // (nc-prop-builder strips DELETE at a share root) but that was presentation
+  // only.
+
+  private assertRepositoryAccess(user: UserModel, urlSegments: string[], subpath: string): void {
+    if (!canAccessToSpaceUrl(user, urlSegments)) {
+      this.logger.warn({ tag: this.assertRepositoryAccess.name, msg: `${user.login} may not access this repository: ${subpath}` })
+      throw new HttpException('You are not allowed to access to this repository', HttpStatus.FORBIDDEN)
+    }
+  }
+
+  private async assertSpacePermissions(req: FastifyDAVRequest): Promise<void> {
+    // oc:favorite is per-user metadata, not file content: stock NC clients
+    // star a file with a PROPPATCH against the file's own DAV URL, and real
+    // Nextcloud lets you favorite something you can only read. Mapping it
+    // through SPACE_HTTP_PERMISSION would demand MODIFY and break starring on
+    // every read-only share. Everything else — including the mtime PROPPATCH
+    // that falls through to WebDAVMethods — takes the normal path.
+    if (req.method === HTTP_METHOD.PROPPATCH && parseFavoriteProppatch(req.body as string | Buffer | null | undefined) !== null) {
+      return
+    }
+    // PROPFIND / GET / HEAD / REPORT map to no operation at all
+    // (SPACE_HTTP_PERMISSION has no entry, or a null one), so read verbs stay
+    // exactly as permissive as they were.
+    await SpaceGuard.checkPermissions(req as FastifyDAVRequest & FastifySpaceRequest, this.logger)
   }
 
   // Translate a URL path like /remote.php/dav/files/{user}/a/b into the
