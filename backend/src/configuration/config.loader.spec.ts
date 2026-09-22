@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
+import { FilesDiagramsConfig } from '../applications/custom-diagrams/custom-diagrams.config'
 import { FilesVersionsConfig } from '../applications/files/files.config'
 import { ENVIRONMENT_PREFIX } from './config.constants'
 import { configLoader } from './config.loader'
@@ -125,6 +126,39 @@ describe(configLoader.name, () => {
     const dist: any = yaml.load(fs.readFileSync(path.join(__dirname, '../../../environment/environment.dist.yaml'), 'utf8'))
 
     expect(dist.applications.files.versions).toEqual(instanceToPlain(new FilesVersionsConfig()))
+  })
+
+  // Same failure class for the drawio editor location (#499). It used to be a
+  // bare `process.env['DRAWIO_URL']` read that bypassed this loader entirely,
+  // so it was invisible to the validator and undocumented; the risk on the way
+  // in is the camelCase trap — EDITORURL is one segment, and `..._EDITOR_URL`
+  // would be discarded with a warning.
+  it('should apply the diagrams editorUrl override', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const envKey = `${ENVIRONMENT_PREFIX}APPLICATIONS_FILES_DIAGRAMS_EDITORURL`
+    process.env[envKey] = 'https://drawio.internal/webapp'
+
+    expect(configLoader().applications.files.diagrams.editorUrl).toBe('https://drawio.internal/webapp')
+    expect(warnSpy).not.toHaveBeenCalledWith(`Ignoring unknown environment variable: "${envKey}".`)
+  })
+
+  it('should ignore the snake_cased spelling of the same key, loudly', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const envKey = `${ENVIRONMENT_PREFIX}APPLICATIONS_FILES_DIAGRAMS_EDITOR_URL`
+    process.env[envKey] = 'https://drawio.internal/webapp'
+
+    // Asserted as "the override did not take" rather than as a concrete value:
+    // the loader returns the merged YAML, so what is left behind depends on
+    // whether the environment.yaml in use carries the block (CI copies the dist
+    // file, a dev worktree may predate it).
+    expect(configLoader().applications.files.diagrams?.editorUrl).not.toBe('https://drawio.internal/webapp')
+    expect(warnSpy).toHaveBeenCalledWith(`Ignoring unknown environment variable: "${envKey}".`)
+  })
+
+  it('should document the diagrams defaults exactly as the config class declares them', () => {
+    const dist: any = yaml.load(fs.readFileSync(path.join(__dirname, '../../../environment/environment.dist.yaml'), 'utf8'))
+
+    expect(dist.applications.files.diagrams).toEqual(instanceToPlain(new FilesDiagramsConfig()))
   })
 
   function clearSyncInEnv() {

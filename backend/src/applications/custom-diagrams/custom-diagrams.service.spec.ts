@@ -1,7 +1,18 @@
+// The service reads the drawio editor location out of the config system (#499).
+// Mock it: the real loader reads environment.yaml off disk at import time, and
+// `node:fs` is mocked below.
+vi.mock('../../configuration/config.environment', () => ({
+  configuration: { applications: { files: { diagrams: { editorUrl: 'https://embed.diagrams.net' } } } },
+  serverConfig: {},
+  exportConfiguration: vi.fn()
+}))
+
 import { HttpStatus } from '@nestjs/common'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { FileError } from '../files/models/file-error'
+import { LockConflict } from '../files/models/file-lock-error'
 import { CustomDiagramsService } from './custom-diagrams.service'
 import { Mock } from 'vitest'
 
@@ -22,17 +33,32 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn()
 }))
 vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
-vi.mock('../files/utils/files', () => ({
-  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 })
+// Only the three filesystem probes are faked. `sanitizePath` (reached through
+// PATH_TO_SPACE_SEGMENTS) and the rest stay REAL — a stubbed path sanitiser
+// would make the traversal case below pass for the wrong reason.
+vi.mock('../files/utils/files', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../files/utils/files')>()),
+  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 }),
+  isPathExists: vi.fn().mockResolvedValue(true),
+  isPathIsDir: vi.fn().mockResolvedValue(false)
 }))
 
 const sha1 = (s: string) => createHash('sha1').update(s, 'utf-8').digest('hex')
 
-const mockUser = { id: 7 } as any
+// `authorize` runs canAccessToSpaceUrl, which asks the principal for its
+// user-level app permissions — so the mock needs a real answer, not a bare id.
+const mockUser = { id: 7, login: 'alice', havePermission: () => true } as any
+const mockUserNoRepoAccess = { id: 8, login: 'mallory', havePermission: () => false } as any
+const SPACE_BASE = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', enabled: true, inTrashRepository: false, quotaIsExceeded: false }
 // envPermissions 'amd' = ADD + MODIFY + DELETE → writable
-const mockSpaceRw = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: 'amd' } as any
+const mockSpaceRw = { ...SPACE_BASE, envPermissions: 'amd' } as any
 // envPermissions '' → read-only
-const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: '' } as any
+const mockSpaceRo = { ...SPACE_BASE, envPermissions: '' } as any
+// A personal-space trash path: full permission bits, but the trash is read-only
+// for everyone (space.guard.ts:46-48).
+const mockSpaceTrash = { ...SPACE_BASE, envPermissions: 'a:d:m:si:so', inTrashRepository: true } as any
+const mockSpaceDisabled = { ...SPACE_BASE, envPermissions: 'amd', enabled: false } as any
+const mockSpaceQuotaExceeded = { ...SPACE_BASE, envPermissions: 'amd', quotaIsExceeded: true } as any
 
 const FILE_PATH = 'files/personal/test.drawio'
 
@@ -72,6 +98,17 @@ describe('CustomDiagramsService', () => {
       vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
 
       const result = await service.load(mockUser, FILE_PATH)
+      expect(result.isWritable).toBe(false)
+    })
+
+    it('returns isWritable=false in the trash even though the permission bits say otherwise', async () => {
+      // A personal-space trash path carries SPACE_ALL_OPERATIONS, so the MODIFY
+      // bit alone reports it writable — but every save there is refused.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+
+      const result = await service.load(mockUser, 'trash/personal/test.drawio')
       expect(result.isWritable).toBe(false)
     })
 
@@ -172,6 +209,133 @@ describe('CustomDiagramsService', () => {
     })
   })
 
+  // #473: the controller carries no SpaceGuard and the path arrives in a query
+  // parameter / body rather than in the URL, so every check the guard would have
+  // performed has to be performed here. These cases pin each one.
+  describe('authorization', () => {
+    it('refuses createNew for a read-only member instead of creating the file', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRo)
+      await expect(service.createNew(mockUser, { dirPath: 'files/spaces/shared', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses createNew in the trash', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      await expect(service.createNew(mockUser, { dirPath: 'trash/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses createNew when the space quota is exceeded', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceQuotaExceeded)
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.INSUFFICIENT_STORAGE
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses save in the trash even with full permission bits', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      ;(existsSync as Mock).mockReturnValue(true)
+      await expect(service.save(mockUser, { path: 'trash/personal/test.drawio', xml: '<mxfile/>', etag: sha1('<mxfile/>') })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['load', () => service.load(mockUser, FILE_PATH)],
+      ['save', () => service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'x' })],
+      ['createNew', () => service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })]
+    ])('refuses %s on a disabled space', async (_name, call) => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceDisabled)
+      ;(existsSync as Mock).mockReturnValue(true)
+      await expect(call()).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    })
+
+    it('refuses a repository the user has no app permission for, without touching the space resolver', async () => {
+      await expect(service.load(mockUserNoRepoAccess, FILE_PATH)).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+      expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    })
+
+    it('normalizes the path before resolving the space (was a raw split)', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+
+      await service.load(mockUser, 'files/personal/sub/../test.drawio')
+      expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'test.drawio'])
+    })
+
+    it('refuses a path that climbs out of a known repository', async () => {
+      // sanitizePath normalizes first, so this resolves to `etc/passwd` — a
+      // repository canAccessToSpaceUrl does not recognise → 403.
+      //
+      // ORDERING CASE. `passwd` is not a diagram extension either, so this also
+      // pins that the repository check runs BEFORE the extension gate: a 400
+      // here would be the wrong answer to "may you look at this at all?".
+      await expect(service.load(mockUser, 'files/personal/../../etc/passwd')).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+      expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    })
+
+    // #474 / merge with #525. Without this gate the pair of routes is a generic
+    // read-any-file / replace-any-file primitive: a GET returned up to 10 MB of
+    // a docx as JSON with a sha1 etag, and a PUT with that etag replaced it.
+    describe('extension gate', () => {
+      it.each([
+        ['load', () => service.load(mockUser, 'files/personal/report.docx')],
+        ['save', () => service.save(mockUser, { path: 'files/personal/report.docx', xml: '<mxfile/>', etag: 'x' })]
+      ])('refuses %s of a non-diagram file before resolving the space', async (_name, call) => {
+        ;(existsSync as Mock).mockReturnValue(true)
+        await expect(call()).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+        // ORDERING CASE, the other half: the gate must run BEFORE space
+        // resolution, so a non-diagram path never reaches the resolver.
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+      })
+
+      it('refuses an extensionless path', async () => {
+        await expect(service.load(mockUser, 'files/personal/README')).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+      })
+
+      it.each(['diagram.drawio', 'diagram.DRAWIO', 'board.dwb'])('accepts %s', async (name) => {
+        spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+        ;(existsSync as Mock).mockReturnValue(true)
+        vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+        await expect(service.load(mockUser, `files/personal/${name}`)).resolves.toBeDefined()
+      })
+
+      it('refuses createNew of a non-diagram name', async () => {
+        await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'payload.sh' })).rejects.toMatchObject({
+          status: HttpStatus.BAD_REQUEST
+        })
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+        expect(filesManager.mkFile).not.toHaveBeenCalled()
+      })
+    })
+
+    // The guard wraps `spaceEnv` in try/catch → 400 and maps a null space to
+    // 404. `authorize` claims to reproduce the guard faithfully; without these
+    // two steps both cases escaped as a bare Error / a wrong status.
+    describe('guard-equivalent error shapes', () => {
+      it('turns an unresolvable path into 400, not 500', async () => {
+        // `spacesManager.spaceEnv` throws a bare Error for a repository root
+        // with no space segment (`GET /api/diagrams/load?path=files`).
+        spacesManager.spaceEnv.mockRejectedValue(new Error('unable to resolve space'))
+        await expect(service.load(mockUser, 'files/personal/test.drawio')).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+      })
+
+      it('turns an unknown space into 404, not 403', async () => {
+        spacesManager.spaceEnv.mockResolvedValue(null)
+        await expect(service.load(mockUser, 'files/personal/test.drawio')).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND })
+      })
+    })
+  })
+
   describe('createNew', () => {
     it('creates file seeded with a valid mxGraph skeleton', async () => {
       spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
@@ -194,6 +358,38 @@ describe('CustomDiagramsService', () => {
       expect(contents).toContain('<mxCell id="0"/>')
       expect(contents).toContain('<mxCell id="1" parent="0"/>')
       expect(result.path).toBe('files/personal/test.drawio')
+    })
+
+    it('sanitises the name half of the path, not just dirPath', async () => {
+      // `NewDiagramDto.name` is only @IsString @IsNotEmpty, so it arrives able
+      // to carry separators and `..`. Only `dirPath` may say where the file
+      // goes.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockResolvedValue(undefined)
+      vi.mocked(writeFile).mockResolvedValue(undefined)
+
+      const result = await service.createNew(mockUser, { dirPath: 'files/personal', name: '../../evil.drawio' })
+      expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'evil.drawio'])
+      expect(result.path).toBe('files/personal/evil.drawio')
+    })
+
+    it("translates mkFile's FileError into its own status instead of a 500", async () => {
+      // `FileError` extends Error, not HttpException, and this controller has
+      // no @UseFilters — so an existing name used to answer 500.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockRejectedValue(new FileError(HttpStatus.BAD_REQUEST, 'Resource already exists'))
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST
+      })
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it('translates a LockConflict into 423', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      filesManager.mkFile.mockRejectedValue(new LockConflict({} as any, 'locked'))
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.LOCKED
+      })
     })
   })
 })
