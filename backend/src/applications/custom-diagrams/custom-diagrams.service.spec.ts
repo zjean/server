@@ -22,17 +22,32 @@ vi.mock('node:fs/promises', () => ({
   unlink: vi.fn()
 }))
 vi.mock('node:fs', () => ({ existsSync: vi.fn() }))
-vi.mock('../files/utils/files', () => ({
-  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 })
+// Only the three filesystem probes are faked. `sanitizePath` (reached through
+// PATH_TO_SPACE_SEGMENTS) and the rest stay REAL — a stubbed path sanitiser
+// would make the traversal case below pass for the wrong reason.
+vi.mock('../files/utils/files', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../files/utils/files')>()),
+  getProps: vi.fn().mockResolvedValue({ name: 'test.drawio', mtime: 1000, size: 10, isDir: false, path: '', id: -1 }),
+  isPathExists: vi.fn().mockResolvedValue(true),
+  isPathIsDir: vi.fn().mockResolvedValue(false)
 }))
 
 const sha1 = (s: string) => createHash('sha1').update(s, 'utf-8').digest('hex')
 
-const mockUser = { id: 7 } as any
+// `authorize` runs canAccessToSpaceUrl, which asks the principal for its
+// user-level app permissions — so the mock needs a real answer, not a bare id.
+const mockUser = { id: 7, login: 'alice', havePermission: () => true } as any
+const mockUserNoRepoAccess = { id: 8, login: 'mallory', havePermission: () => false } as any
+const SPACE_BASE = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', enabled: true, inTrashRepository: false, quotaIsExceeded: false }
 // envPermissions 'amd' = ADD + MODIFY + DELETE → writable
-const mockSpaceRw = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: 'amd' } as any
+const mockSpaceRw = { ...SPACE_BASE, envPermissions: 'amd' } as any
 // envPermissions '' → read-only
-const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: '' } as any
+const mockSpaceRo = { ...SPACE_BASE, envPermissions: '' } as any
+// A personal-space trash path: full permission bits, but the trash is read-only
+// for everyone (space.guard.ts:46-48).
+const mockSpaceTrash = { ...SPACE_BASE, envPermissions: 'a:d:m:si:so', inTrashRepository: true } as any
+const mockSpaceDisabled = { ...SPACE_BASE, envPermissions: 'amd', enabled: false } as any
+const mockSpaceQuotaExceeded = { ...SPACE_BASE, envPermissions: 'amd', quotaIsExceeded: true } as any
 
 const FILE_PATH = 'files/personal/test.drawio'
 
@@ -72,6 +87,17 @@ describe('CustomDiagramsService', () => {
       vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
 
       const result = await service.load(mockUser, FILE_PATH)
+      expect(result.isWritable).toBe(false)
+    })
+
+    it('returns isWritable=false in the trash even though the permission bits say otherwise', async () => {
+      // A personal-space trash path carries SPACE_ALL_OPERATIONS, so the MODIFY
+      // bit alone reports it writable — but every save there is refused.
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+
+      const result = await service.load(mockUser, 'trash/personal/test.drawio')
       expect(result.isWritable).toBe(false)
     })
 
@@ -169,6 +195,76 @@ describe('CustomDiagramsService', () => {
       const b = '<mxfile><b id="2"/></mxfile>'
       expect(Buffer.byteLength(a, 'utf-8')).toBe(Buffer.byteLength(b, 'utf-8'))
       expect(sha1(a)).not.toBe(sha1(b))
+    })
+  })
+
+  // #473: the controller carries no SpaceGuard and the path arrives in a query
+  // parameter / body rather than in the URL, so every check the guard would have
+  // performed has to be performed here. These cases pin each one.
+  describe('authorization', () => {
+    it('refuses createNew for a read-only member instead of creating the file', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRo)
+      await expect(service.createNew(mockUser, { dirPath: 'files/spaces/shared', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses createNew in the trash', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      await expect(service.createNew(mockUser, { dirPath: 'trash/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses createNew when the space quota is exceeded', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceQuotaExceeded)
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })).rejects.toMatchObject({
+        status: HttpStatus.INSUFFICIENT_STORAGE
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+    })
+
+    it('refuses save in the trash even with full permission bits', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceTrash)
+      ;(existsSync as Mock).mockReturnValue(true)
+      await expect(service.save(mockUser, { path: 'trash/personal/test.drawio', xml: '<mxfile/>', etag: sha1('<mxfile/>') })).rejects.toMatchObject({
+        status: HttpStatus.FORBIDDEN
+      })
+      expect(writeFile).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['load', () => service.load(mockUser, FILE_PATH)],
+      ['save', () => service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'x' })],
+      ['createNew', () => service.createNew(mockUser, { dirPath: 'files/personal', name: 'test.drawio' })]
+    ])('refuses %s on a disabled space', async (_name, call) => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceDisabled)
+      ;(existsSync as Mock).mockReturnValue(true)
+      await expect(call()).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+    })
+
+    it('refuses a repository the user has no app permission for, without touching the space resolver', async () => {
+      await expect(service.load(mockUserNoRepoAccess, FILE_PATH)).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+      expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+    })
+
+    it('normalizes the path before resolving the space (was a raw split)', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+
+      await service.load(mockUser, 'files/personal/sub/../test.drawio')
+      expect(spacesManager.spaceEnv).toHaveBeenCalledWith(mockUser, ['files', 'personal', 'test.drawio'])
+    })
+
+    it('refuses a path that climbs out of a known repository', async () => {
+      // sanitizePath normalizes first, so this resolves to `etc/passwd` — a
+      // repository canAccessToSpaceUrl does not recognise → 403.
+      await expect(service.load(mockUser, 'files/personal/../../etc/passwd')).rejects.toMatchObject({ status: HttpStatus.FORBIDDEN })
+      expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
     })
   })
 
