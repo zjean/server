@@ -1,5 +1,5 @@
-import { HttpException, HttpStatus, ValidationPipe } from '@nestjs/common'
-import { EXCEPTION_FILTERS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants'
+import { ExecutionContext, HttpException, HttpStatus, ValidationPipe } from '@nestjs/common'
+import { EXCEPTION_FILTERS_METADATA, GUARDS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants'
 import { Reflector } from '@nestjs/core'
 import { Test } from '@nestjs/testing'
 import { Readable } from 'node:stream'
@@ -10,6 +10,9 @@ import { SPACE_OPERATION } from '../spaces/constants/spaces'
 import { OverrideSpacePermission } from '../spaces/decorators/space-override-permission.decorator'
 import { SpaceGuard } from '../spaces/guards/space.guard'
 import { SpaceEnv } from '../spaces/models/space-env.model'
+import { USER_ROLE } from '../users/constants/user'
+import { UserHaveRole } from '../users/decorators/roles.decorator'
+import { UserRolesGuard } from '../users/guards/roles.guard'
 import { UserModel } from '../users/models/user.model'
 import { VERSIONS_DISABLED_MESSAGE } from './constants/versioning'
 import { DeleteVersionDto, EditorVersionDto } from './dto/version.dto'
@@ -124,6 +127,49 @@ describe(VersioningController.name, () => {
   it('declares the exception filter that maps FileError and LockConflict', () => {
     const filters = new Reflector().get(EXCEPTION_FILTERS_METADATA, VersioningController)
     expect(filters).toContain(VersioningExceptionsFilter)
+  })
+
+  /* ----------------------------------------------------------- authorization */
+
+  // #492: an anonymous share-link visitor could read a file's full history, the
+  // login and full name on every row, and — through `download` and `diff` — the
+  // CONTENT of earlier revisions. SpaceGuard admits a link principal (a link
+  // carries GUEST_PERMISSION.SHARES, so it resolves the space env it is already
+  // browsing) and GET carries no space permission, so nothing refused it.
+  //
+  // The role is asserted through the REAL `UserModel.prototype.haveRole`, not a
+  // stubbed boolean: the whole decision is the numeric comparison
+  // `role <= USER_ROLE.USER`, and what needs pinning is that GUEST (2) and LINK
+  // (3) both fall outside it. A `haveRole: () => false` stub would pass with the
+  // role set to anything at all.
+  function ctxForRole(role: USER_ROLE): ExecutionContext {
+    const user = { role, haveRole: UserModel.prototype.haveRole }
+    return {
+      getHandler: () => VersioningController.prototype.list,
+      getClass: () => VersioningController,
+      switchToHttp: () => ({ getRequest: () => ({ user }) })
+    } as unknown as ExecutionContext
+  }
+
+  it('refuses a link and a guest principal, and admits a user and an admin', () => {
+    const guard = new UserRolesGuard(new Reflector())
+    expect(guard.canActivate(ctxForRole(USER_ROLE.LINK))).toBe(false)
+    expect(guard.canActivate(ctxForRole(USER_ROLE.GUEST))).toBe(false)
+    expect(guard.canActivate(ctxForRole(USER_ROLE.USER))).toBe(true)
+    expect(guard.canActivate(ctxForRole(USER_ROLE.ADMINISTRATOR))).toBe(true)
+  })
+
+  // Class-level, and BEFORE SpaceGuard. Both halves matter: class-level is what
+  // makes a route added here later inherit the gate rather than ship open to
+  // link visitors (the same reasoning VersionsAdminController's header gives),
+  // and ordering it first means a refused principal never reaches path
+  // resolution at all.
+  it('declares the role guard and the USER role at class level, ahead of SpaceGuard', () => {
+    const reflector = new Reflector()
+    const guards = reflector.get(GUARDS_METADATA, VersioningController) as unknown[]
+    expect(guards).toContain(UserRolesGuard)
+    expect(guards.indexOf(UserRolesGuard)).toBeLessThan(guards.indexOf(SpaceGuard))
+    expect(reflector.get(UserHaveRole, VersioningController)).toBe(USER_ROLE.USER)
   })
 
   /* ------------------------------------------------------------- query dtos */

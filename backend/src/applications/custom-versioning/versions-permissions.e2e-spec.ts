@@ -9,6 +9,7 @@ import path from 'node:path'
 import { SpaceModel } from '../spaces/models/space.model'
 import { SpacesManager } from '../spaces/services/spaces-manager.service'
 import { MEMBER_TYPE } from '../users/constants/member'
+import { USER_ROLE } from '../users/constants/user'
 import { SPACE_OPERATION, SPACE_PERMS_SEP, SPACE_ROLE } from '../spaces/constants/spaces'
 import { setupVersionsE2E, type VersionsActor, type VersionsE2EContext } from './utils/versions-e2e.fixture'
 import type { VersionsApi } from './utils/versions-e2e.fixture'
@@ -170,6 +171,60 @@ describe('versions permissions (e2e)', () => {
       expect([403, 404]).toContain((await outsiderApi.content(version.id, rel)).status)
       expect([403, 404]).toContain((await outsiderApi.restore(version.id, rel)).status)
       expect([403, 404]).toContain((await outsiderApi.remove(version.id, rel)).status)
+    })
+  })
+
+  /* ------------------------------------------- an external (guest) principal */
+
+  // #492. The whole controller is gated on the USER role, so a principal below
+  // it is refused before any path is resolved. The live file carries none of
+  // what these endpoints serve — who edited it and when, and the BYTES of
+  // earlier revisions, including content the sharer removed before sharing —
+  // which is why "GET matches reading the live file" stops applying here.
+  //
+  // WHY A GUEST AND NOT A LINK, when a link is what the issue is about: a LINK
+  // account cannot be driven end-to-end from here. `validateUserAccess` refuses
+  // USER_ROLE.LINK at the login route outright; a link session exists only via
+  // `GET /api/app/link/access/:uuid` against a reserved-UUID share. The gate
+  // itself is one numeric comparison — `role <= USER_ROLE.USER` — so GUEST (2)
+  // and LINK (3) fall on the same side of it, and the unit specs pin both.
+  describe('a guest principal', () => {
+    let guestApi: VersionsApi
+
+    beforeAll(async () => {
+      const guest = await e2e.addUser({ role: USER_ROLE.GUEST })
+      guestApi = e2e.makeApiFor({ cookie: guest.cookie, csrf: guest.csrf }, `files/${spaceAlias}`)
+    })
+
+    // Asserted as EXACTLY 403, and contrasted with the outsider's 404 on the
+    // same urls above, because that difference is the evidence the role guard is
+    // in the request path at all: a guest who is no more a member than the
+    // outsider is would otherwise be refused by SpaceGuard for an unrelated
+    // reason, and this case would pass with the gate removed.
+    it('is refused every read, by the role guard rather than by path resolution', async () => {
+      const [version] = (await ownerApi.list(rel)).body
+
+      expect((await guestApi.list(rel)).status).toBe(403)
+      expect((await guestApi.usage(rel)).status).toBe(403)
+      expect((await guestApi.content(version.id, rel)).status).toBe(403)
+      expect((await guestApi.diff(version.id, rel)).status).toBe(403)
+      expect((await guestApi.editorHistory(rel)).status).toBe(403)
+    })
+
+    it('is refused every write too, and the history is still standing afterwards', async () => {
+      const [version] = (await ownerApi.list(rel)).body
+
+      expect((await guestApi.restore(version.id, rel)).status).toBe(403)
+      expect((await guestApi.label(version.id, rel, 'nope')).status).toBe(403)
+      expect((await guestApi.remove(version.id, rel)).status).toBe(403)
+
+      // A status code alone cannot tell "refused" from "refused after
+      // destroying something" — so read the history back, as the owner.
+      const list = await ownerApi.list(rel)
+      expect(list.status).toBe(200)
+      expect(list.body).toHaveLength(1)
+      expect(list.body[0].label).toBeNull()
+      expect(await fs.readFile(path.join(SpaceModel.getFilesPath(spaceAlias), rel), 'utf8')).toBe(REPLACEMENT)
     })
   })
 

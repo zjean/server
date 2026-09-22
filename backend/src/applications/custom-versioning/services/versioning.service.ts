@@ -520,11 +520,39 @@ export class VersioningService {
 
   /* ------------------------------------------------------------------ reads */
 
-  // History for the file the resolved space env points at. Read access is
-  // implied by having resolved the space env at all — the space guard already
-  // enforced it — so there is no extra permission check here, matching how the
-  // rest of the codebase treats a resolved env.
+  // Version history is for INTERNAL principals only (#492).
+  //
+  // Resolving a space env is NOT enough here, which is the one place the reads
+  // below depart from "a resolved env means you may read". A share link is
+  // handed to whoever holds the url, and the live file carries none of what
+  // these methods serve: who edited it and when (`listVersions` attaches
+  // `author: { login, fullName }` to every row), nor the bytes of earlier
+  // revisions — including content the sharer deliberately removed before
+  // sharing.
+  //
+  // This is the read half of the rule `snapshotBeforeOverwrite` already states
+  // on the write side: guest and link principals mint no versions (ADR §8 — "a
+  // public link is a sharing surface, not an authoring one"). They do not read
+  // them either.
+  //
+  // VersioningController refuses these principals at its class-level
+  // UserRolesGuard, so this is the backstop for the two controllers that do NOT
+  // sit behind it: VersionsOfficeController (document-server token auth) and
+  // NcVersionsController (NC basic auth). Both declare
+  // VersioningExceptionsFilter, so this FileError becomes a 403 rather than a
+  // 500.
+  private requireInternalPrincipal(user: UserModel): void {
+    if (user.isGuest || user.isLink) {
+      throw new FileError(HttpStatus.FORBIDDEN, 'Version history is not available for this account')
+    }
+  }
+
+  // History for the file the resolved space env points at. Beyond the principal
+  // check above, read access is implied by having resolved the space env at all
+  // — the space guard already enforced it — so there is no further permission
+  // check here, matching how the rest of the codebase treats a resolved env.
   async listVersions(user: UserModel, space: SpaceEnv): Promise<VersionProps[]> {
+    this.requireInternalPrincipal(user)
     if (!this.enabled) return []
     const fileId = await this.resolveFileId(user, space)
     if (!fileId) return []
@@ -571,6 +599,9 @@ export class VersioningService {
   // a stream and simply drops it leaks a descriptor, which is worth knowing when
   // adding a fourth.
   async getVersionStream(user: UserModel, space: SpaceEnv, versionId: number): Promise<{ stream: Readable; version: VersionRow }> {
+    // Before anything is opened: a rejection after the descriptor exists would
+    // leak it (invariant 6).
+    this.requireInternalPrincipal(user)
     const version = await this.requireVersionFor(user, space, versionId)
     const blobPath = blobPathFromRoot(version.versionsRoot, version.checksum)
     const handle = blobPath ? await fs.open(blobPath, 'r').catch(() => null) : null
@@ -594,6 +625,7 @@ export class VersioningService {
   }
 
   async versionsUsage(user: UserModel, space: SpaceEnv): Promise<VersionsUsage> {
+    this.requireInternalPrincipal(user)
     const versionsRoot = versionsRootFromSpace(user, space)
     if (!this.enabled || !versionsRoot) return { used: 0, ceiling: null, count: 0 }
     const { used, count } = await this.queries.usageByRoot(versionsRoot)

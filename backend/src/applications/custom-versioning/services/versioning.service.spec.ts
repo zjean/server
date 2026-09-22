@@ -1766,6 +1766,49 @@ describe(VersioningService.name, () => {
     expect(queries.rows).toHaveLength(1)
   })
 
+  // #492. The link/guest deny is enforced twice on purpose, and this is the
+  // BACKSTOP half: VersioningController refuses these principals at its
+  // class-level UserRolesGuard, but VersionsOfficeController (document-server
+  // token auth) and NcVersionsController (NC basic auth) call the service
+  // without passing through it, and both serve version BYTES.
+  //
+  // Each read is asserted as a THROW rather than as an empty result, and that
+  // matters: `listVersions` and `versionsUsage` both answer emptily while
+  // `files.versions.enabled` is off, so an assertion on `[]` here would pass for
+  // entirely the wrong reason. The httpCode is what the versioning exception
+  // filter turns into the response status.
+  it('refuses history, usage and version bytes to a guest or a link principal', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect(queries.rows).toHaveLength(1)
+
+    for (const outsider of [guest, linkUser]) {
+      await expect(service.listVersions(outsider, personalSpace())).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+      await expect(service.versionsUsage(outsider, personalSpace())).rejects.toMatchObject({ httpCode: HttpStatus.FORBIDDEN })
+      // Refused BEFORE the blob is opened — a rejection after the descriptor
+      // exists would leak it (invariant 6).
+      await expect(service.getVersionStream(outsider, personalSpace(), queries.rows[0].id)).rejects.toMatchObject({
+        httpCode: HttpStatus.FORBIDDEN
+      })
+    }
+
+    // Refused, not refused-after-deleting: the history the owner can see is
+    // still standing, and still readable by them.
+    expect(queries.rows).toHaveLength(1)
+    await expect(service.listVersions(user, personalSpace())).resolves.toHaveLength(1)
+  })
+
+  // The identity half of the disclosure, stated on its own because it is what
+  // the issue leads with: the row carries the author's login and full name, and
+  // the live file a link visitor can already read carries nothing of the kind.
+  it('never hands an author identity to a guest or a link principal', async () => {
+    versionsConfig.minIntervalSeconds = 0
+    await service.snapshotBeforeOverwrite(user, personalSpace(), { origin: 'web' })
+    expect((await service.listVersions(user, personalSpace()))[0].author).toEqual({ login: 'alice', fullName: 'Alice A' })
+
+    await expect(service.listVersions(linkUser, personalSpace())).rejects.toThrow(FileError)
+  })
+
   // The trash is read-only — space.guard.ts enforces that for every ADD/MODIFY
   // request, and using canModifySpaceEnv here states the rule once rather than
   // restating half of it. Nothing is lost: permanently deleting the file from
