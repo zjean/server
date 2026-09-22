@@ -34,7 +34,14 @@ export class UserAuthManageAppPasswordsDialogComponent {
   @Input({ required: true }) appPasswords: Omit<UserAppPassword, 'password'>[] = []
   @Output() nbAppPasswords = new EventEmitter<number>()
   protected locale = inject<L10nLocale>(L10N_LOCALE)
-  protected availableApps: AUTH_SCOPE[] = Object.values(AUTH_SCOPE)
+  // An explicit allow-list, NOT Object.values(AUTH_SCOPE). The fork adds
+  // AUTH_SCOPE.MOBILE_NC for Nextcloud-compatible mobile clients, whose
+  // credentials are minted by the custom-mobile-compat login-v2 pairing flow and
+  // pruned to the newest five — so one created by hand here would be deleted the
+  // next time a phone pairs. Deriving the dropdown from the enum offered it
+  // anyway, untranslated and unexplained (#504). Existing MOBILE_NC credentials
+  // still LIST here; only minting one by hand is gone.
+  protected availableApps: AUTH_SCOPE[] = [AUTH_SCOPE.WEBDAV, AUTH_SCOPE.CLIENT]
   protected generatedPassword: UserAppPassword
   protected readonly minDate: Date = currentDate()
   protected hasError: string
