@@ -26,6 +26,7 @@ import { SpaceRootFileDto } from '../dto/space-roots.dto'
 import { SpaceEnv } from '../models/space-env.model'
 import { SpaceModel } from '../models/space.model'
 import { IsRealPathIsDirAndExists } from '../utils/paths'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 import { SpacesManager } from './spaces-manager.service'
 import { SpacesQueries } from './spaces-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
@@ -55,6 +56,9 @@ describe(SpacesManager.name, () => {
           provide: FilesQuotaManager,
           useValue: { setQuotaExceeded: () => vi.fn() }
         },
+        // mod(spaces): SpacesManager repoints the fork's version rows when a
+        // space alias changes, because the alias names the blob store (#471).
+        { provide: VersioningService, useValue: { renameSpaceRoot: vi.fn().mockResolvedValue(0) } },
         SpacesManager,
         SpacesQueries,
         UsersQueries,

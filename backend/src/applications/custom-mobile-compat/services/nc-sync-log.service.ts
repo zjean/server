@@ -186,16 +186,21 @@ export class NcSyncLogService implements OnModuleInit {
   }
 
   // Drop events older than `keepDays`. Run from a daily cron in production.
+  //
+  // The count is read off index 0 of the result, NOT off the result itself:
+  // drizzle's mysql2 driver resolves a write to `MySqlQueryResult`, which is
+  // the `[ResultSetHeader, FieldPacket[]]` TUPLE the driver returns. A tuple
+  // has no `affectedRows` / `rowsAffected` of its own, so the old reads were
+  // both `undefined` and this always reported 0 rows pruned however many it
+  // deleted (#521; same dead read as #493). Every upstream write site
+  // destructures the header the same way — see `dbCheckAffectedRows`.
   async prune(keepDays = DEFAULT_KEEP_DAYS): Promise<number> {
     const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000
-    const result = await this.db.delete(ncSyncEvents).where(lt(ncSyncEvents.ts, cutoff))
-    // mysql2 driver returns { affectedRows } in the result header; surface it
-    // for observability (cron logs).
-    return (
-      (result as unknown as { rowsAffected?: number; affectedRows?: number }).rowsAffected ??
-      (result as unknown as { affectedRows?: number }).affectedRows ??
-      0
-    )
+    const [header] = (await this.db.delete(ncSyncEvents).where(lt(ncSyncEvents.ts, cutoff))) as unknown as [
+      { affectedRows?: number } | undefined,
+      ...unknown[]
+    ]
+    return Number(header?.affectedRows ?? 0)
   }
 
   // Map a Sync-in FileEvent payload to one of our log rows.

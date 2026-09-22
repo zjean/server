@@ -14,6 +14,7 @@ import { CommentsManager } from './services/comments-manager.service'
 import { CommentsQueries } from './services/comments-queries.service'
 import { FilesQuotaManager } from '../files/services/files-quota-manager.service'
 import { Mocked } from 'vitest'
+import { VersioningService } from '../custom-versioning/services/versioning.service'
 
 describe(CommentsController.name, () => {
   let commentsController: CommentsController
@@ -37,6 +38,12 @@ describe(CommentsController.name, () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CommentsController],
       providers: [
+        // Plumbing, not a subject of this spec: a manager built by this
+        // testing module (SpacesManager / AdminUsersManager) now injects
+        // VersioningService so a space-alias or user-login rename repoints the
+        // fork's version rows (#471). A bare testing module has no @Global
+        // CustomVersioningModule to supply it.
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         { provide: NotificationsManager, useValue: {} },
         { provide: DB_TOKEN_PROVIDER, useValue: {} },
         { provide: Cache, useValue: {} },

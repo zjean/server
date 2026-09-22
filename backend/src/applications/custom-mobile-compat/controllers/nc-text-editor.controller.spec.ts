@@ -1,9 +1,12 @@
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { JwtModule } from '@nestjs/jwt'
 import { Test, type TestingModule } from '@nestjs/testing'
 import type { FastifyReply, FastifyRequest } from 'fastify'
+import { HttpStatus } from '@nestjs/common'
+import { FileError } from '../../files/models/file-error'
+import { LockConflict } from '../../files/models/file-lock-error'
 import { FilesManager } from '../../files/services/files-manager.service'
 import { FilesQueries } from '../../files/services/files-queries.service'
 import { genEtag } from '../../files/utils/files'
@@ -293,11 +296,17 @@ describe(NcTextEditorController.name, () => {
   })
 
   describe('PUT /custom-mobile-compat/text-editor/content', () => {
-    function makeReq(extraHeaders: Record<string, string> = {}): FastifyRequest {
+    // `body` mirrors what fastify's text/plain parser leaves on the request:
+    // a string. Anything else is a different content type — see the 415 cases.
+    // Wrapped rather than a default parameter, because `undefined` is itself
+    // one of the bodies under test (app.bootstrap's catch-all `*` parser) and
+    // an explicit `undefined` argument would re-trigger the default.
+    function makeReq(extraHeaders: Record<string, string> = {}, bodyOverride?: { value: unknown }): FastifyRequest {
       return {
         method: 'PUT',
         headers: { 'content-type': 'text/plain', 'content-length': '7', ...extraHeaders },
-        raw: {/* would be a Readable in production */} as never
+        body: bodyOverride ? bodyOverride.value : 'NEW v2\n',
+        raw: { headers: { 'content-type': 'text/plain' }, method: 'PUT' } as never
       } as unknown as FastifyRequest
     }
 
@@ -371,6 +380,129 @@ describe(NcTextEditorController.name, () => {
         status: 413
       })
       expect(saveStream).not.toHaveBeenCalled()
+    })
+
+    // Fork (#503 review): the catch-all used to flatten EVERY saveStream
+    // failure to 500, including the deliberate FileError refusals — the
+    // #518 short-write 400, quota/max-size, "parent must exists". The other
+    // two saveStream callers translate FileError to its own httpCode
+    // (WebDAVMethods.handleError, FilesMethods.handleError); this one has to
+    // agree or a client gets a server error it cannot act on.
+    it.each([
+      ['a short-write refusal', new FileError(HttpStatus.BAD_REQUEST, 'Incomplete upload: received 0 of 7 declared bytes'), 400],
+      ['a quota refusal', new FileError(HttpStatus.INSUFFICIENT_STORAGE, 'quota exceeded'), 507],
+      ['a conflict', new FileError(HttpStatus.CONFLICT, 'Parent must exists'), 409]
+    ])('maps %s to its own status instead of 500', async (_label, thrown, expected) => {
+      const realPath = join(workDir, 'put-err.md')
+      writeFileSync(realPath, '# v1\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-err.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-err.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      saveStream.mockRejectedValue(thrown)
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      await expect(controller.putContent(makeReq(), token, makeRes().res)).rejects.toMatchObject({
+        status: expected,
+        message: thrown.message
+      })
+    })
+
+    it('maps a LockConflict to 423 instead of 500', async () => {
+      const realPath = join(workDir, 'put-lock.md')
+      writeFileSync(realPath, '# v1\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-lock.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-lock.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      saveStream.mockRejectedValue(new LockConflict({ key: 'lock-1' } as any, 'Conflicting lock'))
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      await expect(controller.putContent(makeReq(), token, makeRes().res)).rejects.toMatchObject({ status: 423 })
+    })
+
+    it('still returns 500 for an unexpected error', async () => {
+      const realPath = join(workDir, 'put-boom.md')
+      writeFileSync(realPath, '# v1\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-boom.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-boom.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      saveStream.mockRejectedValue(new Error('disk on fire'))
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      await expect(controller.putContent(makeReq(), token, makeRes().res)).rejects.toMatchObject({ status: 500 })
+    })
+
+    // Fork (#503 review): the body re-encode assumed fastify's text/plain
+    // parser had run. For any other content type req.body is NOT a string
+    // (an object for JSON, undefined under app.bootstrap's catch-all `*`
+    // parser — text/markdown, application/octet-stream, multipart), and the
+    // old `: ''` default truncated the file to 0 bytes and answered 204 with
+    // a fresh ETag. The #518 assertion could not catch it either: the
+    // content-length re-derivation recomputes the declaration from the same
+    // empty buffer, so 0 >= 0 passes.
+    it.each([
+      ['a parsed JSON object', { text: 'hello' }],
+      ['an undefined body from the catch-all parser', undefined],
+      ['a raw Buffer', Buffer.from('hello')]
+    ])('refuses %s with 415 and does not touch the file', async (_label, body) => {
+      const realPath = join(workDir, `put-415-${_label.replace(/\W+/g, '-')}.md`)
+      const original = '# keep me\n'
+      writeFileSync(realPath, original)
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-415.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-415.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      await expect(controller.putContent(makeReq({ 'content-type': 'text/markdown' }, { value: body }), token, makeRes().res)).rejects.toMatchObject({
+        status: 415
+      })
+
+      expect(saveStream).not.toHaveBeenCalled()
+      // The refusal is only worth anything if the file survived it — a 415
+      // over an emptied file would be the same defect wearing a 4xx.
+      expect(readFileSync(realPath, 'utf-8')).toBe(original)
+    })
+
+    it('accepts an empty string body (a deliberate save of an empty file)', async () => {
+      // '' is a legitimate save, not a missing body — the guard is on the
+      // TYPE, not on emptiness.
+      const realPath = join(workDir, 'put-empty.md')
+      writeFileSync(realPath, '# v1\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-empty.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-empty.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      saveStream.mockResolvedValue(true)
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      const r = makeRes()
+      await controller.putContent(makeReq({ 'content-length': '0' }, { value: '' }), token, r.res)
+
+      expect(saveStream).toHaveBeenCalledTimes(1)
+      expect(r.status).toBe(204)
+    })
+
+    it('re-derives content-length from the re-encoded body', async () => {
+      // The header the client sent counts wire bytes; saveStream now reads
+      // our re-encode of fastify's parse of them, and #518 asserts the two
+      // agree. A multi-byte character is where a forwarded header would 400.
+      const realPath = join(workDir, 'put-utf8.md')
+      writeFileSync(realPath, '# v1\n')
+      getUserFile.mockResolvedValue({ id: 42, path: '/put-utf8.md' })
+      spaceEnv.mockResolvedValue(
+        makeSpace(realPath, { dbFile: { id: 42, name: 'put-utf8.md', path: '/personal', mime: 'text-markdown', size: 5 } as any })
+      )
+      saveStream.mockResolvedValue(true)
+      const token = await directEditing.mintEditToken({ user: makeUser(), fileId: 42 })
+
+      const req = makeReq({ 'content-length': '999' }, { value: 'héllo' })
+      await controller.putContent(req, token, makeRes().res)
+
+      const forwarded = saveStream.mock.calls[0][2] as FastifyRequest
+      expect(forwarded.raw.headers['content-length']).toBe(String(Buffer.byteLength('héllo', 'utf-8')))
     })
 
     it('returns 401 when the token is invalid', async () => {

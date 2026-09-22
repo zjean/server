@@ -25,6 +25,7 @@ import { SpacesManager } from '../services/spaces-manager.service'
 import { SpacesQueries } from '../services/spaces-queries.service'
 import { SpaceGuard } from './space.guard'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 describe(SpaceGuard.name, () => {
   let spacesGuard: SpaceGuard
@@ -36,6 +37,12 @@ describe(SpaceGuard.name, () => {
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        // Plumbing, not a subject of this spec: a manager built by this
+        // testing module (SpacesManager / AdminUsersManager) now injects
+        // VersioningService so a space-alias or user-login rename repoints the
+        // fork's version rows (#471). A bare testing module has no @Global
+        // CustomVersioningModule to supply it.
+        { provide: VersioningService, useValue: { renameUserRoot: vi.fn(), renameSpaceRoot: vi.fn() } },
         {
           provide: DB_TOKEN_PROVIDER,
           useValue: {}

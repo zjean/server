@@ -157,12 +157,17 @@ export class EditorHistoryService {
 
   // The live file as a history entry.
   //
-  // `newest` is the most recent version row, and it is what names the live
-  // entry's author. That is not a borrow from the wrong place: `snapshot`
-  // records `authorId = user.id` for the user performing the OVERWRITE
-  // (versioning.service.ts:168), so a row holds the bytes that were REPLACED
-  // while naming the person who replaced them — and the newest row therefore
-  // names whoever wrote the content that is live now.
+  // `newest` is the most recent version row, and its `supersededBy` is what
+  // names the live entry's author. That is not a borrow from the wrong place:
+  // `snapshot` records `authorId = user.id` for the user performing the
+  // OVERWRITE, so a row holds the bytes that were REPLACED while naming the
+  // person who replaced them — and the newest row therefore names whoever
+  // wrote the content that is live now.
+  //
+  // It reads `supersededBy` rather than `author` since #491: `author` is now
+  // the row's own CONTENT author, which for the newest row is the person
+  // before last. Using it here would move the off-by-one into the one entry
+  // that was always right.
   //
   // Omitted when that row has no author, or when there is no row at all. The
   // panel renders a missing user as "Anonymous" (`version.user.name ||
@@ -179,7 +184,7 @@ export class EditorHistoryService {
       created: Math.floor(stats.mtimeMs / 1000),
       key: await this.liveDocumentKey(space),
       version: ordinal,
-      ...(newest?.author && { user: { id: newest.author.login, name: newest.author.fullName } })
+      ...(newest?.supersededBy && { user: { id: newest.supersededBy.login, name: newest.supersededBy.fullName } })
     }
   }
 

@@ -22,6 +22,7 @@ import { isValidUserLogin } from '../utils/login'
 import { AdminUsersQueries } from './admin-users-queries.service'
 import { FilesQuotaManager } from '../../files/services/files-quota-manager.service'
 import { FILE_REPOSITORY } from '../../files/constants/operations'
+import { VersioningService } from '../../custom-versioning/services/versioning.service'
 
 @Injectable()
 export class AdminUsersManager {
@@ -30,7 +31,10 @@ export class AdminUsersManager {
   constructor(
     private readonly authManager: AuthManager,
     private readonly filesQuotaManager: FilesQuotaManager,
-    private readonly adminQueries: AdminUsersQueries
+    private readonly adminQueries: AdminUsersQueries,
+    // mod(users): CustomVersioningModule is @Global and exports this, so the
+    // injection costs no import in users.module.ts (#471).
+    private readonly versioning: VersioningService
   ) {}
 
   listUsers(): Promise<AdminUser[]> {
@@ -382,6 +386,15 @@ export class AdminUsersManager {
     }
     try {
       await moveFiles(currentUserSpace, newUserSpace)
+      // mod(users): the fork's version store lives INSIDE the home directory
+      // that just moved, and its rows address it by login. Repointing them is
+      // part of this rename's success contract, not an afterthought: rows left
+      // naming the old login make every Download and Restore 404, split new
+      // history across two roots, and — because the nightly orphan sweep
+      // enumerates the disk and refcounts by root — get every blob in the
+      // renamed home unlinked at 3AM (#471). A throw here falls into the
+      // restore below, so the home goes back and the login change is refused.
+      await this.versioning.renameUserRoot(oldLogin, newLogin)
       return true
     } catch (e) {
       // try to restore

@@ -23,7 +23,10 @@ describe(NcSyncLogService.name, () => {
   let moduleRef: TestingModule
   let service: NcSyncLogService
   let captured: Record<string, unknown>[]
-  let fakeDb: { insert: Mock; select: Mock }
+  let fakeDb: { insert: Mock; select: Mock; delete: Mock }
+  // What the mocked `delete` chain resolves to. Defaults to the exact shape the
+  // mysql2 driver returns: a [ResultSetHeader, FieldPacket[]] TUPLE.
+  let deleteResult: unknown
   // Test override for resolveViewers — when set, replaces the real DB-backed
   // implementation so existing personal-space tests don't need to mock the
   // shared-space query chain. Shared-space tests assign this directly.
@@ -32,6 +35,7 @@ describe(NcSyncLogService.name, () => {
   beforeEach(async () => {
     captured = []
     viewerResolver = undefined
+    deleteResult = [{ affectedRows: 0, insertId: 0, warningStatus: 0 }, []]
     fakeDb = {
       insert: vi.fn(() => ({
         values: (v: Record<string, unknown>) => {
@@ -41,7 +45,8 @@ describe(NcSyncLogService.name, () => {
       })),
       // Empty select chain — resolveViewers' DB path is exercised via the
       // viewerResolver override on shared-space tests below.
-      select: vi.fn(() => ({ from: () => ({ where: () => Promise.resolve([]) }) }))
+      select: vi.fn(() => ({ from: () => ({ where: () => Promise.resolve([]) }) })),
+      delete: vi.fn(() => ({ where: () => Promise.resolve(deleteResult) }))
     }
     moduleRef = await Test.createTestingModule({
       providers: [NcSyncLogService, { provide: DB_TOKEN_PROVIDER, useValue: fakeDb }]
@@ -426,5 +431,32 @@ describe(NcSyncLogService.name, () => {
     expect(captured).toHaveLength(1)
     expect(captured[0]).toMatchObject({ ownerId: 7 })
     expect(fakeDb.select).not.toHaveBeenCalled()
+  })
+
+  // #521 — prune() reported 0 however many rows it deleted.
+  //
+  // These cases resolve the mocked delete to the shape the mysql2 driver
+  // really returns — a `[ResultSetHeader, FieldPacket[]]` tuple — rather than
+  // to a bare `{ affectedRows }` object. That distinction IS the regression:
+  // the previous implementation read `.affectedRows` / `.rowsAffected` off the
+  // tuple itself, which is always `undefined`, and a spec mocking the bare
+  // object would have gone green against the broken code (exactly how #493
+  // shipped).
+  describe('prune', () => {
+    it('returns the number of rows the driver reports deleted', async () => {
+      deleteResult = [{ affectedRows: 1234, insertId: 0, warningStatus: 0 }, []]
+      await expect(service.prune()).resolves.toBe(1234)
+      expect(fakeDb.delete).toHaveBeenCalledTimes(1)
+    })
+
+    it('returns 0 when nothing was old enough to drop', async () => {
+      deleteResult = [{ affectedRows: 0, insertId: 0, warningStatus: 0 }, []]
+      await expect(service.prune()).resolves.toBe(0)
+    })
+
+    it('returns 0 rather than NaN if the driver hands back no header at all', async () => {
+      deleteResult = []
+      await expect(service.prune()).resolves.toBe(0)
+    })
   })
 })
