@@ -8,6 +8,7 @@ import { FastifyInstance, FastifyRequest } from 'fastify'
 import { Logger, LoggerErrorInterceptor } from 'nestjs-pino'
 import { CONTENT_SECURITY_POLICY } from './app.constants'
 import { AppModule } from './app.module'
+import { bootstrapNcRawUploads } from './applications/custom-mobile-compat/utils/nc-raw-put'
 import { bootstrapWebDAV } from './applications/webdav/utils/bootstrap'
 import { IS_TEST_ENV, STATIC_PATH } from './configuration/config.constants'
 import { configuration } from './configuration/config.environment'
@@ -41,6 +42,11 @@ export async function appBootstrap(): Promise<NestFastifyApplication> {
 
   /* WEBDAV BOOTSTRAP RULES */
   bootstrapWebDAV(app, fastifyInstance)
+  // Fork: the same rule for the Nextcloud-compat DAV tree. bootstrapWebDAV's
+  // hook is scoped to /webdav and cannot see /remote.php/*, so NC PUTs carrying
+  // a buffered content type (text/plain, application/json, application/xml)
+  // were drained before the handler read req.raw and landed as 0-byte files.
+  bootstrapNcRawUploads(fastifyInstance)
 
   /* PARSER */
   // Keep unknown binary payloads available through req.raw.
