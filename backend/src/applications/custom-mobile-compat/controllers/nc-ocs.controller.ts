@@ -126,11 +126,23 @@ export class NcOcsController {
   // question directly. No dummy compare for timing: the caller is already
   // authenticated as this user by NcBasicAuthGuard, so there is no oracle
   // here that they did not already have.
+  //
+  // COST. Worst case is one bcrypt(10) per candidate — roughly 0.5 s at
+  // NcAppPasswordService.MAX_MOBILE_PASSWORDS = 5, which caps the walk. That is
+  // bounded and this is an authenticated, once-per-logout route, so it is not a
+  // DoS surface; it is simply slow. The candidate set is narrowed by everything
+  // that can be decided without hashing — wrong scope, and expired rows, which
+  // `validateAppPassword` skips for the same reason and which therefore cannot
+  // be the credential this request authenticated with. Nothing cheaper is
+  // available: a bcrypt hash carries its own salt, so there is no prefix or
+  // index to match a presented secret against without doing the work.
   private async findAppPasswordName(user: UserModel, candidate: string): Promise<string | null> {
     const secrets = await this.usersQueries.getUserSecrets(user.id)
     const rows: UserAppPassword[] = Array.isArray(secrets.appPasswords) ? secrets.appPasswords : []
+    const now = new Date()
     for (const row of rows) {
       if (row.app !== AUTH_SCOPE.MOBILE_NC) continue
+      if (row.expiration && new Date(row.expiration) < now) continue
       if (await comparePassword(candidate, row.password)) return row.name
     }
     return null
