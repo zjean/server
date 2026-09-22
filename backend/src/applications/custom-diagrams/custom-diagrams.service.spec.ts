@@ -4,7 +4,9 @@ import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { Readable } from 'node:stream'
 import { ACTION } from '../../common/constants'
+import { SERVER_NAME } from '../../common/shared'
 import { FileEvent } from '../files/events/file-events'
+import { LockConflict } from '../files/models/file-lock-error'
 import { writeFromStream } from '../files/utils/files'
 import { CustomDiagramsService } from './custom-diagrams.service'
 import { Mock } from 'vitest'
@@ -17,6 +19,12 @@ vi.mock('../files/services/files-manager.service', () => ({
 }))
 vi.mock('../spaces/services/spaces-manager.service', () => ({
   SpacesManager: class SpacesManager {}
+}))
+vi.mock('../custom-versioning/services/versioning.service', () => ({
+  VersioningService: class VersioningService {}
+}))
+vi.mock('../files/services/files-lock-manager.service', () => ({
+  FilesLockManager: class FilesLockManager {}
 }))
 
 vi.mock('node:fs/promises', () => ({
@@ -42,9 +50,9 @@ const sha1 = (s: string) => createHash('sha1').update(s, 'utf-8').digest('hex')
 
 const mockUser = { id: 7 } as any
 // envPermissions 'amd' = ADD + MODIFY + DELETE → writable
-const mockSpaceRw = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: 'amd' } as any
+const mockSpaceRw = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: 'amd', dbFile: { path: 'test.drawio' } } as any
 // envPermissions '' → read-only
-const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: '' } as any
+const mockSpaceRo = { realPath: '/data/test.drawio', relativeUrl: 'test.drawio', envPermissions: '', dbFile: { path: 'test.drawio' } } as any
 
 const FILE_PATH = 'files/personal/test.drawio'
 
@@ -52,11 +60,19 @@ describe('CustomDiagramsService', () => {
   let service: CustomDiagramsService
   let spacesManager: { spaceEnv: Mock }
   let filesManager: { mkFile: Mock }
+  let versioning: { snapshotBeforeOverwrite: Mock }
+  let lockManager: { createOrRefresh: Mock; removeLock: Mock }
 
   beforeEach(() => {
     spacesManager = { spaceEnv: vi.fn() }
     filesManager = { mkFile: vi.fn() }
-    service = new CustomDiagramsService(spacesManager as any, filesManager as any)
+    versioning = { snapshotBeforeOverwrite: vi.fn().mockResolvedValue(undefined) }
+    // Mirrors the real manager: [created, lock].
+    lockManager = {
+      createOrRefresh: vi.fn().mockResolvedValue([true, { key: 'lock-1' }]),
+      removeLock: vi.fn().mockResolvedValue(true)
+    }
+    service = new CustomDiagramsService(spacesManager as any, filesManager as any, versioning as any, lockManager as any)
     vi.mocked(readFile).mockReset()
     vi.mocked(writeFile).mockReset()
     vi.mocked(writeFromStream).mockReset()
@@ -207,6 +223,93 @@ describe('CustomDiagramsService', () => {
       expect(options?.start ?? 0).toBe(0)
     })
 
+    /* ------------------------------------------------------- #474 versioning */
+
+    // The eighth destructive write path. It was missing from the ADR §4 table
+    // entirely, so an hour of drawio autosaves left an empty version panel.
+    it('snapshots the superseded content immediately before overwriting it', async () => {
+      const baseXml = '<mxfile><a/></mxfile>'
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(baseXml as any)
+
+      await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><b/></mxfile>', etag: sha1(baseXml) })
+
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledTimes(1)
+      expect(versioning.snapshotBeforeOverwrite).toHaveBeenCalledWith(mockUser, mockSpaceRw, { origin: 'web' })
+      // BEFORE the write, or it captures the new bytes and the old ones are gone.
+      expect(versioning.snapshotBeforeOverwrite.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(writeFromStream).mock.invocationCallOrder[0])
+    })
+
+    it('does not snapshot a save the etag check rejects', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<onDiskNow/>' as any)
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT
+      })
+      expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+    })
+
+    /* ------------------------------------------------------------ #474 locks */
+
+    it('takes a server lock around the compare-and-write and releases the one it took', async () => {
+      const baseXml = '<mxfile><a/></mxfile>'
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(baseXml as any)
+
+      await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><b/></mxfile>', etag: sha1(baseXml) })
+
+      // createOrRefresh, never create: `create` counts the CALLER'S OWN lock as
+      // a conflict, and the user plausibly has this file open elsewhere.
+      expect(lockManager.createOrRefresh).toHaveBeenCalledWith(mockUser, mockSpaceRw.dbFile, SERVER_NAME, expect.anything())
+      expect(lockManager.createOrRefresh.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(readFile).mock.invocationCallOrder[0])
+      expect(lockManager.removeLock).toHaveBeenCalledWith('lock-1')
+      expect(vi.mocked(writeFromStream).mock.invocationCallOrder[0]).toBeLessThan(lockManager.removeLock.mock.invocationCallOrder[0])
+    })
+
+    it('leaves a pre-existing lock alone — it belongs to a session that is still open', async () => {
+      const baseXml = '<mxfile><a/></mxfile>'
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue(baseXml as any)
+      // What createOrRefresh returns for a lock that was already yours.
+      lockManager.createOrRefresh.mockResolvedValue([false, { key: 'editor-lock' }])
+
+      await service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><b/></mxfile>', etag: sha1(baseXml) })
+
+      expect(writeFromStream).toHaveBeenCalledTimes(1)
+      expect(lockManager.removeLock).not.toHaveBeenCalled()
+    })
+
+    it('releases its lock when the etag check rejects the save', async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<onDiskNow/>' as any)
+      await expect(service.save(mockUser, { path: FILE_PATH, xml: '<mxfile/>', etag: 'stale' })).rejects.toMatchObject({
+        status: HttpStatus.CONFLICT
+      })
+      expect(lockManager.removeLock).toHaveBeenCalledWith('lock-1')
+    })
+
+    // LockConflict extends Error, not HttpException — unreached, it is a 500.
+    it("translates someone else's lock into 423, and writes nothing", async () => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile><a/></mxfile>' as any)
+      lockManager.createOrRefresh.mockRejectedValue(new LockConflict({ key: 'someone-else' } as any, 'Conflicting lock'))
+
+      await expect(
+        service.save(mockUser, { path: FILE_PATH, xml: '<mxfile><b/></mxfile>', etag: sha1('<mxfile><a/></mxfile>') })
+      ).rejects.toMatchObject({
+        status: HttpStatus.LOCKED
+      })
+      expect(writeFromStream).not.toHaveBeenCalled()
+      expect(versioning.snapshotBeforeOverwrite).not.toHaveBeenCalled()
+      expect(lockManager.removeLock).not.toHaveBeenCalled()
+    })
+
     it('two distinct payloads of equal byte length produce different etags', () => {
       // Same length, different content. The old size+mtime ETag would collide
       // under second-resolution filesystems; content-hash must not.
@@ -214,6 +317,49 @@ describe('CustomDiagramsService', () => {
       const b = '<mxfile><b id="2"/></mxfile>'
       expect(Buffer.byteLength(a, 'utf-8')).toBe(Buffer.byteLength(b, 'utf-8'))
       expect(sha1(a)).not.toBe(sha1(b))
+    })
+  })
+
+  /* --------------------------------------------------------- #474 extension */
+
+  // Neither route gated on the extension, so they doubled as a generic
+  // read-any-file / replace-any-file primitive: `load` handed back up to 10 MB
+  // of a .docx as JSON *plus* the etag that lets `save` replace it with
+  // arbitrary text — no version, no lock, no quota accounting, no event.
+  describe('extension gate', () => {
+    beforeEach(() => {
+      spacesManager.spaceEnv.mockResolvedValue(mockSpaceRw)
+      ;(existsSync as Mock).mockReturnValue(true)
+      vi.mocked(readFile).mockResolvedValue('<mxfile/>' as any)
+    })
+
+    it.each(['files/personal/report.docx', 'files/personal/notes', 'files/personal/archive.drawio.zip', 'files/personal/trailing.'])(
+      'refuses to load %s',
+      async (path) => {
+        await expect(service.load(mockUser, path)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST })
+        // The space is never even resolved, so nothing is read.
+        expect(spacesManager.spaceEnv).not.toHaveBeenCalled()
+        expect(readFile).not.toHaveBeenCalled()
+      }
+    )
+
+    it('refuses to save a non-diagram path, before any lock or write', async () => {
+      await expect(service.save(mockUser, { path: 'files/personal/report.docx', xml: '<mxfile/>', etag: sha1('<mxfile/>') })).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST
+      })
+      expect(lockManager.createOrRefresh).not.toHaveBeenCalled()
+      expect(writeFromStream).not.toHaveBeenCalled()
+    })
+
+    it('refuses to seed mxGraph xml into a non-diagram name', async () => {
+      await expect(service.createNew(mockUser, { dirPath: 'files/personal', name: 'report.docx' })).rejects.toMatchObject({
+        status: HttpStatus.BAD_REQUEST
+      })
+      expect(filesManager.mkFile).not.toHaveBeenCalled()
+    })
+
+    it.each(['test.drawio', 'test.DRAWIO', 'board.dwb'])('accepts %s', async (name) => {
+      await expect(service.load(mockUser, `files/personal/${name}`)).resolves.toMatchObject({ xml: '<mxfile/>' })
     })
   })
 

@@ -152,6 +152,15 @@ The destructive moment differs per path, and each hook targets it exactly (§B3 
 | OnlyOffice `saveDocument` | `copyFileContent(tmpFilePath, space.realPath)` | `only-office-manager.service.ts:409` |
 | NC `assembleAndMove` | `moveFiles(tmpPath, space.realPath, true)` | `nc-uploads.controller.ts:212` |
 | `mkFile(overwrite=true)` | `copyFileContent(srcSample, ...)` or `createEmptyFile(...)` | `files-manager.service.ts:365` / `:369` |
+| `CustomDiagramsService.save` | `writeFromStream(space.realPath, …)` | `custom-diagrams.service.ts` |
+
+**AMENDED (#474): there are EIGHT, and the eighth is the fork's own.** `/api/diagrams/save` shipped after this table
+was written and was never added to it: no snapshot, no lock check, and no gate keeping it pointed at a diagram, so it
+also doubled as a read-any-file / replace-any-file primitive. Its origin is `web` — it is an interactive browser write
+and takes the interactive coalescing window — rather than a new enum value, which would have cost a migration for no
+behavioural difference. It writes with `writeFromStream` onto the live path (flag `'w'`, start 0), so the inode
+survives, and it holds a `createOrRefresh` server lock across the etag compare *and* the write, which is stronger than
+the non-DAV `saveStream` branch: the compare is a real CAS rather than a narrowed race.
 
 **Resumed chunks are never snapshotted.** In the direct branch, `writeFromStream` uses flag `'a'` when `start > 0` (`files/utils/files.ts:253`), and `saveStream` validates `startRange === fileSize` (`files-manager.service.ts:147-150`). A `startRange > 0` request therefore sees `fExists === true` while the live file **already holds partial new content** — snapshotting there would capture a half-written frankenfile. The gate is `fExists && !isDir && startRange === 0`.
 
