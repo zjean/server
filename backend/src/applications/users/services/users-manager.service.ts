@@ -5,8 +5,8 @@ import { WriteStream } from 'fs'
 import { createWriteStream } from 'node:fs'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import { CACHE_AUTH_WEBDAV_PREFIX } from '../../../authentication/constants/cache'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
+import { CACHED_AUTH_SCOPE_PREFIXES } from '../../custom-shared/constants/auth-cache'
 import { LoginResponseDto } from '../../../authentication/dto/login-response.dto'
 import { FastifyAuthenticatedRequest } from '../../../authentication/interfaces/auth-request.interface'
 import { JwtIdentityPayload } from '../../../authentication/interfaces/jwt-payload.interface'
@@ -401,9 +401,15 @@ export class UsersManager {
     if (!appPassword) {
       throw new HttpException('App password not found', HttpStatus.NOT_FOUND)
     }
-    if (appPassword.app === AUTH_SCOPE.WEBDAV) {
-      // mutateUserSecrets has committed the revocation; cached Basic-auth results can now be discarded.
-      await this.clearWebDAVAuthCache(user.id).catch((e: Error) => this.logger.error({ tag: this.clearWebDAVAuthCache.name, msg: `${e}` }))
+    // mutateUserSecrets has committed the revocation; cached Basic-auth results can now be discarded.
+    // mod(users): the lookup replaces `if (app === WEBDAV)`. The fork adds a second CACHED scope
+    // (AUTH_SCOPE.MOBILE_NC, the NC mobile Basic-auth guard, 900s TTL), and deleting one of those from
+    // the classic Account → App passwords screen left the device fully working for the remaining TTL (#476).
+    const authCachePrefix: string | undefined = CACHED_AUTH_SCOPE_PREFIXES[appPassword.app]
+    if (authCachePrefix) {
+      await this.clearScopedAuthCache(user.id, authCachePrefix).catch((e: Error) =>
+        this.logger.error({ tag: this.clearScopedAuthCache.name, msg: `${e}` })
+      )
     }
   }
 
@@ -695,10 +701,10 @@ export class UsersManager {
     return this.usersQueries.searchUsersOrGroups(searchMembersDto, user.id)
   }
 
-  private async clearWebDAVAuthCache(userId: number): Promise<void> {
+  private async clearScopedAuthCache(userId: number, prefix: string): Promise<void> {
     // Cache keys contain a hash of login + clear password, which cannot be rebuilt from the stored bcrypt hash.
-    // Inspect cached values instead and remove every positive WebDAV authentication entry for this user.
-    const keys = await this.cache.keys(`${CACHE_AUTH_WEBDAV_PREFIX}-*`)
+    // Inspect cached values instead and remove every positive authentication entry for this user under `prefix`.
+    const keys = await this.cache.keys(`${prefix}-*`)
     const keysToDelete: string[] = []
     for (const key of keys) {
       const cachedUser: null | undefined | Partial<UserModel> = await this.cache.get(key)

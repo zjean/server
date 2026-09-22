@@ -2,6 +2,7 @@ import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common'
 import { Test, TestingModule } from '@nestjs/testing'
 import { PinoLogger } from 'nestjs-pino'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { NcBasicAuthGuard, parseBasicAuth } from './nc-basic-auth.guard'
@@ -231,5 +232,22 @@ describe('parseBasicAuth', () => {
 
   it('handles array-valued headers by taking the first entry', () => {
     expect(parseBasicAuth(['Basic dXNlcjpzZWNyZXQ=', 'junk'])).toEqual({ login: 'user', password: 'secret' })
+  })
+})
+
+// #476 — UsersManager.deleteAppPassword evicts a revoked MOBILE_NC credential
+// by SCANNING this prefix (it holds a name, never the cleartext, and the key
+// is a hash of login + password). That makes the prefix a contract between
+// two files rather than a private detail of this one: if the guard's literal
+// and the shared constant ever drift apart, the scan matches nothing and every
+// revoked NC device keeps working for the remaining 900s TTL, silently.
+describe(`${NcBasicAuthGuard.name} cache key prefix`, () => {
+  it('derives the cache key from the shared CACHE_AUTH_NC_MOBILE_PREFIX', () => {
+    expect(NcBasicAuthGuard.cacheKeyFor('alice', 'secret')).toMatch(new RegExp(`^${CACHE_AUTH_NC_MOBILE_PREFIX}-[0-9a-f]{64}$`))
+  })
+
+  it('is stable for one credential pair and distinct across pairs', () => {
+    expect(NcBasicAuthGuard.cacheKeyFor('alice', 'secret')).toBe(NcBasicAuthGuard.cacheKeyFor('alice', 'secret'))
+    expect(NcBasicAuthGuard.cacheKeyFor('alice', 'secret')).not.toBe(NcBasicAuthGuard.cacheKeyFor('alice', 'other'))
   })
 })

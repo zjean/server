@@ -8,6 +8,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { AuthManager } from '../../../authentication/auth.service'
 import { CACHE_AUTH_WEBDAV_PREFIX } from '../../../authentication/constants/cache'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
 import { AUTH_SCOPE } from '../../../authentication/constants/scope'
 import { AUTH_SESSION } from '../../../authentication/providers/auth-providers.constants'
 import { comparePassword } from '../../../common/functions'
@@ -527,6 +528,33 @@ describe(UsersManager.name, () => {
     })
     expect(cache.keys).toHaveBeenCalledWith(`${CACHE_AUTH_WEBDAV_PREFIX}-*`)
     expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_AUTH_WEBDAV_PREFIX}-match`])
+  })
+
+  // #476 — the fork added a SECOND cached Basic-auth scope. Revoking a
+  // `mobile_nc` app password from the classic Account → App passwords screen
+  // used to leave the device fully working (DAV read/write, chunked upload,
+  // favorites, versions) for the remaining 900s of NcBasicAuthGuard's positive
+  // cache, because the eviction was written as `if (app === WEBDAV)`.
+  it('deletes NC-mobile auth cache entries for the user when deleting a mobile_nc app password (#476)', async () => {
+    const secrets = {
+      appPasswords: [
+        { name: 'mobile-a1b2c3d4', app: AUTH_SCOPE.MOBILE_NC, password: 'HASH' },
+        { name: 'desktop-client', app: AUTH_SCOPE.CLIENT, password: 'HASH' }
+      ]
+    }
+    mockSecretsMutation(secrets as UserSecrets)
+    cache.keys = vi.fn().mockResolvedValue([`${CACHE_AUTH_NC_MOBILE_PREFIX}-mine`, `${CACHE_AUTH_NC_MOBILE_PREFIX}-someone-else`])
+    cache.get = vi
+      .fn()
+      .mockResolvedValueOnce({ id: userTest.id })
+      .mockResolvedValueOnce({ id: userTest.id + 1 })
+    cache.mdel = vi.fn().mockResolvedValue(true)
+
+    await expect(usersManager.deleteAppPassword(userTest, 'mobile-a1b2c3d4')).resolves.toBeUndefined()
+
+    // The NC prefix, not the WebDAV one — the two caches are keyed separately.
+    expect(cache.keys).toHaveBeenCalledWith(`${CACHE_AUTH_NC_MOBILE_PREFIX}-*`)
+    expect(cache.mdel).toHaveBeenCalledWith([`${CACHE_AUTH_NC_MOBILE_PREFIX}-mine`])
   })
 
   it('does not delete WebDAV auth cache entries when deleting another app password scope', async () => {

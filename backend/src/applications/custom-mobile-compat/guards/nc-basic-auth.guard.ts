@@ -8,6 +8,7 @@ import { UserModel } from '../../users/models/user.model'
 import { UsersManager } from '../../users/services/users-manager.service'
 import { UsersQueries } from '../../users/services/users-queries.service'
 import { Cache } from '../../../infrastructure/cache/cache.service'
+import { CACHE_AUTH_NC_MOBILE_PREFIX } from '../../custom-shared/constants/auth-cache'
 import { NC_AUTH_REALM } from '../constants/routes'
 
 // NcBasicAuthGuard
@@ -23,7 +24,10 @@ import { NC_AUTH_REALM } from '../constants/routes'
 @Injectable()
 export class NcBasicAuthGuard implements CanActivate {
   private static readonly CACHE_TTL_SECONDS = 900
-  private static readonly CACHE_PREFIX = 'auth-nc-mobile'
+  // Shared with UsersManager.deleteAppPassword, which scans this prefix to
+  // evict a revoked credential it has no cleartext for (#476). Changing the
+  // literal in one place only would silently un-revoke every NC device.
+  private static readonly CACHE_PREFIX = CACHE_AUTH_NC_MOBILE_PREFIX
 
   constructor(
     private readonly usersQueries: UsersQueries,
