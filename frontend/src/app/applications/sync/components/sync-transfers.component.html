@@ -1,4 +1,6 @@
-<div class="app-top-menu">
+<div class="app-top-menu app-top-menu-tool-bar"
+     [attr.aria-label]="'Actions' | translate:locale.language"
+     role="toolbar">
   <div class="d-flex gap-2">
     <select (ngModelChange)="onSelectPath($event)" [ngModel]="syncPathSelected" class="form-select" style="min-width: 210px">
       <option [ngValue]="null" l10nTranslate>All syncs</option>
@@ -16,24 +18,22 @@
       <option l10nTranslate value="ERROR">Error</option>
     </select>
   </div>
+  <button (click)="refresh()"
+          [attr.aria-label]="'Refresh' | translate:locale.language"
+          [tooltip]="'Refresh' | translate:locale.language"
+          class="btn btn-default"
+          type="button">
+    <svg [lucideIcon]="icons.LucideRotateCw"></svg>
+  </button>
   <div class="d-flex align-items-center ms-auto">
-    <!--Start Filter Button-->
-    <div class="btn-group me-1">
-      <app-input-filter class="d-none d-sm-block"></app-input-filter>
-    </div>
-    <!--End Filter Button-->
-    <button (click)="refresh()"
-            [tooltip]="'Refresh' | translate:locale.language"
-            class="btn btn-default me-1"
-            type="button">
-      <svg [lucideIcon]="icons.LucideRotateCw"></svg>
-    </button>
     <button (click)="openClearDialog()"
+            [attr.aria-label]="'Clear events' | translate:locale.language"
             [tooltip]="'Clear events' | translate:locale.language"
             placement="bottom"
-            class="btn btn-default"
+            class="btn btn-default app-top-menu-tool-bar__action--quiet"
             type="button">
-      <svg [lucideIcon]="icons.LucideTrash2"></svg>
+      <svg [lucideIcon]="icons.LucideTrash"></svg>
+      <span class="app-top-menu-tool-bar__label" l10nTranslate>Clear</span>
     </button>
   </div>
 </div>
@@ -58,7 +58,7 @@
   </tr>
   </thead>
 </table>
-<app-virtual-scroll [bufferAmount]="5" [items]="transfers" [resizeOffset]="105">
+<app-virtual-scroll [bufferAmount]="5" [items]="transfers" [resizeOffset]="115">
   <table class="app-table mb-3">
     <tbody tabindex="-1">
       @for (t of scrollView?.viewPortItems; track t.id) {

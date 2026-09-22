@@ -1,4 +1,4 @@
-<div class="sidebar-component-title justify-content-between position-relative">
+<div class="sidebar-component-title app-top-menu-tool-bar justify-content-between position-relative">
   <div class="sidebar-component-title-side">
     <svg class="cursor-pointer"
              [lucideIcon]="icons.LucideCircleQuestionMark"
@@ -9,7 +9,9 @@
   </div>
   <div class="sidebar-component-title-label" l10nTranslate>Clipboard</div>
   <div class="sidebar-component-title-side">
-    <button (click)="clearAll()" class="btn btn-default" type="button">
+    <button (click)="clearAll()"
+            class="btn btn-default"
+            type="button">
       <svg [lucideIcon]="icons.LucideX"></svg>
     </button>
   </div>
@@ -27,7 +29,7 @@
     </div>
   </div>
   <hr class="mx-0 my-1">
-  <div appAutoResize class="sidebar-item" [resizeOffset]="170">
+  <div appAutoResize class="sidebar-item" [resizeOffset]="175">
     @for (f of files; track f.id) {
       <div class="sidebar-item-container">
         <div class="sidebar-item-content" [tooltip]="fileLocation(f)">

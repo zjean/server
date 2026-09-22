@@ -1,46 +1,48 @@
 <!--Start Top Menu-->
-<div class="app-top-menu">
+<div class="app-top-menu app-top-menu-tool-bar"
+     [attr.aria-label]="'Actions' | translate:locale.language"
+     role="toolbar">
   @if (canCreateSpace) {
     <button (click)="openSpaceDialog(true)"
-            class="btn btn-default me-1"
-            [tooltip]="'New space' | translate:locale.language"
+            [attr.aria-label]="'New space' | translate:locale.language"
+            class="btn btn-default app-top-menu-tool-bar__action--quiet app-top-menu-tool-bar__action--breadcrumb-aligned"
             type="button">
       <svg [lucideIcon]="icons.LucidePlus"></svg>
+      <span class="app-top-menu-tool-bar__label" l10nTranslate>New space</span>
     </button>
   }
   <button (click)="openSpaceDialog()"
+          [attr.aria-label]="'Edit space' | translate:locale.language"
           [disabled]="!canEditSpace"
-          class="btn btn-default me-1"
-          [tooltip]="'Edit space' | translate:locale.language"
+          class="btn btn-default app-top-menu-tool-bar__action--quiet"
           type="button">
     <svg [lucideIcon]="icons.LucidePencil"></svg>
+    <span class="app-top-menu-tool-bar__label" l10nTranslate>Edit space</span>
   </button>
   <button (click)="openChildShareDialog()"
+          [attr.aria-label]="'Edit children shares' | translate:locale.language"
           [disabled]="!canEditSpace || !selected?.counts.shares"
-          class="btn btn-default me-1"
+          class="btn btn-default"
           [tooltip]="'Edit children shares' | translate:locale.language"
           type="button">
     <svg [lucideIcon]="icons.SHARES"></svg>
   </button>
   <button (click)="openSpaceRootsDialog()"
+          [attr.aria-label]="'Manage my anchored files' | translate:locale.language"
           [disabled]="!canManageRoots"
-          class="btn btn-default me-1"
+          class="btn btn-default"
           [tooltip]="'Manage my anchored files' | translate:locale.language"
           type="button">
     <svg [lucideIcon]="icons.LucideAnchor"></svg>
   </button>
+  <button (click)="loadSpaces()"
+          [attr.aria-label]="'Refresh' | translate:locale.language"
+          class="d-none d-sm-block btn btn-default"
+          [tooltip]="'Refresh' | translate:locale.language"
+          type="button">
+    <svg [lucideIcon]="icons.LucideRotateCw" [class]="loading ? 'icon-spin' : ''"></svg>
+  </button>
   <div class="d-flex align-items-center ms-auto">
-    <!--Start Filter Button-->
-    <div class="btn-group me-1">
-      <app-input-filter class="d-none d-sm-block"></app-input-filter>
-    </div>
-    <!--End Filter Button-->
-    <button (click)="loadSpaces()"
-            class="d-none d-sm-block btn btn-default me-1"
-            [tooltip]="'Refresh' | translate:locale.language"
-            type="button">
-      <svg [lucideIcon]="icons.LucideRotateCw" [class]="loading ? 'icon-spin' : ''"></svg>
-    </button>
     <!--Start View Button-->
     <app-navigation-view (switchView)="galleryMode = $event">
     </app-navigation-view>
@@ -59,9 +61,9 @@
     <app-virtual-scroll (contextmenu)="onContextMenu($event)"
                         [childHeight]="galleryMode.dimensions"
                         [childWidth]="galleryMode.dimensions"
-                        [items]="spaces | searchFilter:inputFilter.search()"
+                        [items]="spaces | searchFilter:navbarSearch.viewFilter()"
                         [galleryMode]="true"
-                        [resizeOffset]="110">
+                        [resizeOffset]="115">
       <div class="row g-0" tabindex="-1">
         @for (s of scrollView?.viewPortItems; track s.id) {
           <div (click)="onSelect(s)"
@@ -139,7 +141,7 @@
   </table>
   <app-virtual-scroll (contextmenu)="onContextMenu($event)"
                       [bufferAmount]="5"
-                      [items]="spaces | searchFilter:inputFilter.search()">
+                      [items]="spaces | searchFilter:navbarSearch.viewFilter()">
     <table class="app-table">
       <tbody tabindex="-1">
         @for (s of scrollView?.viewPortItems; track s.id) {

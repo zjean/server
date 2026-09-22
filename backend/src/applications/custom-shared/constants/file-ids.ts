@@ -3,9 +3,13 @@
 // path-keyed lookup-or-insert branch.
 //
 // Upstream 2.5.0 (commit 0148bfea, "centralize file id validation and
-// resolution") added `assertValidFileId` to both helpers:
+// resolution") added this assertion to both helpers; 2.5.2 (commit 12f64395)
+// renamed it `assertValidFileId` -> `assertValidFileReferenceId` and restated
+// it without changing what it accepts:
 //
-//   if (!Number.isSafeInteger(fileId) || fileId === 0) throw 400
+//   const isTemporaryInode = Number.isInteger(fileId) && fileId < 0
+//   const isDatabaseId = Number.isSafeInteger(fileId) && fileId > 0
+//   if (!isTemporaryInode && !isDatabaseId) throw 400
 //
 // So 0 — which the fork used to mean "no id, skip the lookup-by-id branch" —
 // now THROWS, and `undefined` throws too. A negative value is the value that

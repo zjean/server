@@ -9,10 +9,11 @@ import {
   LucideEllipsis,
   LucideKeyRound,
   LucideLogOut,
-  LucideMinus,
   LucidePencil,
   LucidePlus,
   LucideRotateCw,
+  LucideTrash,
+  LucideUserMinus,
   LucideUsersRound
 } from '@lucide/angular'
 import { ContextMenuComponent, ContextMenuModule } from '@perfectmemory/ngx-contextmenu'
@@ -24,7 +25,6 @@ import { BsModalRef } from 'ngx-bootstrap/modal'
 import { TooltipDirective } from 'ngx-bootstrap/tooltip'
 import { filter, take } from 'rxjs/operators'
 import { BadgeMembersComponent } from '../../../common/components/badge-members.component'
-import { FilterComponent } from '../../../common/components/filter.component'
 import { VirtualScrollComponent } from '../../../common/components/virtual-scroll.component'
 import { TapDirective } from '../../../common/directives/tap.directive'
 import { TableHeaderConfig } from '../../../common/interfaces/table.interface'
@@ -33,6 +33,7 @@ import { TimeAgoPipe } from '../../../common/pipes/time-ago.pipe'
 import { originalOrderKeyValue, pathFromRoutes } from '../../../common/utils/functions'
 import { SortSettings, SortTable } from '../../../common/utils/sort-table'
 import { LayoutService } from '../../../layout/layout.service'
+import { NavbarSearchService } from '../../../layout/navbar/services/navbar-search.service'
 import { GroupBrowseModel } from '../models/group-browse.model'
 import { MemberModel } from '../models/member.model'
 import { USER_ICON, USER_PATH, USER_TITLE } from '../user.constants'
@@ -51,7 +52,6 @@ import { UserPersonalGroupLeaveDialogComponent } from './dialogs/user-personal-g
     KeyValuePipe,
     L10nTranslateDirective,
     L10nTranslatePipe,
-    FilterComponent,
     SearchFilterPipe,
     VirtualScrollComponent,
     TooltipDirective,
@@ -71,16 +71,17 @@ export class UserGroupsComponent {
     viewPortItems: MemberModel[]
     scrollInto: (arg: MemberModel | number) => void
   }
-  @ViewChild(FilterComponent, { static: true }) inputFilter: FilterComponent
   @ViewChild('MainContextMenu', { static: true }) mainContextMenu: ContextMenuComponent<any>
   @ViewChild('TargetContextMenu', { static: true }) targetContextMenu: ContextMenuComponent<any>
   protected readonly locale = inject<L10nLocale>(L10N_LOCALE)
+  protected readonly navbarSearch = inject(NavbarSearchService)
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected readonly icons = {
     GROUPS: USER_ICON.GROUPS,
     LucideRotateCw,
     LucidePlus,
-    LucideMinus,
+    LucideTrash,
+    LucideUserMinus,
     LucidePencil,
     LucideArrowDown,
     LucideArrowUp,

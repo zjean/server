@@ -2,17 +2,17 @@ import { KeyValuePipe } from '@angular/common'
 import { Component, effect, ElementRef, inject, ViewChild } from '@angular/core'
 import { FormsModule } from '@angular/forms'
 import { Router } from '@angular/router'
-import { LucideArrowDown, LucideArrowUp, LucideDynamicIcon, LucideRotateCw, LucideTrash2 } from '@lucide/angular'
+import { LucideArrowDown, LucideArrowUp, LucideDynamicIcon, LucideRotateCw, LucideTrash } from '@lucide/angular'
 import { L10N_LOCALE, L10nLocale, L10nTranslateDirective, L10nTranslatePipe } from 'angular-l10n'
 import { BsModalRef } from 'ngx-bootstrap/modal'
 import { TooltipDirective } from 'ngx-bootstrap/tooltip'
 import { take } from 'rxjs/operators'
-import { FilterComponent } from '../../../common/components/filter.component'
 import { VirtualScrollComponent } from '../../../common/components/virtual-scroll.component'
 import { TableHeaderConfig } from '../../../common/interfaces/table.interface'
 import { originalOrderKeyValue } from '../../../common/utils/functions'
 import { SortSettings, SortTable } from '../../../common/utils/sort-table'
 import { LayoutService } from '../../../layout/layout.service'
+import { NavbarSearchService } from '../../../layout/navbar/services/navbar-search.service'
 import { StoreService } from '../../../store/store.service'
 import { SyncTransfer } from '../interfaces/sync-transfer.interface'
 import { SyncPathModel } from '../models/sync-path.model'
@@ -23,16 +23,7 @@ import { SyncTransfersDeleteDialogComponent } from './dialogs/sync-transfers-del
 
 @Component({
   selector: 'app-sync-transfers',
-  imports: [
-    FormsModule,
-    L10nTranslateDirective,
-    L10nTranslatePipe,
-    TooltipDirective,
-    VirtualScrollComponent,
-    LucideDynamicIcon,
-    FilterComponent,
-    KeyValuePipe
-  ],
+  imports: [FormsModule, L10nTranslateDirective, L10nTranslatePipe, TooltipDirective, VirtualScrollComponent, LucideDynamicIcon, KeyValuePipe],
   templateUrl: 'sync-transfers.component.html'
 })
 export class SyncTransfersComponent {
@@ -42,24 +33,24 @@ export class SyncTransfersComponent {
     viewPortItems: SyncTransferModel[]
     scrollInto: (arg: SyncTransferModel | number) => void
   }
-  @ViewChild(FilterComponent, { static: true }) inputFilter: FilterComponent
   public action: string = null
   public syncPathSelected: SyncPathModel = null
   public transfers: SyncTransferModel[] = []
   protected readonly store = inject(StoreService)
+  protected readonly navbarSearch = inject(NavbarSearchService)
   // Sort
   protected readonly originalOrderKeyValue = originalOrderKeyValue
   protected tableHeaders: Record<'action' | 'sync' | 'file' | 'date', TableHeaderConfig> = {
     action: {
       label: 'Action',
-      width: 8,
+      width: 10,
       textCenter: false,
       class: '',
       show: true,
       sortable: true
     },
     sync: {
-      label: 'Synchronization',
+      label: SYNC_TITLE.SYNC_SHORT,
       width: 14,
       textCenter: false,
       class: '',
@@ -84,7 +75,7 @@ export class SyncTransfersComponent {
       sortable: true
     }
   }
-  protected readonly icons = { LucideRotateCw, LucideTrash2, LucideArrowDown, LucideArrowUp }
+  protected readonly icons = { LucideRotateCw, LucideTrash, LucideArrowDown, LucideArrowUp }
   private readonly router = inject(Router)
   private readonly layout = inject(LayoutService)
   private readonly syncService = inject(SyncService)
@@ -109,7 +100,7 @@ export class SyncTransfersComponent {
       sameLink: true
     })
     effect(() => {
-      this.doSearch(this.inputFilter.search())
+      this.doSearch(this.navbarSearch.viewFilter())
     })
     this.checkRouteState()
     if (this.focusOnSyncPathErrorsId) {

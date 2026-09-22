@@ -1,31 +1,41 @@
 <!--Start Top Menu-->
-<div class="app-top-menu">
+<div class="app-top-menu app-top-menu-tool-bar"
+     [attr.aria-label]="'Actions' | translate:locale.language"
+     role="toolbar">
   <button (click)="openDialog(true)"
+          [attr.aria-label]="(!currentGroup && allowedAction.addGroup ? 'New personal group': 'Add members') | translate:locale.language"
           [disabled]="!allowedAction.addGroup && !allowedAction.addUsers"
-          class="btn btn-default me-1"
+          class="btn btn-default app-top-menu-tool-bar__action--quiet app-top-menu-tool-bar__action--breadcrumb-aligned"
           [tooltip]="(!currentGroup && allowedAction.addGroup ? 'New personal group': 'Add members') | translate:locale.language"
           type="button">
     <svg [lucideIcon]="icons.LucidePlus"></svg>
-  </button>
-  <button (click)="openDialog(false, true)"
-          class="btn btn-default me-1"
-          [disabled]="!allowedAction.removeGroup && !allowedAction.removeUser"
-          [tooltip]="(allowedAction.removeGroup ? 'Delete group' : 'Remove from group') | translate:locale.language"
-          type="button">
-    <svg [lucideIcon]="icons.LucideMinus"></svg>
+    <span class="app-top-menu-tool-bar__label" l10nTranslate>New</span>
   </button>
   <button (click)="openDialog()"
+          [attr.aria-label]="(allowedAction.editGroup ? 'Edit group' : 'Edit user') | translate:locale.language"
           [disabled]="!allowedAction.editGroup && !allowedAction.editUser"
-          class="btn btn-default me-1"
+          class="btn btn-default app-top-menu-tool-bar__action--quiet"
           [tooltip]="(allowedAction.editGroup ? 'Edit group' : 'Edit user') | translate:locale.language"
           type="button">
     <svg [lucideIcon]="icons.LucidePencil"></svg>
+    <span class="app-top-menu-tool-bar__label" l10nTranslate>Edit</span>
+  </button>
+  <button (click)="openDialog(false, true)"
+          [attr.aria-label]="(allowedAction.removeGroup ? 'Delete group' : 'Remove from group') | translate:locale.language"
+          class="btn btn-default app-top-menu-tool-bar__action--quiet"
+          [disabled]="!allowedAction.removeGroup && !allowedAction.removeUser"
+          [tooltip]="(allowedAction.removeGroup ? 'Delete group' : 'Remove from group') | translate:locale.language"
+          type="button">
+    <svg [lucideIcon]="allowedAction.removeUser ? icons.LucideUserMinus : icons.LucideTrash"></svg>
+    <span class="app-top-menu-tool-bar__label" l10nTranslate>Delete</span>
   </button>
   @if (!currentGroup) {
-    <div class="btn-group me-1" dropdown>
+    <div class="btn-group" dropdown>
       <button dropdownToggle
+              [attr.aria-label]="'Actions' | translate:locale.language"
               [class.disabled]="!selected"
               class="btn btn-default dropdown-toggle"
+              [tooltip]="'Actions' | translate:locale.language"
               type="button">
         <svg [lucideIcon]="icons.LucideEllipsis"></svg>
       </button>
@@ -43,19 +53,15 @@
       </ul>
     </div>
   }
-  <!--Start Filter Button-->
-  <div class="d-flex align-items-center ms-auto">
-    <div class="btn-group me-1">
-      <app-input-filter class="d-none d-sm-block"></app-input-filter>
-    </div>
+  <div class="d-flex align-items-center">
     <button (click)="refresh()"
+            [attr.aria-label]="'Refresh' | translate:locale.language"
             class="btn btn-default"
             [tooltip]="'Refresh' | translate:locale.language"
             type="button">
       <svg [lucideIcon]="icons.LucideRotateCw" [class]="loading ? 'icon-spin' : ''"></svg>
     </button>
   </div>
-  <!--End Filter Button-->
 </div>
 <!--End Top Menu-->
 <!--Start Table Files Content-->
@@ -82,7 +88,7 @@
 </table>
 <app-virtual-scroll (contextmenu)="onContextMenu($event)"
                     [bufferAmount]="5"
-                    [items]="members | searchFilter:inputFilter.search()">
+                    [items]="members | searchFilter:navbarSearch.viewFilter()">
   <table class="app-table">
     <tbody tabindex="-1">
       @for (m of scrollView?.viewPortItems; track m.mid) {
@@ -200,7 +206,7 @@
   }
   @if (allowedAction.removeGroup || allowedAction.removeUser) {
     <ng-template (execute)="openDialog(false, true)" contextMenuItem>
-      <span l10nTranslate><svg [lucideIcon]="icons.LucideMinus"></svg>
+      <span l10nTranslate><svg [lucideIcon]="allowedAction.removeUser ? icons.LucideUserMinus : icons.LucideTrash"></svg>
         {{ allowedAction.removeGroup ? 'Delete group' : 'Remove from group' }}</span>
     </ng-template>
   }

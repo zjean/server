@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http'
 import { Component, EventEmitter, inject, Input, Output } from '@angular/core'
-import { LucideDynamicIcon, LucideMinus, LucideUserMinus } from '@lucide/angular'
+import { LucideDynamicIcon, LucideTrash, LucideUserMinus } from '@lucide/angular'
 import { L10nTranslateDirective } from 'angular-l10n'
 import { CapitalizePipe } from '../../../../common/pipes/capitalize.pipe'
 import { LayoutService } from '../../../../layout/layout.service'
@@ -19,7 +19,7 @@ export class AdminGroupDeleteDialogComponent {
   @Input({ required: true }) member: MemberModel
   @Output() wasDeleted = new EventEmitter<boolean>()
   protected submitted = false
-  protected readonly icons = { GROUPS: USER_ICON.GROUPS, LucideMinus, LucideUserMinus }
+  protected readonly icons = { GROUPS: USER_ICON.GROUPS, LucideTrash, LucideUserMinus }
   private readonly layout = inject(LayoutService)
   private readonly adminService = inject(AdminService)
 
